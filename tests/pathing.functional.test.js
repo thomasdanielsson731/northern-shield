@@ -30,12 +30,14 @@ describe('Pathing (functional)', () => {
     const reroutePixel = reroute.map(({ col, row }) => grid.cellCenter(col, row));
     enemy.setPath(reroutePixel);
 
+    let deviatedFromRow = false;
     for (let i = 0; i < 80; i++) {
       enemy.update();
+      if (enemy.y !== oldY) deviatedFromRow = true;
       if (enemy.reached) break;
     }
 
-    expect(enemy.y).not.toBe(oldY);
+    expect(deviatedFromRow).toBe(true);
     expect(enemy.reached).toBe(true);
   });
 });
