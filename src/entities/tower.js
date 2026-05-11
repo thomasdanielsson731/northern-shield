@@ -1,25 +1,67 @@
 import { Bullet } from './bullet.js';
 
-const TOWER_STATS = {
-  RANGE: 96,
-  FIRE_RATE: 24,
-  DAMAGE: 35,
-  RADIUS: 6,
-  BULLET_SPEED: 7
+export const TOWER_TYPES = {
+  GUN: 'gun',
+  SNIPER: 'sniper',
+  RAPID: 'rapid'
+};
+
+export const TOWER_DEFS = {
+  [TOWER_TYPES.GUN]: {
+    label: 'Gun',
+    key: '2',
+    color: '#49f',
+    rangeColor: 'rgba(80, 160, 255, 0.25)',
+    cost: 20,
+    range: 96,
+    fireRate: 24,
+    damage: 35,
+    radius: 6,
+    bulletSpeed: 7
+  },
+  [TOWER_TYPES.SNIPER]: {
+    label: 'Sniper',
+    key: '3',
+    color: '#7de39d',
+    rangeColor: 'rgba(125, 227, 157, 0.25)',
+    cost: 35,
+    range: 180,
+    fireRate: 55,
+    damage: 85,
+    radius: 6,
+    bulletSpeed: 11
+  },
+  [TOWER_TYPES.RAPID]: {
+    label: 'Rapid',
+    key: '4',
+    color: '#ffaf69',
+    rangeColor: 'rgba(255, 175, 105, 0.25)',
+    cost: 28,
+    range: 78,
+    fireRate: 9,
+    damage: 14,
+    radius: 5,
+    bulletSpeed: 8
+  }
 };
 
 export class Tower {
-  constructor(x, y, col, row) {
+  constructor(x, y, col, row, type = TOWER_TYPES.GUN) {
     this.x = x;
     this.y = y;
     this.col = col;
     this.row = row;
-    this.range = TOWER_STATS.RANGE;
+    this.type = type;
     this.fireCooldown = 0;
-    this.fireRate = TOWER_STATS.FIRE_RATE;
-    this.damage = TOWER_STATS.DAMAGE;
-    this.radius = TOWER_STATS.RADIUS;
-    this.bulletSpeed = TOWER_STATS.BULLET_SPEED;
+
+    const def = TOWER_DEFS[this.type] || TOWER_DEFS[TOWER_TYPES.GUN];
+    this.range = def.range;
+    this.fireRate = def.fireRate;
+    this.damage = def.damage;
+    this.radius = def.radius;
+    this.bulletSpeed = def.bulletSpeed;
+    this.color = def.color;
+    this.rangeColor = def.rangeColor;
   }
 
   update(enemies, bullets = null) {
@@ -68,12 +110,12 @@ export class Tower {
   }
 
   draw(ctx) {
-    ctx.fillStyle = '#49f';
+    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = 'rgba(80, 160, 255, 0.25)';
+    ctx.strokeStyle = this.rangeColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);

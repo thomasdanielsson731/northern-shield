@@ -1,7 +1,7 @@
 import { ctx, canvas } from './renderer.js';
 import { Grid, CELL } from '../grid/grid.js';
 import { Enemy } from '../entities/enemy.js';
-import { Tower } from '../entities/tower.js';
+import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 
 const COLS = 50;
 const ROWS = 30;
@@ -10,13 +10,17 @@ const CELL_SIZE = 16;
 const SPAWN = { col: 0, row: 15 };
 const GOAL = { col: COLS - 1, row: 15 };
 
-const BUILD_COST = {
-  [CELL.WALL]: 5,
-  [CELL.TOWER]: 20
-};
+const WALL_COST = 5;
 const KEYBINDINGS = {
-  WALL: ['1', 'w'],
-  TOWER: ['2', 't']
+  WALL: ['1', 'w']
+};
+const TOWER_ORDER = [TOWER_TYPES.GUN, TOWER_TYPES.SNIPER, TOWER_TYPES.RAPID];
+const TOWER_BUTTON = {
+  x: 12,
+  y: 50,
+  width: 130,
+  height: 24,
+  gap: 8
 };
 
 const ENEMY_REWARD = 6;
@@ -35,7 +39,28 @@ let credits = STARTING_CREDITS;
 let lives = STARTING_LIVES;
 let kills = 0;
 let buildMode = CELL.WALL;
+let selectedTowerType = TOWER_TYPES.GUN;
 let gameOver = false;
+
+function getTowerButtons() {
+  return TOWER_ORDER.map((type, index) => ({
+    type,
+    x: TOWER_BUTTON.x + index * (TOWER_BUTTON.width + TOWER_BUTTON.gap),
+    y: TOWER_BUTTON.y,
+    width: TOWER_BUTTON.width,
+    height: TOWER_BUTTON.height
+  }));
+}
+
+function getTowerButtonAt(x, y) {
+  const buttons = getTowerButtons();
+  for (const button of buttons) {
+    const inX = x >= button.x && x <= button.x + button.width;
+    const inY = y >= button.y && y <= button.y + button.height;
+    if (inX && inY) return button.type;
+  }
+  return null;
+}
 
 function spawnEnemy() {
   if (!currentPath || gameOver) return;
@@ -76,14 +101,34 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (KEYBINDINGS.WALL.includes(key)) buildMode = CELL.WALL;
-  if (KEYBINDINGS.TOWER.includes(key)) buildMode = CELL.TOWER;
+
+  for (const type of TOWER_ORDER) {
+    const towerDef = TOWER_DEFS[type];
+    if (key === towerDef.key.toLowerCase()) {
+      selectedTowerType = type;
+      buildMode = CELL.TOWER;
+      break;
+    }
+  }
 });
 
 canvas.addEventListener('mousedown', (e) => {
   if (gameOver) return;
 
   const rect = canvas.getBoundingClientRect();
-  const { col, row } = grid.pixelToCell(e.clientX - rect.left, e.clientY - rect.top);
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if (e.button === 0) {
+    const clickedTowerType = getTowerButtonAt(mouseX, mouseY);
+    if (clickedTowerType) {
+      selectedTowerType = clickedTowerType;
+      buildMode = CELL.TOWER;
+      return;
+    }
+  }
+
+  const { col, row } = grid.pixelToCell(mouseX, mouseY);
   const cell = grid.getCell(col, row);
 
   if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) return;
@@ -102,7 +147,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (hasEnemyInCell(col, row)) return;
 
   const placementType = buildMode;
-  const cost = BUILD_COST[placementType];
+  const cost = placementType === CELL.WALL ? WALL_COST : TOWER_DEFS[selectedTowerType].cost;
   if (credits < cost) return;
 
   grid.setCell(col, row, placementType);
@@ -118,7 +163,7 @@ canvas.addEventListener('mousedown', (e) => {
 
   if (placementType === CELL.TOWER) {
     const { x, y } = grid.cellCenter(col, row);
-    towers.push(new Tower(x, y, col, row));
+    towers.push(new Tower(x, y, col, row, selectedTowerType));
   }
 });
 
@@ -182,9 +227,36 @@ function drawPath() {
 function drawHud() {
   ctx.fillStyle = '#dbe5ff';
   ctx.font = '14px monospace';
-  const modeLabel = buildMode === CELL.WALL ? 'Wall (1/W)' : 'Tower (2/T)';
+  const selectedTowerLabel = TOWER_DEFS[selectedTowerType].label;
+  const selectedTowerCost = TOWER_DEFS[selectedTowerType].cost;
+  const modeLabel =
+    buildMode === CELL.WALL
+      ? `Wall (1/W, $${WALL_COST})`
+      : `Tower: ${selectedTowerLabel} ($${selectedTowerCost})`;
   ctx.fillText(`Credits: ${credits}  Lives: ${lives}  Kills: ${kills}`, 12, 22);
-  ctx.fillText(`Build: ${modeLabel} | Left click: place | Right click: remove`, 12, 42);
+  ctx.fillText(`Build: ${modeLabel} | Left: place/select | Right: remove`, 12, 42);
+
+  const buttons = getTowerButtons();
+  for (const button of buttons) {
+    const towerDef = TOWER_DEFS[button.type];
+    const isSelected = button.type === selectedTowerType;
+    const affordable = credits >= towerDef.cost;
+
+    ctx.fillStyle = isSelected ? '#22354d' : '#1a2432';
+    ctx.fillRect(button.x, button.y, button.width, button.height);
+
+    ctx.strokeStyle = towerDef.color;
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(button.x, button.y, button.width, button.height);
+
+    ctx.fillStyle = affordable ? '#ecf5ff' : '#8ea0b8';
+    ctx.font = '12px monospace';
+    ctx.fillText(
+      `${towerDef.key}: ${towerDef.label} $${towerDef.cost}`,
+      button.x + 6,
+      button.y + 16
+    );
+  }
 
   if (gameOver) {
     const centerX = canvas.width / 2;
