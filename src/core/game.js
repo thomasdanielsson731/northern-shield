@@ -30,6 +30,7 @@ grid.setCell(GOAL.col, GOAL.row, CELL.GOAL);
 let currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
 let enemies = [];
 let towers = [];
+let bullets = [];
 let credits = STARTING_CREDITS;
 let lives = STARTING_LIVES;
 let kills = 0;
@@ -125,10 +126,22 @@ function update() {
   if (gameOver) return;
 
   for (const tower of towers) {
-    const towerKills = tower.update(enemies);
+    const towerKills = tower.update(enemies, bullets);
     if (towerKills > 0) {
       kills += towerKills;
       credits += ENEMY_REWARD * towerKills;
+    }
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const bulletKills = bullets[i].update(enemies);
+    if (bulletKills > 0) {
+      kills += bulletKills;
+      credits += ENEMY_REWARD * bulletKills;
+    }
+
+    if (!bullets[i].alive) {
+      bullets.splice(i, 1);
     }
   }
 
@@ -194,6 +207,7 @@ function draw() {
   grid.draw(ctx);
   drawPath();
   towers.forEach(t => t.draw(ctx));
+  bullets.forEach(b => b.draw(ctx));
   enemies.forEach(e => e.draw(ctx));
   drawHud();
 }

@@ -1,8 +1,11 @@
+import { Bullet } from './bullet.js';
+
 const TOWER_STATS = {
   RANGE: 96,
   FIRE_RATE: 24,
   DAMAGE: 35,
-  RADIUS: 6
+  RADIUS: 6,
+  BULLET_SPEED: 7
 };
 
 export class Tower {
@@ -16,9 +19,10 @@ export class Tower {
     this.fireRate = TOWER_STATS.FIRE_RATE;
     this.damage = TOWER_STATS.DAMAGE;
     this.radius = TOWER_STATS.RADIUS;
+    this.bulletSpeed = TOWER_STATS.BULLET_SPEED;
   }
 
-  update(enemies) {
+  update(enemies, bullets = null) {
     if (this.fireCooldown > 0) {
       this.fireCooldown--;
       return 0;
@@ -44,6 +48,12 @@ export class Tower {
     }
 
     if (!target) return 0;
+
+    if (Array.isArray(bullets)) {
+      bullets.push(new Bullet(this.x, this.y, target, this.damage, this.bulletSpeed));
+      this.fireCooldown = this.fireRate;
+      return 0;
+    }
 
     target.hp -= this.damage;
     this.fireCooldown = this.fireRate;
