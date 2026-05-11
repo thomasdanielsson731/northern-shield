@@ -14,6 +14,10 @@ const BUILD_COST = {
   [CELL.WALL]: 5,
   [CELL.TOWER]: 20
 };
+const KEY_BINDINGS = {
+  WALL: ['1', 'w'],
+  TOWER: ['2', 't']
+};
 
 const ENEMY_REWARD = 6;
 const STARTING_CREDITS = 120;
@@ -44,8 +48,9 @@ spawnEnemy();
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === '1' || e.key.toLowerCase() === 'w') buildMode = CELL.WALL;
-  if (e.key === '2' || e.key.toLowerCase() === 't') buildMode = CELL.TOWER;
+  const key = e.key.toLowerCase();
+  if (KEY_BINDINGS.WALL.includes(key)) buildMode = CELL.WALL;
+  if (KEY_BINDINGS.TOWER.includes(key)) buildMode = CELL.TOWER;
 });
 
 canvas.addEventListener('mousedown', (e) => {
@@ -141,13 +146,18 @@ function drawHud() {
   ctx.fillText(`Build: ${modeLabel} | Left click: place | Right click: remove`, 12, 42);
 
   if (gameOver) {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const gameOverLabel = 'GAME OVER';
+    const scoreLabel = `Final score: ${kills}`;
+
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 40px monospace';
-    ctx.fillText('GAME OVER', canvas.width / 2 - 120, canvas.height / 2 - 10);
+    ctx.fillText(gameOverLabel, centerX - ctx.measureText(gameOverLabel).width / 2, centerY - 10);
     ctx.font = '18px monospace';
-    ctx.fillText(`Final score: ${kills}`, canvas.width / 2 - 70, canvas.height / 2 + 24);
+    ctx.fillText(scoreLabel, centerX - ctx.measureText(scoreLabel).width / 2, centerY + 24);
   }
 }
 

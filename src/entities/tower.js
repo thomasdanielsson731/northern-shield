@@ -18,6 +18,7 @@ export class Tower {
     }
 
     let target = null;
+    let bestProgress = -1;
     let bestDistSq = this.range * this.range;
 
     for (const enemy of enemies) {
@@ -25,7 +26,11 @@ export class Tower {
       const dx = enemy.x - this.x;
       const dy = enemy.y - this.y;
       const distSq = dx * dx + dy * dy;
-      if (distSq <= bestDistSq) {
+      const progress = enemy.pathIndex ?? 0;
+      if (distSq > this.range * this.range) continue;
+
+      if (progress > bestProgress || (progress === bestProgress && distSq < bestDistSq)) {
+        bestProgress = progress;
         bestDistSq = distSq;
         target = enemy;
       }
