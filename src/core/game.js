@@ -42,6 +42,31 @@ function spawnEnemy() {
   enemies.push(new Enemy(pixelPath));
 }
 
+function rerouteActiveEnemies() {
+  for (const enemy of enemies) {
+    if (!enemy.alive || enemy.reached) continue;
+
+    const { col, row } = grid.pixelToCell(enemy.x, enemy.y);
+    const enemyPath = grid.findPath(col, row, GOAL.col, GOAL.row);
+    if (!enemyPath || enemyPath.length < 2) continue;
+
+    const pixelPath = enemyPath.map(({ col: pathCol, row: pathRow }) =>
+      grid.cellCenter(pathCol, pathRow)
+    );
+    enemy.setPath(pixelPath);
+  }
+}
+
+function hasEnemyInCell(col, row) {
+  const halfCell = CELL_SIZE / 2;
+  const { x, y } = grid.cellCenter(col, row);
+
+  return enemies.some((enemy) => {
+    if (!enemy.alive || enemy.reached) return false;
+    return Math.abs(enemy.x - x) < halfCell && Math.abs(enemy.y - y) < halfCell;
+  });
+}
+
 setInterval(spawnEnemy, 2000);
 spawnEnemy();
 
@@ -67,11 +92,13 @@ canvas.addEventListener('mousedown', (e) => {
       grid.setCell(col, row, CELL.EMPTY);
       towers = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+      rerouteActiveEnemies();
     }
     return;
   }
 
   if (e.button !== 0 || cell !== CELL.EMPTY) return;
+  if (hasEnemyInCell(col, row)) return;
 
   const placementType = buildMode;
   const cost = BUILD_COST[placementType];
@@ -85,6 +112,7 @@ canvas.addEventListener('mousedown', (e) => {
   }
 
   currentPath = newPath;
+  rerouteActiveEnemies();
   credits -= cost;
 
   if (placementType === CELL.TOWER) {

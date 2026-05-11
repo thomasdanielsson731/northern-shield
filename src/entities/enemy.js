@@ -13,6 +13,14 @@ export class Enemy {
     this.y = path[0].y;
   }
 
+  setPath(path) {
+    if (!path || path.length === 0) return;
+
+    // Keep current position as the first waypoint so reroutes do not teleport enemies.
+    this.path = [{ x: this.x, y: this.y }, ...path];
+    this.pathIndex = 0;
+  }
+
   update() {
     if (!this.alive || this.reached) return;
     if (this.pathIndex >= this.path.length - 1) {
