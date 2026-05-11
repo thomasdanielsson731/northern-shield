@@ -75,22 +75,30 @@ export class Grid {
 
   draw(ctx) {
     const colors = {
-      [CELL.WALL]:  '#667',
-      [CELL.SPAWN]: '#0c4',
-      [CELL.GOAL]:  '#e22',
-      [CELL.TOWER]: '#44c'
+      [CELL.WALL]:  '#3c4a5f',
+      [CELL.SPAWN]: '#25c281',
+      [CELL.GOAL]:  '#e65252',
+      [CELL.TOWER]: '#3f75d9'
     };
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
         const type = this.cells[row][col];
         if (type === CELL.EMPTY) continue;
+
+        const x = col * this.cellSize;
+        const y = row * this.cellSize;
         ctx.fillStyle = colors[type];
-        ctx.fillRect(col * this.cellSize, row * this.cellSize, this.cellSize, this.cellSize);
+        ctx.fillRect(x, y, this.cellSize, this.cellSize);
+
+        // Subtle highlight for better depth readability.
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, this.cellSize - 1, this.cellSize - 1);
       }
     }
 
-    ctx.strokeStyle = '#1e1e2a';
+    ctx.strokeStyle = 'rgba(200, 215, 240, 0.08)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
       ctx.beginPath();

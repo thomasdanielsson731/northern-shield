@@ -42,6 +42,46 @@ let buildMode = CELL.WALL;
 let selectedTowerType = TOWER_TYPES.GUN;
 let gameOver = false;
 
+function getViewSize() {
+  return {
+    width: canvas.clientWidth || window.innerWidth,
+    height: canvas.clientHeight || window.innerHeight
+  };
+}
+
+function drawRoundedPanel(x, y, width, height, radius = 8) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function drawBackground() {
+  const { width, height } = getViewSize();
+  const time = performance.now() * 0.0002;
+
+  const gradient = ctx.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, '#071422');
+  gradient.addColorStop(0.45, '#0e2235');
+  gradient.addColorStop(1, '#11192a');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  const pulse = 0.35 + Math.sin(time * 8) * 0.05;
+  const glow = ctx.createRadialGradient(width * 0.7, height * 0.35, 20, width * 0.7, height * 0.35, 360);
+  glow.addColorStop(0, `rgba(75, 126, 255, ${pulse})`);
+  glow.addColorStop(1, 'rgba(75, 126, 255, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+}
+
 function getTowerButtons() {
   return TOWER_ORDER.map((type, index) => ({
     type,
@@ -210,7 +250,9 @@ function update() {
 
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
-  ctx.strokeStyle = 'rgba(255, 200, 0, 0.15)';
+  ctx.strokeStyle = 'rgba(255, 202, 112, 0.42)';
+  ctx.shadowColor = 'rgba(255, 202, 112, 0.35)';
+  ctx.shadowBlur = 8;
   ctx.lineWidth = CELL_SIZE * 0.7;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -222,10 +264,23 @@ function drawPath() {
     ctx.lineTo(x, y);
   }
   ctx.stroke();
+  ctx.shadowBlur = 0;
 }
 
 function drawHud() {
-  ctx.fillStyle = '#dbe5ff';
+  const topPanelX = 12;
+  const topPanelY = 10;
+  const topPanelW = 660;
+  const topPanelH = 68;
+
+  drawRoundedPanel(topPanelX, topPanelY, topPanelW, topPanelH, 10);
+  ctx.fillStyle = 'rgba(8, 16, 28, 0.72)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(137, 174, 235, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = '#e8f2ff';
   ctx.font = '14px monospace';
   const selectedTowerLabel = TOWER_DEFS[selectedTowerType].label;
   const selectedTowerCost = TOWER_DEFS[selectedTowerType].cost;
@@ -233,8 +288,9 @@ function drawHud() {
     buildMode === CELL.WALL
       ? `Wall (1/W, $${WALL_COST})`
       : `Tower: ${selectedTowerLabel} ($${selectedTowerCost})`;
-  ctx.fillText(`Credits: ${credits}  Lives: ${lives}  Kills: ${kills}`, 12, 22);
-  ctx.fillText(`Build: ${modeLabel} | Left: place/select | Right: remove`, 12, 42);
+  ctx.fillText(`Credits: ${credits}  Lives: ${lives}  Kills: ${kills}`, 24, 34);
+  ctx.fillStyle = '#c7d7f4';
+  ctx.fillText(`Build: ${modeLabel} | Left: place/select | Right: remove`, 24, 56);
 
   const buttons = getTowerButtons();
   for (const button of buttons) {
@@ -242,12 +298,13 @@ function drawHud() {
     const isSelected = button.type === selectedTowerType;
     const affordable = credits >= towerDef.cost;
 
-    ctx.fillStyle = isSelected ? '#22354d' : '#1a2432';
-    ctx.fillRect(button.x, button.y, button.width, button.height);
+    drawRoundedPanel(button.x, button.y, button.width, button.height, 6);
+    ctx.fillStyle = isSelected ? 'rgba(37, 64, 94, 0.92)' : 'rgba(22, 34, 48, 0.85)';
+    ctx.fill();
 
     ctx.strokeStyle = towerDef.color;
     ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.strokeRect(button.x, button.y, button.width, button.height);
+    ctx.stroke();
 
     ctx.fillStyle = affordable ? '#ecf5ff' : '#8ea0b8';
     ctx.font = '12px monospace';
@@ -259,13 +316,21 @@ function drawHud() {
   }
 
   if (gameOver) {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    const { width, height } = getViewSize();
+    const centerX = width / 2;
+    const centerY = height / 2;
     const gameOverLabel = 'GAME OVER';
     const scoreLabel = `Final score: ${kills}`;
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(3, 6, 10, 0.72)';
+    ctx.fillRect(0, 0, width, height);
+
+    drawRoundedPanel(centerX - 200, centerY - 96, 400, 170, 12);
+    ctx.fillStyle = 'rgba(12, 20, 35, 0.88)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.stroke();
+
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 40px monospace';
     ctx.fillText(gameOverLabel, centerX - ctx.measureText(gameOverLabel).width / 2, centerY - 10);
@@ -275,7 +340,9 @@ function drawHud() {
 }
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { width, height } = getViewSize();
+  ctx.clearRect(0, 0, width, height);
+  drawBackground();
   grid.draw(ctx);
   drawPath();
   towers.forEach(t => t.draw(ctx));

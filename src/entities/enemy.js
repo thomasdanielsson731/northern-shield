@@ -46,19 +46,29 @@ export class Enemy {
   draw(ctx) {
     if (!this.alive) return;
 
-    ctx.fillStyle = '#f44';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.arc(this.x + 1.5, this.y + 2, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f05f5f';
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    ctx.fillStyle = '#ffd0d0';
+    ctx.beginPath();
+    ctx.arc(this.x - 2, this.y - 2, this.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
     // HP bar
-    const barW = this.radius * 2;
-    const barH = 3;
+    const barW = this.radius * 2.2;
+    const barH = 4;
     const barX = this.x - this.radius;
-    const barY = this.y - this.radius - 6;
-    ctx.fillStyle = '#333';
+    const barY = this.y - this.radius - 8;
+    ctx.fillStyle = 'rgba(12, 18, 28, 0.85)';
     ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = '#4f4';
+    ctx.fillStyle = '#56e894';
     ctx.fillRect(barX, barY, barW * (this.hp / this.maxHp), barH);
   }
 }

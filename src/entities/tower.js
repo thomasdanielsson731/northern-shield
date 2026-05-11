@@ -62,6 +62,7 @@ export class Tower {
     this.bulletSpeed = def.bulletSpeed;
     this.color = def.color;
     this.rangeColor = def.rangeColor;
+    this.aimAngle = -Math.PI / 2;
   }
 
   update(enemies, bullets = null) {
@@ -91,6 +92,8 @@ export class Tower {
 
     if (!target) return 0;
 
+    this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
+
     if (Array.isArray(bullets)) {
       bullets.push(new Bullet(this.x, this.y, target, this.damage, this.bulletSpeed));
       this.fireCooldown = this.fireRate;
@@ -110,15 +113,39 @@ export class Tower {
   }
 
   draw(ctx) {
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
-
     ctx.strokeStyle = this.rangeColor;
     ctx.lineWidth = 1;
+    ctx.setLineDash([4, 5]);
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(8, 15, 25, 0.6)';
+    ctx.beginPath();
+    ctx.arc(this.x + 1.5, this.y + 2, this.radius + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius + 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius + 1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const barrelLen = this.radius + 6;
+    ctx.strokeStyle = '#eaf2ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(
+      this.x + Math.cos(this.aimAngle) * barrelLen,
+      this.y + Math.sin(this.aimAngle) * barrelLen
+    );
     ctx.stroke();
   }
 }
