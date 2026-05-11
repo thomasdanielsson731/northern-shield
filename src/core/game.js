@@ -14,7 +14,7 @@ const BUILD_COST = {
   [CELL.WALL]: 5,
   [CELL.TOWER]: 20
 };
-const KEY_BINDINGS = {
+const KEYBINDINGS = {
   WALL: ['1', 'w'],
   TOWER: ['2', 't']
 };
@@ -49,8 +49,8 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
-  if (KEY_BINDINGS.WALL.includes(key)) buildMode = CELL.WALL;
-  if (KEY_BINDINGS.TOWER.includes(key)) buildMode = CELL.TOWER;
+  if (KEYBINDINGS.WALL.includes(key)) buildMode = CELL.WALL;
+  if (KEYBINDINGS.TOWER.includes(key)) buildMode = CELL.TOWER;
 });
 
 canvas.addEventListener('mousedown', (e) => {

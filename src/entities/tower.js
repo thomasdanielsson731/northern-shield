@@ -1,14 +1,21 @@
+const TOWER_STATS = {
+  RANGE: 96,
+  FIRE_RATE: 24,
+  DAMAGE: 35,
+  RADIUS: 6
+};
+
 export class Tower {
   constructor(x, y, col, row) {
     this.x = x;
     this.y = y;
     this.col = col;
     this.row = row;
-    this.range = 96;
+    this.range = TOWER_STATS.RANGE;
     this.fireCooldown = 0;
-    this.fireRate = 24;
-    this.damage = 35;
-    this.radius = 6;
+    this.fireRate = TOWER_STATS.FIRE_RATE;
+    this.damage = TOWER_STATS.DAMAGE;
+    this.radius = TOWER_STATS.RADIUS;
   }
 
   update(enemies) {
