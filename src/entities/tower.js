@@ -8,10 +8,10 @@ export const TOWER_TYPES = {
 
 export const TOWER_DEFS = {
   [TOWER_TYPES.GUN]: {
-    label: 'Gun',
+    label: 'Arcane',
     key: '2',
-    color: '#49f',
-    rangeColor: 'rgba(80, 160, 255, 0.25)',
+    color: '#4488ee',
+    rangeColor: 'rgba(68,136,238,0.18)',
     cost: 20,
     range: 96,
     fireRate: 24,
@@ -20,10 +20,10 @@ export const TOWER_DEFS = {
     bulletSpeed: 7
   },
   [TOWER_TYPES.SNIPER]: {
-    label: 'Sniper',
+    label: 'Archer',
     key: '3',
-    color: '#7de39d',
-    rangeColor: 'rgba(125, 227, 157, 0.25)',
+    color: '#55bb66',
+    rangeColor: 'rgba(85,187,102,0.18)',
     cost: 35,
     range: 180,
     fireRate: 55,
@@ -32,10 +32,10 @@ export const TOWER_DEFS = {
     bulletSpeed: 11
   },
   [TOWER_TYPES.RAPID]: {
-    label: 'Rapid',
+    label: 'Storm',
     key: '4',
-    color: '#ffaf69',
-    rangeColor: 'rgba(255, 175, 105, 0.25)',
+    color: '#ee8833',
+    rangeColor: 'rgba(238,136,51,0.18)',
     cost: 28,
     range: 78,
     fireRate: 9,
@@ -55,14 +55,14 @@ export class Tower {
     this.fireCooldown = 0;
 
     const def = TOWER_DEFS[this.type] || TOWER_DEFS[TOWER_TYPES.GUN];
-    this.range = def.range;
-    this.fireRate = def.fireRate;
-    this.damage = def.damage;
-    this.radius = def.radius;
+    this.range      = def.range;
+    this.fireRate   = def.fireRate;
+    this.damage     = def.damage;
+    this.radius     = def.radius;
     this.bulletSpeed = def.bulletSpeed;
-    this.color = def.color;
+    this.color      = def.color;
     this.rangeColor = def.rangeColor;
-    this.aimAngle = -Math.PI / 2;
+    this.aimAngle   = -Math.PI / 2;
   }
 
   update(enemies, bullets = null) {
@@ -73,20 +73,20 @@ export class Tower {
 
     let target = null;
     let bestProgress = -1;
-    let bestDistSq = this.range * this.range;
+    let bestDistSq   = this.range * this.range;
 
     for (const enemy of enemies) {
       if (!enemy.alive || enemy.reached) continue;
       const dx = enemy.x - this.x;
       const dy = enemy.y - this.y;
-      const distSq = dx * dx + dy * dy;
+      const distSq   = dx * dx + dy * dy;
       const progress = enemy.pathIndex ?? 0;
       if (distSq > this.range * this.range) continue;
 
       if (progress > bestProgress || (progress === bestProgress && distSq < bestDistSq)) {
         bestProgress = progress;
-        bestDistSq = distSq;
-        target = enemy;
+        bestDistSq   = distSq;
+        target       = enemy;
       }
     }
 
@@ -104,42 +104,59 @@ export class Tower {
     this.fireCooldown = this.fireRate;
 
     if (target.hp <= 0) {
-      target.hp = 0;
+      target.hp    = 0;
       target.alive = false;
       return 1;
     }
-
     return 0;
   }
 
   draw(ctx) {
+    // range ring
     ctx.strokeStyle = this.rangeColor;
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 5]);
+    ctx.setLineDash([3, 6]);
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = 'rgba(8, 15, 25, 0.6)';
+    // outer magical rune ring
+    ctx.strokeStyle = `${this.color}55`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
     ctx.arc(this.x + 1.5, this.y + 2, this.radius + 2, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = this.color;
+    // body glow
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius + 1, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = 1.2;
+    // inner bright highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth   = 1;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius + 1, 0, Math.PI * 2);
     ctx.stroke();
 
-    const barrelLen = this.radius + 6;
-    ctx.strokeStyle = '#eaf2ff';
-    ctx.lineWidth = 2;
+    // barrel
+    const barrelLen = this.radius + 7;
+    ctx.strokeStyle = '#f0e8d0';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
     ctx.beginPath();
     ctx.moveTo(this.x, this.y);
     ctx.lineTo(
@@ -147,5 +164,6 @@ export class Tower {
       this.y + Math.sin(this.aimAngle) * barrelLen
     );
     ctx.stroke();
+    ctx.lineCap = 'butt';
   }
 }

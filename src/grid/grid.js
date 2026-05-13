@@ -74,11 +74,17 @@ export class Grid {
   }
 
   draw(ctx) {
-    const colors = {
-      [CELL.WALL]:  '#3c4a5f',
-      [CELL.SPAWN]: '#25c281',
-      [CELL.GOAL]:  '#e65252',
-      [CELL.TOWER]: '#3f75d9'
+    const fills = {
+      [CELL.WALL]:  '#1e1430',
+      [CELL.SPAWN]: '#6a3e08',
+      [CELL.GOAL]:  '#580810',
+      [CELL.TOWER]: '#180e40'
+    };
+    const edges = {
+      [CELL.WALL]:  'rgba(160,110,220,0.12)',
+      [CELL.SPAWN]: 'rgba(240,160,40,0.35)',
+      [CELL.GOAL]:  'rgba(255,60,60,0.3)',
+      [CELL.TOWER]: 'rgba(120,90,255,0.25)'
     };
 
     for (let row = 0; row < this.rows; row++) {
@@ -88,17 +94,17 @@ export class Grid {
 
         const x = col * this.cellSize;
         const y = row * this.cellSize;
-        ctx.fillStyle = colors[type];
+
+        ctx.fillStyle = fills[type];
         ctx.fillRect(x, y, this.cellSize, this.cellSize);
 
-        // Subtle highlight for better depth readability.
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.strokeStyle = edges[type] || 'rgba(255,255,255,0.06)';
         ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, this.cellSize - 1, this.cellSize - 1);
       }
     }
 
-    ctx.strokeStyle = 'rgba(200, 215, 240, 0.08)';
+    ctx.strokeStyle = 'rgba(120,60,180,0.07)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
       ctx.beginPath();
