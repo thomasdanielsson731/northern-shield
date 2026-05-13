@@ -1,11 +1,56 @@
+export const ENEMY_TYPES = {
+  INFANTRY: 'infantry',
+  DRONE: 'drone',
+  TANK: 'tank'
+};
+
+export const ENEMY_DEFS = {
+  infantry: {
+    label: 'Infantry',
+    speed: 0.9,
+    hp: 60,
+    radius: 5,
+    reward: 4,
+    color: '#e85555',
+    highlightColor: '#ffaaaa',
+    flying: false
+  },
+  drone: {
+    label: 'Drone',
+    speed: 1.1,
+    hp: 75,
+    radius: 5,
+    reward: 8,
+    color: '#9966ff',
+    highlightColor: '#ccaaff',
+    flying: true
+  },
+  tank: {
+    label: 'Tank',
+    speed: 0.35,
+    hp: 500,
+    radius: 11,
+    reward: 20,
+    color: '#c87a38',
+    highlightColor: '#f0b870',
+    flying: false
+  }
+};
+
 export class Enemy {
-  constructor(path, speed = 1.5) {
+  constructor(path, type = ENEMY_TYPES.INFANTRY) {
+    const def = ENEMY_DEFS[type] || ENEMY_DEFS[ENEMY_TYPES.INFANTRY];
+    this.type = type;
     this.path = path;
     this.pathIndex = 0;
-    this.speed = speed;
-    this.radius = 7;
-    this.hp = 100;
-    this.maxHp = 100;
+    this.speed = def.speed;
+    this.radius = def.radius;
+    this.hp = def.hp;
+    this.maxHp = def.hp;
+    this.reward = def.reward;
+    this.color = def.color;
+    this.highlightColor = def.highlightColor;
+    this.flying = def.flying;
     this.alive = true;
     this.reached = false;
 
@@ -15,8 +60,6 @@ export class Enemy {
 
   setPath(path) {
     if (!path || path.length === 0) return;
-
-    // Keep current position as the first waypoint so reroutes do not teleport enemies.
     this.path = [{ x: this.x, y: this.y }, ...path];
     this.pathIndex = 0;
   }
@@ -46,29 +89,91 @@ export class Enemy {
   draw(ctx) {
     if (!this.alive) return;
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    if (this.type === ENEMY_TYPES.DRONE) {
+      this._drawDrone(ctx);
+    } else if (this.type === ENEMY_TYPES.TANK) {
+      this._drawTank(ctx);
+    } else {
+      this._drawInfantry(ctx);
+    }
+
+    this._drawHpBar(ctx);
+  }
+
+  _drawInfantry(ctx) {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.arc(this.x + 1.5, this.y + 2, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#f05f5f';
+    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#ffd0d0';
+    ctx.fillStyle = this.highlightColor;
     ctx.beginPath();
-    ctx.arc(this.x - 2, this.y - 2, this.radius * 0.4, 0, Math.PI * 2);
+    ctx.arc(this.x - 2, this.y - 2, this.radius * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  _drawDrone(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(Math.PI / 4);
+
+    const s = this.radius;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(1.5 - s, 2 - s, s * 2, s * 2);
+
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-s, -s, s * 2, s * 2);
+
+    ctx.fillStyle = this.highlightColor;
+    ctx.fillRect(-s * 0.35, -s * 0.35, s * 0.7, s * 0.7);
+
+    ctx.restore();
+  }
+
+  _drawTank(ctx) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.arc(this.x + 2, this.y + 2.5, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // HP bar
-    const barW = this.radius * 2.2;
-    const barH = 4;
-    const barX = this.x - this.radius;
-    const barY = this.y - this.radius - 8;
-    ctx.fillStyle = 'rgba(12, 18, 28, 0.85)';
+    ctx.fillStyle = '#2a2030';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius - 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = this.highlightColor;
+    ctx.beginPath();
+    ctx.arc(this.x - 3, this.y - 3, this.radius * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  _drawHpBar(ctx) {
+    const barW = this.radius * 2.4;
+    const barH = this.type === ENEMY_TYPES.TANK ? 5 : 4;
+    const barX = this.x - barW / 2;
+    const barY = this.y - this.radius - 9;
+
+    ctx.fillStyle = 'rgba(12,18,28,0.85)';
     ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = '#56e894';
-    ctx.fillRect(barX, barY, barW * (this.hp / this.maxHp), barH);
+
+    const pct = this.hp / this.maxHp;
+    ctx.fillStyle = pct > 0.5 ? '#56e894' : pct > 0.25 ? '#f0c040' : '#e84040';
+    ctx.fillRect(barX, barY, barW * pct, barH);
   }
 }

@@ -30,7 +30,7 @@ export class Bullet {
       if (this.target.hp <= 0) {
         this.target.hp = 0;
         this.target.alive = false;
-        return 1;
+        return this.target.reward ?? 6;
       }
 
       return 0;
