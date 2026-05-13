@@ -101,9 +101,9 @@ export class Enemy {
   }
 
   _drawGraveborn(ctx) {
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
     ctx.beginPath();
-    ctx.arc(this.x + 1.5, this.y + 2, this.radius, 0, Math.PI * 2);
+    ctx.ellipse(this.x + 2, this.y + this.radius * 0.75, this.radius * 1.15, this.radius * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.shadowColor = 'rgba(160,60,255,0.55)';
@@ -140,9 +140,9 @@ export class Enemy {
   }
 
   _drawGolem(ctx) {
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
-    ctx.arc(this.x + 2.5, this.y + 3, this.radius, 0, Math.PI * 2);
+    ctx.ellipse(this.x + 3, this.y + this.radius * 0.7, this.radius * 1.35, this.radius * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // stone shell

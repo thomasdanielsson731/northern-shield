@@ -74,36 +74,6 @@ export class Grid {
   }
 
   draw(ctx) {
-    const fills = {
-      [CELL.WALL]:  '#1e1430',
-      [CELL.SPAWN]: '#6a3e08',
-      [CELL.GOAL]:  '#580810',
-      [CELL.TOWER]: '#180e40'
-    };
-    const edges = {
-      [CELL.WALL]:  'rgba(160,110,220,0.12)',
-      [CELL.SPAWN]: 'rgba(240,160,40,0.35)',
-      [CELL.GOAL]:  'rgba(255,60,60,0.3)',
-      [CELL.TOWER]: 'rgba(120,90,255,0.25)'
-    };
-
-    for (let row = 0; row < this.rows; row++) {
-      for (let col = 0; col < this.cols; col++) {
-        const type = this.cells[row][col];
-        if (type === CELL.EMPTY) continue;
-
-        const x = col * this.cellSize;
-        const y = row * this.cellSize;
-
-        ctx.fillStyle = fills[type];
-        ctx.fillRect(x, y, this.cellSize, this.cellSize);
-
-        ctx.strokeStyle = edges[type] || 'rgba(255,255,255,0.06)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 0.5, y + 0.5, this.cellSize - 1, this.cellSize - 1);
-      }
-    }
-
     ctx.strokeStyle = 'rgba(120,60,180,0.07)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
@@ -118,5 +88,61 @@ export class Grid {
       ctx.lineTo(this.cols * this.cellSize, y * this.cellSize);
       ctx.stroke();
     }
+
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        const type = this.cells[row][col];
+        if (type === CELL.EMPTY) continue;
+
+        const x = col * this.cellSize;
+        const y = row * this.cellSize;
+        const cs = this.cellSize;
+
+        if (type === CELL.WALL) {
+          this._drawWallBlock(ctx, x, y, cs);
+        } else {
+          const fills = {
+            [CELL.SPAWN]: '#6a3e08',
+            [CELL.GOAL]:  '#580810',
+            [CELL.TOWER]: '#180e40'
+          };
+          const edges = {
+            [CELL.SPAWN]: 'rgba(240,160,40,0.35)',
+            [CELL.GOAL]:  'rgba(255,60,60,0.3)',
+            [CELL.TOWER]: 'rgba(120,90,255,0.25)'
+          };
+          ctx.fillStyle = fills[type] || '#111';
+          ctx.fillRect(x, y, cs, cs);
+          ctx.strokeStyle = edges[type] || 'rgba(255,255,255,0.06)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
+        }
+      }
+    }
+  }
+
+  _drawWallBlock(ctx, x, y, cs) {
+    const topH = 3;
+
+    // Front face
+    ctx.fillStyle = '#1e1430';
+    ctx.fillRect(x, y + topH, cs, cs - topH);
+
+    // Top face — lighter stone, simulates raised block lit from above
+    ctx.fillStyle = '#36245a';
+    ctx.fillRect(x, y, cs, topH);
+
+    // Edge highlight where top meets front
+    ctx.fillStyle = 'rgba(180,140,255,0.14)';
+    ctx.fillRect(x, y + topH, cs, 1);
+
+    // Right-side shadow — fakes depth
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(x + cs - 1, y + topH, 1, cs - topH);
+
+    // Outer border
+    ctx.strokeStyle = 'rgba(160,110,220,0.1)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
   }
 }
