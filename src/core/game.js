@@ -325,6 +325,26 @@ function drawHud() {
     ctx.fillText(costStr, btn.x + btn.width - costW - 7, btn.y + 28);
   }
 
+  // game title — top right
+  const { width } = getViewSize();
+  const titleX = width - 18;
+  const titleY = 34;
+
+  ctx.save();
+  ctx.textAlign = 'right';
+  ctx.letterSpacing = '4px';
+  ctx.font = 'bold 17px monospace';
+  ctx.shadowColor = 'rgba(80,160,255,0.75)';
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = '#c8e4ff';
+  ctx.fillText('NORTHERN SHIELD', titleX, titleY);
+  ctx.shadowBlur = 0;
+  ctx.letterSpacing = '2px';
+  ctx.font = '10px monospace';
+  ctx.fillStyle = 'rgba(140,180,230,0.55)';
+  ctx.fillText('TOWER DEFENSE', titleX, titleY + 16);
+  ctx.restore();
+
   if (gameOver) {
     const { width, height } = getViewSize();
     const cx = width / 2;
