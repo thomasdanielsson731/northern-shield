@@ -1,4 +1,5 @@
 import { Bullet } from './bullet.js';
+import { SPRITES } from '../assets.js';
 
 export const TOWER_TYPES = {
   BERSERK:  'berserk',
@@ -257,13 +258,30 @@ export class Tower {
   // ── Bärsärkare: huge berserker warrior swinging a battle axe ─────────────────
   _drawBerserk(ctx, t) {
     const x = this.x, y = this.y;
-    const axeSpin = t * 3.5;
 
-    // Ground shadow
+    // Ground shadow (always drawn)
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath();
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Sprite rendering when loaded
+    const sp = SPRITES.barsarkare_walk;
+    if (sp) {
+      const frame = Math.floor(t * 7) % sp.total;
+      const col   = frame % sp.cols;
+      const row   = Math.floor(frame / sp.cols);
+      const dw = 30, dh = 40;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.drawImage(sp.img,
+        col * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
+        x - dw / 2, y - dh * 0.82, dw, dh);
+      ctx.restore();
+      return;
+    }
+
+    const axeSpin = t * 3.5;
 
     // Fur-lined boots
     ctx.fillStyle = '#5a3010';

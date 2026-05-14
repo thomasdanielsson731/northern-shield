@@ -588,30 +588,37 @@ function drawBackground() {
   const { width, height } = getViewSize();
   const time = performance.now() * 0.0004;
 
-  // Grass gradient (CoC style)
+  // Dark stone/earth — Nordic dungeon feel (matches concept art)
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0,   '#4a8a28');
-  grad.addColorStop(0.5, '#3d7820');
-  grad.addColorStop(1,   '#2e6016');
+  grad.addColorStop(0,   '#1a1008');
+  grad.addColorStop(0.5, '#130c05');
+  grad.addColorStop(1,   '#0d0803');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle grass texture patches
-  const starTime = performance.now() * 0.0003;
+  // Subtle stone texture (irregular dark blotches)
+  const starTime = performance.now() * 0.0002;
   for (const s of STARS) {
-    const alpha = 0.06 + Math.sin(starTime + s.phase) * 0.03;
-    ctx.fillStyle = `rgba(80,160,30,${Math.max(0, alpha)})`;
+    const alpha = 0.045 + Math.sin(starTime + s.phase) * 0.02;
+    ctx.fillStyle = `rgba(60,38,14,${Math.max(0, alpha)})`;
     ctx.beginPath();
-    ctx.ellipse(s.x * width, s.y * height, s.r * 5, s.r * 2.5, s.phase, 0, Math.PI * 2);
+    ctx.ellipse(s.x * width, s.y * height, s.r * 7, s.r * 3, s.phase, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Sun warmth glow top-right
-  const p1 = 0.18 + Math.sin(time * 3) * 0.04;
-  const g1 = ctx.createRadialGradient(width * 0.85, height * 0.1, 10, width * 0.85, height * 0.1, 350);
-  g1.addColorStop(0, `rgba(255,220,80,${p1})`);
-  g1.addColorStop(1, 'rgba(255,220,80,0)');
+  // Warm torch-light glow top-right (distant fire)
+  const p1 = 0.12 + Math.sin(time * 3.2) * 0.04;
+  const g1 = ctx.createRadialGradient(width * 0.88, height * 0.08, 8, width * 0.88, height * 0.08, 320);
+  g1.addColorStop(0, `rgba(255,140,30,${p1})`);
+  g1.addColorStop(1, 'rgba(255,100,10,0)');
   ctx.fillStyle = g1;
+  ctx.fillRect(0, 0, width, height);
+
+  // Faint left-side ambient (cool blue — moonlight)
+  const g2 = ctx.createRadialGradient(width * 0.04, height * 0.5, 0, width * 0.04, height * 0.5, 260);
+  g2.addColorStop(0, `rgba(40,60,120,0.09)`);
+  g2.addColorStop(1, 'rgba(20,30,80,0)');
+  ctx.fillStyle = g2;
   ctx.fillRect(0, 0, width, height);
 }
 
