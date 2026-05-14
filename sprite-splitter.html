@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Northern Shield — Sprite Splitter</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1008; color: #e8c040; font-family: monospace; padding: 16px; }
+  h1 { font-size: 18px; margin-bottom: 12px; color: #f0c840; }
+  #controls { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  label { font-size: 12px; color: #b8a060; }
+  input[type=number] { width: 64px; background: #2a1408; border: 1px solid #6a4010; color: #e8c040; padding: 3px 6px; font-family: monospace; }
+  button { background: #4a2408; border: 1px solid #c08020; color: #e8c040; padding: 5px 12px; cursor: pointer; font-family: monospace; font-size: 12px; }
+  button:hover { background: #7a3810; }
+  #layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  #preview-wrap { position: relative; }
+  #preview-wrap canvas { display: block; }
+  .overlay-line { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,80,0,0.7); pointer-events: none; }
+  #strips { display: flex; flex-direction: column; gap: 14px; }
+  .strip-card { background: #2a1208; border: 1px solid #5a3010; padding: 10px 14px; }
+  .strip-card h3 { font-size: 12px; color: #f0c840; margin-bottom: 6px; }
+  .strip-card canvas { display: block; image-rendering: pixelated; margin-bottom: 6px; border: 1px solid #3a2010; }
+  .strip-card a { display: inline-block; background: #183a18; border: 1px solid #40a040; color: #80e880; padding: 4px 10px; text-decoration: none; font-size: 11px; }
+  .strip-card a:hover { background: #2a5a2a; }
+  #status { font-size: 11px; color: #a09060; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>⚔ Northern Shield — Sprite Splitter</h1>
+
+<div id="controls">
+  <label>Image: <strong>/assets/towers/reference_character_animations.png</strong></label>
+  <span style="color:#5a4020">|</span>
+  <label>Row height: <input type="number" id="rowH" value="128" min="20" max="400"> px</label>
+  <label>Top offset: <input type="number" id="topOff" value="0" min="0" max="200"> px</label>
+  <button id="btnUpdate">Update Crops</button>
+  <button id="btnSaveAll">Download All</button>
+</div>
+
+<div id="layout">
+  <div id="preview-wrap">
+    <canvas id="fullCanvas"></canvas>
+  </div>
+  <div id="strips"></div>
+</div>
+<div id="status">Loading image…</div>
+
+<script>
+const CHARACTERS = [
+  { name: 'BARBARIAN',  file: 'barbarian_sprites.png',  folder: 'towers' },
+  { name: 'ARCHER',     file: 'archer_sprites.png',     folder: 'towers' },
+  { name: 'DVARG',      file: 'dvarg_sprites.png',      folder: 'towers' },
+  { name: 'BRYNHILD',   file: 'brynhild_sprites.png',   folder: 'towers' },
+  { name: 'VALKYRIA',   file: 'valkyria_sprites.png',   folder: 'towers' },
+  { name: 'VILDEMAN',   file: 'vildeman_sprites.png',   folder: 'towers' },
+  { name: 'IS MACIKER', file: 'ismaciker_sprites.png',  folder: 'towers' },
+];
+
+const img = new Image();
+img.src = '/assets/towers/reference_character_animations.png';
+
+img.onload = () => {
+  document.getElementById('status').textContent =
+    `Loaded: ${img.naturalWidth} × ${img.naturalHeight} px`;
+
+  const defaultRowH = Math.floor(img.naturalHeight / CHARACTERS.length);
+  document.getElementById('rowH').value = defaultRowH;
+
+  renderAll();
+};
+
+img.onerror = () => {
+  document.getElementById('status').textContent = 'ERROR: Could not load image. Is the Vite dev server running?';
+};
+
+function getParams() {
+  return {
+    rowH:   parseInt(document.getElementById('rowH').value)   || 128,
+    topOff: parseInt(document.getElementById('topOff').value) || 0,
+  };
+}
+
+function renderAll() {
+  if (!img.complete || img.naturalWidth === 0) return;
+
+  const { rowH, topOff } = getParams();
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const SCALE = Math.min(1, 300 / W);
+
+  // ── Preview with overlay lines ─────────────────────────
+  const full = document.getElementById('fullCanvas');
+  full.width  = W * SCALE;
+  full.height = H * SCALE;
+  const fc = full.getContext('2d');
+  fc.drawImage(img, 0, 0, full.width, full.height);
+
+  // Remove old lines
+  const wrap = document.getElementById('preview-wrap');
+  wrap.querySelectorAll('.overlay-line').forEach(el => el.remove());
+  for (let i = 0; i < CHARACTERS.length + 1; i++) {
+    const y = (topOff + i * rowH) * SCALE;
+    const line = document.createElement('div');
+    line.className = 'overlay-line';
+    line.style.top = y + 'px';
+    wrap.appendChild(line);
+  }
+
+  // ── Strip cards ────────────────────────────────────────
+  const strips = document.getElementById('strips');
+  strips.innerHTML = '';
+
+  CHARACTERS.forEach((ch, i) => {
+    const srcY = topOff + i * rowH;
+    if (srcY + rowH > H + 4) return; // skip if out of bounds
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = W;
+    offscreen.height = rowH;
+    const oc = offscreen.getContext('2d');
+    oc.drawImage(img, 0, srcY, W, rowH, 0, 0, W, rowH);
+
+    const DISP_SCALE = Math.min(1, 360 / W);
+    const disp = document.createElement('canvas');
+    disp.width  = W * DISP_SCALE;
+    disp.height = rowH * DISP_SCALE;
+    const dc = disp.getContext('2d');
+    dc.imageSmoothingEnabled = false;
+    dc.drawImage(offscreen, 0, 0, disp.width, disp.height);
+
+    const a = document.createElement('a');
+    a.textContent = `⬇ Save as assets/${ch.folder}/${ch.file}`;
+    a.href = '#';
+    a.onclick = e => {
+      e.preventDefault();
+      offscreen.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const dl = document.createElement('a');
+        dl.href = url;
+        dl.download = ch.file;
+        dl.click();
+        URL.revokeObjectURL(url);
+      });
+    };
+
+    const card = document.createElement('div');
+    card.className = 'strip-card';
+    card.innerHTML = `<h3>${ch.name} → assets/${ch.folder}/${ch.file}</h3>`;
+    card.appendChild(disp);
+    card.appendChild(a);
+    strips.appendChild(card);
+  });
+}
+
+document.getElementById('btnUpdate').onclick = renderAll;
+
+document.getElementById('btnSaveAll').onclick = () => {
+  if (!img.complete || img.naturalWidth === 0) return;
+  const { rowH, topOff } = getParams();
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+
+  CHARACTERS.forEach((ch, i) => {
+    const srcY = topOff + i * rowH;
+    if (srcY >= H) return;
+
+    const off = document.createElement('canvas');
+    off.width  = W;
+    off.height = Math.min(rowH, H - srcY);
+    off.getContext('2d').drawImage(img, 0, srcY, W, off.height, 0, 0, W, off.height);
+
+    off.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = ch.file;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+  });
+};
+</script>
+</body>
+</html>
