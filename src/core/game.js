@@ -7,15 +7,18 @@ const COLS = 50;
 const ROWS = 30;
 const CELL_SIZE = 14;
 
-const GRID_TOP    = 42;
-const GRID_BOTTOM = GRID_TOP + ROWS * CELL_SIZE;
+const SIDEBAR_W     = 52;
+const RIGHT_PANEL_W = 188;
+const GRID_LEFT     = SIDEBAR_W;
+const GRID_TOP      = 48;
+const GRID_BOTTOM   = GRID_TOP + ROWS * CELL_SIZE;
 
 const SPAWN = { col: 0,        row: 15 };
 const GOAL  = { col: COLS - 1, row: 15 };
 
 const WALL_COST = 5;
 
-const BUILD_BTN = { x: 12, w: 106, h: 38, gap: 5 };
+const BUILD_BTN = { x: SIDEBAR_W + 8, w: 106, h: 38, gap: 5 };
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Sköldborg', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
@@ -52,6 +55,8 @@ let panelUpgradeBtn = null;
 let panelSellBtn    = null;
 let restartBtn      = null;
 let toplistBtn      = null;
+let nextWaveBtn     = null;
+let activeSidebarTab = 'towers';
 
 // ── high-score table ──────────────────────────────────────────────────────────
 
@@ -434,7 +439,16 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  const { col, row } = grid.pixelToCell(mouseX, mouseY - GRID_TOP);
+  // Next-wave button (right panel)
+  if (e.button === 0 && nextWaveBtn && !gameOver) {
+    if (mouseX >= nextWaveBtn.x && mouseX <= nextWaveBtn.x + nextWaveBtn.w &&
+        mouseY >= nextWaveBtn.y && mouseY <= nextWaveBtn.y + nextWaveBtn.h) {
+      if (waveState === 'countdown' || waveState === 'break') startNextWave();
+      return;
+    }
+  }
+
+  const { col, row } = grid.pixelToCell(mouseX - GRID_LEFT, mouseY - GRID_TOP);
   const cell = grid.getCell(col, row);
 
   if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
@@ -663,7 +677,7 @@ function drawPath() {
 
 function drawFrames() {
   const { width, height } = getViewSize();
-  const gx = 0, gy = GRID_TOP;
+  const gx = GRID_LEFT, gy = GRID_TOP;
   const gw = COLS * CELL_SIZE, gh = ROWS * CELL_SIZE;
 
   ctx.save();
@@ -816,173 +830,210 @@ function drawFrames() {
   ctx.restore();
 }
 
-function drawSidePanel() {
-  const { width } = getViewSize();
-  const panelX = COLS * CELL_SIZE + 8;
-  const panelW = width - panelX - 8;
-  if (panelW < 130) return;
+function drawRightPanel() {
+  const { width, height } = getViewSize();
+  const px = GRID_LEFT + COLS * CELL_SIZE + 4;
+  const pw = width - px - 4;
+  if (pw < 60) return;
 
-  const panelY = GRID_TOP + 4;
-  const panelH = ROWS * CELL_SIZE - 8;
-  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(60,35,10,0.92)');
+  const fullH = height - GRID_TOP - 4;
+  drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(50,26,6,0.96)');
 
-  const lx  = panelX + 12;
-  let   ly  = panelY + 20;
-  const gap = 17;
-
-  function divider() {
-    ctx.strokeStyle = 'rgba(210,160,40,0.22)';
-    ctx.lineWidth   = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(panelX + 8, ly);
-    ctx.lineTo(panelX + panelW - 8, ly);
-    ctx.stroke();
-    ly += 10;
-  }
-
-  function stat(icon, label, value, color = '#c0b090') {
-    ctx.font      = '11px monospace';
-    ctx.fillStyle = color;
-    ctx.fillText(`${icon} ${label}`, lx, ly);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#e8c040';
-    ctx.fillText(`${value}`, panelX + panelW - 10, ly);
-    ctx.textAlign = 'left';
-    ly += gap;
-  }
+  const lx = px + 10;
+  let ly = GRID_TOP + 18;
+  const rEdge = px + pw - 8;
 
   ctx.save();
-  ctx.textAlign = 'left';
 
-  // Title
-  ctx.font        = 'bold 12px monospace';
-  ctx.fillStyle   = '#f0c840';
-  ctx.shadowColor = 'rgba(220,170,40,0.7)';
+  // ── KOMMANDE FIENDER header ────────────────────────────────────────────────
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#f0c840';
+  ctx.shadowColor = 'rgba(220,170,30,0.8)';
   ctx.shadowBlur  = 8;
-  ctx.fillText('RAPPORT', lx, ly);
-  ctx.shadowBlur  = 0;
-  ly += gap + 2;
+  ctx.textAlign   = 'left';
+  ctx.fillText('KOMMANDE', lx, ly); ly += 13;
+  ctx.fillText('FIENDER', lx, ly);  ly += 16;
+  ctx.shadowBlur = 0;
+
+  function divider() {
+    ctx.strokeStyle = 'rgba(200,150,30,0.25)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(px + 6, ly); ctx.lineTo(px + pw - 6, ly);
+    ctx.stroke();
+    ly += 8;
+  }
   divider();
 
-  // Tower breakdown
-  const towerCounts = {};
-  let   wallCount   = 0;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (grid.cells[r][c] === CELL.WALL) wallCount++;
-    }
-  }
-  for (const t of towers) towerCounts[t.type] = (towerCounts[t.type] ?? 0) + 1;
+  // Next wave enemies
+  const nextNum = waveNumber + 1;
+  const next = waveComposition(nextNum);
+  const entries = [
+    { label: 'Graveborn', count: next.infantry, color: '#bb70ff', skip: next.infantry === 0 },
+    { label: 'Wisp',      count: next.drones,   color: '#88bbff', skip: next.drones   === 0 },
+    { label: 'Golem',     count: next.tanks,    color: '#d08820', skip: next.tanks    === 0 },
+    { label: 'Banshee',   count: next.emps,     color: '#00ddcc', skip: next.emps     === 0 },
+  ];
 
-  stat('🗼', 'Torn', towers.length, '#c0b090');
-  for (const type of Object.values(TOWER_TYPES)) {
-    const n = towerCounts[type] ?? 0;
-    if (n === 0) continue;
-    const def = TOWER_DEFS[type];
-    ctx.font      = '10px monospace';
-    ctx.fillStyle = def.color;
-    ctx.fillText(`  ${def.label}`, lx, ly);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#e8c040';
-    ctx.fillText(`${n}`, panelX + panelW - 10, ly);
+  ctx.font = '10px monospace';
+  for (const e of entries) {
+    if (e.skip) continue;
+    ctx.fillStyle = e.color;
     ctx.textAlign = 'left';
-    ly += gap - 2;
+    ctx.fillText(e.label, lx, ly);
+    ctx.fillStyle = '#e8c040';
+    ctx.textAlign = 'right';
+    ctx.fillText(`×${e.count}`, rEdge, ly);
+    ctx.textAlign = 'left';
+    ly += 16;
   }
-  stat('🧱', 'Murar', wallCount, '#a09070');
+
+  ly += 6;
   divider();
 
-  // Economy
-  stat('◆', 'Förtjänat', `+${goldEarned}`, '#e8c040');
-  stat('◆', 'Spenderat', `-${goldSpent}`, '#c09040');
-  divider();
+  // ── Tower stats ─────────────────────────────────────────────────────────────
+  ctx.font      = 'bold 9px monospace';
+  ctx.fillStyle = '#c0a060';
+  ctx.textAlign = 'left';
+  ctx.fillText('TORN', lx, ly); ly += 14;
 
-  // Battle
-  stat('★', 'Slagna', slain, '#b8c8e0');
-  const leaked = STARTING_LIVES - lives;
-  stat('♥', 'Läckt', `${leaked}/${STARTING_LIVES}`, leaked > 0 ? '#ff9090' : '#60e880');
-  divider();
-
-  // Next wave preview
-  if (!gameOver && waveState !== 'active') {
-    const nextNum = waveNumber + 1;
-    ctx.font      = 'bold 10px monospace';
-    ctx.fillStyle = '#a0e0c0';
-    ctx.fillText(`Våg ${nextNum}:`, lx, ly);
-    ly += gap;
-    const next = waveComposition(nextNum);
-    const preview = [
-      { label: `● ×${next.infantry}`, color: '#bb70ff' },
-      { label: `◆ ×${next.drones}`,   color: '#88bbff', skip: next.drones === 0 },
-      { label: `◉ ×${next.tanks}`,    color: '#c07820', skip: next.tanks  === 0 },
-      { label: `✦ ×${next.emps}`,     color: '#00ddcc', skip: next.emps   === 0 },
-    ];
-    for (const p of preview) {
-      if (p.skip) continue;
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = p.color;
-      ctx.fillText(`  ${p.label}`, lx, ly);
-      ly += gap - 2;
+  ctx.font = '9px monospace';
+  for (const tower of towers.slice(0, 6)) {
+    const def = TOWER_DEFS[tower.type];
+    ctx.fillStyle = def.color;
+    ctx.fillText(def.label, lx, ly);
+    if (tower.level > 1) {
+      ctx.fillStyle = tower.maxed ? '#ff9040' : '#e8c040';
+      ctx.textAlign = 'right';
+      ctx.fillText(tower.maxed ? 'MAX' : `L${tower.level}`, rEdge, ly);
+      ctx.textAlign = 'left';
     }
+    ly += 13;
+  }
+  if (towers.length > 6) {
+    ctx.fillStyle = 'rgba(180,150,80,0.5)';
+    ctx.fillText(`+${towers.length - 6} mer`, lx, ly);
+    ly += 13;
+  }
+
+  ly += 4;
+  divider();
+
+  // ── Economy ──────────────────────────────────────────────────────────────────
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = '#e8c040';
+  ctx.textAlign = 'left';
+  ctx.fillText(`+${goldEarned}`, lx, ly);
+  ctx.fillStyle = 'rgba(180,140,60,0.7)';
+  ctx.textAlign = 'right';
+  ctx.fillText(`-${goldSpent}`, rEdge, ly);
+  ctx.textAlign = 'left';
+  ly += 14;
+
+  ctx.fillStyle = '#b8c8e0';
+  ctx.fillText(`★ Slagna: ${slain}`, lx, ly); ly += 13;
+  const leaked = STARTING_LIVES - lives;
+  ctx.fillStyle = leaked > 0 ? '#ff9090' : '#60e880';
+  ctx.fillText(`♥ Läckt: ${leaked}/${STARTING_LIVES}`, lx, ly);
+
+  // ── NÄSTA VÅG button ─────────────────────────────────────────────────────────
+  if (!gameOver && waveState !== 'active') {
+    const btnH = 44;
+    const btnY = GRID_TOP + fullH - btnH - 10;
+    const btnX = px + 6;
+    const btnW = pw - 12;
+
+    ctx.shadowColor = 'rgba(200,30,20,0.8)';
+    ctx.shadowBlur  = 12;
+    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(140,18,18,0.97)', 0.92, 6);
+    ctx.shadowBlur  = 0;
+
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 11px monospace';
+    ctx.fillStyle   = '#ffffff';
+    ctx.shadowColor = 'rgba(255,100,80,0.7)';
+    ctx.shadowBlur  = 8;
+    ctx.fillText('NÄSTA VÅG', btnX + btnW / 2, btnY + 17);
+    const secs = waveState === 'countdown'
+      ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
+      : Math.ceil((BREAK_FRAMES - waveTimer) / 60);
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = 'rgba(255,200,180,0.8)';
+    ctx.fillText(`auto ${secs}s`, btnX + btnW / 2, btnY + 32);
+    ctx.shadowBlur = 0;
+
+    nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+  } else {
+    nextWaveBtn = null;
   }
 
   ctx.restore();
 }
 
-function drawHud() {
+function drawTopBar() {
   const { width } = getViewSize();
+  drawFantasyPanel(2, 2, width - 4, GRID_TOP - 4, 'rgba(55,30,8,0.96)');
 
-  // ── Top status bar ────────────────────────────────────────────────────────────
-  const topX = 8, topY = 6, topH = 30;
-  const topW = width - 16;
-  drawFantasyPanel(topX, topY, topW, topH, 'rgba(60,35,10,0.95)');
-
+  const cy = (GRID_TOP - 4) / 2 + 7;
   ctx.save();
-  ctx.font = '13px monospace';
-  let sx = topX + 14;
-  const sy = topY + 20;
 
-  ctx.fillStyle = '#e8c040';
-  ctx.fillText(`◆ Gold: ${gold}`, sx, sy);
-  sx += ctx.measureText(`◆ Gold: ${gold}`).width + 18;
+  // Left: title
+  ctx.font        = 'bold 15px monospace';
+  ctx.fillStyle   = '#f0c840';
+  ctx.shadowColor = 'rgba(220,170,40,0.85)';
+  ctx.shadowBlur  = 14;
+  ctx.textAlign   = 'left';
+  ctx.fillText('⚔ NORTHERN SHIELD', 16, cy);
+  ctx.shadowBlur  = 0;
+
+  // Center: wave + timer
+  const wLabel = waveNumber === 0 ? 'VÅG 0' : `VÅG ${waveNumber}`;
+  ctx.font      = 'bold 13px monospace';
+  ctx.fillStyle = '#a0e0c0';
+  ctx.textAlign = 'center';
+  ctx.fillText(wLabel, width / 2 - 34, cy);
+
+  if (waveState !== 'active') {
+    const tSecs = waveState === 'countdown'
+      ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
+      : Math.ceil((BREAK_FRAMES - waveTimer) / 60);
+    const mm = String(Math.floor(tSecs / 60)).padStart(2, '0');
+    const ss = String(tSecs % 60).padStart(2, '0');
+    ctx.font      = '12px monospace';
+    ctx.fillStyle = 'rgba(180,230,200,0.75)';
+    ctx.fillText(`${mm}:${ss}`, width / 2 + 26, cy);
+  } else {
+    const rem = spawnQueue.length + enemies.length;
+    ctx.font      = '12px monospace';
+    ctx.fillStyle = rem > 0 ? '#e8a060' : '#60e880';
+    ctx.fillText(`◈ ${rem}/${waveTotal}`, width / 2 + 20, cy);
+  }
+
+  // Right: resources
+  let rx = width - 14;
+  ctx.font = '13px monospace';
 
   ctx.fillStyle = '#ff9090';
-  ctx.fillText(`♥ Lives: ${lives}`, sx, sy);
-  sx += ctx.measureText(`♥ Lives: ${lives}`).width + 18;
+  ctx.textAlign = 'right';
+  ctx.fillText(`♥ ${lives}`, rx, cy);
+  rx -= ctx.measureText(`♥ ${lives}`).width + 18;
+
+  ctx.fillStyle = '#e8c040';
+  ctx.fillText(`◆ ${gold}`, rx, cy);
+  rx -= ctx.measureText(`◆ ${gold}`).width + 18;
 
   ctx.fillStyle = '#b8c8e0';
-  ctx.fillText(`★ Slain: ${slain}`, sx, sy);
-  sx += ctx.measureText(`★ Slain: ${slain}`).width + 18;
+  ctx.fillText(`★ ${slain}`, rx, cy);
 
-  const waveLabel = waveNumber === 0 ? '-' : `${waveNumber}`;
-  ctx.fillStyle = '#a0e0c0';
-  ctx.fillText(`⚔ Wave: ${waveLabel}`, sx, sy);
-  sx += ctx.measureText(`⚔ Wave: ${waveLabel}`).width + 14;
-
-  if (waveNumber > 0 && waveState === 'active') {
-    const remaining = spawnQueue.length + enemies.length;
-    ctx.fillStyle = remaining > 0 ? '#e8a060' : '#60e880';
-    ctx.fillText(`◈ ${remaining}/${waveTotal}`, sx, sy);
-  }
   ctx.restore();
+}
 
-  // title — right side of top bar
-  ctx.save();
-  ctx.textAlign     = 'right';
-  ctx.letterSpacing = '4px';
-  ctx.font          = 'bold 17px monospace';
-  ctx.shadowColor   = 'rgba(220,170,40,0.85)';
-  ctx.shadowBlur    = 16;
-  ctx.fillStyle     = '#f0c840';
-  ctx.fillText('NORTHERN SHIELD', width - 18, topY + 21);
-  ctx.shadowBlur    = 0;
-  ctx.restore();
-
-  // ── Bottom build bar ──────────────────────────────────────────────────────────
-  const buildPanelX = 8;
+function drawBottomBuildBar() {
+  const buildPanelW = BUILD_ITEMS.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 20;
+  const buildPanelX = SIDEBAR_W + 2;
   const buildPanelY = GRID_BOTTOM + 4;
-  const buildPanelW = BUILD_BTN.x + BUILD_ITEMS.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 10;
-  const buildPanelH = BUILD_BTN.h + 18;
-  drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(60,35,10,0.95)');
+  const buildPanelH = BUILD_BTN.h + 22;
+  drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(55,30,8,0.96)');
 
   for (const btn of getBuildButtons()) {
     const isSelected = btn.mode === CELL.WALL
@@ -990,34 +1041,46 @@ function drawHud() {
       : buildMode === CELL.TOWER && selectedTowerType === btn.id;
     const affordable = gold >= btn.cost;
 
-    const fillStyle   = isSelected ? 'rgba(55,30,8,0.96)' : 'rgba(8,4,18,0.90)';
-    const borderAlpha = isSelected ? 0.88 : 0.38;
+    const fillStyle   = isSelected ? 'rgba(60,32,8,0.97)' : 'rgba(10,5,20,0.90)';
+    const borderAlpha = isSelected ? 0.90 : 0.35;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
 
-    ctx.font      = 'bold 11px monospace';
-    ctx.fillStyle = isSelected ? '#e8c040' : 'rgba(180,150,80,0.65)';
-    ctx.fillText(`[${btn.key}]`, btn.x + 7, btn.y + 15);
+    // Color swatch circle
+    ctx.beginPath();
+    ctx.arc(btn.x + 12, btn.y + btn.height / 2, 5, 0, Math.PI * 2);
+    ctx.fillStyle = affordable ? btn.color : 'rgba(80,60,40,0.5)';
+    ctx.fill();
 
-    ctx.font      = '12px monospace';
-    ctx.fillStyle = !affordable ? '#4a4030' : isSelected ? '#fff' : '#c0b090';
-    ctx.fillText(btn.label, btn.x + 7, btn.y + 29);
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = isSelected ? '#e8c040' : 'rgba(180,150,80,0.6)';
+    ctx.fillText(`[${btn.key}]`, btn.x + 22, btn.y + 13);
+
+    ctx.font      = '11px monospace';
+    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#fff' : '#c0b090';
+    ctx.fillText(btn.label, btn.x + 22, btn.y + 27);
 
     const costStr = `$${btn.cost}`;
-    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#e8c040' : '#907840';
-    ctx.fillText(costStr, btn.x + btn.width - ctx.measureText(costStr).width - 7, btn.y + 29);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = !affordable ? '#302818' : isSelected ? '#e8c040' : '#807040';
+    ctx.fillText(costStr, btn.x + btn.width - 6, btn.y + 27);
+    ctx.textAlign = 'left';
   }
+}
+
+function drawHud() {
+  drawTopBar();
+  drawBottomBuildBar();
 
   if (!gameOver) return;
 
-  const { height } = getViewSize();
-  const cx = width / 2;
+  const { width, height } = getViewSize();
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
   const cy = height / 2;
 
   ctx.fillStyle = 'rgba(3,1,8,0.82)';
   ctx.fillRect(0, 0, width, height);
 
   if (showTopList) {
-    // ── Toplist screen ──────────────────────────────────────────────────────────
     const pw = 380, ph = Math.min(60 + highScores.length * 26 + 60, 360);
     const px = cx - pw / 2, py = cy - ph / 2;
     drawFantasyPanel(px, py, pw, ph, 'rgba(6,2,14,0.97)', 0.85, 12);
@@ -1060,13 +1123,11 @@ function drawHud() {
       ctx.fillText(`+${s.goldEarned}`, colX[3], row);
       row += 24;
     });
-
     if (highScores.length === 0) {
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(160,140,100,0.6)';
       ctx.font      = '12px monospace';
       ctx.fillText('Inga resultat ännu', cx, row);
-      row += 24;
     }
     ctx.restore();
 
@@ -1074,17 +1135,15 @@ function drawHud() {
     const bbX = cx - bbW / 2, bbY = py + ph - 50;
     drawFantasyPanel(bbX, bbY, bbW, bbH, 'rgba(8,6,22,0.97)', 0.7, 6);
     ctx.save();
-    ctx.textAlign   = 'center';
-    ctx.font        = 'bold 13px monospace';
-    ctx.fillStyle   = '#a0c0e8';
+    ctx.textAlign = 'center';
+    ctx.font      = 'bold 13px monospace';
+    ctx.fillStyle = '#a0c0e8';
     ctx.fillText('← TILLBAKA', cx, bbY + 23);
     ctx.restore();
     restartBtn = { x: bbX, y: bbY, w: bbW, h: bbH, action: 'back' };
 
   } else {
-    // ── Game-over screen ────────────────────────────────────────────────────────
     drawFantasyPanel(cx - 220, cy - 120, 440, 230, 'rgba(6,2,14,0.97)', 0.82, 12);
-
     ctx.save();
     ctx.textAlign   = 'center';
     ctx.shadowColor = 'rgba(200,50,50,0.7)';
@@ -1099,12 +1158,10 @@ function drawHud() {
     ctx.fillText(`Vågor klara: ${waveNumber}   Guld förtjänat: ${goldEarned}`, cx, cy + 22);
     ctx.restore();
 
-    const rbW = 160, rbH = 38;
-    const tlW = 160, tlH = 38;
-    const gap = 12;
+    const rbW = 160, rbH = 38, tlW = 160, tlH = 38, gap = 12;
     const totalW = rbW + gap + tlW;
-    const rbX  = cx - totalW / 2,         rbY = cy + 52;
-    const tlX  = cx - totalW / 2 + rbW + gap, tlY = cy + 52;
+    const rbX = cx - totalW / 2,              rbY = cy + 52;
+    const tlX = cx - totalW / 2 + rbW + gap,  tlY = cy + 52;
 
     drawFantasyPanel(rbX, rbY, rbW, rbH, 'rgba(8,26,8,0.97)', 0.75, 6);
     ctx.save();
@@ -1136,9 +1193,9 @@ function drawTowerPanel(tower) {
   const panelH = 86;
   const { width, height } = getViewSize();
 
-  let px = tower.x - panelW / 2;
-  let py = (tower.y + GRID_TOP) - panelH - CELL_SIZE - 4;
-  px = Math.max(8, Math.min(px, width  - panelW - 8));
+  let px = GRID_LEFT + tower.x - panelW / 2;
+  let py = GRID_TOP  + tower.y  - panelH - CELL_SIZE - 4;
+  px = Math.max(SIDEBAR_W + 4, Math.min(px, width - RIGHT_PANEL_W - panelW - 4));
   py = Math.max(8, Math.min(py, height - panelH - 8));
 
   drawFantasyPanel(px, py, panelW, panelH, 'rgba(4,2,12,0.97)', 0.88, 7);
@@ -1217,8 +1274,8 @@ function drawWaveAnnouncement() {
   if (waveState === 'active') return;
 
   const { width } = getViewSize();
-  const cx = width / 2;
-  const cy = GRID_TOP + (ROWS * CELL_SIZE) / 2;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const cy = GRID_TOP  + (ROWS * CELL_SIZE) / 2;
 
   let line1, line2, glowColor;
   if (waveState === 'countdown') {
@@ -1273,6 +1330,40 @@ function drawWaveAnnouncement() {
   ctx.restore();
 }
 
+function drawLeftSidebar() {
+  const { height } = getViewSize();
+  drawFantasyPanel(0, GRID_TOP, SIDEBAR_W, height - GRID_TOP, 'rgba(46,24,6,0.97)');
+
+  const tabs = [
+    { id: 'towers',  symbol: '⚔',  label: 'TORN'  },
+    { id: 'troops',  symbol: '●',  label: 'TRUPP' },
+    { id: 'defense', symbol: '🛡', label: 'FÖRSV' },
+    { id: 'deco',    symbol: '✦',  label: 'DEKO'  },
+    { id: 'map',     symbol: '◉',  label: 'KARTA' },
+  ];
+
+  const tabH = 68, tabGap = 3;
+  tabs.forEach((tab, i) => {
+    const ty     = GRID_TOP + 10 + i * (tabH + tabGap);
+    const active = activeSidebarTab === tab.id;
+    drawFantasyPanel(4, ty, SIDEBAR_W - 8, tabH,
+      active ? 'rgba(80,42,8,0.97)' : 'rgba(22,12,3,0.88)',
+      active ? 0.88 : 0.25, 6);
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font      = '18px monospace';
+    ctx.fillStyle = active ? '#f0c840' : 'rgba(160,120,50,0.55)';
+    if (active) { ctx.shadowColor = 'rgba(220,170,30,0.8)'; ctx.shadowBlur = 8; }
+    ctx.fillText(tab.symbol, SIDEBAR_W / 2, ty + 28);
+    ctx.shadowBlur = 0;
+    ctx.font      = '7px monospace';
+    ctx.fillStyle = active ? '#c0a030' : 'rgba(120,90,40,0.45)';
+    ctx.fillText(tab.label, SIDEBAR_W / 2, ty + 44);
+    ctx.restore();
+  });
+}
+
 function draw() {
   const { width, height } = getViewSize();
   ctx.clearRect(0, 0, width, height);
@@ -1280,10 +1371,9 @@ function draw() {
 
   // Game world — translated down by GRID_TOP so the top status bar doesn't cover the grid
   ctx.save();
-  ctx.translate(
-    screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0,
-    GRID_TOP + (screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0)
-  );
+  const shakeX = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
+  const shakeY = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
+  ctx.translate(GRID_LEFT + shakeX, GRID_TOP + shakeY);
 
   const time = performance.now() * 0.001;
   grid.draw(ctx, time);
@@ -1313,7 +1403,8 @@ function draw() {
   ctx.restore();
 
   drawFrames();
-  drawSidePanel();
+  drawLeftSidebar();
+  drawRightPanel();
   drawHud();
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
