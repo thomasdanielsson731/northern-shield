@@ -74,7 +74,7 @@ export class Grid {
   }
 
   draw(ctx, time = 0) {
-    ctx.strokeStyle = 'rgba(120,60,180,0.07)';
+    ctx.strokeStyle = 'rgba(0,80,0,0.12)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
       ctx.beginPath();
@@ -104,12 +104,13 @@ export class Grid {
           this._drawSpawn(ctx, x, y, cs, time);
         } else if (type === CELL.GOAL) {
           this._drawGoal(ctx, x, y, cs, time);
-        } else {
-          const fills = { [CELL.TOWER]: '#180e40' };
-          const edges = { [CELL.TOWER]: 'rgba(120,90,255,0.25)' };
-          ctx.fillStyle = fills[type] || '#111';
+        } else if (type === CELL.TOWER) {
+          // CoC tower pad: worn stone
+          ctx.fillStyle = '#8a7050';
           ctx.fillRect(x, y, cs, cs);
-          ctx.strokeStyle = edges[type] || 'rgba(255,255,255,0.06)';
+          ctx.fillStyle = 'rgba(255,220,120,0.12)';
+          ctx.fillRect(x, y, cs, 2);
+          ctx.strokeStyle = 'rgba(100,70,20,0.5)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
         }
@@ -122,22 +123,22 @@ export class Grid {
     const cy = y + cs / 2;
     const pulse = 0.5 + Math.sin(time * 3) * 0.5;
 
-    ctx.fillStyle = '#3a2004';
+    ctx.fillStyle = '#1a5c08';
     ctx.fillRect(x, y, cs, cs);
 
     // Pulsing ring
     ctx.save();
-    ctx.strokeStyle = `rgba(240,160,40,${0.3 + pulse * 0.45})`;
+    ctx.strokeStyle = `rgba(80,220,60,${0.3 + pulse * 0.5})`;
     ctx.lineWidth   = 1.5;
-    ctx.shadowColor = 'rgba(255,180,40,0.8)';
-    ctx.shadowBlur  = 8 * pulse;
+    ctx.shadowColor = 'rgba(60,200,40,0.9)';
+    ctx.shadowBlur  = 10 * pulse;
     ctx.beginPath();
     ctx.arc(cx, cy, (cs / 2 - 2) * (0.7 + pulse * 0.28), 0, Math.PI * 2);
     ctx.stroke();
     ctx.shadowBlur = 0;
 
     // Inner dot
-    ctx.fillStyle = `rgba(255,180,40,${0.5 + pulse * 0.4})`;
+    ctx.fillStyle = `rgba(80,220,60,${0.5 + pulse * 0.4})`;
     ctx.beginPath();
     ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -185,26 +186,30 @@ export class Grid {
   }
 
   _drawWallBlock(ctx, x, y, cs) {
-    const topH = 3;
+    const topH = 4;
 
-    // Front face
-    ctx.fillStyle = '#1e1430';
+    // Front face (warm grey stone)
+    ctx.fillStyle = '#8c8070';
     ctx.fillRect(x, y + topH, cs, cs - topH);
 
-    // Top face — lighter stone, simulates raised block lit from above
-    ctx.fillStyle = '#36245a';
+    // Top face — bright lit from above (CoC top-down lighting)
+    ctx.fillStyle = '#c8b898';
     ctx.fillRect(x, y, cs, topH);
 
-    // Edge highlight where top meets front
-    ctx.fillStyle = 'rgba(180,140,255,0.14)';
+    // Bright edge where top meets front
+    ctx.fillStyle = 'rgba(255,240,180,0.35)';
     ctx.fillRect(x, y + topH, cs, 1);
 
-    // Right-side shadow — fakes depth
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x + cs - 1, y + topH, 1, cs - topH);
+    // Right-side shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(x + cs - 2, y + topH, 2, cs - topH);
+
+    // Bottom shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(x, y + cs - 1, cs, 1);
 
     // Outer border
-    ctx.strokeStyle = 'rgba(160,110,220,0.1)';
+    ctx.strokeStyle = 'rgba(80,60,30,0.6)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
   }

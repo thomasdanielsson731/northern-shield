@@ -69,6 +69,7 @@ function restartGame() {
   screenShake   = 0;
 
   waveNumber    = 0;
+  waveTotal     = 0;
   waveState     = 'countdown';
   waveTimer     = 0;
   spawnQueue    = [];
@@ -78,11 +79,14 @@ function restartGame() {
 
 // ── wave system ───────────────────────────────────────────────────────────────
 
-const COUNTDOWN_FRAMES = 180;
-const BREAK_FRAMES     = 360;
-const SPAWN_FRAMES     = 40;
+const COUNTDOWN_FRAMES  = 180;
+const BREAK_FRAMES      = 360;
+const SPAWN_FRAMES      = 40;
+const EMP_RANGE         = 50;
+const EMP_DISABLE_FRAMES = 150;
 
 let waveNumber  = 0;
+let waveTotal   = 0;
 let waveState   = 'countdown';  // 'countdown' | 'active' | 'break'
 let waveTimer   = 0;
 let spawnQueue  = [];
@@ -135,15 +139,23 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function waveComposition(num) {
+  return {
+    infantry: Math.min(6 + num * 2, 26),
+    drones:   num >= 2 ? Math.min(num - 1, 8) : 0,
+    tanks:    num >= 4 ? Math.min(Math.floor((num - 3) * 0.7), 4) : 0,
+    emps:     num >= 3 ? Math.min(Math.floor((num - 2) * 0.5), 4) : 0,
+  };
+}
+
 function buildWave(num) {
-  const infantry = Math.min(6 + num * 2, 26);
-  const drones   = num >= 2 ? Math.min(num - 1, 8) : 0;
-  const tanks    = num >= 4 ? Math.min(Math.floor((num - 3) * 0.7), 4) : 0;
+  const { infantry, drones, tanks, emps } = waveComposition(num);
 
   const queue = [
     ...Array(infantry).fill(ENEMY_TYPES.INFANTRY),
     ...Array(drones).fill(ENEMY_TYPES.DRONE),
     ...Array(tanks).fill(ENEMY_TYPES.TANK),
+    ...Array(emps).fill(ENEMY_TYPES.EMP),
   ];
 
   for (let i = queue.length - 1; i > 0; i--) {
@@ -158,6 +170,7 @@ function startNextWave() {
   waveNumber++;
   waveHpScale = 1 + (waveNumber - 1) * 0.12;
   spawnQueue  = buildWave(waveNumber);
+  waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
   waveState   = 'active';
 }
@@ -235,29 +248,25 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
   ctx.fill();
   ctx.restore();
 
-  // gold outer border
+  // warm brown outer border (CoC style)
   drawRoundedPath(x, y, w, h, radius);
-  ctx.strokeStyle = `rgba(210,160,40,${borderAlpha})`;
-  ctx.lineWidth   = 1.5;
+  ctx.strokeStyle = `rgba(180,110,30,${borderAlpha})`;
+  ctx.lineWidth   = 2;
   ctx.stroke();
 
-  // inner subtle line
-  if (w > 16 && h > 16) {
-    drawRoundedPath(x + 3, y + 3, w - 6, h - 6, Math.max(radius - 2, 2));
-    ctx.strokeStyle = `rgba(210,160,40,${borderAlpha * 0.22})`;
-    ctx.lineWidth   = 0.5;
-    ctx.stroke();
-  }
+  // highlight line (top edge — lit from above)
+  drawRoundedPath(x + 2, y + 2, w - 4, h - 4, Math.max(radius - 2, 2));
+  ctx.strokeStyle = `rgba(255,200,80,${borderAlpha * 0.28})`;
+  ctx.lineWidth   = 0.5;
+  ctx.stroke();
 
-  // corner gem diamonds
-  const gs = 4;
-  for (const [cx, cy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = `rgba(230,180,50,${borderAlpha})`;
-    ctx.fillRect(-gs / 2, -gs / 2, gs, gs);
-    ctx.restore();
+  // corner rivets
+  const gs = 3.5;
+  for (const [cx, cy] of [[x + 5, y + 5], [x + w - 5, y + 5], [x + 5, y + h - 5], [x + w - 5, y + h - 5]]) {
+    ctx.fillStyle = `rgba(220,160,40,${borderAlpha * 0.9})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, gs / 2, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -457,7 +466,29 @@ function update() {
       gold += reward;
       if (b.target) spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 12);
     }
-    if (!b.alive) bullets.splice(i, 1);
+    if (!b.alive) {
+      // Splash damage for missile bullets
+      if (b.splashRadius > 0) {
+        const ix = b.x, iy = b.y;
+        spawnParticles(ix, iy, '#ff6622', 20);
+        for (const enemy of enemies) {
+          if (!enemy.alive || enemy.reached || enemy === b.target) continue;
+          const dx = enemy.x - ix;
+          const dy = enemy.y - iy;
+          if (dx * dx + dy * dy <= b.splashRadius * b.splashRadius) {
+            enemy.hp -= b.splashDamage;
+            if (enemy.hp <= 0) {
+              enemy.hp    = 0;
+              enemy.alive = false;
+              slain++;
+              gold += enemy.reward;
+              spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 10);
+            }
+          }
+        }
+      }
+      bullets.splice(i, 1);
+    }
   }
 
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -474,6 +505,18 @@ function update() {
     }
   }
 
+  // EMP: Banshee disables nearby towers
+  for (const enemy of enemies) {
+    if (enemy.type !== ENEMY_TYPES.EMP || !enemy.alive || enemy.reached) continue;
+    for (const tower of towers) {
+      const dx = tower.x - enemy.x;
+      const dy = tower.y - enemy.y;
+      if (dx * dx + dy * dy <= EMP_RANGE * EMP_RANGE) {
+        tower.disabledTimer = Math.max(tower.disabledTimer, EMP_DISABLE_FRAMES);
+      }
+    }
+  }
+
   updateParticles();
   if (screenShake > 0) screenShake *= 0.82;
 }
@@ -482,39 +525,32 @@ function update() {
 
 function drawBackground() {
   const { width, height } = getViewSize();
-  const time = performance.now() * 0.0002;
+  const time = performance.now() * 0.0004;
 
-  const grad = ctx.createLinearGradient(0, 0, width, height);
-  grad.addColorStop(0,    '#06030f');
-  grad.addColorStop(0.5,  '#0e0820');
-  grad.addColorStop(1,    '#0a0618');
+  // Grass gradient (CoC style)
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0,   '#4a8a28');
+  grad.addColorStop(0.5, '#3d7820');
+  grad.addColorStop(1,   '#2e6016');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  // Stars
-  const starTime = performance.now() * 0.0009;
+  // Subtle grass texture patches
+  const starTime = performance.now() * 0.0003;
   for (const s of STARS) {
-    const alpha = 0.2 + Math.sin(starTime + s.phase) * 0.18;
-    ctx.fillStyle = `rgba(200,210,255,${Math.max(0, alpha)})`;
+    const alpha = 0.06 + Math.sin(starTime + s.phase) * 0.03;
+    ctx.fillStyle = `rgba(80,160,30,${Math.max(0, alpha)})`;
     ctx.beginPath();
-    ctx.arc(s.x * width, s.y * height, s.r, 0, Math.PI * 2);
+    ctx.ellipse(s.x * width, s.y * height, s.r * 5, s.r * 2.5, s.phase, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // pulsing purple magic glow
-  const p1 = 0.28 + Math.sin(time * 6) * 0.06;
-  const g1 = ctx.createRadialGradient(width * 0.65, height * 0.4, 10, width * 0.65, height * 0.4, 400);
-  g1.addColorStop(0, `rgba(110,50,190,${p1})`);
-  g1.addColorStop(1, 'rgba(110,50,190,0)');
+  // Sun warmth glow top-right
+  const p1 = 0.18 + Math.sin(time * 3) * 0.04;
+  const g1 = ctx.createRadialGradient(width * 0.85, height * 0.1, 10, width * 0.85, height * 0.1, 350);
+  g1.addColorStop(0, `rgba(255,220,80,${p1})`);
+  g1.addColorStop(1, 'rgba(255,220,80,0)');
   ctx.fillStyle = g1;
-  ctx.fillRect(0, 0, width, height);
-
-  // pulsing amber glow (offset phase)
-  const p2 = 0.14 + Math.sin(time * 4 + 1.8) * 0.04;
-  const g2 = ctx.createRadialGradient(width * 0.22, height * 0.72, 10, width * 0.22, height * 0.72, 280);
-  g2.addColorStop(0, `rgba(170,90,15,${p2})`);
-  g2.addColorStop(1, 'rgba(170,90,15,0)');
-  ctx.fillStyle = g2;
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -533,22 +569,22 @@ function drawPath() {
     }
   }
 
-  // Glow base layer
+  // CoC dirt path — warm sandy brown
   ctx.save();
-  ctx.lineWidth   = CELL_SIZE * 0.65;
+  ctx.lineWidth   = CELL_SIZE * 0.72;
   ctx.lineJoin    = 'round';
   ctx.lineCap     = 'round';
-  ctx.strokeStyle = 'rgba(180,130,25,0.32)';
-  ctx.shadowColor = 'rgba(220,175,45,0.4)';
-  ctx.shadowBlur  = 14;
+  ctx.strokeStyle = 'rgba(180,130,60,0.55)';
+  ctx.shadowColor = 'rgba(200,150,60,0.3)';
+  ctx.shadowBlur  = 8;
   ctx.setLineDash([]);
   buildPathShape();
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Animated flowing dashes on top
-  ctx.lineWidth      = CELL_SIZE * 0.22;
-  ctx.strokeStyle    = 'rgba(255,210,60,0.55)';
+  // Animated flowing dashes (direction indicator)
+  ctx.lineWidth      = CELL_SIZE * 0.2;
+  ctx.strokeStyle    = 'rgba(240,200,90,0.5)';
   ctx.setLineDash([6, 14]);
   ctx.lineDashOffset = -(time * 28) % 20;
   buildPathShape();
@@ -563,7 +599,7 @@ function drawHud() {
   const panelW = BUILD_BTN.x + BUILD_ITEMS.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 10;
   const panelH = BUILD_BTN.y + BUILD_BTN.h + 12;
 
-  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(6,3,16,0.92)');
+  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(60,35,10,0.95)');
 
   // stats row
   ctx.save();
@@ -581,9 +617,16 @@ function drawHud() {
   ctx.fillText(`★ Slain: ${slain}`, panelX + 14 + goldW + 18 + livesW + 18, panelY + 26);
   const slainW = ctx.measureText(`★ Slain: ${slain}`).width;
 
+  const waveLabel = waveNumber === 0 ? '-' : `${waveNumber}`;
   ctx.fillStyle = '#a0e0c0';
-  const waveLabel = waveNumber === 0 ? 'Wave: -' : `Wave: ${waveNumber}`;
-  ctx.fillText(`⚔ ${waveLabel}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18, panelY + 26);
+  ctx.fillText(`⚔ Wave: ${waveLabel}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18, panelY + 26);
+  const waveW = ctx.measureText(`⚔ Wave: ${waveLabel}`).width;
+
+  if (waveNumber > 0 && waveState === 'active') {
+    const remaining = spawnQueue.length + enemies.length;
+    ctx.fillStyle = remaining > 0 ? '#e8a060' : '#60e880';
+    ctx.fillText(`◈ ${remaining}/${waveTotal}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18 + waveW + 14, panelY + 26);
+  }
 
   ctx.restore();
 
@@ -786,12 +829,35 @@ function drawWaveAnnouncement() {
   ctx.shadowBlur  = 22;
   ctx.fillStyle   = '#f0e080';
   ctx.font        = 'bold 28px monospace';
-  ctx.fillText(line1, cx, cy - 10);
+  ctx.fillText(line1, cx, cy - 14);
 
   ctx.shadowBlur  = 10;
   ctx.fillStyle   = 'rgba(200,230,200,0.85)';
   ctx.font        = '15px monospace';
-  ctx.fillText(line2, cx, cy + 20);
+  ctx.fillText(line2, cx, cy + 14);
+
+  // Next wave composition (shown during break)
+  if (waveState === 'break') {
+    const next = waveComposition(waveNumber + 1);
+    const parts = [];
+    if (next.infantry > 0) parts.push({ label: `● ×${next.infantry}`, color: '#bb70ff' });
+    if (next.drones   > 0) parts.push({ label: `◆ ×${next.drones}`,   color: '#88bbff' });
+    if (next.tanks    > 0) parts.push({ label: `◉ ×${next.tanks}`,    color: '#c07820' });
+    if (next.emps     > 0) parts.push({ label: `✦ ×${next.emps}`,     color: '#00ddcc' });
+
+    ctx.font = '13px monospace';
+    const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 18, -18);
+    let px = cx - totalW / 2;
+    for (const p of parts) {
+      ctx.fillStyle   = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur  = 6;
+      ctx.textAlign   = 'left';
+      ctx.fillText(p.label, px, cy + 36);
+      px += ctx.measureText(p.label).width + 18;
+    }
+    ctx.shadowBlur = 0;
+  }
 
   ctx.restore();
 }

@@ -1,14 +1,16 @@
 export class Bullet {
-  constructor(x, y, target, damage, speed = 7) {
+  constructor(x, y, target, damage, speed = 7, splashRadius = 0, splashDamage = 0) {
     this.x = x;
     this.y = y;
     this.target = target;
     this.damage = damage;
     this.speed = speed;
-    this.radius = 2.5;
+    this.splashRadius = splashRadius;
+    this.splashDamage = splashDamage;
+    this.radius = splashRadius > 0 ? 3.5 : 2.5;
     this.alive = true;
     this.trail = [{ x, y }];
-    this.maxTrailPoints = 6;
+    this.maxTrailPoints = splashRadius > 0 ? 4 : 6;
   }
 
   update() {
@@ -40,35 +42,58 @@ export class Bullet {
     this.y += (dy / dist) * this.speed;
 
     this.trail.push({ x: this.x, y: this.y });
-    if (this.trail.length > this.maxTrailPoints) {
-      this.trail.shift();
-    }
+    if (this.trail.length > this.maxTrailPoints) this.trail.shift();
     return 0;
   }
 
   draw(ctx) {
     if (!this.alive) return;
 
-    if (this.trail.length > 1) {
-      ctx.strokeStyle = 'rgba(255, 216, 107, 0.5)';
-      ctx.lineWidth = 1.6;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(this.trail[0].x, this.trail[0].y);
-      for (let i = 1; i < this.trail.length; i++) {
-        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+    if (this.splashRadius > 0) {
+      // Fireball / missile
+      if (this.trail.length > 1) {
+        ctx.strokeStyle = 'rgba(255,110,30,0.55)';
+        ctx.lineWidth   = 3;
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+        for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        ctx.stroke();
       }
-      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,80,20,0.35)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = '#ff6620';
+      ctx.shadowBlur  = 14;
+      ctx.fillStyle   = '#ffcc44';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineCap = 'butt';
+    } else {
+      // Normal arcane bullet
+      if (this.trail.length > 1) {
+        ctx.strokeStyle = 'rgba(255, 216, 107, 0.5)';
+        ctx.lineWidth   = 1.6;
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+        for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255, 216, 107, 0.35)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffd86b';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineCap = 'butt';
     }
-
-    ctx.fillStyle = 'rgba(255, 216, 107, 0.35)';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffd86b';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
   }
 }

@@ -1,9 +1,10 @@
 import { Bullet } from './bullet.js';
 
 export const TOWER_TYPES = {
-  GUN: 'gun',
-  SNIPER: 'sniper',
-  RAPID: 'rapid'
+  GUN:     'gun',
+  SNIPER:  'sniper',
+  RAPID:   'rapid',
+  MISSILE: 'missile'
 };
 
 export const TOWER_DEFS = {
@@ -42,6 +43,20 @@ export const TOWER_DEFS = {
     damage: 14,
     radius: 5,
     bulletSpeed: 8
+  },
+  [TOWER_TYPES.MISSILE]: {
+    label: 'Siege',
+    key: '5',
+    color: '#dd5522',
+    rangeColor: 'rgba(220,80,30,0.12)',
+    cost: 50,
+    range: 110,
+    fireRate: 85,
+    damage: 60,
+    radius: 7,
+    bulletSpeed: 4,
+    splashRadius: 34,
+    splashDamage: 30
   }
 };
 
@@ -67,6 +82,9 @@ export class Tower {
     this.rangeColor   = def.rangeColor;
     this.aimAngle     = -Math.PI / 2;
     this.fireFlash    = 0;
+    this.disabledTimer = 0;
+    this.splashRadius  = def.splashRadius ?? 0;
+    this.splashDamage  = def.splashDamage ?? 0;
 
     this._applyLevel();
   }
@@ -98,6 +116,10 @@ export class Tower {
   }
 
   update(enemies, bullets = null) {
+    if (this.disabledTimer > 0) {
+      this.disabledTimer--;
+      return 0;
+    }
     if (this.fireCooldown > 0) {
       this.fireCooldown--;
       return 0;
@@ -127,7 +149,7 @@ export class Tower {
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
-      bullets.push(new Bullet(this.x, this.y, target, this.damage, this.bulletSpeed));
+      bullets.push(new Bullet(this.x, this.y, target, this.damage, this.bulletSpeed, this.splashRadius, this.splashDamage));
       this.fireCooldown = this.fireRate;
       this.fireFlash    = 7;
       return 0;
@@ -155,9 +177,35 @@ export class Tower {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    if (this.type === TOWER_TYPES.GUN)         this._drawArcane(ctx, t);
+    if (this.type === TOWER_TYPES.GUN)          this._drawArcane(ctx, t);
     else if (this.type === TOWER_TYPES.SNIPER)  this._drawArcher(ctx, t);
+    else if (this.type === TOWER_TYPES.MISSILE) this._drawSiege(ctx, t);
     else                                        this._drawStorm(ctx, t);
+
+    // EMP disabled shimmer
+    if (this.disabledTimer > 0) {
+      const flicker = 0.45 + Math.sin(t * 28) * 0.3;
+      ctx.save();
+      ctx.fillStyle   = `rgba(0,220,200,${flicker * 0.4})`;
+      ctx.shadowColor = '#00ffee';
+      ctx.shadowBlur  = 12;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const a  = t * 9 + (i * Math.PI * 2 / 3);
+        const r1 = this.radius + 3;
+        const r2 = this.radius + 8;
+        ctx.strokeStyle = `rgba(0,255,220,${0.35 + Math.sin(t * 18 + i) * 0.25})`;
+        ctx.lineWidth   = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(this.x + Math.cos(a) * r1,       this.y + Math.sin(a) * r1);
+        ctx.lineTo(this.x + Math.cos(a + 0.5) * r2, this.y + Math.sin(a + 0.5) * r2);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
 
     // Muzzle flash ring
     if (this.fireFlash > 0) {
@@ -322,6 +370,54 @@ export class Tower {
     ctx.lineTo(x + Math.cos(this.aimAngle) * barrelLen, y - 7 + Math.sin(this.aimAngle) * barrelLen);
     ctx.stroke();
     ctx.shadowBlur = 0;
+    ctx.lineCap = 'butt';
+  }
+
+  // ── Siege: heavy fire cannon with ember core ────────────────────────────────
+  _drawSiege(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.7 + Math.sin(t * 4.5) * 0.3;
+
+    // Wide stone base
+    ctx.fillStyle = '#2a1008';
+    ctx.fillRect(x - 8, y + 3, 16, 5);
+    ctx.fillStyle = '#1a0804';
+    ctx.fillRect(x - 8, y + 7, 16, 1);
+
+    // Squat reinforced body
+    ctx.fillStyle = '#1e0c06';
+    ctx.fillRect(x - 6, y - 4, 12, 8);
+    ctx.fillStyle = '#2c1a0c';
+    ctx.fillRect(x - 6, y - 4, 4, 8);
+
+    // Crenellations
+    ctx.fillStyle = '#1e0c06';
+    for (const dx of [-5, -2, 1]) ctx.fillRect(x + dx, y - 7, 2.5, 3.5);
+
+    // Thick barrel
+    const barrelLen = 10;
+    ctx.strokeStyle = '#aa4420';
+    ctx.lineWidth   = 4.5;
+    ctx.lineCap     = 'round';
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 8 * pulse;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(this.aimAngle) * barrelLen, y + Math.sin(this.aimAngle) * barrelLen);
+    ctx.stroke();
+
+    // Ember core
+    ctx.shadowBlur  = 18 * pulse;
+    ctx.fillStyle   = '#ff7733';
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = '#ffee88';
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.lineCap = 'butt';
   }
 

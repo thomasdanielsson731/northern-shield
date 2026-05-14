@@ -1,10 +1,21 @@
 export const ENEMY_TYPES = {
   INFANTRY: 'infantry',
-  DRONE: 'drone',
-  TANK: 'tank'
+  DRONE:    'drone',
+  TANK:     'tank',
+  EMP:      'emp'
 };
 
 export const ENEMY_DEFS = {
+  emp: {
+    label:          'Banshee',
+    speed:          0.65,
+    hp:             90,
+    radius:         5,
+    reward:         14,
+    color:          '#00bbcc',
+    highlightColor: '#aaffff',
+    flying:         false
+  },
   infantry: {
     label: 'Graveborn',
     speed: 0.9,
@@ -93,6 +104,8 @@ export class Enemy {
       this._drawWisp(ctx);
     } else if (this.type === ENEMY_TYPES.TANK) {
       this._drawGolem(ctx);
+    } else if (this.type === ENEMY_TYPES.EMP) {
+      this._drawBanshee(ctx);
     } else {
       this._drawGraveborn(ctx);
     }
@@ -183,6 +196,57 @@ export class Enemy {
     ctx.arc(this.x + this.radius * 0.32, eyeY, 1.6, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+  }
+
+  _drawBanshee(ctx) {
+    const t = performance.now() * 0.001;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Electric arcs
+    for (let i = 0; i < 4; i++) {
+      const a   = t * 3 + (i * Math.PI / 2);
+      const len = 5 + Math.sin(t * 12 + i * 1.8) * 2.5;
+      ctx.strokeStyle = `rgba(0,255,220,${0.25 + Math.sin(t * 15 + i) * 0.2})`;
+      ctx.lineWidth   = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 3, Math.sin(a) * 3);
+      ctx.lineTo(Math.cos(a + 0.3) * len, Math.sin(a + 0.3) * len);
+      ctx.stroke();
+    }
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(2, this.radius * 0.75, this.radius * 1.1, this.radius * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Diamond body
+    const s = this.radius;
+    ctx.shadowColor = '#00ffee';
+    ctx.shadowBlur  = 14;
+    ctx.fillStyle   = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s * 0.75, 0);
+    ctx.lineTo(0, s);
+    ctx.lineTo(-s * 0.75, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Inner highlight
+    const hs = s * 0.42;
+    ctx.fillStyle = this.highlightColor;
+    ctx.beginPath();
+    ctx.moveTo(0, -hs);
+    ctx.lineTo(hs * 0.75, 0);
+    ctx.lineTo(0, hs);
+    ctx.lineTo(-hs * 0.75, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
   }
 
   _drawHpBar(ctx) {
