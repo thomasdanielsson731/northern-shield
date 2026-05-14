@@ -2,6 +2,7 @@ import { ctx, canvas } from './renderer.js';
 import { Grid, CELL } from '../grid/grid.js';
 import { Enemy, ENEMY_TYPES, ENEMY_DEFS } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
+import { SPRITES } from '../assets.js';
 
 const COLS = 50;
 const ROWS = 30;
@@ -18,7 +19,7 @@ const GOAL  = { col: COLS - 1, row: 15 };
 
 const WALL_COST = 5;
 
-const BUILD_BTN = { x: SIDEBAR_W + 8, w: 106, h: 38, gap: 5 };
+const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Sköldborg', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
