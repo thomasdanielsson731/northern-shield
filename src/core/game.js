@@ -13,12 +13,12 @@ const GRID_BOTTOM = GRID_TOP + ROWS * CELL_SIZE;
 const SPAWN = { col: 0,        row: 15 };
 const GOAL  = { col: COLS - 1, row: 15 };
 
-const WALL_COST = 8;
+const WALL_COST = 5;
 
 const BUILD_BTN = { x: 12, w: 106, h: 38, gap: 5 };
 
 const BUILD_ITEMS = [
-  { id: 'wall', label: 'Wall', key: '1', color: '#a08040', cost: WALL_COST, mode: CELL.WALL },
+  { id: 'wall', label: 'Sköldborg', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
   ...Object.values(TOWER_TYPES).map(type => ({
     id:    type,
     label: TOWER_DEFS[type].label,
@@ -560,6 +560,20 @@ function update() {
       const dy = tower.y - enemy.y;
       if (dx * dx + dy * dy <= EMP_RANGE * EMP_RANGE) {
         tower.disabledTimer = Math.max(tower.disabledTimer, EMP_DISABLE_FRAMES);
+      }
+    }
+  }
+
+  // Sköldborg: adjacent wall blocks slow passing enemies by 20%
+  for (const enemy of enemies) {
+    if (!enemy.alive || enemy.reached) continue;
+    const { col, row } = grid.pixelToCell(enemy.x, enemy.y);
+    const adj = [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]];
+    for (const [ac, ar] of adj) {
+      if (grid.getCell(ac, ar) === CELL.WALL) {
+        enemy.slowTimer  = Math.max(enemy.slowTimer, 4);
+        enemy.slowFactor = Math.min(enemy.slowFactor, 0.8);
+        break;
       }
     }
   }

@@ -67,6 +67,8 @@ export class Bullet {
       this._drawSpear(ctx);
     } else if (this.shape === 'rock') {
       this._drawRock(ctx);
+    } else if (this.shape === 'stun') {
+      this._drawStun(ctx);
     } else if (this.splashRadius > 0) {
       this._drawFireball(ctx);
     } else if (this.slowDuration > 0) {
@@ -218,7 +220,55 @@ export class Bullet {
     ctx.lineCap = 'butt';
   }
 
-  // ── Charm sparkle (Blondie) ──────────────────────────────────────────────────
+  // ── Stun star (Blondie) ──────────────────────────────────────────────────────
+  _drawStun(ctx) {
+    const spin = performance.now() * 0.004;
+
+    // Trail
+    if (this.trail.length > 1) {
+      ctx.strokeStyle = 'rgba(255,220,50,0.5)';
+      ctx.lineWidth   = 1.5;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+
+    // Halo
+    ctx.fillStyle = 'rgba(255,220,30,0.22)';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Spinning 5-pointed gold star
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(spin);
+    ctx.shadowColor = '#ffdd00';
+    ctx.shadowBlur  = 14;
+    ctx.fillStyle   = '#ffe840';
+    const outerR = this.radius * 1.3, innerR = this.radius * 0.55;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = (i * Math.PI / 5) - Math.PI / 2;
+      const r = i % 2 === 0 ? outerR : innerR;
+      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else         ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // Bright core
+    ctx.fillStyle  = '#fff8a0';
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Charm sparkle (Blondie — legacy shape, unused) ────────────────────────────
   _drawCharm(ctx) {
     if (this.trail.length > 1) {
       ctx.strokeStyle = 'rgba(255,140,200,0.5)';

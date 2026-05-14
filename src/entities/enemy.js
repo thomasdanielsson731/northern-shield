@@ -119,22 +119,49 @@ export class Enemy {
       this._drawGraveborn(ctx);
     }
 
-    // Icy slow overlay
+    // Slow / stun overlay
     if (this.slowTimer > 0) {
-      const alpha = 0.4 * Math.min(1, this.slowTimer / 25);
+      const alpha = Math.min(1, this.slowTimer / 25);
       ctx.save();
-      ctx.strokeStyle = `rgba(120,210,255,${alpha * 1.5})`;
-      ctx.lineWidth   = 2;
-      ctx.shadowColor = '#80ddff';
-      ctx.shadowBlur  = 8;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(160,230,255,${alpha * 0.3})`;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      if (this.slowFactor <= 0.05) {
+        // Stun: spinning gold stars
+        const t   = performance.now() * 0.001;
+        const rot = t * 3.5;
+        for (let i = 0; i < 3; i++) {
+          const a  = rot + (i / 3) * Math.PI * 2;
+          const sr = this.radius + 5;
+          const sx = this.x + Math.cos(a) * sr;
+          const sy = this.y + Math.sin(a) * sr;
+          ctx.shadowColor = '#ffdd00';
+          ctx.shadowBlur  = 6;
+          ctx.fillStyle   = `rgba(255,220,30,${0.65 * alpha})`;
+          ctx.beginPath();
+          const or = 3, ir = 1.3, pts = 5;
+          for (let j = 0; j < pts * 2; j++) {
+            const sa = (j * Math.PI / pts) - Math.PI / 2 + rot * 2 + i;
+            const rr = j % 2 === 0 ? or : ir;
+            if (j === 0) ctx.moveTo(sx + Math.cos(sa) * rr, sy + Math.sin(sa) * rr);
+            else         ctx.lineTo(sx + Math.cos(sa) * rr, sy + Math.sin(sa) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      } else {
+        // Slow: icy blue ring
+        ctx.strokeStyle = `rgba(120,210,255,${alpha * 0.6})`;
+        ctx.lineWidth   = 2;
+        ctx.shadowColor = '#80ddff';
+        ctx.shadowBlur  = 8;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(160,230,255,${alpha * 0.12})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
       ctx.restore();
     }
 

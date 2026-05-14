@@ -186,30 +186,75 @@ export class Grid {
   }
 
   _drawWallBlock(ctx, x, y, cs) {
-    const topH = 4;
+    const cx = x + cs / 2;
+    const cy = y + cs / 2;
 
-    // Front face (warm grey stone)
-    ctx.fillStyle = '#8c8070';
-    ctx.fillRect(x, y + topH, cs, cs - topH);
+    // Clip to cell
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, cs, cs);
+    ctx.clip();
 
-    // Top face — bright lit from above (CoC top-down lighting)
-    ctx.fillStyle = '#c8b898';
-    ctx.fillRect(x, y, cs, topH);
+    // Dark wood backing
+    ctx.fillStyle = '#2a1408';
+    ctx.fillRect(x, y, cs, cs);
+    // Wood grain
+    ctx.strokeStyle = 'rgba(80,40,10,0.55)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + cs * (0.25 + i * 0.25));
+      ctx.lineTo(x + cs, y + cs * (0.25 + i * 0.25));
+      ctx.stroke();
+    }
 
-    // Bright edge where top meets front
-    ctx.fillStyle = 'rgba(255,240,180,0.35)';
-    ctx.fillRect(x, y + topH, cs, 1);
+    // Two overlapping circular shields
+    const shieldR = cs * 0.38;
+    const offsets = [[-cs * 0.17, 0], [cs * 0.17, 0]];
+    for (const [ox, oy] of offsets) {
+      const sx = cx + ox;
+      const sy = cy + oy;
+      // Shield rim (dark iron)
+      ctx.fillStyle = '#3a3028';
+      ctx.beginPath();
+      ctx.arc(sx, sy, shieldR, 0, Math.PI * 2);
+      ctx.fill();
+      // Shield face — clip to circle and draw quadrants
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sx, sy, shieldR - 1, 0, Math.PI * 2);
+      ctx.clip();
+      // Red quadrants (top-left, bottom-right)
+      ctx.fillStyle = '#aa1a10';
+      ctx.fillRect(sx - shieldR, sy - shieldR, shieldR, shieldR);
+      ctx.fillRect(sx,           sy,           shieldR, shieldR);
+      // Cream quadrants (top-right, bottom-left)
+      ctx.fillStyle = '#e8d8a0';
+      ctx.fillRect(sx,           sy - shieldR, shieldR, shieldR);
+      ctx.fillRect(sx - shieldR, sy,           shieldR, shieldR);
+      // Dividing cross lines
+      ctx.strokeStyle = 'rgba(30,15,5,0.6)';
+      ctx.lineWidth   = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(sx - shieldR, sy); ctx.lineTo(sx + shieldR, sy);
+      ctx.moveTo(sx, sy - shieldR); ctx.lineTo(sx, sy + shieldR);
+      ctx.stroke();
+      ctx.restore();
+      // Boss (center metal knob)
+      ctx.fillStyle = '#888880';
+      ctx.beginPath();
+      ctx.arc(sx, sy, shieldR * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(220,220,200,0.7)';
+      ctx.beginPath();
+      ctx.arc(sx - shieldR * 0.07, sy - shieldR * 0.08, shieldR * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    // Right-side shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(x + cs - 2, y + topH, 2, cs - topH);
-
-    // Bottom shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(x, y + cs - 1, cs, 1);
+    ctx.restore();
 
     // Outer border
-    ctx.strokeStyle = 'rgba(80,60,30,0.6)';
+    ctx.strokeStyle = 'rgba(60,30,10,0.7)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
   }

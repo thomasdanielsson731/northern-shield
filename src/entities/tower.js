@@ -72,8 +72,9 @@ export const TOWER_DEFS = {
     damage:       8,
     radius:       7,
     bulletSpeed:  5,
-    slowFactor:   0.4,
-    slowDuration: 130
+    slowFactor:   0,
+    slowDuration: 90,
+    bulletShape:  'stun'
   }
 };
 
