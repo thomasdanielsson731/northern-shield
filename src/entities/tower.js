@@ -1,6 +1,21 @@
 import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 
+// Draw one frame from a 4-frame (IDLE/WALK/ATTACK/DEATH) sprite strip.
+// frame: 0=idle, 2=attack. Flips sprite horizontally when aimAngle faces left.
+function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36) {
+  const sp = SPRITES[spriteKey];
+  if (!sp) return false;
+  const dh = Math.round(dw * sp.frameH / sp.frameW);
+  ctx.save();
+  ctx.translate(x, y);
+  if (Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
+  ctx.drawImage(sp.img, frame * sp.frameW, 0, sp.frameW, sp.frameH,
+    -dw / 2, -dh * 0.88, dw, dh);
+  ctx.restore();
+  return true;
+}
+
 export const TOWER_TYPES = {
   BERSERK:  'berserk',
   VALKYRIE: 'valkyrie',
@@ -265,7 +280,9 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Sprite rendering when loaded
+    // Sprite rendering — walk animation preferred, barbarian as fallback
+    if (drawSpriteFrame(ctx, 'barbarian', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
+
     const sp = SPRITES.barsarkare_walk;
     if (sp) {
       const frame = Math.floor(t * 7) % sp.total;
@@ -435,6 +452,13 @@ export class Tower {
   // ── Valkyria: winged warrior with spear ───────────────────────────────────────
   _drawValkyrie(ctx, t) {
     const x = this.x, y = this.y;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (drawSpriteFrame(ctx, 'valkyria', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 40)) return;
+
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
 
@@ -593,6 +617,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
 
     // Stone base
     ctx.fillStyle = '#9aaa9a';
@@ -733,6 +758,13 @@ export class Tower {
   // ── Katapult: medieval trebuchet with swinging arm ───────────────────────────
   _drawCatapult(ctx, t) {
     const x = this.x, y = this.y;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (drawSpriteFrame(ctx, 'dvarg', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
+
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const armAng = this.aimAngle - Math.PI * 0.5;
 
@@ -818,6 +850,13 @@ export class Tower {
   // ── Blondie: enchantress with floating hearts ─────────────────────────────────
   _drawBlondie(ctx, t) {
     const x = this.x, y = this.y;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (drawSpriteFrame(ctx, 'brynhild', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
+
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
 
