@@ -851,8 +851,8 @@ function drawRightPanel() {
   ctx.shadowColor = 'rgba(220,170,30,0.8)';
   ctx.shadowBlur  = 8;
   ctx.textAlign   = 'left';
-  ctx.fillText('KOMMANDE', lx, ly); ly += 13;
-  ctx.fillText('FIENDER', lx, ly);  ly += 16;
+  ctx.fillText('INCOMING', lx, ly); ly += 13;
+  ctx.fillText('ENEMIES', lx, ly);  ly += 16;
   ctx.shadowBlur = 0;
 
   function divider() {
@@ -895,7 +895,7 @@ function drawRightPanel() {
   ctx.font      = 'bold 9px monospace';
   ctx.fillStyle = '#c0a060';
   ctx.textAlign = 'left';
-  ctx.fillText('TORN', lx, ly); ly += 14;
+  ctx.fillText('TOWERS', lx, ly); ly += 14;
 
   ctx.font = '9px monospace';
   for (const tower of towers.slice(0, 6)) {
@@ -912,7 +912,7 @@ function drawRightPanel() {
   }
   if (towers.length > 6) {
     ctx.fillStyle = 'rgba(180,150,80,0.5)';
-    ctx.fillText(`+${towers.length - 6} mer`, lx, ly);
+    ctx.fillText(`+${towers.length - 6} more`, lx, ly);
     ly += 13;
   }
 
@@ -931,10 +931,10 @@ function drawRightPanel() {
   ly += 14;
 
   ctx.fillStyle = '#b8c8e0';
-  ctx.fillText(`★ Slagna: ${slain}`, lx, ly); ly += 13;
+  ctx.fillText(`★ Slain: ${slain}`, lx, ly); ly += 13;
   const leaked = STARTING_LIVES - lives;
   ctx.fillStyle = leaked > 0 ? '#ff9090' : '#60e880';
-  ctx.fillText(`♥ Läckt: ${leaked}/${STARTING_LIVES}`, lx, ly);
+  ctx.fillText(`♥ Leaked: ${leaked}/${STARTING_LIVES}`, lx, ly);
 
   // ── NÄSTA VÅG button ─────────────────────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
@@ -953,7 +953,7 @@ function drawRightPanel() {
     ctx.fillStyle   = '#ffffff';
     ctx.shadowColor = 'rgba(255,100,80,0.7)';
     ctx.shadowBlur  = 8;
-    ctx.fillText('NÄSTA VÅG', btnX + btnW / 2, btnY + 17);
+    ctx.fillText('NEXT WAVE', btnX + btnW / 2, btnY + 17);
     const secs = waveState === 'countdown'
       ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
       : Math.ceil((BREAK_FRAMES - waveTimer) / 60);
@@ -987,7 +987,7 @@ function drawTopBar() {
   ctx.shadowBlur  = 0;
 
   // Center: wave + timer
-  const wLabel = waveNumber === 0 ? 'VÅG 0' : `VÅG ${waveNumber}`;
+  const wLabel = waveNumber === 0 ? 'WAVE 0' : `WAVE ${waveNumber}`;
   ctx.font      = 'bold 13px monospace';
   ctx.fillStyle = '#a0e0c0';
   ctx.textAlign = 'center';
@@ -1091,7 +1091,7 @@ function drawHud() {
     ctx.shadowBlur  = 14;
     ctx.fillStyle   = '#f0c840';
     ctx.font        = 'bold 22px monospace';
-    ctx.fillText('TOPPLISTA', cx, py + 36);
+    ctx.fillText('HIGH SCORES', cx, py + 36);
     ctx.shadowBlur  = 0;
 
     ctx.textAlign = 'left';
@@ -1100,10 +1100,10 @@ function drawHud() {
     ctx.font      = 'bold 10px monospace';
     ctx.fillStyle = 'rgba(200,160,40,0.6)';
     ctx.fillText('#', colX[0], row);
-    ctx.fillText('Våg', colX[1], row);
-    ctx.fillText('Slagna', colX[2], row);
+    ctx.fillText('Wave', colX[1], row);
+    ctx.fillText('Slain', colX[2], row);
     ctx.textAlign = 'right';
-    ctx.fillText('Guld', colX[3], row);
+    ctx.fillText('Gold', colX[3], row);
     row += 18;
     ctx.strokeStyle = 'rgba(200,160,40,0.2)';
     ctx.lineWidth   = 0.5;
@@ -1127,7 +1127,7 @@ function drawHud() {
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(160,140,100,0.6)';
       ctx.font      = '12px monospace';
-      ctx.fillText('Inga resultat ännu', cx, row);
+      ctx.fillText('No results yet', cx, row);
     }
     ctx.restore();
 
@@ -1138,7 +1138,7 @@ function drawHud() {
     ctx.textAlign = 'center';
     ctx.font      = 'bold 13px monospace';
     ctx.fillStyle = '#a0c0e8';
-    ctx.fillText('← TILLBAKA', cx, bbY + 23);
+    ctx.fillText('← BACK', cx, bbY + 23);
     ctx.restore();
     restartBtn = { x: bbX, y: bbY, w: bbW, h: bbH, action: 'back' };
 
@@ -1150,12 +1150,12 @@ function drawHud() {
     ctx.shadowBlur  = 22;
     ctx.fillStyle   = '#e84040';
     ctx.font        = 'bold 44px monospace';
-    ctx.fillText('BESEGRAD', cx, cy - 30);
+    ctx.fillText('DEFEATED', cx, cy - 30);
     ctx.shadowBlur  = 0;
     ctx.fillStyle   = '#e8c040';
     ctx.font        = '14px monospace';
-    ctx.fillText(`Slagna fiender: ${slain}`, cx, cy + 2);
-    ctx.fillText(`Vågor klara: ${waveNumber}   Guld förtjänat: ${goldEarned}`, cx, cy + 22);
+    ctx.fillText(`Enemies slain: ${slain}`, cx, cy + 2);
+    ctx.fillText(`Waves: ${waveNumber}   Gold earned: ${goldEarned}`, cx, cy + 22);
     ctx.restore();
 
     const rbW = 160, rbH = 38, tlW = 160, tlH = 38, gap = 12;
@@ -1170,7 +1170,7 @@ function drawHud() {
     ctx.fillStyle   = '#88ee66';
     ctx.shadowColor = 'rgba(100,220,80,0.55)';
     ctx.shadowBlur  = 10;
-    ctx.fillText('SPELA IGEN', rbX + rbW / 2, rbY + 25);
+    ctx.fillText('PLAY AGAIN', rbX + rbW / 2, rbY + 25);
     ctx.restore();
 
     drawFantasyPanel(tlX, tlY, tlW, tlH, 'rgba(12,8,28,0.97)', 0.7, 6);
@@ -1180,7 +1180,7 @@ function drawHud() {
     ctx.fillStyle   = '#e8c040';
     ctx.shadowColor = 'rgba(220,170,30,0.55)';
     ctx.shadowBlur  = 8;
-    ctx.fillText('TOPPLISTA ★', tlX + tlW / 2, tlY + 25);
+    ctx.fillText('HIGH SCORES ★', tlX + tlW / 2, tlY + 25);
     ctx.restore();
 
     restartBtn = { x: rbX, y: rbY, w: rbW, h: rbH, action: 'restart' };
@@ -1335,11 +1335,11 @@ function drawLeftSidebar() {
   drawFantasyPanel(0, GRID_TOP, SIDEBAR_W, height - GRID_TOP, 'rgba(46,24,6,0.97)');
 
   const tabs = [
-    { id: 'towers',  symbol: '⚔',  label: 'TORN'  },
-    { id: 'troops',  symbol: '●',  label: 'TRUPP' },
-    { id: 'defense', symbol: '🛡', label: 'FÖRSV' },
-    { id: 'deco',    symbol: '✦',  label: 'DEKO'  },
-    { id: 'map',     symbol: '◉',  label: 'KARTA' },
+    { id: 'towers',  symbol: '⚔',  label: 'TOWERS'  },
+    { id: 'troops',  symbol: '●',  label: 'TROOPS'  },
+    { id: 'defense', symbol: '🛡', label: 'DEFENSE' },
+    { id: 'deco',    symbol: '✦',  label: 'DECO'    },
+    { id: 'map',     symbol: '◉',  label: 'MAP'     },
   ];
 
   const tabH = 68, tabGap = 3;
