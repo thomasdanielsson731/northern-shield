@@ -1,15 +1,17 @@
 export class Bullet {
-  constructor(x, y, target, damage, speed = 7, splashRadius = 0, splashDamage = 0) {
+  constructor(x, y, target, damage, speed = 7, splashRadius = 0, splashDamage = 0, slowFactor = 1, slowDuration = 0) {
     this.x = x;
     this.y = y;
-    this.target = target;
-    this.damage = damage;
-    this.speed = speed;
+    this.target       = target;
+    this.damage       = damage;
+    this.speed        = speed;
     this.splashRadius = splashRadius;
     this.splashDamage = splashDamage;
-    this.radius = splashRadius > 0 ? 3.5 : 2.5;
-    this.alive = true;
-    this.trail = [{ x, y }];
+    this.slowFactor   = slowFactor;
+    this.slowDuration = slowDuration;
+    this.radius       = splashRadius > 0 ? 3.5 : 2.5;
+    this.alive        = true;
+    this.trail        = [{ x, y }];
     this.maxTrailPoints = splashRadius > 0 ? 4 : 6;
   }
 
@@ -27,14 +29,19 @@ export class Bullet {
 
     if (dist <= Math.max(this.speed, hitDistance)) {
       this.target.hp -= this.damage;
+
+      if (this.slowDuration > 0) {
+        this.target.slowTimer  = Math.max(this.target.slowTimer ?? 0, this.slowDuration);
+        this.target.slowFactor = Math.min(this.target.slowFactor ?? 1, this.slowFactor);
+      }
+
       this.alive = false;
 
       if (this.target.hp <= 0) {
-        this.target.hp = 0;
+        this.target.hp    = 0;
         this.target.alive = false;
         return this.target.reward ?? 6;
       }
-
       return 0;
     }
 
@@ -50,7 +57,7 @@ export class Bullet {
     if (!this.alive) return;
 
     if (this.splashRadius > 0) {
-      // Fireball / missile
+      // Bofors fireball
       if (this.trail.length > 1) {
         ctx.strokeStyle = 'rgba(255,110,30,0.55)';
         ctx.lineWidth   = 3;
@@ -64,7 +71,6 @@ export class Bullet {
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 2.8, 0, Math.PI * 2);
       ctx.fill();
-
       ctx.shadowColor = '#ff6620';
       ctx.shadowBlur  = 14;
       ctx.fillStyle   = '#ffcc44';
@@ -73,8 +79,33 @@ export class Bullet {
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.lineCap = 'butt';
+
+    } else if (this.slowDuration > 0) {
+      // Blondie charm sparkle — pink heart-like orb
+      if (this.trail.length > 1) {
+        ctx.strokeStyle = 'rgba(255,140,200,0.5)';
+        ctx.lineWidth   = 1.4;
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+        for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,130,200,0.3)';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = '#ff88cc';
+      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = '#ffaadd';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineCap = 'butt';
+
     } else {
-      // Normal arcane bullet
+      // Standard arcane/bullet
       if (this.trail.length > 1) {
         ctx.strokeStyle = 'rgba(255, 216, 107, 0.5)';
         ctx.lineWidth   = 1.6;
@@ -88,7 +119,6 @@ export class Bullet {
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 2.2, 0, Math.PI * 2);
       ctx.fill();
-
       ctx.fillStyle = '#ffd86b';
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);

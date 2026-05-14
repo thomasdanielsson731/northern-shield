@@ -54,7 +54,10 @@ export class Enemy {
     this.type           = type;
     this.path           = path;
     this.pathIndex      = 0;
+    this.baseSpeed      = def.speed;
     this.speed          = def.speed;
+    this.slowTimer      = 0;
+    this.slowFactor     = 1;
     this.radius         = def.radius;
     this.hp             = Math.round(def.hp * hpScale);
     this.maxHp          = Math.round(def.hp * hpScale);
@@ -82,18 +85,24 @@ export class Enemy {
       return;
     }
 
+    if (this.slowTimer > 0) {
+      this.slowTimer--;
+      if (this.slowTimer === 0) this.slowFactor = 1;
+    }
+    const effectiveSpeed = this.slowTimer > 0 ? this.baseSpeed * this.slowFactor : this.baseSpeed;
+
     const target = this.path[this.pathIndex + 1];
     const dx   = target.x - this.x;
     const dy   = target.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist <= this.speed) {
+    if (dist <= effectiveSpeed) {
       this.x = target.x;
       this.y = target.y;
       this.pathIndex++;
     } else {
-      this.x += (dx / dist) * this.speed;
-      this.y += (dy / dist) * this.speed;
+      this.x += (dx / dist) * effectiveSpeed;
+      this.y += (dy / dist) * effectiveSpeed;
     }
   }
 
@@ -108,6 +117,25 @@ export class Enemy {
       this._drawBanshee(ctx);
     } else {
       this._drawGraveborn(ctx);
+    }
+
+    // Icy slow overlay
+    if (this.slowTimer > 0) {
+      const alpha = 0.38 * Math.min(1, this.slowTimer / 25);
+      ctx.save();
+      ctx.strokeStyle = `rgba(120,210,255,${alpha * 1.4})`;
+      ctx.lineWidth   = 1.5;
+      ctx.shadowColor = '#80ddff';
+      ctx.shadowBlur  = 6;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(160,230,255,${alpha * 0.35})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
 
     this._drawHpBar(ctx);

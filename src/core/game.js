@@ -7,12 +7,15 @@ const COLS = 50;
 const ROWS = 30;
 const CELL_SIZE = 16;
 
+const GRID_TOP    = 42;
+const GRID_BOTTOM = GRID_TOP + ROWS * CELL_SIZE;
+
 const SPAWN = { col: 0,        row: 15 };
 const GOAL  = { col: COLS - 1, row: 15 };
 
 const WALL_COST = 5;
 
-const BUILD_BTN = { x: 12, y: 40, w: 112, h: 38, gap: 6 };
+const BUILD_BTN = { x: 12, w: 112, h: 38, gap: 6 };
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Wall', key: '1', color: '#a08040', cost: WALL_COST, mode: CELL.WALL },
@@ -41,7 +44,7 @@ let gold     = STARTING_GOLD;
 let lives    = STARTING_LIVES;
 let slain    = 0;
 let buildMode         = CELL.WALL;
-let selectedTowerType = TOWER_TYPES.GUN;
+let selectedTowerType = TOWER_TYPES.VIKING;
 let gameOver = false;
 
 let selectedTower   = null;
@@ -273,10 +276,11 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
 function getBuildButtons() {
+  const btnY = GRID_BOTTOM + 9;
   return BUILD_ITEMS.map((item, i) => ({
     ...item,
     x:      BUILD_BTN.x + i * (BUILD_BTN.w + BUILD_BTN.gap),
-    y:      BUILD_BTN.y,
+    y:      btnY,
     width:  BUILD_BTN.w,
     height: BUILD_BTN.h
   }));
@@ -393,7 +397,7 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  const { col, row } = grid.pixelToCell(mouseX, mouseY);
+  const { col, row } = grid.pixelToCell(mouseX, mouseY - GRID_TOP);
   const cell = grid.getCell(col, row);
 
   if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
@@ -594,43 +598,61 @@ function drawPath() {
 }
 
 function drawHud() {
-  const panelX = 10;
-  const panelY = 8;
-  const panelW = BUILD_BTN.x + BUILD_ITEMS.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 10;
-  const panelH = BUILD_BTN.y + BUILD_BTN.h + 12;
+  const { width } = getViewSize();
 
-  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(60,35,10,0.95)');
+  // ── Top status bar ────────────────────────────────────────────────────────────
+  const topX = 8, topY = 6, topH = 30;
+  const topW = width - 16;
+  drawFantasyPanel(topX, topY, topW, topH, 'rgba(60,35,10,0.95)');
 
-  // stats row
   ctx.save();
   ctx.font = '13px monospace';
+  let sx = topX + 14;
+  const sy = topY + 20;
 
   ctx.fillStyle = '#e8c040';
-  ctx.fillText(`◆ Gold: ${gold}`, panelX + 14, panelY + 26);
-  const goldW = ctx.measureText(`◆ Gold: ${gold}`).width;
+  ctx.fillText(`◆ Gold: ${gold}`, sx, sy);
+  sx += ctx.measureText(`◆ Gold: ${gold}`).width + 18;
 
   ctx.fillStyle = '#ff9090';
-  ctx.fillText(`♥ Lives: ${lives}`, panelX + 14 + goldW + 18, panelY + 26);
-  const livesW = ctx.measureText(`♥ Lives: ${lives}`).width;
+  ctx.fillText(`♥ Lives: ${lives}`, sx, sy);
+  sx += ctx.measureText(`♥ Lives: ${lives}`).width + 18;
 
   ctx.fillStyle = '#b8c8e0';
-  ctx.fillText(`★ Slain: ${slain}`, panelX + 14 + goldW + 18 + livesW + 18, panelY + 26);
-  const slainW = ctx.measureText(`★ Slain: ${slain}`).width;
+  ctx.fillText(`★ Slain: ${slain}`, sx, sy);
+  sx += ctx.measureText(`★ Slain: ${slain}`).width + 18;
 
   const waveLabel = waveNumber === 0 ? '-' : `${waveNumber}`;
   ctx.fillStyle = '#a0e0c0';
-  ctx.fillText(`⚔ Wave: ${waveLabel}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18, panelY + 26);
-  const waveW = ctx.measureText(`⚔ Wave: ${waveLabel}`).width;
+  ctx.fillText(`⚔ Wave: ${waveLabel}`, sx, sy);
+  sx += ctx.measureText(`⚔ Wave: ${waveLabel}`).width + 14;
 
   if (waveNumber > 0 && waveState === 'active') {
     const remaining = spawnQueue.length + enemies.length;
     ctx.fillStyle = remaining > 0 ? '#e8a060' : '#60e880';
-    ctx.fillText(`◈ ${remaining}/${waveTotal}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18 + waveW + 14, panelY + 26);
+    ctx.fillText(`◈ ${remaining}/${waveTotal}`, sx, sy);
   }
-
   ctx.restore();
 
-  // build buttons
+  // title — right side of top bar
+  ctx.save();
+  ctx.textAlign     = 'right';
+  ctx.letterSpacing = '4px';
+  ctx.font          = 'bold 17px monospace';
+  ctx.shadowColor   = 'rgba(220,170,40,0.85)';
+  ctx.shadowBlur    = 16;
+  ctx.fillStyle     = '#f0c840';
+  ctx.fillText('NORTHERN SHIELD', width - 18, topY + 21);
+  ctx.shadowBlur    = 0;
+  ctx.restore();
+
+  // ── Bottom build bar ──────────────────────────────────────────────────────────
+  const buildPanelX = 8;
+  const buildPanelY = GRID_BOTTOM + 4;
+  const buildPanelW = BUILD_BTN.x + BUILD_ITEMS.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 10;
+  const buildPanelH = BUILD_BTN.h + 18;
+  drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(60,35,10,0.95)');
+
   for (const btn of getBuildButtons()) {
     const isSelected = btn.mode === CELL.WALL
       ? buildMode === CELL.WALL
@@ -641,42 +663,18 @@ function drawHud() {
     const borderAlpha = isSelected ? 0.88 : 0.38;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
 
-    // key badge
     ctx.font      = 'bold 11px monospace';
     ctx.fillStyle = isSelected ? '#e8c040' : 'rgba(180,150,80,0.65)';
     ctx.fillText(`[${btn.key}]`, btn.x + 7, btn.y + 15);
 
-    // label
     ctx.font      = '12px monospace';
-    ctx.fillStyle = !affordable
-      ? '#4a4030'
-      : isSelected ? '#fff' : '#c0b090';
+    ctx.fillStyle = !affordable ? '#4a4030' : isSelected ? '#fff' : '#c0b090';
     ctx.fillText(btn.label, btn.x + 7, btn.y + 29);
 
-    // cost (right-aligned)
     const costStr = `$${btn.cost}`;
-    ctx.fillStyle = !affordable
-      ? '#3a3020'
-      : isSelected ? '#e8c040' : '#907840';
+    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#e8c040' : '#907840';
     ctx.fillText(costStr, btn.x + btn.width - ctx.measureText(costStr).width - 7, btn.y + 29);
   }
-
-  // game title — top right
-  const { width } = getViewSize();
-  ctx.save();
-  ctx.textAlign    = 'right';
-  ctx.letterSpacing = '4px';
-  ctx.font          = 'bold 17px monospace';
-  ctx.shadowColor   = 'rgba(220,170,40,0.85)';
-  ctx.shadowBlur    = 16;
-  ctx.fillStyle     = '#f0c840';
-  ctx.fillText('NORTHERN SHIELD', width - 18, 34);
-  ctx.shadowBlur    = 0;
-  ctx.letterSpacing = '2px';
-  ctx.font          = '10px monospace';
-  ctx.fillStyle     = 'rgba(200,155,35,0.5)';
-  ctx.fillText('TOWER DEFENSE', width - 18, 50);
-  ctx.restore();
 
   if (!gameOver) return;
 
@@ -726,7 +724,7 @@ function drawTowerPanel(tower) {
   const { width, height } = getViewSize();
 
   let px = tower.x - panelW / 2;
-  let py = tower.y - panelH - CELL_SIZE - 4;
+  let py = (tower.y + GRID_TOP) - panelH - CELL_SIZE - 4;
   px = Math.max(8, Math.min(px, width  - panelW - 8));
   py = Math.max(8, Math.min(py, height - panelH - 8));
 
@@ -805,9 +803,9 @@ function drawWaveAnnouncement() {
   if (gameOver) return;
   if (waveState === 'active') return;
 
-  const { width, height } = getViewSize();
+  const { width } = getViewSize();
   const cx = width / 2;
-  const cy = height / 2;
+  const cy = GRID_TOP + (ROWS * CELL_SIZE) / 2;
 
   let line1, line2, glowColor;
   if (waveState === 'countdown') {
@@ -867,14 +865,12 @@ function draw() {
   ctx.clearRect(0, 0, width, height);
   drawBackground();
 
-  // Screen shake — applied to game world only, not HUD
+  // Game world — translated down by GRID_TOP so the top status bar doesn't cover the grid
   ctx.save();
-  if (screenShake > 0.3) {
-    ctx.translate(
-      (Math.random() - 0.5) * screenShake * 2,
-      (Math.random() - 0.5) * screenShake * 2
-    );
-  }
+  ctx.translate(
+    screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0,
+    GRID_TOP + (screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0)
+  );
 
   const time = performance.now() * 0.001;
   grid.draw(ctx, time);
