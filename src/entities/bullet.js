@@ -69,6 +69,8 @@ export class Bullet {
       this._drawRock(ctx);
     } else if (this.shape === 'stun') {
       this._drawStun(ctx);
+    } else if (this.shape === 'arrow') {
+      this._drawArrow(ctx);
     } else if (this.splashRadius > 0) {
       this._drawFireball(ctx);
     } else if (this.slowDuration > 0) {
@@ -266,6 +268,67 @@ export class Bullet {
     ctx.arc(0, 0, this.radius * 0.38, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  // ── Arrow (Bågskytt) ────────────────────────────────────────────────────────
+  _drawArrow(ctx) {
+    const angle = this.angle;
+    const perpA = angle + Math.PI / 2;
+    const shaftLen = 10;
+    const tipLen   = 4;
+
+    const tailX = this.x - Math.cos(angle) * shaftLen;
+    const tailY = this.y - Math.sin(angle) * shaftLen;
+    const tipX  = this.x + Math.cos(angle) * tipLen;
+    const tipY  = this.y + Math.sin(angle) * tipLen;
+
+    // Short trail
+    if (this.trail.length > 1) {
+      ctx.strokeStyle = 'rgba(200,170,100,0.28)';
+      ctx.lineWidth   = 1;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      ctx.stroke();
+    }
+
+    // Shaft
+    ctx.strokeStyle = '#8a5020';
+    ctx.lineWidth   = 1.4;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+
+    // Fletching (red feathers at tail)
+    ctx.fillStyle = '#cc3322';
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(tailX + Math.cos(perpA) * 2.2 + Math.cos(angle) * 3, tailY + Math.sin(perpA) * 2.2 + Math.sin(angle) * 3);
+    ctx.lineTo(tailX + Math.cos(angle) * 4.5, tailY + Math.sin(angle) * 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(tailX - Math.cos(perpA) * 2.2 + Math.cos(angle) * 3, tailY - Math.sin(perpA) * 2.2 + Math.sin(angle) * 3);
+    ctx.lineTo(tailX + Math.cos(angle) * 4.5, tailY + Math.sin(angle) * 4.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Metal arrowhead
+    ctx.shadowColor = 'rgba(200,185,150,0.7)';
+    ctx.shadowBlur  = 5;
+    ctx.fillStyle   = '#c8c0a8';
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(this.x + Math.cos(perpA) * 1.6, this.y + Math.sin(perpA) * 1.6);
+    ctx.lineTo(this.x - Math.cos(perpA) * 1.6, this.y - Math.sin(perpA) * 1.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineCap = 'butt';
   }
 
   // ── Charm sparkle (Blondie — legacy shape, unused) ────────────────────────────

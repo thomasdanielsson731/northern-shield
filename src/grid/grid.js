@@ -121,28 +121,80 @@ export class Grid {
   _drawSpawn(ctx, x, y, cs, time) {
     const cx = x + cs / 2;
     const cy = y + cs / 2;
-    const pulse = 0.5 + Math.sin(time * 3) * 0.5;
+    const pulse = 0.5 + Math.sin(time * 2.5) * 0.5;
+    const rot   = time * 1.4;
 
-    ctx.fillStyle = '#1a5c08';
+    // Void background
+    ctx.fillStyle = '#06030c';
     ctx.fillRect(x, y, cs, cs);
 
-    // Pulsing ring
+    // Outer aura glow
     ctx.save();
-    ctx.strokeStyle = `rgba(80,220,60,${0.3 + pulse * 0.5})`;
-    ctx.lineWidth   = 1.5;
-    ctx.shadowColor = 'rgba(60,200,40,0.9)';
-    ctx.shadowBlur  = 10 * pulse;
+    ctx.shadowColor = 'rgba(140,60,255,0.9)';
+    ctx.shadowBlur  = 18 * pulse;
+    ctx.fillStyle   = `rgba(80,20,180,${0.28 + pulse * 0.22})`;
     ctx.beginPath();
-    ctx.arc(cx, cy, (cs / 2 - 2) * (0.7 + pulse * 0.28), 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Inner dot
-    ctx.fillStyle = `rgba(80,220,60,${0.5 + pulse * 0.4})`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, cs / 2 - 0.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
+
+    // Outer runic ring (rotating)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    const outerR = cs / 2 - 1.5;
+    ctx.strokeStyle = `rgba(190,110,255,${0.5 + pulse * 0.4})`;
+    ctx.lineWidth   = 0.8;
+    ctx.setLineDash([1.5, 2.5]);
+    ctx.beginPath();
+    ctx.arc(0, 0, outerR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Rune ticks
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.strokeStyle = `rgba(230,160,255,${0.55 + pulse * 0.35})`;
+      ctx.lineWidth   = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (outerR - 1.8), Math.sin(a) * (outerR - 1.8));
+      ctx.lineTo(Math.cos(a) * (outerR + 0.5), Math.sin(a) * (outerR + 0.5));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Inner ring (counter-rotating, cyan)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-rot * 1.9);
+    ctx.strokeStyle = `rgba(100,190,255,${0.38 + pulse * 0.32})`;
+    ctx.lineWidth   = 0.7;
+    ctx.setLineDash([1, 3]);
+    ctx.beginPath();
+    ctx.arc(0, 0, cs / 2 - 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Portal core gradient
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cs / 2 - 3);
+    grad.addColorStop(0,    `rgba(245,215,255,${0.85 + pulse * 0.15})`);
+    grad.addColorStop(0.35, `rgba(160,80,255,${0.5 * pulse})`);
+    grad.addColorStop(0.75, `rgba(70,25,150,${0.28 * pulse})`);
+    grad.addColorStop(1,    'rgba(15,5,40,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cs / 2 - 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright pulsing core
+    ctx.shadowColor = 'rgba(210,170,255,0.95)';
+    ctx.shadowBlur  = 12 * pulse;
+    ctx.fillStyle   = `rgba(245,225,255,${0.75 + pulse * 0.25})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 1.8 + pulse * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
   _drawGoal(ctx, x, y, cs, time) {

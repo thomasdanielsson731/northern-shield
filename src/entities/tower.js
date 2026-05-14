@@ -35,16 +35,17 @@ export const TOWER_DEFS = {
     bulletShape:  'spear'
   },
   [TOWER_TYPES.MILITARY]: {
-    label:        'Militär',
+    label:        'Bågskytt',
     key:          '4',
-    color:        '#667733',
-    rangeColor:   'rgba(90,110,40,0.13)',
+    color:        '#6688aa',
+    rangeColor:   'rgba(80,120,170,0.13)',
     cost:         28,
     range:        80,
     fireRate:     8,
     damage:       14,
     radius:       7,
-    bulletSpeed:  9
+    bulletSpeed:  11,
+    bulletShape:  'arrow'
   },
   [TOWER_TYPES.CATAPULT]: {
     label:        'Katapult',
@@ -564,85 +565,151 @@ export class Tower {
     ctx.lineCap = 'butt';
   }
 
-  // ── Militär: sandbag bunker + machine gun ────────────────────────────────────
+  // ── Bågskytt: Viking archer on stone watchtower ──────────────────────────────
   _drawMilitary(ctx, t) {
     const x = this.x, y = this.y;
-    const spin = t * 5;
+    const glow = 0.6 + Math.sin(t * 3.5) * 0.4;
 
-    // Sandbag base
-    const sandColor = (l) => `hsl(52,40%,${l}%)`;
-    for (let i = 0; i < 4; i++) {
-      const bx = x - 7 + i * 3.5;
-      ctx.fillStyle = sandColor(32 + (i % 2) * 6);
-      ctx.beginPath();
-      ctx.ellipse(bx + 1.75, y + 5.5, 2, 1.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    for (let i = 0; i < 3; i++) {
-      const bx = x - 5.5 + i * 3.8;
-      ctx.fillStyle = sandColor(36 + (i % 2) * 6);
-      ctx.beginPath();
-      ctx.ellipse(bx + 1.5, y + 3, 2, 1.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Bunker body
-    ctx.fillStyle = '#4a5220';
-    ctx.fillRect(x - 5, y - 5, 10, 9);
-    ctx.fillStyle = '#5a6428';
-    ctx.fillRect(x - 5, y - 5, 4, 9);
-
-    // Crenellations
-    ctx.fillStyle = '#404818';
-    for (const dx of [-4.5, -1.5, 1.5]) ctx.fillRect(x + dx, y - 8, 2.2, 3.5);
-    ctx.fillStyle = '#5a6428';
-    for (const dx of [-4.5, -1.5, 1.5]) ctx.fillRect(x + dx, y - 8, 0.8, 3.5);
-
-    // Spinning brass casings
-    for (let i = 0; i < 5; i++) {
-      const a     = spin + (i / 5) * Math.PI * 2;
-      const alpha = 0.4 + Math.abs(Math.sin(a)) * 0.5;
-      ctx.fillStyle   = `rgba(210,175,40,${alpha})`;
-      ctx.shadowColor = this.color;
-      ctx.shadowBlur  = 3;
-      ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * 7, y + Math.sin(a) * 2.5, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-
-    // Olive orb
-    const pulse = 0.8 + Math.sin(t * 9) * 0.2;
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur  = 10 * pulse;
-    ctx.fillStyle   = this.color;
+    // Ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
     ctx.beginPath();
-    ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+    ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(210,230,120,0.7)';
+
+    // Stone base
+    ctx.fillStyle = '#9aaa9a';
+    ctx.fillRect(x - 7, y + 5, 14, 4);
+    ctx.fillStyle = '#687868';
+    ctx.fillRect(x - 7, y + 8, 14, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x - 7, y + 5, 14, 1);
+
+    // Legs
+    ctx.fillStyle = '#2e1008';
+    ctx.fillRect(x - 3, y - 1, 2.5, 6);
+    ctx.fillRect(x + 0.5, y - 1, 2.5, 6);
+    // Boots with fur trim
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(x - 3.5, y + 3, 3.2, 2.5);
+    ctx.fillRect(x + 0.5, y + 3, 3.2, 2.5);
+    ctx.fillStyle = '#c8b090';
+    ctx.fillRect(x - 3.5, y + 3, 3.2, 1);
+    ctx.fillRect(x + 0.5, y + 3, 3.2, 1);
+
+    // Torso — leather jerkin
+    ctx.fillStyle = '#7a4820';
     ctx.beginPath();
-    ctx.arc(x - 1.1, y - 1.1, 1.3, 0, Math.PI * 2);
+    ctx.moveTo(x - 5, y + 1);
+    ctx.lineTo(x + 5, y + 1);
+    ctx.lineTo(x + 4, y - 6);
+    ctx.lineTo(x - 4, y - 6);
+    ctx.closePath();
+    ctx.fill();
+    // Highlight left panel
+    ctx.fillStyle = '#9a5828';
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y + 1);
+    ctx.lineTo(x - 1.5, y + 1);
+    ctx.lineTo(x - 1.5, y - 6);
+    ctx.lineTo(x - 4, y - 6);
+    ctx.closePath();
+    ctx.fill();
+    // Belt + buckle
+    ctx.fillStyle = '#1e0c06';
+    ctx.fillRect(x - 5, y - 0.5, 10, 1.5);
+    ctx.fillStyle = '#d0a030';
+    ctx.fillRect(x - 0.8, y - 0.5, 1.8, 2);
+
+    // Quiver on back (left)
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(x - 7, y - 5, 2.2, 7);
+    ctx.fillStyle = '#3a1808';
+    ctx.fillRect(x - 7, y - 5, 2.2, 1.2);
+    // Arrow shafts
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = '#8a5020';
+      ctx.lineWidth   = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x - 6.6 + i * 0.7, y - 5);
+      ctx.lineTo(x - 6.6 + i * 0.7, y - 2.5);
+      ctx.stroke();
+      ctx.fillStyle = '#cc3322';
+      ctx.fillRect(x - 6.9 + i * 0.7, y - 6, 0.9, 1);
+    }
+    ctx.lineCap = 'butt';
+
+    // Head
+    ctx.shadowColor = 'rgba(100,150,200,0.4)';
+    ctx.shadowBlur  = 5;
+    ctx.fillStyle   = '#c8885a';
+    ctx.beginPath();
+    ctx.arc(x, y - 9.5, 4.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-
-    // Machine gun barrel
-    ctx.strokeStyle = '#8aaa44';
-    ctx.lineWidth   = 2.8;
-    ctx.lineCap     = 'round';
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur  = 5;
+    // Round helm (no horns — archer needs mobility)
+    ctx.fillStyle = '#8898b0';
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(this.aimAngle) * 9, y + Math.sin(this.aimAngle) * 9);
+    ctx.arc(x, y - 11.5, 4.2, 0, Math.PI, true);
+    ctx.fill();
+    ctx.fillStyle = '#a0b2c8';
+    ctx.fillRect(x - 4.2, y - 11.5, 8.4, 1.5);
+    ctx.fillStyle = '#8898b0';
+    ctx.fillRect(x - 0.8, y - 11.5, 1.6, 4.2);
+    // Blue warpaint
+    ctx.fillStyle = '#3366cc';
+    ctx.fillRect(x - 3.5, y - 10.5, 2.3, 1);
+    ctx.fillRect(x + 1.2, y - 10.5, 2.3, 1);
+
+    // Longbow (rotates toward aim target)
+    ctx.save();
+    ctx.translate(x + 3, y - 3);
+    ctx.rotate(this.aimAngle);
+    ctx.shadowColor = 'rgba(160,120,50,0.5)';
+    ctx.shadowBlur  = 5 * glow;
+    // Bow limb
+    ctx.strokeStyle = '#6a3810';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-2, -9);
+    ctx.quadraticCurveTo(-8, 0, -2, 9);
     ctx.stroke();
-    ctx.strokeStyle = '#aab860';
+    ctx.shadowBlur = 0;
+    // Bowstring (slightly drawn back)
+    ctx.strokeStyle = '#e0d0a0';
+    ctx.lineWidth   = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(-2, -9);
+    ctx.lineTo(2, 0);
+    ctx.lineTo(-2, 9);
+    ctx.stroke();
+    // Arrow nocked
+    ctx.strokeStyle = '#8a5020';
     ctx.lineWidth   = 1;
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(this.aimAngle) * 9, y + Math.sin(this.aimAngle) * 9);
+    ctx.moveTo(10, 0);
+    ctx.lineTo(2, 0);
     ctx.stroke();
+    // Arrowhead
+    ctx.shadowColor = `rgba(200,185,150,${0.6 * glow})`;
+    ctx.shadowBlur  = 6 * glow;
+    ctx.fillStyle   = '#c8c0a8';
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(10, -1.6);
+    ctx.lineTo(10, 1.6);
+    ctx.closePath();
+    ctx.fill();
     ctx.shadowBlur = 0;
+    // Fletching
+    ctx.fillStyle = '#cc3322';
+    ctx.beginPath();
+    ctx.moveTo(2.5, 0); ctx.lineTo(2.5, -2.8); ctx.lineTo(5, 0); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(2.5, 0); ctx.lineTo(2.5, 2.8);  ctx.lineTo(5, 0); ctx.closePath(); ctx.fill();
     ctx.lineCap = 'butt';
+    ctx.restore();
   }
 
   // ── Katapult: medieval trebuchet with swinging arm ───────────────────────────
