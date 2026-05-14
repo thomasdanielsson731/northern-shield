@@ -5,7 +5,7 @@ import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 
 const COLS = 50;
 const ROWS = 30;
-const CELL_SIZE = 16;
+const CELL_SIZE = 14;
 
 const GRID_TOP    = 42;
 const GRID_BOTTOM = GRID_TOP + ROWS * CELL_SIZE;
@@ -15,7 +15,7 @@ const GOAL  = { col: COLS - 1, row: 15 };
 
 const WALL_COST = 8;
 
-const BUILD_BTN = { x: 12, w: 112, h: 38, gap: 6 };
+const BUILD_BTN = { x: 12, w: 106, h: 38, gap: 5 };
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Wall', key: '1', color: '#a08040', cost: WALL_COST, mode: CELL.WALL },
@@ -44,13 +44,35 @@ let gold     = STARTING_GOLD;
 let lives    = STARTING_LIVES;
 let slain    = 0;
 let buildMode         = CELL.WALL;
-let selectedTowerType = TOWER_TYPES.VIKING;
+let selectedTowerType = TOWER_TYPES.BERSERK;
 let gameOver = false;
 
 let selectedTower   = null;
 let panelUpgradeBtn = null;
 let panelSellBtn    = null;
 let restartBtn      = null;
+let toplistBtn      = null;
+
+// ── high-score table ──────────────────────────────────────────────────────────
+
+const HS_KEY    = 'northern-shield-hs';
+const HS_MAX    = 8;
+
+function loadHighScores() {
+  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch { return []; }
+}
+
+function saveHighScore(score) {
+  const list = loadHighScores();
+  list.push(score);
+  list.sort((a, b) => b.waves - a.waves || b.slain - a.slain);
+  const trimmed = list.slice(0, HS_MAX);
+  localStorage.setItem(HS_KEY, JSON.stringify(trimmed));
+  return trimmed;
+}
+
+let highScores    = loadHighScores();
+let showTopList   = false;
 
 // ── restart ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +94,8 @@ function restartGame() {
   screenShake   = 0;
   goldSpent     = 0;
   goldEarned    = 0;
+  showTopList   = false;
+  highScores    = loadHighScores();
 
   waveNumber    = 0;
   waveTotal     = 0;
@@ -356,12 +380,20 @@ canvas.addEventListener('mousedown', e => {
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  // Game over: only restart button is interactive
+  // Game over: only overlay buttons are interactive
   if (gameOver) {
-    if (e.button === 0 && restartBtn &&
-        mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
-        mouseY >= restartBtn.y && mouseY <= restartBtn.y + restartBtn.h) {
-      restartGame();
+    if (e.button === 0) {
+      if (restartBtn &&
+          mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
+          mouseY >= restartBtn.y && mouseY <= restartBtn.y + restartBtn.h) {
+        if (restartBtn.action === 'back') { showTopList = false; }
+        else                             { restartGame(); }
+      }
+      if (!showTopList && toplistBtn &&
+          mouseX >= toplistBtn.x && mouseX <= toplistBtn.x + toplistBtn.w &&
+          mouseY >= toplistBtn.y && mouseY <= toplistBtn.y + toplistBtn.h) {
+        showTopList = true;
+      }
     }
     return;
   }
@@ -513,7 +545,10 @@ function update() {
       lives--;
       screenShake = 10;
       enemies.splice(i, 1);
-      if (lives <= 0) gameOver = true;
+      if (lives <= 0) {
+        gameOver   = true;
+        highScores = saveHighScore({ waves: waveNumber, slain, goldEarned });
+      }
     }
   }
 
@@ -957,40 +992,122 @@ function drawHud() {
   const cx = width / 2;
   const cy = height / 2;
 
-  ctx.fillStyle = 'rgba(3,1,8,0.78)';
+  ctx.fillStyle = 'rgba(3,1,8,0.82)';
   ctx.fillRect(0, 0, width, height);
 
-  drawFantasyPanel(cx - 210, cy - 110, 420, 210, 'rgba(6,2,14,0.96)', 0.8, 12);
+  if (showTopList) {
+    // ── Toplist screen ──────────────────────────────────────────────────────────
+    const pw = 380, ph = Math.min(60 + highScores.length * 26 + 60, 360);
+    const px = cx - pw / 2, py = cy - ph / 2;
+    drawFantasyPanel(px, py, pw, ph, 'rgba(6,2,14,0.97)', 0.85, 12);
 
-  const line1 = 'DEFEATED';
-  const line2 = `Warriors Slain: ${slain}   Waves: ${waveNumber}`;
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = 'rgba(220,170,30,0.8)';
+    ctx.shadowBlur  = 14;
+    ctx.fillStyle   = '#f0c840';
+    ctx.font        = 'bold 22px monospace';
+    ctx.fillText('TOPPLISTA', cx, py + 36);
+    ctx.shadowBlur  = 0;
 
-  ctx.save();
-  ctx.textAlign   = 'center';
-  ctx.shadowColor = 'rgba(200,50,50,0.7)';
-  ctx.shadowBlur  = 20;
-  ctx.fillStyle   = '#e84040';
-  ctx.font        = 'bold 42px monospace';
-  ctx.fillText(line1, cx, cy - 18);
-  ctx.shadowBlur  = 0;
-  ctx.fillStyle   = '#e8c040';
-  ctx.font        = '16px monospace';
-  ctx.fillText(line2, cx, cy + 18);
-  ctx.restore();
+    ctx.textAlign = 'left';
+    const colX = [px + 20, px + 80, cx, px + pw - 20];
+    let   row   = py + 60;
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = 'rgba(200,160,40,0.6)';
+    ctx.fillText('#', colX[0], row);
+    ctx.fillText('Våg', colX[1], row);
+    ctx.fillText('Slagna', colX[2], row);
+    ctx.textAlign = 'right';
+    ctx.fillText('Guld', colX[3], row);
+    row += 18;
+    ctx.strokeStyle = 'rgba(200,160,40,0.2)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(px + 14, row - 6); ctx.lineTo(px + pw - 14, row - 6);
+    ctx.stroke();
 
-  // Restart button
-  const rbW = 170, rbH = 38;
-  const rbX = cx - rbW / 2, rbY = cy + 44;
-  drawFantasyPanel(rbX, rbY, rbW, rbH, 'rgba(8,26,8,0.97)', 0.75, 6);
-  ctx.save();
-  ctx.textAlign   = 'center';
-  ctx.font        = 'bold 15px monospace';
-  ctx.fillStyle   = '#88ee66';
-  ctx.shadowColor = 'rgba(100,220,80,0.6)';
-  ctx.shadowBlur  = 10;
-  ctx.fillText('PLAY AGAIN', cx, rbY + 25);
-  ctx.restore();
-  restartBtn = { x: rbX, y: rbY, w: rbW, h: rbH };
+    highScores.forEach((s, i) => {
+      const medal = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#a0b0c0';
+      ctx.font      = i < 3 ? 'bold 11px monospace' : '11px monospace';
+      ctx.fillStyle = medal;
+      ctx.textAlign = 'left';
+      ctx.fillText(`${i + 1}`, colX[0], row);
+      ctx.fillText(`${s.waves}`, colX[1], row);
+      ctx.fillText(`${s.slain}`, colX[2], row);
+      ctx.textAlign = 'right';
+      ctx.fillText(`+${s.goldEarned}`, colX[3], row);
+      row += 24;
+    });
+
+    if (highScores.length === 0) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(160,140,100,0.6)';
+      ctx.font      = '12px monospace';
+      ctx.fillText('Inga resultat ännu', cx, row);
+      row += 24;
+    }
+    ctx.restore();
+
+    const bbW = 160, bbH = 36;
+    const bbX = cx - bbW / 2, bbY = py + ph - 50;
+    drawFantasyPanel(bbX, bbY, bbW, bbH, 'rgba(8,6,22,0.97)', 0.7, 6);
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 13px monospace';
+    ctx.fillStyle   = '#a0c0e8';
+    ctx.fillText('← TILLBAKA', cx, bbY + 23);
+    ctx.restore();
+    restartBtn = { x: bbX, y: bbY, w: bbW, h: bbH, action: 'back' };
+
+  } else {
+    // ── Game-over screen ────────────────────────────────────────────────────────
+    drawFantasyPanel(cx - 220, cy - 120, 440, 230, 'rgba(6,2,14,0.97)', 0.82, 12);
+
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = 'rgba(200,50,50,0.7)';
+    ctx.shadowBlur  = 22;
+    ctx.fillStyle   = '#e84040';
+    ctx.font        = 'bold 44px monospace';
+    ctx.fillText('BESEGRAD', cx, cy - 30);
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = '#e8c040';
+    ctx.font        = '14px monospace';
+    ctx.fillText(`Slagna fiender: ${slain}`, cx, cy + 2);
+    ctx.fillText(`Vågor klara: ${waveNumber}   Guld förtjänat: ${goldEarned}`, cx, cy + 22);
+    ctx.restore();
+
+    const rbW = 160, rbH = 38;
+    const tlW = 160, tlH = 38;
+    const gap = 12;
+    const totalW = rbW + gap + tlW;
+    const rbX  = cx - totalW / 2,         rbY = cy + 52;
+    const tlX  = cx - totalW / 2 + rbW + gap, tlY = cy + 52;
+
+    drawFantasyPanel(rbX, rbY, rbW, rbH, 'rgba(8,26,8,0.97)', 0.75, 6);
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 13px monospace';
+    ctx.fillStyle   = '#88ee66';
+    ctx.shadowColor = 'rgba(100,220,80,0.55)';
+    ctx.shadowBlur  = 10;
+    ctx.fillText('SPELA IGEN', rbX + rbW / 2, rbY + 25);
+    ctx.restore();
+
+    drawFantasyPanel(tlX, tlY, tlW, tlH, 'rgba(12,8,28,0.97)', 0.7, 6);
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 13px monospace';
+    ctx.fillStyle   = '#e8c040';
+    ctx.shadowColor = 'rgba(220,170,30,0.55)';
+    ctx.shadowBlur  = 8;
+    ctx.fillText('TOPPLISTA ★', tlX + tlW / 2, tlY + 25);
+    ctx.restore();
+
+    restartBtn = { x: rbX, y: rbY, w: rbW, h: rbH, action: 'restart' };
+    toplistBtn = { x: tlX, y: tlY, w: tlW, h: tlH };
+  }
 }
 
 function drawTowerPanel(tower) {
