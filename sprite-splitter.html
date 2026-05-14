@@ -154,15 +154,27 @@ function renderAll() {
 
 document.getElementById('btnUpdate').onclick = renderAll;
 
+// Sequential downloads with delay so browsers don't block them
 document.getElementById('btnSaveAll').onclick = () => {
   if (!img.complete || img.naturalWidth === 0) return;
   const { rowH, topOff } = getParams();
   const W = img.naturalWidth;
   const H = img.naturalHeight;
+  const btn = document.getElementById('btnSaveAll');
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
 
-  CHARACTERS.forEach((ch, i) => {
-    const srcY = topOff + i * rowH;
-    if (srcY >= H) return;
+  let idx = 0;
+  function downloadNext() {
+    if (idx >= CHARACTERS.length) {
+      btn.disabled = false;
+      btn.textContent = 'Download All';
+      document.getElementById('status').textContent = 'All done! Move the files to the correct assets/ subfolders.';
+      return;
+    }
+    const ch  = CHARACTERS[idx++];
+    const srcY = topOff + (idx - 1) * rowH;
+    if (srcY >= H) { downloadNext(); return; }
 
     const off = document.createElement('canvas');
     off.width  = W;
@@ -171,13 +183,18 @@ document.getElementById('btnSaveAll').onclick = () => {
 
     off.toBlob(blob => {
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
+      const a   = document.createElement('a');
+      a.href     = url;
       a.download = ch.file;
+      document.body.appendChild(a);
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      document.getElementById('status').textContent = `Downloaded ${ch.file} (${idx}/${CHARACTERS.length})`;
+      setTimeout(downloadNext, 700);
     });
-  });
+  }
+  downloadNext();
 };
 </script>
 </body>
