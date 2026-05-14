@@ -13,7 +13,7 @@ const GRID_BOTTOM = GRID_TOP + ROWS * CELL_SIZE;
 const SPAWN = { col: 0,        row: 15 };
 const GOAL  = { col: COLS - 1, row: 15 };
 
-const WALL_COST = 5;
+const WALL_COST = 8;
 
 const BUILD_BTN = { x: 12, w: 112, h: 38, gap: 6 };
 
@@ -29,8 +29,8 @@ const BUILD_ITEMS = [
   }))
 ];
 
-const STARTING_GOLD  = 120;
-const STARTING_LIVES = 20;
+const STARTING_GOLD  = 85;
+const STARTING_LIVES = 15;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
 grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
@@ -70,6 +70,8 @@ function restartGame() {
   gameOver      = false;
   selectedTower = null;
   screenShake   = 0;
+  goldSpent     = 0;
+  goldEarned    = 0;
 
   waveNumber    = 0;
   waveTotal     = 0;
@@ -82,9 +84,9 @@ function restartGame() {
 
 // ── wave system ───────────────────────────────────────────────────────────────
 
-const COUNTDOWN_FRAMES  = 180;
-const BREAK_FRAMES      = 360;
-const SPAWN_FRAMES      = 40;
+const COUNTDOWN_FRAMES  = 150;
+const BREAK_FRAMES      = 250;
+const SPAWN_FRAMES      = 30;
 const EMP_RANGE         = 50;
 const EMP_DISABLE_FRAMES = 150;
 
@@ -96,8 +98,10 @@ let spawnQueue  = [];
 let spawnTimer  = 0;
 let waveHpScale = 1;
 
-let particles   = [];
-let screenShake = 0;
+let particles     = [];
+let screenShake   = 0;
+let goldSpent     = 0;
+let goldEarned    = 0;
 
 function spawnParticles(x, y, color, count = 10) {
   for (let i = 0; i < count; i++) {
@@ -144,10 +148,10 @@ function drawParticles() {
 
 function waveComposition(num) {
   return {
-    infantry: Math.min(6 + num * 2, 26),
-    drones:   num >= 2 ? Math.min(num - 1, 8) : 0,
-    tanks:    num >= 4 ? Math.min(Math.floor((num - 3) * 0.7), 4) : 0,
-    emps:     num >= 3 ? Math.min(Math.floor((num - 2) * 0.5), 4) : 0,
+    infantry: Math.min(8 + num * 2, 32),
+    drones:   num >= 2 ? Math.min(num, 12)                           : 0,
+    tanks:    num >= 3 ? Math.min(Math.floor((num - 2) * 0.85), 6)   : 0,
+    emps:     num >= 2 ? Math.min(Math.floor((num - 1) * 0.6),  6)   : 0,
   };
 }
 
@@ -171,7 +175,7 @@ function buildWave(num) {
 
 function startNextWave() {
   waveNumber++;
-  waveHpScale = 1 + (waveNumber - 1) * 0.12;
+  waveHpScale = 1 + (waveNumber - 1) * 0.16;
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
@@ -379,7 +383,8 @@ canvas.addEventListener('mousedown', e => {
         mouseX >= panelUpgradeBtn.x && mouseX <= panelUpgradeBtn.x + panelUpgradeBtn.w &&
         mouseY >= panelUpgradeBtn.y && mouseY <= panelUpgradeBtn.y + panelUpgradeBtn.h) {
       if (!selectedTower.maxed && gold >= selectedTower.upgradeCost) {
-        gold -= selectedTower.upgradeCost;
+        goldSpent += selectedTower.upgradeCost;
+        gold      -= selectedTower.upgradeCost;
         selectedTower.upgrade();
       }
       return;
@@ -445,7 +450,8 @@ canvas.addEventListener('mousedown', e => {
 
   currentPath = newPath;
   rerouteActiveEnemies();
-  gold -= cost;
+  goldSpent += cost;
+  gold      -= cost;
 
   if (buildMode === CELL.TOWER) {
     const { x, y } = grid.cellCenter(col, row);
@@ -467,7 +473,8 @@ function update() {
     const reward = b.update();
     if (reward > 0) {
       slain++;
-      gold += reward;
+      gold        += reward;
+      goldEarned  += reward;
       if (b.target) spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 12);
     }
     if (!b.alive) {
@@ -485,7 +492,8 @@ function update() {
               enemy.hp    = 0;
               enemy.alive = false;
               slain++;
-              gold += enemy.reward;
+              gold       += enemy.reward;
+              goldEarned += enemy.reward;
               spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 10);
             }
           }
@@ -594,6 +602,273 @@ function drawPath() {
   buildPathShape();
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawFrames() {
+  const { width, height } = getViewSize();
+  const gx = 0, gy = GRID_TOP;
+  const gw = COLS * CELL_SIZE, gh = ROWS * CELL_SIZE;
+
+  ctx.save();
+
+  // ── Ornate grid border: silver outer → dark body → gold center ───────────────
+
+  // 1. Deep drop shadow
+  ctx.shadowColor   = 'rgba(0,0,0,0.95)';
+  ctx.shadowBlur    = 20;
+  ctx.shadowOffsetY = 4;
+  ctx.strokeStyle   = '#0a0501';
+  ctx.lineWidth     = 10;
+  ctx.strokeRect(gx + 5, gy + 5, gw - 10, gh - 10);
+  ctx.shadowBlur = ctx.shadowOffsetY = 0;
+
+  // 2. Silver outer edge
+  ctx.shadowColor = 'rgba(190,210,230,0.45)';
+  ctx.shadowBlur  = 6;
+  ctx.strokeStyle = '#b0bcc8';
+  ctx.lineWidth   = 3;
+  ctx.strokeRect(gx + 1.5, gy + 1.5, gw - 3, gh - 3);
+  ctx.shadowBlur  = 0;
+
+  // 3. Dark charcoal separator
+  ctx.strokeStyle = '#1e1208';
+  ctx.lineWidth   = 4;
+  ctx.strokeRect(gx + 4, gy + 4, gw - 8, gh - 8);
+
+  // 4. Gold center band with warm glow
+  ctx.shadowColor = 'rgba(220,155,20,0.85)';
+  ctx.shadowBlur  = 14;
+  ctx.strokeStyle = '#d4982a';
+  ctx.lineWidth   = 3.5;
+  ctx.strokeRect(gx + 6.75, gy + 6.75, gw - 13.5, gh - 13.5);
+  ctx.shadowBlur  = 0;
+
+  // 5. Bright gold inner highlight
+  ctx.strokeStyle = 'rgba(255,235,100,0.5)';
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(gx + 9, gy + 9, gw - 18, gh - 18);
+
+  // 6. Corner ornaments — silver shell + gold inner gem
+  const ds = 11;
+  for (const [cx, cy] of [[gx, gy], [gx + gw, gy], [gx, gy + gh], [gx + gw, gy + gh]]) {
+    // silver outer diamond
+    ctx.shadowColor = 'rgba(200,220,240,0.7)';
+    ctx.shadowBlur  = 10;
+    ctx.fillStyle   = '#c0ccd8';
+    ctx.beginPath();
+    ctx.moveTo(cx,                cy - ds);
+    ctx.lineTo(cx + ds * 0.72,   cy);
+    ctx.lineTo(cx,                cy + ds);
+    ctx.lineTo(cx - ds * 0.72,   cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // gold inner diamond
+    const gi = ds * 0.58;
+    ctx.shadowColor = '#ffe070';
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = '#e8a820';
+    ctx.beginPath();
+    ctx.moveTo(cx,               cy - gi);
+    ctx.lineTo(cx + gi * 0.72,  cy);
+    ctx.lineTo(cx,               cy + gi);
+    ctx.lineTo(cx - gi * 0.72,  cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // facet gleam
+    ctx.fillStyle = 'rgba(255,255,200,0.9)';
+    ctx.beginPath();
+    ctx.arc(cx - gi * 0.2, cy - gi * 0.28, gi * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Outer game border: silver outer, gold middle, dark inner ─────────────────
+
+  // 1. Black shadow
+  ctx.shadowColor   = 'rgba(0,0,0,0.98)';
+  ctx.shadowBlur    = 16;
+  ctx.shadowOffsetY = 3;
+  ctx.strokeStyle   = '#0a0501';
+  ctx.lineWidth     = 8;
+  ctx.strokeRect(4, 4, width - 8, height - 8);
+  ctx.shadowBlur = ctx.shadowOffsetY = 0;
+
+  // 2. Silver outer line
+  ctx.shadowColor = 'rgba(180,200,220,0.4)';
+  ctx.shadowBlur  = 5;
+  ctx.strokeStyle = '#a0aeb8';
+  ctx.lineWidth   = 2.5;
+  ctx.strokeRect(2, 2, width - 4, height - 4);
+  ctx.shadowBlur  = 0;
+
+  // 3. Dark separator
+  ctx.strokeStyle = '#1a0f05';
+  ctx.lineWidth   = 4;
+  ctx.strokeRect(5.5, 5.5, width - 11, height - 11);
+
+  // 4. Gold middle band
+  ctx.shadowColor = 'rgba(200,140,15,0.65)';
+  ctx.shadowBlur  = 8;
+  ctx.strokeStyle = '#b8861e';
+  ctx.lineWidth   = 2.5;
+  ctx.strokeRect(8, 8, width - 16, height - 16);
+  ctx.shadowBlur  = 0;
+
+  // 5. Faint inner gold gleam
+  ctx.strokeStyle = 'rgba(255,210,60,0.2)';
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(10.5, 10.5, width - 21, height - 21);
+
+  // 6. Outer corner ornaments — silver outer, gold inner
+  const os = 8;
+  for (const [cx, cy] of [[14, 14], [width - 14, 14], [14, height - 14], [width - 14, height - 14]]) {
+    ctx.shadowColor = 'rgba(190,210,230,0.6)';
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = '#b0bcc8';
+    ctx.beginPath();
+    ctx.moveTo(cx,               cy - os);
+    ctx.lineTo(cx + os * 0.72,  cy);
+    ctx.lineTo(cx,               cy + os);
+    ctx.lineTo(cx - os * 0.72,  cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const oi = os * 0.55;
+    ctx.shadowColor = '#ffd060';
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = '#c88c18';
+    ctx.beginPath();
+    ctx.moveTo(cx,               cy - oi);
+    ctx.lineTo(cx + oi * 0.72,  cy);
+    ctx.lineTo(cx,               cy + oi);
+    ctx.lineTo(cx - oi * 0.72,  cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(255,250,180,0.8)';
+    ctx.beginPath();
+    ctx.arc(cx - oi * 0.2, cy - oi * 0.28, oi * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawSidePanel() {
+  const { width } = getViewSize();
+  const panelX = COLS * CELL_SIZE + 8;
+  const panelW = width - panelX - 8;
+  if (panelW < 130) return;
+
+  const panelY = GRID_TOP + 4;
+  const panelH = ROWS * CELL_SIZE - 8;
+  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(60,35,10,0.92)');
+
+  const lx  = panelX + 12;
+  let   ly  = panelY + 20;
+  const gap = 17;
+
+  function divider() {
+    ctx.strokeStyle = 'rgba(210,160,40,0.22)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(panelX + 8, ly);
+    ctx.lineTo(panelX + panelW - 8, ly);
+    ctx.stroke();
+    ly += 10;
+  }
+
+  function stat(icon, label, value, color = '#c0b090') {
+    ctx.font      = '11px monospace';
+    ctx.fillStyle = color;
+    ctx.fillText(`${icon} ${label}`, lx, ly);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#e8c040';
+    ctx.fillText(`${value}`, panelX + panelW - 10, ly);
+    ctx.textAlign = 'left';
+    ly += gap;
+  }
+
+  ctx.save();
+  ctx.textAlign = 'left';
+
+  // Title
+  ctx.font        = 'bold 12px monospace';
+  ctx.fillStyle   = '#f0c840';
+  ctx.shadowColor = 'rgba(220,170,40,0.7)';
+  ctx.shadowBlur  = 8;
+  ctx.fillText('RAPPORT', lx, ly);
+  ctx.shadowBlur  = 0;
+  ly += gap + 2;
+  divider();
+
+  // Tower breakdown
+  const towerCounts = {};
+  let   wallCount   = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid.cells[r][c] === CELL.WALL) wallCount++;
+    }
+  }
+  for (const t of towers) towerCounts[t.type] = (towerCounts[t.type] ?? 0) + 1;
+
+  stat('🗼', 'Torn', towers.length, '#c0b090');
+  for (const type of Object.values(TOWER_TYPES)) {
+    const n = towerCounts[type] ?? 0;
+    if (n === 0) continue;
+    const def = TOWER_DEFS[type];
+    ctx.font      = '10px monospace';
+    ctx.fillStyle = def.color;
+    ctx.fillText(`  ${def.label}`, lx, ly);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#e8c040';
+    ctx.fillText(`${n}`, panelX + panelW - 10, ly);
+    ctx.textAlign = 'left';
+    ly += gap - 2;
+  }
+  stat('🧱', 'Murar', wallCount, '#a09070');
+  divider();
+
+  // Economy
+  stat('◆', 'Förtjänat', `+${goldEarned}`, '#e8c040');
+  stat('◆', 'Spenderat', `-${goldSpent}`, '#c09040');
+  divider();
+
+  // Battle
+  stat('★', 'Slagna', slain, '#b8c8e0');
+  const leaked = STARTING_LIVES - lives;
+  stat('♥', 'Läckt', `${leaked}/${STARTING_LIVES}`, leaked > 0 ? '#ff9090' : '#60e880');
+  divider();
+
+  // Next wave preview
+  if (!gameOver && waveState !== 'active') {
+    const nextNum = waveNumber + 1;
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = '#a0e0c0';
+    ctx.fillText(`Våg ${nextNum}:`, lx, ly);
+    ly += gap;
+    const next = waveComposition(nextNum);
+    const preview = [
+      { label: `● ×${next.infantry}`, color: '#bb70ff' },
+      { label: `◆ ×${next.drones}`,   color: '#88bbff', skip: next.drones === 0 },
+      { label: `◉ ×${next.tanks}`,    color: '#c07820', skip: next.tanks  === 0 },
+      { label: `✦ ×${next.emps}`,     color: '#00ddcc', skip: next.emps   === 0 },
+    ];
+    for (const p of preview) {
+      if (p.skip) continue;
+      ctx.font      = '10px monospace';
+      ctx.fillStyle = p.color;
+      ctx.fillText(`  ${p.label}`, lx, ly);
+      ly += gap - 2;
+    }
+  }
+
   ctx.restore();
 }
 
@@ -899,6 +1174,8 @@ function draw() {
   drawParticles();
   ctx.restore();
 
+  drawFrames();
+  drawSidePanel();
   drawHud();
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
