@@ -12,6 +12,7 @@ export class Grid {
     this.rows = rows;
     this.cellSize = cellSize;
     this.cells = Array.from({ length: rows }, () => new Array(cols).fill(CELL.EMPTY));
+    this.healthRatio = 1;  // set by game.js each frame: lives / STARTING_LIVES
   }
 
   getCell(col, row) {
@@ -200,39 +201,47 @@ export class Grid {
   _drawGoal(ctx, x, y, cs, time) {
     const cx = x + cs / 2;
     const cy = y + cs / 2;
-    const pulse = 0.5 + Math.sin(time * 4 + 1) * 0.5;
+    const hr = this.healthRatio;  // 0-1
 
-    ctx.fillStyle = '#2a0408';
+    // Health state: color shifts healthy(gold) → damaged(amber) → critical(red)
+    const pulseSpeed = hr > 0.33 ? 4 : 9;
+    const pulse = 0.5 + Math.sin(time * pulseSpeed + 1) * 0.5;
+    const r = hr > 0.66 ? 180 : hr > 0.33 ? 220 : 255;
+    const g = hr > 0.66 ? 160 : hr > 0.33 ? 100 : 40;
+    const b = hr > 0.66 ? 20  : hr > 0.33 ? 10  : 10;
+
+    ctx.fillStyle = `rgb(${Math.floor(r*0.08)},${Math.floor(g*0.06)},${Math.floor(b*0.04)})`;
     ctx.fillRect(x, y, cs, cs);
 
     ctx.save();
     // Outer pulsing ring
-    ctx.strokeStyle = `rgba(255,60,60,${0.3 + pulse * 0.5})`;
+    ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 + pulse * 0.55})`;
     ctx.lineWidth   = 1.5;
-    ctx.shadowColor = 'rgba(255,40,40,0.9)';
-    ctx.shadowBlur  = 10 * pulse;
+    ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
+    ctx.shadowBlur  = (8 + (1 - hr) * 14) * pulse;
     ctx.beginPath();
     ctx.arc(cx, cy, cs / 2 - 2, 0, Math.PI * 2);
     ctx.stroke();
 
     // Inner ring (rotating)
-    ctx.strokeStyle = `rgba(255,120,80,${0.4 + pulse * 0.35})`;
+    ctx.strokeStyle = `rgba(${r},${Math.floor(g * 0.6 + 80)},${b},${0.4 + pulse * 0.35})`;
     ctx.lineWidth   = 1;
-    ctx.shadowBlur  = 5;
+    ctx.shadowBlur  = 4;
     ctx.setLineDash([2, 4]);
-    ctx.lineDashOffset = time * 10;
+    ctx.lineDashOffset = time * (hr > 0.33 ? 10 : 22);
     ctx.beginPath();
     ctx.arc(cx, cy, cs / 2 - 5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.shadowBlur = 0;
 
-    // Center cross
-    ctx.strokeStyle = `rgba(255,80,80,${0.5 + pulse * 0.4})`;
-    ctx.lineWidth   = 1;
+    // Shield rune: circle + cross (replacing plain cross)
+    ctx.strokeStyle = `rgba(${r},${g},${b},${0.5 + pulse * 0.4})`;
+    ctx.lineWidth   = 0.8;
     ctx.beginPath();
-    ctx.moveTo(cx - 3, cy); ctx.lineTo(cx + 3, cy);
-    ctx.moveTo(cx, cy - 3); ctx.lineTo(cx, cy + 3);
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.moveTo(cx - 3.5, cy); ctx.lineTo(cx + 3.5, cy);
+    ctx.moveTo(cx, cy - 3.5); ctx.lineTo(cx, cy + 3.5);
     ctx.stroke();
     ctx.restore();
   }

@@ -1,0 +1,36 @@
+P O R T A L   S Y S T E M   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     T h e   s p a w n   g a t e   ( T i d s p o r t a l )   a n d   g o a l   a r e   t h e   e m o t i o n a l   a n c h o r s   o f   t h e   m a p .
+     T h e y   s h o u l d   l o o k   a l i v e   a n d   d r a m a t i c   —   p l a y e r   k n o w s   i n s t a n t l y   w h e r e   t h r e a t   c o m e s   f r o m .
+
+ C U R R E N T   S T A T E :
+     S p a w n   g a t e   i s   a   p u r p l e   v o i d   p o r t a l   w i t h   r o t a t i n g   r u n i c   r i n g s .   A l r e a d y   i m p l e m e n t e d .
+     G o a l   c e l l   i s   d r a w n   a s   a   p l a i n   c o l o r e d   c e l l   —   n o   s p e c i a l   a n i m a t i o n .
+     S P A W N   =   {   c o l :   0 ,   r o w :   1 5   }
+     G O A L   =   {   c o l :   C O L S - 1 ,   r o w :   1 5   }
+
+ P R O P O S E D   E N H A N C E M E N T S :
+
+     G o a l   V i s u a l :
+     -   D r a w   a   g l o w i n g   c r y s t a l   o r   r u n e s t o n e   a t   t h e   g o a l   c e l l
+     -   P u l s i n g   r e d / a m b e r   g l o w   t h a t   i n t e n s i f i e s   a s   l i v e s   d r o p
+     -   U s e   c t x . s h a d o w B l u r   +   s i n ( )   f o r   t h e   p u l s e   a n i m a t i o n
+
+     S p a w n   P o r t a l   e n h a n c e m e n t s :
+     -   F l a s h   b r i g h t e r   w h e n   a n   e n e m y   s p a w n s   ( t i e   t o   s p a w n E n e m y ( )   e v e n t )
+     -   W a v e   n u m b e r   r u n e   c a r v e d   i n t o   p o r t a l   f r a m e   ( d r a w   i n   c e n t e r   o f   r i n g )
+
+     W a r n i n g   p u l s e :
+     -   L a s t   3   s e c o n d s   o f   b r e a k / c o u n t d o w n :   p o r t a l   p u l s e s   r e d   ( g l o w   i n t e n s i f i e s )
+     -   G i v e s   p l a y e r   a   v i s u a l   c u e   t o   f i n i s h   p l a c i n g   t o w e r s
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   K e e p   p o r t a l   a n i m a t i o n   i n   t h e   g r i d   d r a w   p a s s ,   n o t   H U D
+     -   U s e   a   s h a r e d   ' f r a m e T i c k '   c o u n t e r   f o r   s i n ( )   a n i m a t i o n s   ( a l r e a d y   i n   g a m e . j s )
+     -   A l w a y s   c t x . r e s t o r e ( )   a f t e r   s h a d o w B l u r   t o   p r e v e n t   s t a t e   l e a k
+
+ R U L E S :
+ -   N o   c h a n g e s   t o   G r i d   c l a s s   l o g i c   —   o n l y   v i s u a l   l a y e r
+ -   P o r t a l   f l a s h   i s   c o s m e t i c   o n l y ,   n o   g a m e p l a y   e f f e c t
+ -   K e e p   g o a l   a n d   s p a w n   c l e a r l y   d i s t i n g u i s h a b l e   b y   c o l o r

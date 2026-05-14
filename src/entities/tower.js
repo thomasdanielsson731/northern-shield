@@ -183,7 +183,17 @@ export class Tower {
   }
 
   draw(ctx) {
-    const t = performance.now() * 0.001;
+    const t   = performance.now() * 0.001;
+    const def = TOWER_DEFS[this.type];
+
+    // Colored baseplate — drawn before everything else
+    ctx.save();
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.22;
+    ctx.fillStyle   = def.color;
+    ctx.beginPath();
+    ctx.roundRect(this.x - 7, this.y - 7, 14, 14, 2);
+    ctx.fill();
+    ctx.restore();
 
     // Range ring (skip for berserk — tiny ring looks bad)
     if (this.type !== TOWER_TYPES.BERSERK) {

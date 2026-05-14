@@ -1,0 +1,38 @@
+T E R R A I N   +   G R A S S   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     T h e   g r i d   s h o u l d   f e e l   l i k e   a   N o r s e   b a t t l e f i e l d ,   n o t   a n   e m p t y   b o a r d .
+     S u b t l e   t e r r a i n   v a r i a t i o n   a d d s   l i f e   w i t h o u t   d i s t r a c t i n g   f r o m   g a m e p l a y .
+
+ C U R R E N T   S T A T E :
+     G r i d   b a c k g r o u n d   i s   a   d a r k   s o l i d   f i l l   p e r   c e l l   ( d a r k   s t o n e / e a r t h   t o n e ) .
+     C E L L _ S I Z E = 1 4 p x .   G r i d   i s   5 0 x 3 0 .
+     N o   t e r r a i n   v a r i a n t s ,   n o   t e x t u r e   o v e r l a y .
+
+ P R O P O S E D   A P P R O A C H :
+
+     S t a t i c   n o i s e   t e x t u r e :
+     -   G e n e r a t e   a n   o f f s c r e e n   c a n v a s   o n c e   a t   i n i t   w i t h   p e r - c e l l   v a r i a t i o n
+     -   E a c h   c e l l   g e t s   a   s l i g h t   b r i g h t n e s s   v a r i a n t   ( + / - 1 0 %   o f   b a s e   c o l o r )
+     -   B a s e d   o n   a   s e e d e d   r a n d o m   v a l u e   p e r   c e l l   ( s t o r e   i n   a   ' n o i s e M a p '   a r r a y )
+
+     T e r r a i n   t y p e s   ( v i s u a l   o n l y ,   n o   g a m e p l a y   e f f e c t ) :
+     -   E M P T Y   c e l l :   d a r k   e a r t h   w i t h   o c c a s i o n a l   g r a s s   t u f t   o v e r l a y
+     -   P A T H   c e l l s :   s l i g h t l y   l i g h t e r ,   w o r n - d o w n   s o i l   l o o k
+     -   W A L L   c e l l s :   c o b b l e s t o n e   t e x t u r e   h i n t   ( s m a l l   r e c t s   o v e r l a i d )
+
+     G r a s s   t u f t s :
+     -   R a n d o m l y   p l a c e d   s m a l l   g r e e n   s t r o k e s   ( 2 - 3   p x   l i n e s )   o n   e m p t y   c e l l s
+     -   C o l o r :   ' # 2 a 4 a 1 8 '   t o   ' # 3 a 6 0 2 0 '   r a n d o m
+     -   D e n s i t y :   1   t u f t   p e r   ~ 8   e m p t y   c e l l s
+     -   D r a w n   t o   o f f s c r e e n   c a n v a s   a t   i n i t ,   b l i t t e d   e a c h   f r a m e
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   O f f s c r e e n   c a n v a s   i n i t i a l i z e d   o n c e   i n   g a m e . j s   a t   s t a r t u p
+     -   W h e n   g r i d   c h a n g e s   ( w a l l   p l a c e d ) ,   r e - d r a w   o n l y   a f f e c t e d   c e l l s
+     -   N e v e r   d r a w   g r a s s   o n   S P A W N ,   G O A L ,   W A L L ,   o r   T O W E R   c e l l s
+
+ R U L E S :
+ -   T e r r a i n   i s   d e c o r a t i v e   o n l y   —   z e r o   g a m e p l a y   i m p a c t
+ -   M u s t   n o t   r e d u c e   r e a d a b i l i t y   o f   p a t h ,   t o w e r s ,   o r   e n e m i e s
+ -   D o   n o t   r e g e n e r a t e   e a c h   f r a m e   —   u s e   o f f s c r e e n   c a c h e

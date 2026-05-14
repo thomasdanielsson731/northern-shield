@@ -1,0 +1,37 @@
+C O R E   /   G O A L   S Y S T E M   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     T h e   N o r t h e r n   S h i e l d   i t s e l f   —   t h e   t h i n g   b e i n g   d e f e n d e d   —   s h o u l d   h a v e
+     v i s u a l   p r e s e n c e   a n d   r e a c t   t o   d a m a g e .   M a k e   l o s i n g   l i v e s   f e e l   w e i g h t y .
+
+ C U R R E N T   S T A T E :
+     G O A L   c e l l   a t   c o l   4 9 ,   r o w   1 5 .   E n e m i e s   t h a t   r e a c h   i t   d e d u c t   1   l i f e .
+     L i v e s   s t a r t s   a t   1 5 .   G a m e   o v e r   a t   0 .
+     N o   v i s u a l   d i f f e r e n c e   b e t w e e n   f u l l   h e a l t h   a n d   n e a r - d e a t h   s t a t e .
+
+ P R O P O S E D   S Y S T E M :
+
+     C o r e   H e a l t h   S t a t e s :
+     -   H e a l t h y   ( 1 1 - 1 5   l i v e s ) :   B r i g h t   g o l d   g l o w ,   p u l s i n g   c a l m l y
+     -   D a m a g e d   ( 6 - 1 0   l i v e s ) :   A m b e r   g l o w ,   c r a c k   p a t t e r n   o v e r l a y
+     -   C r i t i c a l   ( 1 - 5   l i v e s ) :   R e d   g l o w ,   f a s t e r   p u l s e ,   s c r e e n   e d g e   v i g n e t t e
+
+     G o a l   c e l l   v i s u a l :
+     -   D r a w   a   r u n e   s h i e l d   s y m b o l   ( c i r c l e   +   c r o s s )   c e n t e r e d   o n   t h e   g o a l   c e l l
+     -   C o l o r   b a s e d   o n   h e a l t h   s t a t e   a b o v e
+     -   P u l s e   s p e e d :   s l o w   ( 0 . 0 2   r a d / f r a m e )   n o r m a l ,   f a s t   ( 0 . 0 6 )   c r i t i c a l
+
+     S c r e e n   v i g n e t t e :
+     -   D r a w   a   r a d i a l   g r a d i e n t   o v e r l a y   a t   c r i t i c a l   h e a l t h
+     -   R e d g r a d i e n t   f r o m   e d g e s ,   t r a n s p a r e n t   i n   c e n t e r
+     -   O p a c i t y :   M a t h . m a x ( 0 ,   ( 5   -   l i v e s )   /   5   *   0 . 3 5 )
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   H e a l t h   s t a t e   d e r i v e d   f r o m   l i v e s   e a c h   f r a m e   —   n o   e x t r a   v a r i a b l e   n e e d e d
+     -   V i g n e t t e   d r a w n   i n   d r a w ( )   a f t e r   g r i d   b u t   b e f o r e   H U D
+     -   G o a l   v i s u a l   d r a w n   i n s i d e   t h e   g r i d   r e n d e r   p a s s
+
+ R U L E S :
+ -   N e v e r   c h a n g e   l i v e s   l o g i c   —   t h i s   i s   p u r e l y   v i s u a l   f e e d b a c k
+ -   V i g n e t t e   d o e s   N O T   a p p e a r   a t   f u l l   h e a l t h
+ -   K e e p   g o a l   c e l l   v i s i b l e   t h r o u g h o u t   —   n e v e r   c o v e r   i t   w i t h   t o w e r s

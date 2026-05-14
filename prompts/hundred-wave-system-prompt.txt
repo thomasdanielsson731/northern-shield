@@ -1,0 +1,42 @@
+1 0 0 - W A V E   S Y S T E M   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     G i v e   N o r t h e r n   S h i e l d   a   c l e a r   e n d g o a l :   s u r v i v e   1 0 0   w a v e s .
+     D i f f i c u l t y   s h o u l d   s c a l e   s m o o t h l y   s o   e a r l y   w a v e s   a r e   a c c e s s i b l e
+     a n d   l a t e r   w a v e s   f e e l   l i k e   a   s i e g e .
+
+ C U R R E N T   S T A T E :
+     W a v e C o m p o s i t i o n ( n )   g e n e r a t e s   w a v e   c o n t e n t   f r o m   a   f o r m u l a .
+     N o   h a r d   c a p   o n   w a v e s   —   g a m e   c o n t i n u e s   i n d e f i n i t e l y .
+     N o   " y o u   w o n "   s t a t e .
+
+ W A V E   S C A L I N G   D E S I G N :
+
+     P h a s e s :
+     -   W a v e s   1 - 2 0 :   E a r l y   t h r e a t .   G r a v e b o r n   d o m i n a n t .   N o   G o l e m s   u n t i l   w a v e   1 0 .
+     -   W a v e s   2 1 - 5 0 :   M i d g a m e .   W i s p s   i n t r o d u c e d .   B a n s h e e s   f r o m   w a v e   3 0 .
+     -   W a v e s   5 1 - 7 5 :   H a r d .   M u l t i p l e   G o l e m s .   L a r g e r   p a c k s .
+     -   W a v e s   7 6 - 9 9 :   V e r y   h a r d .   M i x e d   a l l   t y p e s .   H P   a n d   s p e e d   b o n u s e s .
+     -   W a v e   1 0 0 :   F i n a l   s i e g e .   L a r g e   s p a w n ,   a l l   e n e m y   t y p e s .   V i c t o r y   o n   c l e a r .
+
+     S c a l i n g   f o r m u l a s :
+     -   E n e m y   H P   m u l t :   1   +   w a v e N u m b e r   *   0 . 0 8
+     -   E n e m y   c o u n t :   b a s e   +   M a t h . f l o o r ( w a v e N u m b e r   *   0 . 4 )
+     -   S p e e d   m u l t   ( w a v e   5 0 + ) :   1   +   ( w a v e N u m b e r   -   5 0 )   *   0 . 0 0 5
+
+ V I C T O R Y   S T A T E :
+     -   S u r v i v i n g   w a v e   1 0 0   t r i g g e r s   ' v i c t o r y '   g a m e   s t a t e
+     -   S h o w   V I C T O R Y   s c r e e n   i n s t e a d   o f   D E F E A T E D
+     -   S a v e   h i g h s c o r e   w i t h   ' c l e a r e d :   t r u e '   f l a g
+     -   D i s t i n c t   g o l d / g r e e n   t h e m e d   g a m e o v e r   s c r e e n
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   A d d   ' M A X _ W A V E S   =   1 0 0 '   c o n s t a n t   t o   g a m e . j s
+     -   C h e c k   a f t e r   e a c h   w a v e   c l e a r :   i f   w a v e N u m b e r   > =   M A X _ W A V E S ,   t r i g g e r   v i c t o r y
+     -   P a s s   h p M u l t   a n d   s p e e d M u l t   i n t o   s p a w n E n e m y ( )   f r o m   w a v e C o m p o s i t i o n ( )
+     -   S h o w   ' W a v e   X   /   1 0 0 '   i n   t o p   b a r   i n s t e a d   o f   j u s t   ' W a v e   X '
+
+ R U L E S :
+ -   S c a l i n g   m u s t   b e   s m o o t h   —   n o   s u d d e n   d i f f i c u l t y   s p i k e s
+ -   W a v e   1 0 0   m u s t   b e   w i n n a b l e   b y   a   s k i l l e d   p l a y e r
+ -   D o   n o t   a l t e r   c o r e   B F S   o r   t o w e r   l o g i c   f o r   t h i s   f e a t u r e

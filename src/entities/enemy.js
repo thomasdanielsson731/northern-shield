@@ -336,6 +336,21 @@ export class Enemy {
       ctx.fill();
       ctx.shadowBlur = 0;
     }
+
+    // Flying badge: small upward triangle above body
+    ctx.save();
+    ctx.fillStyle   = 'rgba(200,230,255,0.65)';
+    ctx.shadowColor = 'rgba(140,190,255,0.5)';
+    ctx.shadowBlur  = 5;
+    const fty = y - r * 1.7;
+    ctx.beginPath();
+    ctx.moveTo(x,      fty - 3.5);
+    ctx.lineTo(x - 3,  fty + 2.5);
+    ctx.lineTo(x + 3,  fty + 2.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   // ── Golem: massive stone creature with lava cracks ───────────────────────────
@@ -443,6 +458,18 @@ export class Enemy {
     ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // Boss double-ring indicator
+    ctx.strokeStyle = 'rgba(255,140,20,0.50)';
+    ctx.lineWidth   = 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y, r + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,180,40,0.25)';
+    ctx.lineWidth   = 0.7;
+    ctx.beginPath();
+    ctx.arc(x, y, r + 9, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   // ── Banshee: electric diamond ghost ──────────────────────────────────────────
@@ -528,13 +555,34 @@ export class Enemy {
     ctx.arc(x, y, r * 0.15, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // EMP lightning-bolt badge — top-right of body
+    ctx.save();
+    const bx = x + r * 0.78, by = y - r * 0.78, bs = 5.5;
+    ctx.shadowColor = '#00ffcc';
+    ctx.shadowBlur  = 7;
+    ctx.fillStyle   = '#00ffdd';
+    ctx.beginPath();
+    ctx.moveTo(bx + bs * 0.12,  by - bs * 0.52);
+    ctx.lineTo(bx - bs * 0.18,  by + bs * 0.05);
+    ctx.lineTo(bx + bs * 0.04,  by + bs * 0.05);
+    ctx.lineTo(bx - bs * 0.12,  by + bs * 0.52);
+    ctx.lineTo(bx + bs * 0.20,  by - bs * 0.05);
+    ctx.lineTo(bx - bs * 0.04,  by - bs * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   _drawHpBar(ctx) {
-    const barW = this.radius * 2.8;
-    const barH = this.type === ENEMY_TYPES.TANK ? 6 : 5;
+    if (this.hp >= this.maxHp) return;
+
+    const isBoss = this.type === ENEMY_TYPES.TANK;
+    const barW = this.radius * (isBoss ? 3.2 : 2.8);
+    const barH = isBoss ? 5 : 3;
     const barX = this.x - barW / 2;
-    const barY = this.y - this.radius - 12;
+    const barY = this.y - this.radius - (isBoss ? 14 : 10);
 
     // Background
     ctx.fillStyle = 'rgba(6,3,14,0.88)';

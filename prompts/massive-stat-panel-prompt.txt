@@ -1,0 +1,41 @@
+M A S S I V E   S T A T   P A N E L   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     P l a y e r s   w a n t   t o   k n o w   e x a c t l y   w h a t   t h e i r   t o w e r s   a r e   d o i n g .
+     A   d e t a i l e d   s t a t   p a n e l   o n   t o w e r   s e l e c t i o n   r e w a r d s   e x p e r t   p l a y .
+
+ C U R R E N T   S T A T E :
+     S e l e c t e d   t o w e r   s h o w s   a   s m a l l   p a n e l   w i t h :   t y p e ,   l e v e l ,   r a n g e ,   u p g r a d e   b u t t o n ,   s e l l   b u t t o n .
+     T O W E R _ D E F S   h a s :   l a b e l ,   c o s t ,   r a n g e ,   f i r e R a t e ,   d a m a g e ,   r a d i u s ,   b u l l e t S p e e d .
+     T o w e r   h a s :   l e v e l ,   m a x e d ,   t y p e ,   t o t a l K i l l s   ( i f   t r a c k e d ) .
+
+ P R O P O S E D   P A N E L   C O N T E N T :
+
+     H e a d e r :
+     -   T o w e r   t y p e   n a m e   ( N o r s e   l a b e l )   +   l e v e l   b a d g e   ( " L 3 " )
+     -   T o w e r   c o l o r   d o t   f o r   q u i c k   i d e n t i f i c a t i o n
+
+     C o r e   S t a t s :
+     -   D a m a g e :   b a s e   *   l e v e l M u l t i p l i e r   ( s h o w   e f f e c t i v e   v a l u e )
+     -   A t t a c k   S p e e d :   f i r e R a t e   c o n v e r t e d   t o   " X . X / s "   ( h u m a n - r e a d a b l e )
+     -   R a n g e :   i n   c e l l s   ( r a n g e / C E L L _ S I Z E ,   r o u n d e d )
+     -   S p e c i a l :   " S l o w " ,   " S p l a s h " ,   " S t u n " ,   " E M P "   b a d g e   i f   a p p l i c a b l e
+
+     E c o n o m y :
+     -   S e l l   v a l u e :   M a t h . f l o o r ( c o s t   *   0 . 6 )   g o l d
+     -   T o t a l   i n v e s t e d :   c o s t   +   s u m   o f   u p g r a d e   c o s t s
+     -   K i l l s   b y   t h i s   t o w e r   ( t r a c k   ' t o w e r . k i l l s '   i n   T o w e r   c l a s s )
+
+     U p g r a d e   p r e v i e w :
+     -   N e x t   u p g r a d e   c o s t   +   d a m a g e   a f t e r   u p g r a d e   ( g r e y e d   o u t   i f   m a x e d )
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   P a n e l   i s   d r a w n   i n   d r a w S e l e c t e d T o w e r P a n e l ( )   i n   g a m e . j s
+     -   A d d   ' k i l l s '   c o u n t e r   t o   T o w e r   c l a s s ,   i n c r e m e n t   w h e n   b u l l e t   k i l l s   e n e m y
+     -   F i r e r a t e   t o   " /s " :   ( 6 0   /   f i r e R a t e ) . t o F i x e d ( 1 )
+     -   P a n e l   m a y   n e e d   t o   b e   w i d e r   —   c h e c k   r i g h t   p a n e l   s p a c e   o r   f l o a t   n e a r   t o w e r
+
+ R U L E S :
+ -   S h o w   e f f e c t i v e   s t a t s ,   n o t   b a s e   s t a t s   —   i n c l u d e   u p g r a d e   s c a l i n g
+ -   N e v e r   s h o w   r a w   i n t e r n a l   v a l u e s   l i k e   f i r e R a t e   i n   f r a m e s
+ -   S t a t   p a n e l   h i d e s   w h e n   n o   t o w e r   i s   s e l e c t e d   —   n o   p e r m a n e n t   U I   s l o t

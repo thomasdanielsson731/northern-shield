@@ -1,0 +1,38 @@
+B O S S   W A R N I N G   S Y S T E M   —   N o r t h e r n   S h i e l d
+
+ G O A L :
+     W h e n   a   G o l e m   ( b o s s )   i s   a b o u t   t o   s p a w n ,   t h e   p l a y e r   m u s t   k n o w .
+     T h e   w a r n i n g   s h o u l d   b u i l d   t e n s i o n   w i t h o u t   b r e a k i n g   g a m e f l o w .
+
+ C U R R E N T   S T A T E :
+     G o l e m   ( t a n k )   i s   i n   E N E M Y _ D E F S   —   h i g h   H P ,   s l o w ,   l a r g e   r a d i u s .
+     W a v e   c o m p o s i t i o n   s h o w s   " G o l e m   x N "   i n   r i g h t   p a n e l   d u r i n g   b r e a k .
+     N o   d y n a m i c   w a r n i n g   e v e n t   o n   b o s s   s p a w n .
+
+ P R O P O S E D   S Y S T E M :
+
+     P r e - w a v e   w a r n i n g   ( i n   b r e a k   s t a t e ) :
+     -   I f   n e x t   w a v e   c o n t a i n s   G o l e m s :   s h o w   a   r e d   " B O S S   I N C O M I N G "   b a n n e r
+     -   B a n n e r   f a d e s   i n   f o r   0 . 5 s ,   h o l d s   2 s ,   f a d e s   o u t
+     -   S h o w   d u r i n g   c o u n t d o w n   p h a s e ,   n o t   d u r i n g   a c t i v e   c o m b a t
+
+     S p a w n   m o m e n t :
+     -   W h e n   a   G o l e m   i s   s p a w n e d :   f l a s h   t h e   p o r t a l   b r i g h t   r e d   f o r   0 . 3 s
+     -   S c r e e n   s h a k e :   s m a l l   i m p a c t   j o l t   ( 3 p x ,   1 0   f r a m e s )
+     -   G o l e m   e n t r a n c e :   s c a l e   f r o m   0 . 5 x   t o   1 . 0 x   o v e r   2 0   f r a m e s   ( s p a w n   a n i m a t i o n )
+
+     B o s s   h e a l t h   b a r :
+     -   W h i l e   a   G o l e m   i s   a l i v e :   s h o w   a   h e a l t h   b a r   a b o v e   t h e   e n e m y
+     -   A l l   e n e m i e s   h a v e   h p / m a x H p   —   u s e   t h i s   f o r   t h e   b a r
+     -   B a r   c o l o r :   g r e e n   >   7 5 % ,   y e l l o w   5 0 - 7 5 % ,   r e d   <   5 0 %
+     -   B o s s   b a r   i s   t a l l e r   ( 4 p x   i n s t e a d   o f   2 p x )   a n d   h a s   a   b o r d e r
+
+ I M P L E M E N T A T I O N   N O T E S :
+     -   T r a c k   ' b o s s W a r n i n g T i m e r '   i n   g a m e . j s   d u r i n g   c o u n t d o w n
+     -   ' b o s s ' :   t r u e   f l a g   i n   E N E M Y _ D E F S   f o r   G o l e m   ( t a n k )
+     -   H e a l t h   b a r s   d r a w n   i n   E n e m y . d r a w ( )   i f   b o s s   =   t r u e   o r   h p   <   m a x H p
+
+ R U L E S :
+ -   W a r n i n g   b a n n e r   n e v e r   c o v e r s   t h e   g r i d   p l a y a r e a   —   s h o w   i n   H U D   o v e r l a y
+ -   B o s s   h e a l t h   b a r   d o e s   n o t   s h o w   f o r   r e g u l a r   e n e m i e s   a t   f u l l   h e a l t h
+ -   K e e p   t h e   w a r n i n g   f e e l i n g   o p t i o n a l   t o   r e a d   —   n o t   a n   i n t e r r u p t i n g   p o p u p
