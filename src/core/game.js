@@ -44,6 +44,38 @@ let buildMode         = CELL.WALL;
 let selectedTowerType = TOWER_TYPES.GUN;
 let gameOver = false;
 
+let selectedTower   = null;
+let panelUpgradeBtn = null;
+let panelSellBtn    = null;
+let restartBtn      = null;
+
+// ── restart ───────────────────────────────────────────────────────────────────
+
+function restartGame() {
+  grid.cells = Array.from({ length: ROWS }, () => new Array(COLS).fill(CELL.EMPTY));
+  grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
+  grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
+
+  currentPath   = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+  enemies       = [];
+  towers        = [];
+  bullets       = [];
+  particles     = [];
+  gold          = STARTING_GOLD;
+  lives         = STARTING_LIVES;
+  slain         = 0;
+  gameOver      = false;
+  selectedTower = null;
+  screenShake   = 0;
+
+  waveNumber    = 0;
+  waveState     = 'countdown';
+  waveTimer     = 0;
+  spawnQueue    = [];
+  spawnTimer    = 0;
+  waveHpScale   = 1;
+}
+
 // ── wave system ───────────────────────────────────────────────────────────────
 
 const COUNTDOWN_FRAMES = 180;
@@ -303,27 +335,69 @@ window.addEventListener('keydown', e => {
 });
 
 canvas.addEventListener('mousedown', e => {
-  if (gameOver) return;
-
   const rect   = canvas.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
+  // Game over: only restart button is interactive
+  if (gameOver) {
+    if (e.button === 0 && restartBtn &&
+        mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
+        mouseY >= restartBtn.y && mouseY <= restartBtn.y + restartBtn.h) {
+      restartGame();
+    }
+    return;
+  }
+
+  // Build-mode button row (left-click only)
   if (e.button === 0) {
     const btn = getBuildButtonAt(mouseX, mouseY);
     if (btn) {
       buildMode = btn.mode;
       if (btn.mode === CELL.TOWER) selectedTowerType = btn.id;
+      selectedTower = null;
+      return;
+    }
+  }
+
+  // Tower panel buttons (when a tower is selected)
+  if (e.button === 0 && selectedTower) {
+    if (panelUpgradeBtn &&
+        mouseX >= panelUpgradeBtn.x && mouseX <= panelUpgradeBtn.x + panelUpgradeBtn.w &&
+        mouseY >= panelUpgradeBtn.y && mouseY <= panelUpgradeBtn.y + panelUpgradeBtn.h) {
+      if (!selectedTower.maxed && gold >= selectedTower.upgradeCost) {
+        gold -= selectedTower.upgradeCost;
+        selectedTower.upgrade();
+      }
+      return;
+    }
+    if (panelSellBtn &&
+        mouseX >= panelSellBtn.x && mouseX <= panelSellBtn.x + panelSellBtn.w &&
+        mouseY >= panelSellBtn.y && mouseY <= panelSellBtn.y + panelSellBtn.h) {
+      gold += selectedTower.sellValue;
+      grid.setCell(selectedTower.col, selectedTower.row, CELL.EMPTY);
+      towers      = towers.filter(t => t !== selectedTower);
+      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+      rerouteActiveEnemies();
+      selectedTower = null;
       return;
     }
   }
 
   const { col, row } = grid.pixelToCell(mouseX, mouseY);
   const cell = grid.getCell(col, row);
-  if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) return;
 
+  if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
+    selectedTower = null;
+    return;
+  }
+
+  // Right-click: remove wall or tower instantly
   if (e.button === 2) {
     if (cell === CELL.WALL || cell === CELL.TOWER) {
+      if (selectedTower && selectedTower.col === col && selectedTower.row === row) {
+        selectedTower = null;
+      }
       grid.setCell(col, row, CELL.EMPTY);
       towers      = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
@@ -332,7 +406,18 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  if (e.button !== 0 || cell !== CELL.EMPTY) return;
+  if (e.button !== 0) return;
+
+  // Left-click on placed tower: select it
+  if (cell === CELL.TOWER) {
+    selectedTower = towers.find(t => t.col === col && t.row === row) ?? null;
+    return;
+  }
+
+  // Left-click elsewhere: deselect
+  selectedTower = null;
+
+  if (cell !== CELL.EMPTY) return;
   if (hasEnemyInCell(col, row)) return;
 
   const cost = buildMode === CELL.WALL ? WALL_COST : TOWER_DEFS[selectedTowerType].cost;
@@ -559,10 +644,10 @@ function drawHud() {
   ctx.fillStyle = 'rgba(3,1,8,0.78)';
   ctx.fillRect(0, 0, width, height);
 
-  drawFantasyPanel(cx - 210, cy - 100, 420, 178, 'rgba(6,2,14,0.96)', 0.8, 12);
+  drawFantasyPanel(cx - 210, cy - 110, 420, 210, 'rgba(6,2,14,0.96)', 0.8, 12);
 
   const line1 = 'DEFEATED';
-  const line2 = `Warriors Slain: ${slain}`;
+  const line2 = `Warriors Slain: ${slain}   Waves: ${waveNumber}`;
 
   ctx.save();
   ctx.textAlign   = 'center';
@@ -570,12 +655,107 @@ function drawHud() {
   ctx.shadowBlur  = 20;
   ctx.fillStyle   = '#e84040';
   ctx.font        = 'bold 42px monospace';
-  ctx.fillText(line1, cx, cy - 8);
+  ctx.fillText(line1, cx, cy - 18);
   ctx.shadowBlur  = 0;
   ctx.fillStyle   = '#e8c040';
-  ctx.font        = '18px monospace';
-  ctx.fillText(line2, cx, cy + 28);
+  ctx.font        = '16px monospace';
+  ctx.fillText(line2, cx, cy + 18);
   ctx.restore();
+
+  // Restart button
+  const rbW = 170, rbH = 38;
+  const rbX = cx - rbW / 2, rbY = cy + 44;
+  drawFantasyPanel(rbX, rbY, rbW, rbH, 'rgba(8,26,8,0.97)', 0.75, 6);
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 15px monospace';
+  ctx.fillStyle   = '#88ee66';
+  ctx.shadowColor = 'rgba(100,220,80,0.6)';
+  ctx.shadowBlur  = 10;
+  ctx.fillText('PLAY AGAIN', cx, rbY + 25);
+  ctx.restore();
+  restartBtn = { x: rbX, y: rbY, w: rbW, h: rbH };
+}
+
+function drawTowerPanel(tower) {
+  const panelW = 162;
+  const panelH = 86;
+  const { width, height } = getViewSize();
+
+  let px = tower.x - panelW / 2;
+  let py = tower.y - panelH - CELL_SIZE - 4;
+  px = Math.max(8, Math.min(px, width  - panelW - 8));
+  py = Math.max(8, Math.min(py, height - panelH - 8));
+
+  drawFantasyPanel(px, py, panelW, panelH, 'rgba(4,2,12,0.97)', 0.88, 7);
+
+  const def = TOWER_DEFS[tower.type];
+
+  ctx.save();
+
+  // Title + level
+  ctx.font      = 'bold 11px monospace';
+  ctx.fillStyle = def.color;
+  ctx.textAlign = 'left';
+  ctx.fillText(def.label.toUpperCase(), px + 10, py + 17);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = tower.maxed ? '#ff9040' : '#e8c040';
+  ctx.fillText(tower.maxed ? 'MAX' : `Lv ${tower.level}`, px + panelW - 10, py + 17);
+
+  // Stats
+  ctx.textAlign = 'left';
+  ctx.font      = '10px monospace';
+  ctx.fillStyle = '#8aaccc';
+  ctx.fillText(`DMG ${tower.damage}   RNG ${tower.range}   CD ${tower.fireRate}`, px + 10, py + 32);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(210,160,40,0.2)';
+  ctx.lineWidth   = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(px + 8, py + 40); ctx.lineTo(px + panelW - 8, py + 40);
+  ctx.stroke();
+
+  // Upgrade button
+  const btnY  = py + 47;
+  const btnH  = 28;
+  const upgW  = 94;
+  const sellW = 52;
+  const upgX  = px + 8;
+  const sellX = px + panelW - 8 - sellW;
+
+  const canUpgrade = !tower.maxed && gold >= tower.upgradeCost;
+  drawFantasyPanel(upgX, btnY, upgW, btnH,
+    canUpgrade ? 'rgba(8,24,8,0.97)' : 'rgba(10,8,20,0.97)',
+    canUpgrade ? 0.65 : 0.18, 4);
+
+  ctx.textAlign = 'center';
+  if (tower.maxed) {
+    ctx.fillStyle = 'rgba(130,110,60,0.75)';
+    ctx.font      = '10px monospace';
+    ctx.fillText('MAXED', upgX + upgW / 2, btnY + 18);
+  } else {
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = canUpgrade ? '#88ee66' : '#3a4030';
+    ctx.fillText('Upgrade', upgX + upgW / 2, btnY + 12);
+    ctx.font      = '10px monospace';
+    ctx.fillStyle = canUpgrade ? '#e8c040' : '#2a2818';
+    ctx.fillText(`$${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
+  }
+
+  // Sell button
+  drawFantasyPanel(sellX, btnY, sellW, btnH, 'rgba(22,6,6,0.97)', 0.55, 4);
+  ctx.font      = 'bold 10px monospace';
+  ctx.fillStyle = '#ee6666';
+  ctx.fillText('Sell', sellX + sellW / 2, btnY + 12);
+  ctx.font      = '10px monospace';
+  ctx.fillStyle = '#e8c040';
+  ctx.fillText(`$${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
+
+  ctx.restore();
+
+  panelUpgradeBtn = { x: upgX,  y: btnY, w: upgW,  h: btnH };
+  panelSellBtn    = { x: sellX, y: btnY, w: sellW, h: btnH };
 }
 
 function drawWaveAnnouncement() {
@@ -634,6 +814,24 @@ function draw() {
   grid.draw(ctx, time);
   drawPath();
   towers.forEach(t => t.draw(ctx));
+
+  // Selection ring on active tower
+  if (selectedTower && !gameOver) {
+    const st = performance.now() * 0.001;
+    ctx.save();
+    ctx.strokeStyle    = 'rgba(255,255,180,0.75)';
+    ctx.lineWidth      = 1.5;
+    ctx.shadowColor    = 'rgba(255,240,100,0.8)';
+    ctx.shadowBlur     = 8;
+    ctx.setLineDash([4, 5]);
+    ctx.lineDashOffset = -(st * 18) % 9;
+    ctx.beginPath();
+    ctx.arc(selectedTower.x, selectedTower.y, CELL_SIZE * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   bullets.forEach(b => b.draw(ctx));
   enemies.forEach(e => e.draw(ctx));
   drawParticles();
@@ -641,6 +839,7 @@ function draw() {
 
   drawHud();
   drawWaveAnnouncement();
+  if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
 }
 
 function gameLoop() {
