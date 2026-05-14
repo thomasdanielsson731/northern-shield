@@ -38,15 +38,15 @@ export const ENEMY_DEFS = {
 };
 
 export class Enemy {
-  constructor(path, type = ENEMY_TYPES.INFANTRY) {
+  constructor(path, type = ENEMY_TYPES.INFANTRY, hpScale = 1) {
     const def = ENEMY_DEFS[type] || ENEMY_DEFS[ENEMY_TYPES.INFANTRY];
     this.type           = type;
     this.path           = path;
     this.pathIndex      = 0;
     this.speed          = def.speed;
     this.radius         = def.radius;
-    this.hp             = def.hp;
-    this.maxHp          = def.hp;
+    this.hp             = Math.round(def.hp * hpScale);
+    this.maxHp          = Math.round(def.hp * hpScale);
     this.reward         = def.reward;
     this.color          = def.color;
     this.highlightColor = def.highlightColor;

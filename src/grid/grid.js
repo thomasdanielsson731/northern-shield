@@ -73,7 +73,7 @@ export class Grid {
     return null;
   }
 
-  draw(ctx) {
+  draw(ctx, time = 0) {
     ctx.strokeStyle = 'rgba(120,60,180,0.07)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
@@ -100,17 +100,13 @@ export class Grid {
 
         if (type === CELL.WALL) {
           this._drawWallBlock(ctx, x, y, cs);
+        } else if (type === CELL.SPAWN) {
+          this._drawSpawn(ctx, x, y, cs, time);
+        } else if (type === CELL.GOAL) {
+          this._drawGoal(ctx, x, y, cs, time);
         } else {
-          const fills = {
-            [CELL.SPAWN]: '#6a3e08',
-            [CELL.GOAL]:  '#580810',
-            [CELL.TOWER]: '#180e40'
-          };
-          const edges = {
-            [CELL.SPAWN]: 'rgba(240,160,40,0.35)',
-            [CELL.GOAL]:  'rgba(255,60,60,0.3)',
-            [CELL.TOWER]: 'rgba(120,90,255,0.25)'
-          };
+          const fills = { [CELL.TOWER]: '#180e40' };
+          const edges = { [CELL.TOWER]: 'rgba(120,90,255,0.25)' };
           ctx.fillStyle = fills[type] || '#111';
           ctx.fillRect(x, y, cs, cs);
           ctx.strokeStyle = edges[type] || 'rgba(255,255,255,0.06)';
@@ -119,6 +115,73 @@ export class Grid {
         }
       }
     }
+  }
+
+  _drawSpawn(ctx, x, y, cs, time) {
+    const cx = x + cs / 2;
+    const cy = y + cs / 2;
+    const pulse = 0.5 + Math.sin(time * 3) * 0.5;
+
+    ctx.fillStyle = '#3a2004';
+    ctx.fillRect(x, y, cs, cs);
+
+    // Pulsing ring
+    ctx.save();
+    ctx.strokeStyle = `rgba(240,160,40,${0.3 + pulse * 0.45})`;
+    ctx.lineWidth   = 1.5;
+    ctx.shadowColor = 'rgba(255,180,40,0.8)';
+    ctx.shadowBlur  = 8 * pulse;
+    ctx.beginPath();
+    ctx.arc(cx, cy, (cs / 2 - 2) * (0.7 + pulse * 0.28), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Inner dot
+    ctx.fillStyle = `rgba(255,180,40,${0.5 + pulse * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  _drawGoal(ctx, x, y, cs, time) {
+    const cx = x + cs / 2;
+    const cy = y + cs / 2;
+    const pulse = 0.5 + Math.sin(time * 4 + 1) * 0.5;
+
+    ctx.fillStyle = '#2a0408';
+    ctx.fillRect(x, y, cs, cs);
+
+    ctx.save();
+    // Outer pulsing ring
+    ctx.strokeStyle = `rgba(255,60,60,${0.3 + pulse * 0.5})`;
+    ctx.lineWidth   = 1.5;
+    ctx.shadowColor = 'rgba(255,40,40,0.9)';
+    ctx.shadowBlur  = 10 * pulse;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cs / 2 - 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner ring (rotating)
+    ctx.strokeStyle = `rgba(255,120,80,${0.4 + pulse * 0.35})`;
+    ctx.lineWidth   = 1;
+    ctx.shadowBlur  = 5;
+    ctx.setLineDash([2, 4]);
+    ctx.lineDashOffset = time * 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cs / 2 - 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+
+    // Center cross
+    ctx.strokeStyle = `rgba(255,80,80,${0.5 + pulse * 0.4})`;
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, cy); ctx.lineTo(cx + 3, cy);
+    ctx.moveTo(cx, cy - 3); ctx.lineTo(cx, cy + 3);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawWallBlock(ctx, x, y, cs) {

@@ -45,6 +45,8 @@ export const TOWER_DEFS = {
   }
 };
 
+const MAX_LEVEL = 10;
+
 export class Tower {
   constructor(x, y, col, row, type = TOWER_TYPES.GUN) {
     this.x = x;
@@ -53,16 +55,46 @@ export class Tower {
     this.row = row;
     this.type = type;
     this.fireCooldown = 0;
+    this.level = 1;
 
     const def = TOWER_DEFS[this.type] || TOWER_DEFS[TOWER_TYPES.GUN];
-    this.range       = def.range;
-    this.fireRate    = def.fireRate;
-    this.damage      = def.damage;
-    this.radius      = def.radius;
-    this.bulletSpeed = def.bulletSpeed;
-    this.color       = def.color;
-    this.rangeColor  = def.rangeColor;
-    this.aimAngle    = -Math.PI / 2;
+    this.baseDamage   = def.damage;
+    this.baseRange    = def.range;
+    this.baseFireRate = def.fireRate;
+    this.radius       = def.radius;
+    this.bulletSpeed  = def.bulletSpeed;
+    this.color        = def.color;
+    this.rangeColor   = def.rangeColor;
+    this.aimAngle     = -Math.PI / 2;
+    this.fireFlash    = 0;
+
+    this._applyLevel();
+  }
+
+  _applyLevel() {
+    const n = this.level - 1;
+    this.damage   = Math.round(this.baseDamage   * (1 + n * 0.25));
+    this.range    = Math.round(this.baseRange    * (1 + n * 0.08));
+    this.fireRate = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
+  }
+
+  get upgradeCost() {
+    return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.85);
+  }
+
+  get sellValue() {
+    return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * 0.5);
+  }
+
+  get maxed() {
+    return this.level >= MAX_LEVEL;
+  }
+
+  upgrade() {
+    if (this.maxed) return false;
+    this.level++;
+    this._applyLevel();
+    return true;
   }
 
   update(enemies, bullets = null) {
@@ -97,6 +129,7 @@ export class Tower {
     if (Array.isArray(bullets)) {
       bullets.push(new Bullet(this.x, this.y, target, this.damage, this.bulletSpeed));
       this.fireCooldown = this.fireRate;
+      this.fireFlash    = 7;
       return 0;
     }
 
@@ -122,9 +155,39 @@ export class Tower {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    if (this.type === TOWER_TYPES.GUN)    this._drawArcane(ctx, t);
-    else if (this.type === TOWER_TYPES.SNIPER) this._drawArcher(ctx, t);
-    else                                  this._drawStorm(ctx, t);
+    if (this.type === TOWER_TYPES.GUN)         this._drawArcane(ctx, t);
+    else if (this.type === TOWER_TYPES.SNIPER)  this._drawArcher(ctx, t);
+    else                                        this._drawStorm(ctx, t);
+
+    // Muzzle flash ring
+    if (this.fireFlash > 0) {
+      const alpha = this.fireFlash / 7;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,200,${alpha * 0.9})`;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur  = 14 * alpha;
+      ctx.lineWidth   = 2.5 * alpha;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 5 + (7 - this.fireFlash), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      this.fireFlash--;
+    }
+
+    // Level badge (hidden at level 1)
+    if (this.level > 1) {
+      const badge = this.maxed ? 'MAX' : `${this.level}`;
+      ctx.save();
+      ctx.font      = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      const bw = ctx.measureText(badge).width + 5;
+      ctx.fillStyle = 'rgba(6,3,14,0.9)';
+      ctx.fillRect(this.x - bw / 2, this.y + 5, bw, 8);
+      ctx.fillStyle = this.maxed ? '#ff9040' : '#e8c040';
+      ctx.fillText(badge, this.x, this.y + 12);
+      ctx.restore();
+    }
   }
 
   // ── Arcane: stone pedestal + rotating blue crystal gem ──────────────────────
@@ -134,7 +197,7 @@ export class Tower {
     // Stone platform
     ctx.fillStyle = '#24183e';
     ctx.fillRect(x - 6, y + 4, 12, 4);
-    ctx.fillStyle = '#14102a'; // front edge (darker = facing viewer)
+    ctx.fillStyle = '#14102a';
     ctx.fillRect(x - 6, y + 7, 12, 1);
     ctx.strokeStyle = 'rgba(200,160,40,0.3)';
     ctx.lineWidth = 0.5;
@@ -143,7 +206,7 @@ export class Tower {
     // Column
     ctx.fillStyle = '#1c1440';
     ctx.fillRect(x - 2.5, y - 1, 5, 6);
-    ctx.fillStyle = '#28204e'; // left face lighter
+    ctx.fillStyle = '#28204e';
     ctx.fillRect(x - 2.5, y - 1, 2, 6);
 
     // Rotating diamond crystal
@@ -199,10 +262,10 @@ export class Tower {
     // Base platform
     ctx.fillStyle = '#1e2630';
     ctx.fillRect(x - 6, y + 4, 12, 4);
-    ctx.fillStyle = '#131820'; // front edge
+    ctx.fillStyle = '#131820';
     ctx.fillRect(x - 6, y + 7, 12, 1);
 
-    // Tower body (trapezoid — wider at bottom)
+    // Tower body (trapezoid)
     ctx.fillStyle = '#182028';
     ctx.beginPath();
     ctx.moveTo(x - 5,   y + 4);
@@ -212,7 +275,7 @@ export class Tower {
     ctx.closePath();
     ctx.fill();
 
-    // Left face highlight (angled light)
+    // Left face highlight
     ctx.fillStyle = '#243038';
     ctx.beginPath();
     ctx.moveTo(x - 5,   y + 4);
@@ -222,7 +285,7 @@ export class Tower {
     ctx.closePath();
     ctx.fill();
 
-    // Battlements (merlons)
+    // Battlements
     ctx.fillStyle = '#182028';
     for (const dx of [-2.5, -0.5, 1.5]) {
       ctx.fillRect(x + dx, y - 10, 1.5, 3);
@@ -232,7 +295,7 @@ export class Tower {
     ctx.fillStyle = 'rgba(0,5,8,0.8)';
     ctx.fillRect(x - 0.5, y - 1, 1, 3);
 
-    // Emerald orb at top with pulse
+    // Emerald orb with pulse
     const glow = 0.85 + Math.sin(t * 2.4 + 1) * 0.15;
     ctx.shadowColor = this.color;
     ctx.shadowBlur  = 12 * glow;
@@ -270,26 +333,26 @@ export class Tower {
     // Wide stone base
     ctx.fillStyle = '#281808';
     ctx.fillRect(x - 7, y + 3, 14, 4);
-    ctx.fillStyle = '#181008'; // front edge
+    ctx.fillStyle = '#181008';
     ctx.fillRect(x - 7, y + 6, 14, 1);
 
     // Squat body
     ctx.fillStyle = '#1c1008';
     ctx.fillRect(x - 5, y - 3, 10, 7);
-    ctx.fillStyle = '#281c10'; // left face highlight
+    ctx.fillStyle = '#281c10';
     ctx.fillRect(x - 5, y - 3, 4, 7);
 
-    // Crenellations on squat body
+    // Crenellations
     ctx.fillStyle = '#1c1008';
     for (const dx of [-4, -1.5, 1]) {
       ctx.fillRect(x + dx, y - 6, 2, 3);
     }
 
-    // Spinning energy particles (orbit)
+    // Spinning energy particles
     for (let i = 0; i < 6; i++) {
-      const a   = spin + (i / 6) * Math.PI * 2;
-      const rx  = Math.cos(a) * 7;
-      const ry  = Math.sin(a) * 3;
+      const a     = spin + (i / 6) * Math.PI * 2;
+      const rx    = Math.cos(a) * 7;
+      const ry    = Math.sin(a) * 3;
       const alpha = 0.35 + Math.abs(Math.sin(a)) * 0.55;
       ctx.fillStyle   = `rgba(238,136,51,${alpha})`;
       ctx.shadowColor = this.color;
@@ -315,7 +378,7 @@ export class Tower {
     ctx.arc(x - 1.1, y - 1.1, 1.3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Short thick barrel from orb
+    // Short thick barrel
     const barrelLen = 9;
     ctx.strokeStyle = '#ffbb55';
     ctx.lineWidth   = 2;

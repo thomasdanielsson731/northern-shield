@@ -44,6 +44,129 @@ let buildMode         = CELL.WALL;
 let selectedTowerType = TOWER_TYPES.GUN;
 let gameOver = false;
 
+// ── wave system ───────────────────────────────────────────────────────────────
+
+const COUNTDOWN_FRAMES = 180;
+const BREAK_FRAMES     = 360;
+const SPAWN_FRAMES     = 40;
+
+let waveNumber  = 0;
+let waveState   = 'countdown';  // 'countdown' | 'active' | 'break'
+let waveTimer   = 0;
+let spawnQueue  = [];
+let spawnTimer  = 0;
+let waveHpScale = 1;
+
+let particles   = [];
+let screenShake = 0;
+
+function spawnParticles(x, y, color, count = 10) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+    const speed = 1.2 + Math.random() * 2.8;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 1,
+      decay: 0.022 + Math.random() * 0.018,
+      radius: 1.5 + Math.random() * 2.5,
+      color
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += 0.06;
+    p.vx *= 0.95;
+    p.vy *= 0.95;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle   = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur  = 5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius * p.life, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+
+function buildWave(num) {
+  const infantry = Math.min(6 + num * 2, 26);
+  const drones   = num >= 2 ? Math.min(num - 1, 8) : 0;
+  const tanks    = num >= 4 ? Math.min(Math.floor((num - 3) * 0.7), 4) : 0;
+
+  const queue = [
+    ...Array(infantry).fill(ENEMY_TYPES.INFANTRY),
+    ...Array(drones).fill(ENEMY_TYPES.DRONE),
+    ...Array(tanks).fill(ENEMY_TYPES.TANK),
+  ];
+
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [queue[i], queue[j]] = [queue[j], queue[i]];
+  }
+
+  return queue;
+}
+
+function startNextWave() {
+  waveNumber++;
+  waveHpScale = 1 + (waveNumber - 1) * 0.12;
+  spawnQueue  = buildWave(waveNumber);
+  spawnTimer  = 0;
+  waveState   = 'active';
+}
+
+function updateWave() {
+  if (gameOver) return;
+
+  if (waveState === 'countdown') {
+    waveTimer++;
+    if (waveTimer >= COUNTDOWN_FRAMES) { waveTimer = 0; startNextWave(); }
+    return;
+  }
+
+  if (waveState === 'break') {
+    waveTimer++;
+    if (waveTimer >= BREAK_FRAMES) { waveTimer = 0; startNextWave(); }
+    return;
+  }
+
+  // active — spawn from queue
+  if (spawnQueue.length > 0) {
+    spawnTimer++;
+    if (spawnTimer >= SPAWN_FRAMES) {
+      spawnTimer = 0;
+      spawnEnemy(spawnQueue.shift(), waveHpScale);
+    }
+  } else if (enemies.length === 0) {
+    waveTimer = 0;
+    waveState = 'break';
+  }
+}
+
+// ── starfield ─────────────────────────────────────────────────────────────────
+
+const STARS = Array.from({ length: 120 }, () => ({
+  x:     Math.random(),
+  y:     Math.random(),
+  r:     0.5 + Math.random() * 1.2,
+  phase: Math.random() * Math.PI * 2
+}));
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function getViewSize() {
@@ -128,7 +251,7 @@ function getBuildButtonAt(mx, my) {
 
 // ── spawning ──────────────────────────────────────────────────────────────────
 
-function spawnEnemy(type = ENEMY_TYPES.INFANTRY) {
+function spawnEnemy(type = ENEMY_TYPES.INFANTRY, hpScale = 1) {
   if (!currentPath || gameOver) return;
 
   let path;
@@ -138,13 +261,8 @@ function spawnEnemy(type = ENEMY_TYPES.INFANTRY) {
     path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
   }
 
-  enemies.push(new Enemy(path, type));
+  enemies.push(new Enemy(path, type, hpScale));
 }
-
-setInterval(() => spawnEnemy(ENEMY_TYPES.INFANTRY), 1800);
-setInterval(() => spawnEnemy(ENEMY_TYPES.DRONE),    5000);
-setInterval(() => spawnEnemy(ENEMY_TYPES.TANK),    12000);
-spawnEnemy(ENEMY_TYPES.INFANTRY);
 
 // ── rerouting ─────────────────────────────────────────────────────────────────
 
@@ -242,15 +360,19 @@ canvas.addEventListener('mousedown', e => {
 function update() {
   if (gameOver) return;
 
+  updateWave();
+
   for (const tower of towers) tower.update(enemies, bullets);
 
   for (let i = bullets.length - 1; i >= 0; i--) {
-    const reward = bullets[i].update();
+    const b = bullets[i];
+    const reward = b.update();
     if (reward > 0) {
       slain++;
       gold += reward;
+      if (b.target) spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 12);
     }
-    if (!bullets[i].alive) bullets.splice(i, 1);
+    if (!b.alive) bullets.splice(i, 1);
   }
 
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -261,10 +383,14 @@ function update() {
     }
     if (enemies[i].reached) {
       lives--;
+      screenShake = 10;
       enemies.splice(i, 1);
       if (lives <= 0) gameOver = true;
     }
   }
+
+  updateParticles();
+  if (screenShake > 0) screenShake *= 0.82;
 }
 
 // ── draw ──────────────────────────────────────────────────────────────────────
@@ -279,6 +405,16 @@ function drawBackground() {
   grad.addColorStop(1,    '#0a0618');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
+
+  // Stars
+  const starTime = performance.now() * 0.0009;
+  for (const s of STARS) {
+    const alpha = 0.2 + Math.sin(starTime + s.phase) * 0.18;
+    ctx.fillStyle = `rgba(200,210,255,${Math.max(0, alpha)})`;
+    ctx.beginPath();
+    ctx.arc(s.x * width, s.y * height, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // pulsing purple magic glow
   const p1 = 0.28 + Math.sin(time * 6) * 0.06;
@@ -300,22 +436,40 @@ function drawBackground() {
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
 
-  ctx.strokeStyle = 'rgba(200,150,35,0.44)';
-  ctx.shadowColor  = 'rgba(220,175,45,0.55)';
-  ctx.shadowBlur   = 12;
-  ctx.lineWidth    = CELL_SIZE * 0.65;
-  ctx.lineJoin     = 'round';
-  ctx.lineCap      = 'round';
-  ctx.beginPath();
+  const time = performance.now() * 0.001;
 
-  const { x: sx, y: sy } = grid.cellCenter(currentPath[0].col, currentPath[0].row);
-  ctx.moveTo(sx, sy);
-  for (let i = 1; i < currentPath.length; i++) {
-    const { x, y } = grid.cellCenter(currentPath[i].col, currentPath[i].row);
-    ctx.lineTo(x, y);
+  function buildPathShape() {
+    const { x: sx, y: sy } = grid.cellCenter(currentPath[0].col, currentPath[0].row);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    for (let i = 1; i < currentPath.length; i++) {
+      const { x, y } = grid.cellCenter(currentPath[i].col, currentPath[i].row);
+      ctx.lineTo(x, y);
+    }
   }
+
+  // Glow base layer
+  ctx.save();
+  ctx.lineWidth   = CELL_SIZE * 0.65;
+  ctx.lineJoin    = 'round';
+  ctx.lineCap     = 'round';
+  ctx.strokeStyle = 'rgba(180,130,25,0.32)';
+  ctx.shadowColor = 'rgba(220,175,45,0.4)';
+  ctx.shadowBlur  = 14;
+  ctx.setLineDash([]);
+  buildPathShape();
   ctx.stroke();
   ctx.shadowBlur = 0;
+
+  // Animated flowing dashes on top
+  ctx.lineWidth      = CELL_SIZE * 0.22;
+  ctx.strokeStyle    = 'rgba(255,210,60,0.55)';
+  ctx.setLineDash([6, 14]);
+  ctx.lineDashOffset = -(time * 28) % 20;
+  buildPathShape();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 function drawHud() {
@@ -340,6 +494,11 @@ function drawHud() {
 
   ctx.fillStyle = '#b8c8e0';
   ctx.fillText(`★ Slain: ${slain}`, panelX + 14 + goldW + 18 + livesW + 18, panelY + 26);
+  const slainW = ctx.measureText(`★ Slain: ${slain}`).width;
+
+  ctx.fillStyle = '#a0e0c0';
+  const waveLabel = waveNumber === 0 ? 'Wave: -' : `Wave: ${waveNumber}`;
+  ctx.fillText(`⚔ ${waveLabel}`, panelX + 14 + goldW + 18 + livesW + 18 + slainW + 18, panelY + 26);
 
   ctx.restore();
 
@@ -419,16 +578,69 @@ function drawHud() {
   ctx.restore();
 }
 
+function drawWaveAnnouncement() {
+  if (gameOver) return;
+  if (waveState === 'active') return;
+
+  const { width, height } = getViewSize();
+  const cx = width / 2;
+  const cy = height / 2;
+
+  let line1, line2, glowColor;
+  if (waveState === 'countdown') {
+    const secs = Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60);
+    line1 = 'PREPARE FOR BATTLE';
+    line2 = `Starting in ${secs}...`;
+    glowColor = 'rgba(200,160,40,0.7)';
+  } else {
+    const secs = Math.ceil((BREAK_FRAMES - waveTimer) / 60);
+    line1 = `WAVE ${waveNumber} COMPLETE`;
+    line2 = `Next wave in ${secs}...`;
+    glowColor = 'rgba(80,220,140,0.7)';
+  }
+
+  ctx.save();
+  ctx.textAlign = 'center';
+
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur  = 22;
+  ctx.fillStyle   = '#f0e080';
+  ctx.font        = 'bold 28px monospace';
+  ctx.fillText(line1, cx, cy - 10);
+
+  ctx.shadowBlur  = 10;
+  ctx.fillStyle   = 'rgba(200,230,200,0.85)';
+  ctx.font        = '15px monospace';
+  ctx.fillText(line2, cx, cy + 20);
+
+  ctx.restore();
+}
+
 function draw() {
   const { width, height } = getViewSize();
   ctx.clearRect(0, 0, width, height);
   drawBackground();
-  grid.draw(ctx);
+
+  // Screen shake — applied to game world only, not HUD
+  ctx.save();
+  if (screenShake > 0.3) {
+    ctx.translate(
+      (Math.random() - 0.5) * screenShake * 2,
+      (Math.random() - 0.5) * screenShake * 2
+    );
+  }
+
+  const time = performance.now() * 0.001;
+  grid.draw(ctx, time);
   drawPath();
   towers.forEach(t => t.draw(ctx));
   bullets.forEach(b => b.draw(ctx));
   enemies.forEach(e => e.draw(ctx));
+  drawParticles();
+  ctx.restore();
+
   drawHud();
+  drawWaveAnnouncement();
 }
 
 function gameLoop() {
