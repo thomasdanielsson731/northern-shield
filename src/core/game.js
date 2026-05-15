@@ -4,8 +4,8 @@ import { Enemy, ENEMY_TYPES, ENEMY_DEFS } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 
-const COLS = 50;
-const ROWS = 30;
+const COLS = 36;
+const ROWS = 22;
 const CELL_SIZE = 14;
 
 const SIDEBAR_W     = 52;
@@ -14,8 +14,8 @@ const GRID_LEFT     = SIDEBAR_W;
 const GRID_TOP      = 48;
 const GRID_BOTTOM   = GRID_TOP + ROWS * CELL_SIZE;
 
-const SPAWN = { col: 0,        row: 15 };
-const GOAL  = { col: COLS - 1, row: 15 };
+const SPAWN = { col: 0,        row: 11 };
+const GOAL  = { col: COLS - 1, row: 11 };
 
 const WALL_COST = 5;
 
@@ -1330,7 +1330,7 @@ function drawBottomBuildBar() {
     [TOWER_TYPES.VALKYRIE]: 'valkyrie',
     [TOWER_TYPES.MILITARY]: 'archer',
     [TOWER_TYPES.CATAPULT]: 'catapult',
-    [TOWER_TYPES.BLONDIE]:  'brynhild',
+    [TOWER_TYPES.BLONDIE]:  'blondie',
   };
 
   const buttons     = getBuildButtons();

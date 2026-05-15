@@ -849,7 +849,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'brynhild', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
+    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
