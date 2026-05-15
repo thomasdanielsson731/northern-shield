@@ -1127,79 +1127,81 @@ function drawPath() {
 function drawFrames() {
   const W = BASE_W, H = BASE_H;
 
-  const spCorner  = SPRITES['frameCorner'];
-  const spBorderH = SPRITES['frameBorderH'];
-  const spBorderV = SPRITES['frameBorderV'];
-
-  const spritesReady = spCorner  && spCorner.img.complete  && spCorner.img.naturalWidth  > 0
-                    && spBorderH && spBorderH.img.complete && spBorderH.img.naturalWidth > 0
-                    && spBorderV && spBorderV.img.complete && spBorderV.img.naturalWidth > 0;
+  const thick = 32;
 
   ctx.save();
 
-  if (spritesReady) {
-    // Corner sprite is 1536x1024 (3:2). Render so short side = thick.
-    const thick  = 28;
-    const cW     = Math.round(thick * spCorner.frameW / spCorner.frameH);
-    const cH     = thick;
-    const hTileW = Math.round(thick * spBorderH.frameW / spBorderH.frameH);
-    const vTileH = Math.round(thick * spBorderV.frameH / spBorderV.frameW);
+  // ── Solid border fills — always connected, never dashed ───────────────────
+  ctx.fillStyle = '#12080200';  // start transparent
+  const bands = [
+    { c: '#100802', w: thick },
+    { c: '#1c1006', w: thick - 4 },
+    { c: '#241408', w: thick - 10 },
+  ];
+  // Fill border rectangles with darkening bands
+  for (const { c, w } of bands) {
+    ctx.fillStyle = c;
+    ctx.fillRect(0, 0, W, w);              // top
+    ctx.fillRect(0, H - w, W, w);          // bottom
+    ctx.fillRect(0, w, w, H - w * 2);     // left (between corners)
+    ctx.fillRect(W - w, w, w, H - w * 2); // right
+  }
 
-    const blit = (sp, dx, dy, dw, dh) =>
-      ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, dx, dy, dw, dh);
+  // ── Outer hard edge ───────────────────────────────────────────────────────
+  ctx.strokeStyle = 'rgba(4,2,0,0.95)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
 
-    // Top edge
-    ctx.save();
-    ctx.beginPath(); ctx.rect(cW, 0, W - cW * 2, thick); ctx.clip();
-    for (let x = cW; x < W - cW; x += hTileW) blit(spBorderH, x, 0, hTileW, thick);
-    ctx.restore();
+  // ── Outer thin gold accent ────────────────────────────────────────────────
+  ctx.strokeStyle = 'rgba(160,100,18,0.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(4, 4, W - 8, H - 8);
 
-    // Bottom edge (flip V)
-    ctx.save();
-    ctx.translate(0, H); ctx.scale(1, -1);
-    ctx.beginPath(); ctx.rect(cW, 0, W - cW * 2, thick); ctx.clip();
-    for (let x = cW; x < W - cW; x += hTileW) blit(spBorderH, x, 0, hTileW, thick);
-    ctx.restore();
+  // ── Inner gold trim — the primary ornamental line ─────────────────────────
+  ctx.shadowColor = 'rgba(220,148,28,0.80)';
+  ctx.shadowBlur  = 10;
+  ctx.strokeStyle = '#c8901a';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(thick - 1, thick - 1, W - 2 * thick + 2, H - 2 * thick + 2);
+  ctx.shadowBlur  = 0;
 
-    // Left edge
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, cH, thick, H - cH * 2); ctx.clip();
-    for (let y = cH; y < H - cH; y += vTileH) blit(spBorderV, 0, y, thick, vTileH);
-    ctx.restore();
+  // Fine bright highlight just inside the gold trim
+  ctx.strokeStyle = 'rgba(255,220,100,0.22)';
+  ctx.lineWidth   = 0.8;
+  ctx.strokeRect(thick + 1, thick + 1, W - 2 * thick - 2, H - 2 * thick - 2);
 
-    // Right edge (flip H)
-    ctx.save();
-    ctx.translate(W, 0); ctx.scale(-1, 1);
-    ctx.beginPath(); ctx.rect(0, cH, thick, H - cH * 2); ctx.clip();
-    for (let y = cH; y < H - cH; y += vTileH) blit(spBorderV, 0, y, thick, vTileH);
-    ctx.restore();
-
-    // Top-left corner (as-is)
-    blit(spCorner, 0, 0, cW, cH);
-    // Top-right (flip H)
-    ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1);
-    blit(spCorner, 0, 0, cW, cH); ctx.restore();
-    // Bottom-left (flip V)
-    ctx.save(); ctx.translate(0, H); ctx.scale(1, -1);
-    blit(spCorner, 0, 0, cW, cH); ctx.restore();
-    // Bottom-right (flip both)
-    ctx.save(); ctx.translate(W, H); ctx.scale(-1, -1);
-    blit(spCorner, 0, 0, cW, cH); ctx.restore();
-
+  // ── Corner ornament sprites ───────────────────────────────────────────────
+  const spCorner = SPRITES['frameCorner'];
+  if (spCorner && spCorner.img.complete && spCorner.img.naturalWidth > 0) {
+    const cH = thick;
+    const cW = Math.round(cH * spCorner.frameW / spCorner.frameH);
+    const drawCorner = (flipH, flipV) => {
+      ctx.save();
+      ctx.translate(flipH ? W : 0, flipV ? H : 0);
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      ctx.drawImage(spCorner.img, 0, 0, spCorner.frameW, spCorner.frameH, 0, 0, cW, cH);
+      ctx.restore();
+    };
+    drawCorner(false, false);  // top-left
+    drawCorner(true,  false);  // top-right
+    drawCorner(false, true);   // bottom-left
+    drawCorner(true,  true);   // bottom-right
   } else {
-    // Procedural fallback while sprites load
-    ctx.shadowColor = 'rgba(0,0,0,0.95)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 3;
-    ctx.strokeStyle = '#080401'; ctx.lineWidth = 9;
-    ctx.strokeRect(4.5, 4.5, W - 9, H - 9);
-    ctx.shadowBlur = ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = '#a8b8c4'; ctx.lineWidth = 2;
-    ctx.strokeRect(2, 2, W - 4, H - 4);
-    ctx.strokeStyle = '#181004'; ctx.lineWidth = 4;
-    ctx.strokeRect(5, 5, W - 10, H - 10);
-    ctx.shadowColor = 'rgba(210,148,18,0.70)'; ctx.shadowBlur = 10;
-    ctx.strokeStyle = '#c8901e'; ctx.lineWidth = 2.5;
-    ctx.strokeRect(7.75, 7.75, W - 15.5, H - 15.5);
-    ctx.shadowBlur = 0;
+    // Procedural diamond corner gems
+    for (const [cx, cy] of [
+      [thick / 2, thick / 2], [W - thick / 2, thick / 2],
+      [thick / 2, H - thick / 2], [W - thick / 2, H - thick / 2]
+    ]) {
+      ctx.shadowColor = 'rgba(220,150,30,0.8)';
+      ctx.shadowBlur  = 8;
+      ctx.fillStyle   = '#c8901a';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 6, cy);
+      ctx.lineTo(cx, cy + 9); ctx.lineTo(cx - 6, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
   }
 
   ctx.restore();
@@ -1207,11 +1209,11 @@ function drawFrames() {
 
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const pw = BASE_W - px - 32;  // 28px frame + 4px inner gap
+  const pw = BASE_W - px - 36;  // 32px frame + 4px inner gap
   speedBtn = null;
   if (pw < 60) return;
 
-  const fullH = BASE_H - GRID_TOP - 32;  // 28px frame + 4px inner gap
+  const fullH = BASE_H - GRID_TOP - 36;  // 32px frame + 4px inner gap
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(42,22,6,0.97)');
 
   const lx    = px + 10;
