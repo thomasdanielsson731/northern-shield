@@ -1510,7 +1510,39 @@ function drawBottomBuildBar() {
 
     const sprKey = spriteKeys[btn.id];
     const sp     = sprKey ? SPRITES[sprKey] : null;
-    if (sp && sp.img && sp.img.complete && sp.img.naturalWidth > 0) {
+    if (btn.mode === CELL.WALL) {
+      // ── Shield Wall portrait: two round shields ─────────────────────────────
+      const scx = ppx + ppw / 2;
+      const scy = ppy + pph / 2;
+      const shR = Math.min(pph * 0.40, ppw * 0.21);
+      ctx.save();
+      if (!affordable) ctx.globalAlpha = 0.35;
+      for (const ox of [-ppw * 0.21, ppw * 0.21]) {
+        const sx = scx + ox, sy = scy;
+        ctx.fillStyle = '#3a2410';
+        ctx.beginPath(); ctx.arc(sx, sy, shR, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.beginPath(); ctx.arc(sx, sy, shR - 1, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = '#b01808';
+        ctx.fillRect(sx - shR, sy - shR, shR, shR);
+        ctx.fillRect(sx, sy, shR, shR);
+        ctx.fillStyle = '#d8c888';
+        ctx.fillRect(sx, sy - shR, shR, shR);
+        ctx.fillRect(sx - shR, sy, shR, shR);
+        ctx.strokeStyle = 'rgba(20,10,4,0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(sx - shR, sy); ctx.lineTo(sx + shR, sy);
+        ctx.moveTo(sx, sy - shR); ctx.lineTo(sx, sy + shR);
+        ctx.stroke();
+        ctx.restore();
+        const bossR = shR * 0.18;
+        ctx.fillStyle = '#706860';
+        ctx.beginPath(); ctx.arc(sx, sy, bossR, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(230,220,200,0.75)';
+        ctx.beginPath(); ctx.arc(sx - bossR * 0.3, sy - bossR * 0.35, bossR * 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    } else if (sp && sp.img && sp.img.complete && sp.img.naturalWidth > 0) {
       ctx.save();
       if (!affordable) ctx.globalAlpha = 0.30;
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, ppx, ppy, ppw, pph);
@@ -1518,19 +1550,12 @@ function drawBottomBuildBar() {
     } else {
       // fallback: gem circle with tower color
       ctx.save();
+      ctx.globalAlpha = affordable ? 1 : 0.4;
       ctx.beginPath();
       ctx.arc(btn.x + btn.width / 2, btn.y + PORTRAIT_H / 2 + 2, 13, 0, Math.PI * 2);
       ctx.fillStyle = affordable ? btn.color : 'rgba(60,45,30,0.5)';
-      if (!affordable) ctx.globalAlpha = 0.4;
       ctx.fill();
       ctx.restore();
-      if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(btn.x + btn.width / 2, btn.y + PORTRAIT_H / 2 + 2, 13, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(240,200,80,0.7)';
-        ctx.lineWidth   = 1.5;
-        ctx.stroke();
-      }
     }
 
     // ── Hotkey badge top-left ───────────────────────────────────────────────────
