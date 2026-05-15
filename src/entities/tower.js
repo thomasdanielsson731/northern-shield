@@ -241,7 +241,7 @@ export class Tower {
       this.fireFlash--;
     }
 
-    // EMP disabled shimmer
+    // Mara disabled shimmer
     if (this.disabledTimer > 0) {
       const flicker = 0.45 + Math.sin(t * 28) * 0.3;
       ctx.save();

@@ -240,22 +240,22 @@ function waveComposition(num) {
   const n = Math.min(num, MAX_WAVES);
   const speedBonus = n > 50 ? (n - 50) * 0.005 : 0;  // stored for use in spawnEnemy
   return {
-    infantry:   Math.min(8  + Math.floor(n * 2.2), 40),
-    drones:     n >= 2  ? Math.min(Math.floor(n * 1.1),  16) : 0,
-    tanks:      n >= 3  ? Math.min(Math.floor((n - 2) * 0.85), n >= 51 ? 8 : 6) : 0,
-    emps:       n >= 2  ? Math.min(Math.floor((n - 1) * 0.6),  8) : 0,
+    draugr:     Math.min(8  + Math.floor(n * 2.2), 40),
+    mylings:    n >= 2  ? Math.min(Math.floor(n * 1.1),  16) : 0,
+    jotunn:     n >= 3  ? Math.min(Math.floor((n - 2) * 0.85), n >= 51 ? 8 : 6) : 0,
+    maras:      n >= 2  ? Math.min(Math.floor((n - 1) * 0.6),  8) : 0,
     speedBonus,
   };
 }
 
 function buildWave(num) {
-  const { infantry, drones, tanks, emps } = waveComposition(num);
+  const { draugr, mylings, jotunn, maras } = waveComposition(num);
 
   const queue = [
-    ...Array(infantry).fill(ENEMY_TYPES.INFANTRY),
-    ...Array(drones).fill(ENEMY_TYPES.DRONE),
-    ...Array(tanks).fill(ENEMY_TYPES.TANK),
-    ...Array(emps).fill(ENEMY_TYPES.EMP),
+    ...Array(draugr).fill(ENEMY_TYPES.DRAUGR),
+    ...Array(mylings).fill(ENEMY_TYPES.MYLING),
+    ...Array(jotunn).fill(ENEMY_TYPES.JOTUNN),
+    ...Array(maras).fill(ENEMY_TYPES.MARA),
   ];
 
   for (let i = queue.length - 1; i > 0; i--) {
@@ -284,7 +284,7 @@ function updateWave() {
   if (portalFlash > 0) portalFlash--;
 
   if (waveState === 'countdown' || waveState === 'break') {
-    const nextHasBoss = waveComposition(waveNumber + 1).tanks > 0;
+    const nextHasBoss = waveComposition(waveNumber + 1).jotunn > 0;
     bossWarnAlpha = nextHasBoss
       ? Math.min(1, bossWarnAlpha + 0.025)
       : Math.max(0, bossWarnAlpha - 0.04);
@@ -523,7 +523,7 @@ function getBuildButtonAt(mx, my) {
 
 // ── spawning ──────────────────────────────────────────────────────────────────
 
-function spawnEnemy(type = ENEMY_TYPES.INFANTRY, hpScale = 1) {
+function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   if (!currentPath || gameOver) return;
 
   let path;
@@ -533,7 +533,7 @@ function spawnEnemy(type = ENEMY_TYPES.INFANTRY, hpScale = 1) {
     path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
   }
 
-  if (type === ENEMY_TYPES.TANK) {
+  if (type === ENEMY_TYPES.JOTUNN) {
     screenShake = Math.max(screenShake, 9);
     portalFlash = 22;
   }
@@ -778,9 +778,9 @@ function update() {
     }
   }
 
-  // EMP: Banshee disables nearby towers
+  // Mara: supernatural fear disables nearby towers
   for (const enemy of enemies) {
-    if (enemy.type !== ENEMY_TYPES.EMP || !enemy.alive || enemy.reached) continue;
+    if (enemy.type !== ENEMY_TYPES.MARA || !enemy.alive || enemy.reached) continue;
     for (const tower of towers) {
       const dx = tower.x - enemy.x;
       const dy = tower.y - enemy.y;
@@ -1092,10 +1092,10 @@ function drawRightPanel() {
   const nextNum = waveNumber + 1;
   const next    = waveComposition(nextNum);
   const entries = [
-    { label: 'Graveborn', count: next.infantry, color: '#bb70ff', skip: next.infantry === 0, boss: false },
-    { label: 'Wisp',      count: next.drones,   color: '#88bbff', skip: next.drones   === 0, boss: false },
-    { label: 'Golem',     count: next.tanks,    color: '#d08820', skip: next.tanks    === 0, boss: true  },
-    { label: 'Banshee',   count: next.emps,     color: '#00ddcc', skip: next.emps     === 0, boss: false },
+    { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false },
+    { label: 'Myling', count: next.mylings, color: '#88bbff', skip: next.mylings === 0, boss: false },
+    { label: 'Jötunn', count: next.jotunn,  color: '#d08820', skip: next.jotunn  === 0, boss: true  },
+    { label: 'Mara',   count: next.maras,   color: '#00ddcc', skip: next.maras   === 0, boss: false },
   ];
 
   // BOSS sub-header before first boss entry
@@ -1695,10 +1695,10 @@ function drawWaveAnnouncement() {
   if (waveState === 'break') {
     const next = waveComposition(waveNumber + 1);
     const parts = [];
-    if (next.infantry > 0) parts.push({ label: `● ×${next.infantry}`, color: '#bb70ff' });
-    if (next.drones   > 0) parts.push({ label: `◆ ×${next.drones}`,   color: '#88bbff' });
-    if (next.tanks    > 0) parts.push({ label: `◉ ×${next.tanks}`,    color: '#c07820' });
-    if (next.emps     > 0) parts.push({ label: `✦ ×${next.emps}`,     color: '#00ddcc' });
+    if (next.draugr  > 0) parts.push({ label: `● ×${next.draugr}`,  color: '#bb70ff' });
+    if (next.mylings > 0) parts.push({ label: `◆ ×${next.mylings}`, color: '#88bbff' });
+    if (next.jotunn  > 0) parts.push({ label: `◉ ×${next.jotunn}`,  color: '#c07820' });
+    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#00ddcc' });
 
     ctx.font = '13px monospace';
     const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 18, -18);

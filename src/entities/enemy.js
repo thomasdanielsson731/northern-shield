@@ -1,13 +1,13 @@
 export const ENEMY_TYPES = {
-  INFANTRY: 'infantry',
-  DRONE:    'drone',
-  TANK:     'tank',
-  EMP:      'emp'
+  DRAUGR: 'draugr',
+  MYLING: 'myling',
+  JOTUNN: 'jotunn',
+  MARA:   'mara'
 };
 
 export const ENEMY_DEFS = {
-  emp: {
-    label:          'Banshee',
+  mara: {
+    label:          'Mara',
     speed:          0.65,
     hp:             90,
     radius:         7,
@@ -16,8 +16,8 @@ export const ENEMY_DEFS = {
     highlightColor: '#aaffff',
     flying:         false
   },
-  infantry: {
-    label:          'Graveborn',
+  draugr: {
+    label:          'Draugr',
     speed:          0.9,
     hp:             60,
     radius:         7,
@@ -26,8 +26,8 @@ export const ENEMY_DEFS = {
     highlightColor: '#cc88ff',
     flying:         false
   },
-  drone: {
-    label:          'Wisp',
+  myling: {
+    label:          'Myling',
     speed:          1.1,
     hp:             75,
     radius:         6,
@@ -36,8 +36,8 @@ export const ENEMY_DEFS = {
     highlightColor: '#e8f8ff',
     flying:         true
   },
-  tank: {
-    label:          'Golem',
+  jotunn: {
+    label:          'Jötunn',
     speed:          0.35,
     hp:             500,
     radius:         13,
@@ -49,8 +49,8 @@ export const ENEMY_DEFS = {
 };
 
 export class Enemy {
-  constructor(path, type = ENEMY_TYPES.INFANTRY, hpScale = 1) {
-    const def = ENEMY_DEFS[type] || ENEMY_DEFS[ENEMY_TYPES.INFANTRY];
+  constructor(path, type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
+    const def = ENEMY_DEFS[type] || ENEMY_DEFS[ENEMY_TYPES.DRAUGR];
     this.type           = type;
     this.path           = path;
     this.pathIndex      = 0;
@@ -109,11 +109,11 @@ export class Enemy {
   draw(ctx) {
     if (!this.alive) return;
 
-    if (this.type === ENEMY_TYPES.DRONE) {
+    if (this.type === ENEMY_TYPES.MYLING) {
       this._drawWisp(ctx);
-    } else if (this.type === ENEMY_TYPES.TANK) {
+    } else if (this.type === ENEMY_TYPES.JOTUNN) {
       this._drawGolem(ctx);
-    } else if (this.type === ENEMY_TYPES.EMP) {
+    } else if (this.type === ENEMY_TYPES.MARA) {
       this._drawBanshee(ctx);
     } else {
       this._drawGraveborn(ctx);
@@ -578,7 +578,7 @@ export class Enemy {
   _drawHpBar(ctx) {
     if (this.hp >= this.maxHp) return;
 
-    const isBoss = this.type === ENEMY_TYPES.TANK;
+    const isBoss = this.type === ENEMY_TYPES.JOTUNN;
     const barW = this.radius * (isBoss ? 3.2 : 2.8);
     const barH = isBoss ? 5 : 3;
     const barX = this.x - barW / 2;
