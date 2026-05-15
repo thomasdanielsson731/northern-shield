@@ -1042,36 +1042,32 @@ function drawPath() {
   };
   ctx.lineJoin = 'round';
   ctx.lineCap  = 'round';
-  // outer shadow
-  mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.62)';       ctx.lineWidth = cs * 1.00; ctx.stroke();
-  // dark stone base
-  mkPath(); ctx.strokeStyle = 'rgba(30,22,12,0.95)';    ctx.lineWidth = cs * 0.82; ctx.stroke();
-  // mid stone
-  mkPath(); ctx.strokeStyle = 'rgba(54,42,26,0.90)';    ctx.lineWidth = cs * 0.64; ctx.stroke();
-  // lighter centre / worn wheel strip
-  mkPath(); ctx.strokeStyle = 'rgba(74,60,38,0.65)';    ctx.lineWidth = cs * 0.38; ctx.stroke();
-  // snow/frost dusting along edges (dashed)
-  ctx.setLineDash([1, Math.round(cs * 0.55)]);
-  ctx.lineDashOffset = 4;
-  mkPath(); ctx.strokeStyle = 'rgba(190,210,235,0.13)'; ctx.lineWidth = cs * 0.87; ctx.stroke();
-  ctx.setLineDash([]);
-  // stone block joint lines at each node
-  ctx.lineCap = 'butt';
-  for (let i = 1; i < pts.length - 1; i++) {
-    const ddx = pts[i + 1 < pts.length ? i + 1 : i].x - pts[i - 1].x;
-    const ddy = pts[i + 1 < pts.length ? i + 1 : i].y - pts[i - 1].y;
-    const ll  = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-    const nx  = (-ddy / ll) * cs * 0.37;
-    const ny  = ( ddx / ll) * cs * 0.37;
-    ctx.strokeStyle = 'rgba(10,6,2,0.50)';
-    ctx.lineWidth   = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(pts[i].x - nx, pts[i].y - ny);
-    ctx.lineTo(pts[i].x + nx, pts[i].y + ny);
-    ctx.stroke();
+
+  const pathSp = SPRITES['path'];
+  if (pathSp && pathSp.img.complete && pathSp.img.naturalWidth > 0) {
+    // Use path_tile.png as a stroked texture pattern
+    const tileSize = cs * 4;
+    const tileCvs  = document.createElement('canvas');
+    tileCvs.width  = tileSize;
+    tileCvs.height = tileSize;
+    const tileCtx  = tileCvs.getContext('2d');
+    tileCtx.drawImage(pathSp.img, 0, 0, pathSp.frameW, pathSp.frameH, 0, 0, tileSize, tileSize);
+    const pat = ctx.createPattern(tileCvs, 'repeat');
+    // Outer shadow
+    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = cs * 1.05; ctx.stroke();
+    // Path sprite fill
+    mkPath(); ctx.strokeStyle = pat;                 ctx.lineWidth = cs * 0.88; ctx.stroke();
+    // Subtle dark edge to contain the sprite
+    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = cs * 0.92; ctx.globalCompositeOperation = 'multiply'; ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  } else {
+    // Procedural fallback (no joint lines — continuous stone look)
+    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.62)';    ctx.lineWidth = cs * 1.00; ctx.stroke();
+    mkPath(); ctx.strokeStyle = 'rgba(30,22,12,0.95)'; ctx.lineWidth = cs * 0.82; ctx.stroke();
+    mkPath(); ctx.strokeStyle = 'rgba(54,42,26,0.90)'; ctx.lineWidth = cs * 0.64; ctx.stroke();
+    mkPath(); ctx.strokeStyle = 'rgba(74,60,38,0.65)'; ctx.lineWidth = cs * 0.38; ctx.stroke();
   }
-  ctx.lineCap = 'round';
-  // faint embedded glow in stone
+  // Faint embedded glow on road surface
   mkPath(); ctx.strokeStyle = 'rgba(100,160,255,0.07)'; ctx.lineWidth = cs * 0.30; ctx.stroke();
 
   // ── Will-o'-wisps — glowing orbs that travel along the path ──────────────
@@ -1143,7 +1139,7 @@ function drawFrames() {
 
   if (spritesReady) {
     // Corner sprite is 1536x1024 (3:2). Render so short side = thick.
-    const thick  = 18;
+    const thick  = 28;
     const cW     = Math.round(thick * spCorner.frameW / spCorner.frameH);
     const cH     = thick;
     const hTileW = Math.round(thick * spBorderH.frameW / spBorderH.frameH);
@@ -1211,11 +1207,11 @@ function drawFrames() {
 
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const pw = BASE_W - px - 22;  // 18px frame + 4px inner gap
+  const pw = BASE_W - px - 32;  // 28px frame + 4px inner gap
   speedBtn = null;
   if (pw < 60) return;
 
-  const fullH = BASE_H - GRID_TOP - 22;  // 18px frame + 4px inner gap
+  const fullH = BASE_H - GRID_TOP - 32;  // 28px frame + 4px inner gap
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(42,22,6,0.97)');
 
   const lx    = px + 10;

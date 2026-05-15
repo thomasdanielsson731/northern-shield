@@ -210,21 +210,18 @@ Inte genom snabb klickhastighet.
 
 Clash of Clans-inspirerad fantasy-estetik med nordiskt/vikinga-tema:
 
-- varma jordfärger och mörk stenbakgrund (nordisk dungeonatmosfär)
-- ornamenterade guldinramningar (silver yttre kant → mörk separator → guld centerband)
-- detaljerade handritade karaktärer — berserkar, valkyrior, skelett, lavagolem
-- CoC-stil smutsig stig (varm sandbrun) med animerade flödande markeringar
-- färgkodade fiendetyper med unika visuella signaturer
-- rund tidsportal i lila/cyan som spawn-punkt
-- guldvalv med befästa murar som mål (skalar med spelarens livskraft)
+- Mörk nordisk mark (sprite-textur + 48% darken, kraftig vignette vid kanterna)
+- Ornamenterad vikingaram i sprite-form runt hela spelet (18px tjock, synlig på alla 4 sidor)
+- Detaljerade sprite-karaktärer — berserkar, valkyrior, bågskytt, katapult, Blondie
+- Stenstig (mörka lager: skugga → stengrund → sliten hjulspår → snödamm i kanten) med will-o'-wisps
+- Skattkammare vid Trelleborg: varm guldaura, stor mynthög, runsten, kista, orbiterade gnistor
+- Guldmynt flyger i parabolbåge från stupade fiender till skattkammaren
+- Nordiska fiendetyper: Draugr, Myling, Jötunn, Mara — med sprite-assets
+- Rund tidsportal i lila/void som spawn-punkt
+- Trelleborg-fästning som mål med skadat rödglöd vid låg hälsa
 
-Exempel:
-
-- lila/benvit Graveborn (skelettkrigar med glödande ögon)
-- blå diamant Wisp (flygande energiorb med roterande ringar)
-- mörkbrun Golem (lavagolem med sprickande eld)
-- cyan diamant Banshee (elektrisk ande med EMP-bult-badge)
-- guld/brun panel-UI med fantasiinramning och nitdekor
+Tornsprites skalade 35–50% större med färgbaserad glödeffekt per klass:
+- Bärsärkare (rött), Valkyrie (blått), Bågskytt (stålblått), Katapult (orange), Blondie (rosa)
 
 ## Teknisk vision
 
@@ -244,15 +241,20 @@ Byggt med:
 
 ## Produktmål
 
-### MVP (klart)
+### MVP (klart, 2026-05-15)
 
-- grid-system (50×30)
-- wall placement + BFS pathfinding
-- 5 tower-typer med CoC-stil
-- 4 fiende-typer med unik grafik
+- grid-system (36×22, CELL_SIZE=14)
+- wall placement + BFS pathfinding (re-routing aktiva fiender)
+- 5 tower-typer med sprite-grafik + glow (Berserker, Valkyrie, Archer, Catapult, Blondie)
+- 4 fiende-typer med Norse sprite-grafik (Draugr, Myling, Jötunn, Mara)
+- Stenstigsväg med embedded glow + will-o'-wisps
+- Skattkammare vid Trelleborg (aura, mynthög, runsten, kista, gnistor)
+- Guldmyntsystem (flyger till skattkammaren när fiender dör)
+- Vikingaornamentram (sprite-baserad, synlig alla 4 sidor)
+- Mörk nordisk terräng (sprite-textur, frost, vignette)
+- Spelhastighet: 30 tick/sek normalt, ×2-knapp för snabbt läge
 - vågsystem med 100 vågor
-- ekonomi (guld, uppgraderingar, sälj)
-- game over + topplista (localStorage)
+- ekonomi (guld, uppgraderingar, sälj), game over + topplista (localStorage)
 
 ### Långsiktig potential
 

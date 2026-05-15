@@ -47,13 +47,14 @@ Stylized Viking dark fantasy. NOT realistic. NOT pixel art.
 | Banshee   | Cyan ghost         | Electric cyan   | `#00eeff` |
 
 ### Environment
-| Element    | Color                  | Hex       |
+| Element    | Color                  | Hex / note |
 |------------|------------------------|-----------|
-| Background | Deep purple-black      | `#06030f` |
-| Grid empty | Dark earth/stone       | `#1a1428` |
-| Path       | Warm sandy gold        | `rgba(200,150,35)` |
-| Wall cell  | Dark stone purple      | `#1e1430` |
-| UI panels  | Dark fill + gold rim   | `#060310` / `#d2a028` |
+| Background | Very dark Nordic earth | `#06030f` + 48% black overlay |
+| Grid empty | Dark stone/earth       | Sprite tile darkened, vignette to 72% at edges |
+| Path       | Dark stone road        | Layered: `#1e160c` outer → `#362a1a` mid → `#4a3c26` worn center |
+| Wall cell  | Dark stone brown       | `#2a1408` base, `#6e5038` stone body |
+| UI panels  | Dark fill + gold rim   | `rgba(42,22,6,0.97)` / `rgba(180,110,30,0.7)` |
+| Hoard aura | Warm amber gold glow   | `rgba(255,185,40,0.28)` radial at Trelleborg |
 
 ---
 
@@ -107,10 +108,11 @@ Every unit must be **instantly readable as a silhouette** at small sizes.
 
 **Northern Shield** — A Norse fortress under siege by dark fantasy creatures.
 
-- **Defenders:** Norse warriors guarding the last stronghold
-- **Enemies:** Undead, spirits, and dark magic creatures (NOT sci-fi/robots)
+- **Defenders:** Norse warriors guarding the last stronghold and its **Treasure Hoard** (large gold pile + rune artifacts + treasure chest at center-right of map)
+- **Enemies:** Draugr (undead infantry), Myling (flying ghosts), Jötunn (giants), Mara (nightmare spirits that disable towers)
 - **Setting:** Norse dark fantasy — stone fortresses, rune magic, firelight, ancient glows
 - **Mood:** Dramatic, tense, atmospheric — CoC warmth meets dark Norse mythology
+- **Path:** Ancient dark stone road with worn wheel tracks and frost-dusted edges, will-o'-wisps floating above it
 
 ---
 
