@@ -290,23 +290,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Sprite rendering — walk animation preferred, barbarian as fallback
-    if (drawSpriteFrame(ctx, 'barbarian', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
-
-    const sp = SPRITES.barsarkare_walk;
-    if (sp) {
-      const frame = Math.floor(t * 7) % sp.total;
-      const col   = frame % sp.cols;
-      const row   = Math.floor(frame / sp.cols);
-      const dw = 30, dh = 40;
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      ctx.drawImage(sp.img,
-        col * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
-        x - dw / 2, y - dh * 0.82, dw, dh);
-      ctx.restore();
-      return;
-    }
+    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
 
     const axeSpin = t * 3.5;
 
@@ -467,7 +451,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyria', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 40)) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 40)) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -773,7 +757,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'dvarg', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
+    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const armAng = this.aimAngle - Math.PI * 0.5;

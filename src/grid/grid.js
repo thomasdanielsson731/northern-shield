@@ -13,6 +13,8 @@ export class Grid {
     this.cellSize = cellSize;
     this.cells = Array.from({ length: rows }, () => new Array(cols).fill(CELL.EMPTY));
     this.healthRatio = 1;  // set by game.js each frame: lives / STARTING_LIVES
+    this.gold        = 0;  // set by game.js each frame: current gold
+    this.hoardPulse  = 0;  // set by game.js each frame: coin-landing bounce
   }
 
   getCell(col, row) {
@@ -75,7 +77,7 @@ export class Grid {
   }
 
   draw(ctx, time = 0) {
-    ctx.strokeStyle = 'rgba(0,80,0,0.12)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
     ctx.lineWidth = 0.5;
     for (let x = 0; x <= this.cols; x++) {
       ctx.beginPath();
@@ -201,48 +203,114 @@ export class Grid {
   _drawGoal(ctx, x, y, cs, time) {
     const cx = x + cs / 2;
     const cy = y + cs / 2;
-    const hr = this.healthRatio;  // 0-1
+    const hr = this.healthRatio;
 
-    // Health state: color shifts healthy(gold) → damaged(amber) → critical(red)
-    const pulseSpeed = hr > 0.33 ? 4 : 9;
-    const pulse = 0.5 + Math.sin(time * pulseSpeed + 1) * 0.5;
-    const r = hr > 0.66 ? 180 : hr > 0.33 ? 220 : 255;
-    const g = hr > 0.66 ? 160 : hr > 0.33 ? 100 : 40;
-    const b = hr > 0.66 ? 20  : hr > 0.33 ? 10  : 10;
+    const pulseSpeed = hr > 0.33 ? 3.5 : 8;
+    const pulse      = 0.5 + Math.sin(time * pulseSpeed) * 0.5;
 
-    ctx.fillStyle = `rgb(${Math.floor(r*0.08)},${Math.floor(g*0.06)},${Math.floor(b*0.04)})`;
-    ctx.fillRect(x, y, cs, cs);
+    const outerR = cs * 2.5;   // ~35px — extends across ~5 cells
+    const innerR = cs * 1.15;  // ~16px — inner ring
+    const gateH  = 0.24;       // half-width of each gate gap (radians)
+
+    // Wall color: gold → amber → red with health
+    const wr = hr > 0.66 ? 110 : hr > 0.33 ? 145 : 175;
+    const wg = hr > 0.66 ? 88  : hr > 0.33 ? 70  : 35;
+    const wb = hr > 0.66 ? 50  : hr > 0.33 ? 22  : 15;
+
+    // ── Outer earth fill ────────────────────────────────────────────────────────
+    ctx.fillStyle = '#1a1108';
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR + 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Courtyard floor ─────────────────────────────────────────────────────────
+    ctx.fillStyle = '#2a1c09';
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR - 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Cross-roads (E-W and N-S paths through gates) ───────────────────────────
+    const pw = 4.5;
+    ctx.fillStyle = '#362210';
+    ctx.fillRect(cx - outerR - cs, cy - pw / 2, (outerR + cs) * 2, pw);
+    ctx.fillRect(cx - pw / 2, cy - outerR - cs, pw, (outerR + cs) * 2);
+
+    // ── Outer rampart — 4 arcs with gate gaps at E/S/W/N ───────────────────────
+    //    Gates centered at: E=0, S=π/2, W=π (entrance), N=3π/2
+    const gateAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
 
     ctx.save();
-    // Outer pulsing ring
-    ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 + pulse * 0.55})`;
-    ctx.lineWidth   = 1.5;
-    ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
-    ctx.shadowBlur  = (8 + (1 - hr) * 14) * pulse;
-    ctx.beginPath();
-    ctx.arc(cx, cy, cs / 2 - 2, 0, Math.PI * 2);
-    ctx.stroke();
+    const dmgGlow = hr < 0.66 ? (1 - hr) * 0.7 * pulse : 0;
+    ctx.shadowColor = dmgGlow > 0 ? `rgba(255,70,0,${dmgGlow})` : 'rgba(180,130,50,0.25)';
+    ctx.shadowBlur  = dmgGlow > 0 ? 14 * pulse : 5;
 
-    // Inner ring (rotating)
-    ctx.strokeStyle = `rgba(${r},${Math.floor(g * 0.6 + 80)},${b},${0.4 + pulse * 0.35})`;
-    ctx.lineWidth   = 1;
-    ctx.shadowBlur  = 4;
-    ctx.setLineDash([2, 4]);
-    ctx.lineDashOffset = time * (hr > 0.33 ? 10 : 22);
+    ctx.strokeStyle = `rgb(${wr},${wg},${wb})`;
+    ctx.lineWidth   = 9;
+    ctx.lineCap     = 'butt';
+    for (const ga of gateAngles) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, ga + gateH, ga + Math.PI / 2 - gateH);
+      ctx.stroke();
+    }
+
+    // Rampart highlight / top edge
+    ctx.strokeStyle = `rgba(${Math.min(wr + 70, 255)},${Math.min(wg + 60, 255)},${Math.min(wb + 35, 255)},0.32)`;
+    ctx.lineWidth   = 2;
+    ctx.shadowBlur  = 0;
+    for (const ga of gateAngles) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR - 4, ga + gateH, ga + Math.PI / 2 - gateH);
+      ctx.stroke();
+    }
+
+    // ── Inner ring ──────────────────────────────────────────────────────────────
+    ctx.strokeStyle = `rgba(${wr},${wg},${wb},0.65)`;
+    ctx.lineWidth   = 4.5;
+    ctx.shadowColor = dmgGlow > 0 ? `rgba(255,70,0,${dmgGlow * 0.8})` : 'rgba(0,0,0,0)';
+    ctx.shadowBlur  = dmgGlow > 0 ? 9 * pulse : 0;
     ctx.beginPath();
-    ctx.arc(cx, cy, cs / 2 - 5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
     ctx.shadowBlur = 0;
+    ctx.restore();
 
-    // Shield rune: circle + cross (replacing plain cross)
-    ctx.strokeStyle = `rgba(${r},${g},${b},${0.5 + pulse * 0.4})`;
-    ctx.lineWidth   = 0.8;
+    // ── Center platform ─────────────────────────────────────────────────────────
+    ctx.fillStyle = '#100b04';
     ctx.beginPath();
-    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
-    ctx.moveTo(cx - 3.5, cy); ctx.lineTo(cx + 3.5, cy);
-    ctx.moveTo(cx, cy - 3.5); ctx.lineTo(cx, cy + 3.5);
-    ctx.stroke();
+    ctx.arc(cx, cy, cs * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Gold pile ───────────────────────────────────────────────────────────────
+    const goldCount = Math.min(Math.floor(Math.log2((this.gold || 0) + 2)), 8);
+    const pileScale = this.hoardPulse > 0 ? 1 + (this.hoardPulse / 10) * 0.38 : 1.0;
+    const gPulse    = 0.5 + Math.sin(time * 5.5 + 0.8) * 0.5;
+    const pileRx    = cs * 0.52 * pileScale;
+
+    ctx.save();
+    if (goldCount > 0) {
+      ctx.shadowColor = 'rgba(255,210,30,0.85)';
+      ctx.shadowBlur  = 5 + gPulse * 4 + (this.hoardPulse > 0 ? 9 : 0);
+      for (let i = 0; i < goldCount; i++) {
+        const coinY = cy + 2.5 - i * 2.0;
+        const rx    = pileRx * (1 - i * 0.04);
+        ctx.beginPath();
+        ctx.ellipse(cx, coinY, rx, rx * 0.36, 0, 0, Math.PI * 2);
+        ctx.fillStyle = i === goldCount - 1 ? '#f0c840' : '#7a5018';
+        ctx.fill();
+        if (i === goldCount - 1) {
+          ctx.strokeStyle = 'rgba(255,240,110,0.85)';
+          ctx.lineWidth   = 0.8;
+          ctx.stroke();
+        }
+      }
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = 'rgba(100,70,20,0.4)';
+      ctx.lineWidth   = 0.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cs * 0.32, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

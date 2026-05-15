@@ -21,6 +21,12 @@ const WALL_COST = 5;
 
 const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 
+// Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
+const BASE_W = SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W; // 940
+const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56; // 580
+
+let gameScale = 1;
+
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Shield Wall', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
   ...Object.values(TOWER_TYPES).map(type => ({
@@ -338,13 +344,111 @@ const STARS = Array.from({ length: 120 }, () => ({
   phase: Math.random() * Math.PI * 2
 }));
 
+// ── terrain canvas — static grass, generated once at startup ─────────────────
+
+let terrainCanvas = null;
+
+function initTerrain() {
+  terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width  = COLS * CELL_SIZE;
+  terrainCanvas.height = ROWS * CELL_SIZE;
+  const tc = terrainCanvas.getContext('2d');
+  const cs = CELL_SIZE;
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const x = col * cs;
+      const y = row * cs;
+
+      // Deterministic per-cell values — same look every game restart
+      const s  = (col * 1103515245 + row * 22695477 + col * row * 6364136223) | 0;
+      const v1 = ((s ^ (s >>> 7))  * 0x5851f42d & 0x7fffffff) / 0x7fffffff;
+      const v2 = ((s * 0x27bb2ee6) & 0x7fffffff) / 0x7fffffff;
+      const v3 = ((s ^ (s <<  5))  * 0xbf58476d & 0x7fffffff) / 0x7fffffff;
+      const v4 = ((s * 0x94d049bb) & 0x7fffffff) / 0x7fffffff;
+
+      // Base grass — dark olive green with per-cell brightness variation
+      const br = Math.floor(v1 * 14);
+      tc.fillStyle = `rgb(${18 + br},${28 + br * 2},${9 + br})`;
+      tc.fillRect(x, y, cs, cs);
+
+      // Dirt/soil patches — warm brown blotch on some cells
+      if (v2 < 0.3) {
+        tc.fillStyle = `rgba(28,18,6,${0.22 + v2 * 0.3})`;
+        tc.fillRect(
+          x + Math.floor(v4 * 3),
+          y + Math.floor(v3 * 3),
+          Math.floor(cs * 0.6),
+          Math.floor(cs * 0.5)
+        );
+      }
+
+      // Primary grass tuft cluster — dense, ~1 in 3 cells
+      if (v3 < 0.34) {
+        const tx    = x + 2 + Math.floor(v1 * (cs - 6));
+        const ty    = y + 3 + Math.floor(v2 * (cs - 5));
+        const green = Math.floor(58 + v1 * 36);
+        tc.strokeStyle = `rgb(18,${green},10)`;
+        tc.lineWidth   = 0.85;
+        const blades = 2 + Math.floor(v4 * 3);   // 2–4 blades
+        for (let b = 0; b < blades; b++) {
+          const bx   = tx + b * 2.2 - blades;
+          const lean = (v2 - 0.5) * 5;
+          const tall = 2.5 + v3 * 2;
+          tc.beginPath();
+          tc.moveTo(bx, ty);
+          tc.lineTo(bx + lean, ty - tall);
+          tc.stroke();
+        }
+      }
+
+      // Secondary smaller cluster — adds density on ~half the cells
+      if (v4 < 0.45) {
+        const tx2    = x + 1 + Math.floor(v2 * (cs - 4));
+        const ty2    = y + 2 + Math.floor(v4 * (cs - 5));
+        const green2 = Math.floor(50 + v3 * 28);
+        tc.strokeStyle = `rgb(16,${green2},9)`;
+        tc.lineWidth   = 0.7;
+        const blades2 = 2 + (s & 1);
+        for (let b = 0; b < blades2; b++) {
+          const bx2  = tx2 + b * 2;
+          const lean2 = (v1 - 0.5) * 4;
+          tc.beginPath();
+          tc.moveTo(bx2, ty2);
+          tc.lineTo(bx2 + lean2, ty2 - (2 + v2 * 1.8));
+          tc.stroke();
+        }
+      }
+
+      // Occasional tall single blade for variety
+      if (v1 < 0.12) {
+        const tx3 = x + Math.floor(v3 * (cs - 2));
+        const ty3 = y + cs - 2;
+        tc.strokeStyle = `rgba(30,${Math.floor(70 + v4 * 25)},14,0.9)`;
+        tc.lineWidth   = 0.6;
+        tc.beginPath();
+        tc.moveTo(tx3, ty3);
+        tc.lineTo(tx3 + (v2 - 0.5) * 6, ty3 - 4 - v1 * 3);
+        tc.stroke();
+      }
+    }
+  }
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function getViewSize() {
   return {
-    width:  canvas.clientWidth  || window.innerWidth,
-    height: canvas.clientHeight || window.innerHeight
+    width:  (canvas.clientWidth  || window.innerWidth)  / gameScale,
+    height: (canvas.clientHeight || window.innerHeight) / gameScale,
   };
+}
+
+function computeScale() {
+  gameScale = Math.min(
+    (window.innerWidth)  / BASE_W,
+    (window.innerHeight) / BASE_H
+  );
 }
 
 function drawRoundedPath(x, y, w, h, r = 8) {
@@ -476,8 +580,8 @@ window.addEventListener('keydown', e => {
 
 canvas.addEventListener('mousedown', e => {
   const rect   = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
+  const mouseX = (e.clientX - rect.left) / gameScale;
+  const mouseY = (e.clientY - rect.top)  / gameScale;
 
   // Game over: only overlay buttons are interactive
   if (gameOver) {
@@ -802,13 +906,13 @@ function drawFrames() {
 
   // ── Ornate grid border: silver outer → dark body → gold center ───────────────
 
-  // 1. Deep drop shadow
+  // 1. Deep drop shadow — sits just outside the grid
   ctx.shadowColor   = 'rgba(0,0,0,0.95)';
   ctx.shadowBlur    = 20;
   ctx.shadowOffsetY = 4;
   ctx.strokeStyle   = '#0a0501';
   ctx.lineWidth     = 10;
-  ctx.strokeRect(gx + 5, gy + 5, gw - 10, gh - 10);
+  ctx.strokeRect(gx - 5, gy - 5, gw + 10, gh + 10);
   ctx.shadowBlur = ctx.shadowOffsetY = 0;
 
   // 2. Silver outer edge
@@ -816,26 +920,26 @@ function drawFrames() {
   ctx.shadowBlur  = 6;
   ctx.strokeStyle = '#b0bcc8';
   ctx.lineWidth   = 3;
-  ctx.strokeRect(gx + 1.5, gy + 1.5, gw - 3, gh - 3);
+  ctx.strokeRect(gx - 1.5, gy - 1.5, gw + 3, gh + 3);
   ctx.shadowBlur  = 0;
 
   // 3. Dark charcoal separator
   ctx.strokeStyle = '#1e1208';
   ctx.lineWidth   = 4;
-  ctx.strokeRect(gx + 4, gy + 4, gw - 8, gh - 8);
+  ctx.strokeRect(gx - 4, gy - 4, gw + 8, gh + 8);
 
   // 4. Gold center band with warm glow
   ctx.shadowColor = 'rgba(220,155,20,0.85)';
   ctx.shadowBlur  = 14;
   ctx.strokeStyle = '#d4982a';
   ctx.lineWidth   = 3.5;
-  ctx.strokeRect(gx + 6.75, gy + 6.75, gw - 13.5, gh - 13.5);
+  ctx.strokeRect(gx - 6.75, gy - 6.75, gw + 13.5, gh + 13.5);
   ctx.shadowBlur  = 0;
 
   // 5. Bright gold inner highlight
   ctx.strokeStyle = 'rgba(255,235,100,0.5)';
   ctx.lineWidth   = 1;
-  ctx.strokeRect(gx + 9, gy + 9, gw - 18, gh - 18);
+  ctx.strokeRect(gx - 9, gy - 9, gw + 18, gh + 18);
 
   // 6. Corner ornaments — silver shell + gold inner gem
   const ds = 11;
@@ -1222,10 +1326,10 @@ function drawBottomBuildBar() {
   const INFO_H     = 26;
 
   const spriteKeys = {
-    [TOWER_TYPES.BERSERK]:  'barbarian',
-    [TOWER_TYPES.VALKYRIE]: 'valkyria',
+    [TOWER_TYPES.BERSERK]:  'berserker',
+    [TOWER_TYPES.VALKYRIE]: 'valkyrie',
     [TOWER_TYPES.MILITARY]: 'archer',
-    [TOWER_TYPES.CATAPULT]: 'dvarg',
+    [TOWER_TYPES.CATAPULT]: 'catapult',
     [TOWER_TYPES.BLONDIE]:  'brynhild',
   };
 
@@ -1648,8 +1752,9 @@ function drawLeftSidebar() {
 }
 
 function draw() {
-  const { width, height } = getViewSize();
-  ctx.clearRect(0, 0, width, height);
+  ctx.clearRect(0, 0, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
+  ctx.save();
+  ctx.scale(gameScale, gameScale);
   drawBackground();
 
   // Game world — translated down by GRID_TOP so the top status bar doesn't cover the grid
@@ -1662,6 +1767,10 @@ function draw() {
   grid.healthRatio = Math.max(0, lives / STARTING_LIVES);
   grid.gold        = gold;
   grid.hoardPulse  = hoardPulse;
+
+  // Grass terrain (blit pre-rendered offscreen canvas — free per frame)
+  if (terrainCanvas) ctx.drawImage(terrainCanvas, 0, 0);
+
   grid.draw(ctx, time);
   drawPath();
   towers.forEach(t => t.draw(ctx));
@@ -1723,6 +1832,7 @@ function draw() {
   drawBossWarning();
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
+  ctx.restore();
 }
 
 function gameLoop() {
@@ -1732,4 +1842,7 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+computeScale();
+window.addEventListener('resize', computeScale);
+initTerrain();
 gameLoop();
