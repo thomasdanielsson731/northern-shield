@@ -1,33 +1,33 @@
-I m p r o v e   g a m e   f e e l   i n   N o r t h e r n   S h i e l d   w i t h o u t   a d d i n g   m a j o r   c o m p l e x i t y .
+Improve game feel in Northern Shield without adding major complexity.
 
- C U R R E N T   F E E D B A C K   M E C H A N I S M S   ( a l r e a d y   i m p l e m e n t e d ) :
- -   H P   b a r s   w i t h   c o l o r   t r a n s i t i o n s :   g r e e n   →   y e l l o w   →   r e d
- -   B u l l e t   t r a i l :   6 - p o i n t   t r a i l   a r r a y ,   g o l d e n   c o l o r   ( # f f d 8 6 b )
- -   T o w e r   b o d y   g l o w :   c t x . s h a d o w B l u r   w i t h   t o w e r   c o l o r
- -   E n e m y   t y p e   g l o w s :   G r a v e b o r n   p u r p l e ,   W i s p   e t h e r e a l   b l u e ,   G o l e m   a m b e r   c o r e
- -   S p r i t e   A T T A C K   f r a m e :   f i r e F l a s h   c o u n t d o w n   t r i g g e r s   f r a m e   2   f o r   ~ 8   f r a m e s
- -   S c r e e n   s h a k e :   s h a k e X / s h a k e Y ,   d e c a y s   e a c h   f r a m e ,   a p p l i e d   i n   c t x . t r a n s l a t e ( )
- -   P a r t i c l e s :   p a r t i c l e s [ ]   a r r a y ,   { x , y , v x , v y , l i f e , m a x L i f e , c o l o r }   —   d e a t h   b u r s t s
- -   P a t h   h i g h l i g h t   s h o w s   c u r r e n t   e n e m y   r o u t e   ( g o l d e n ,   a n i m a t e d   v i a   a m b i e n t   g l o w )
- -   B a c k g r o u n d   p u l s i n g   a m b i e n t   g l o w s   ( p h a s e - o f f s e t   p u r p l e   +   a m b e r )
- -   B a n s h e e   E M P   p u l s e   r i n g :   e x p a n d i n g   c i r c l e   o n   d i s c h a r g e
- -   S p a w n   g a t e   p o r t a l :   a n i m a t e d   a m b e r   p o r t a l   a t   s p a w n   c e l l
+ CURRENT FEEDBACK MECHANISMS (already implemented):
+ - HP bars with color transitions: green → yellow → red
+ - Bullet trail: 6-point trail array, golden color (#ffd86b)
+ - Tower body glow: ctx.shadowBlur with tower color
+ - Enemy type glows: Graveborn purple, Wisp ethereal blue, Golem amber core
+ - Sprite ATTACK frame: fireFlash countdown triggers frame 2 for ~8 frames
+ - Screen shake: shakeX/shakeY, decays each frame, applied in ctx.translate()
+ - Particles: particles[] array, {x,y,vx,vy,life,maxLife,color} — death bursts
+ - Path highlight shows current enemy route (golden, animated via ambient glow)
+ - Background pulsing ambient glows (phase-offset purple + amber)
+ - Banshee EMP pulse ring: expanding circle on discharge
+ - Spawn gate portal: animated amber portal at spawn cell
 
- M I S S I N G   F E E L   ( h i g h e s t   i m p a c t ,   l o w e s t   c o m p l e x i t y ) :
- 1 .   H i t   f l a s h :   b r i e f l y   b r i g h t e n   e n e m y   c o l o r   w h e n   t a k i n g   d a m a g e
- 2 .   P l a c e m e n t   f e e d b a c k :   b r i e f   c e l l   h i g h l i g h t   w h e n   p l a c i n g   w a l l   o r   t o w e r
- 3 .   G o l e m   s t a g g e r :   s l i g h t l y   o f f s e t   d r a w   p o s i t i o n   f o r   3   f r a m e s   o n   h e a v y   h i t
- 4 .   W a v e   s t a r t   f l a s h :   b r i e f   s c r e e n   p u l s e   w h e n   w a v e   b e g i n s
+ MISSING FEEL (highest impact, lowest complexity):
+ 1. Hit flash: briefly brighten enemy color when taking damage
+ 2. Placement feedback: brief cell highlight when placing wall or tower
+ 3. Golem stagger: slightly offset draw position for 3 frames on heavy hit
+ 4. Wave start flash: brief screen pulse when wave begins
 
- C A N V A S   T E C H N I Q U E S :
- -   c t x . g l o b a l A l p h a   f o r   f a d e s   a n d   f l a s h e s
- -   c t x . s h a d o w B l u r   f o r   g l o w s   ( a l w a y s   r e s e t   t o   0   a f t e r )
- -   S h o r t - l i v e d   e f f e c t   a r r a y s :   [ { x ,   y ,   l i f e ,   m a x L i f e ,   c o l o r } ]   —   k e e p   u n d e r   2 0   t o t a l
- -   S c a l e / o f f s e t   p u l s e :   d r a w   s l i g h t l y   d i s p l a c e d   f o r   N   f r a m e s ,   n o   c l a s s   n e e d e d
+ CANVAS TECHNIQUES:
+ - ctx.globalAlpha for fades and flashes
+ - ctx.shadowBlur for glows (always reset to 0 after)
+ - Short-lived effect arrays: [{ x, y, life, maxLife, color }] — keep under 20 total
+ - Scale/offset pulse: draw slightly displaced for N frames, no class needed
 
- R U L E S :
- -   P r e f e r   s m a l l   h i g h - i m p a c t   i m p r o v e m e n t s
- -   N o   s o u n d   a r c h i t e c t u r e   u n l e s s   e x p l i c i t l y   r e q u e s t e d
- -   K e e p   p a r t i c l e / e f f e c t   s y s t e m s   s i m p l e   —   p l a i n   a r r a y s ,   n o   P a r t i c l e   c l a s s
- -   N e v e r   l e t   e f f e c t s   o b s c u r e   e n e m y   H P   b a r s   o r   m o v e m e n t   c l a r i t y
- -   D e a t h   e f f e c t s   s h o u l d   u s e   t h e   e n e m y ' s   c o l o r   ( G r a v e b o r n :   p u r p l e ,   W i s p :   b l u e ,   G o l e m :   a m b e r )
+ RULES:
+ - Prefer small high-impact improvements
+ - No sound architecture unless explicitly requested
+ - Keep particle/effect systems simple — plain arrays, no Particle class
+ - Never let effects obscure enemy HP bars or movement clarity
+ - Death effects should use the enemy's color (Graveborn: purple, Wisp: blue, Golem: amber)

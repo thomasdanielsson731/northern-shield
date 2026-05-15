@@ -1,41 +1,41 @@
-P r i o r i t i z e   s h i p p i n g   N o r t h e r n   S h i e l d   o v e r   p e r f e c t i o n .
+Prioritize shipping Northern Shield over perfection.
 
- C U R R E N T   P L A Y A B L E   S T A T E :
-     ✓   G r i d   r e n d e r s   ( 5 0 x 3 0 ,   C E L L _ S I Z E = 1 4 ,   c a n v a s   f i l l s   w i n d o w )
-     ✓   W a l l   p l a c e m e n t   w i t h   l i v e   p a t h   v a l i d a t i o n
-     ✓   B F S   p a t h f i n d i n g   ( r e r o u t e s   a c t i v e   e n e m i e s   o n   c h a n g e )
-     ✓   6   t o w e r   t y p e s :   S k ö l d b o r g   /   B ä r s ä r k a r e   /   V a l k y r i a   /   B å g s k y t t   /   K a t a p u l t   /   B l o n d i e
-     ✓   4   e n e m y   t y p e s :   G r a v e b o r n   /   W i s p   ( f l y i n g )   /   G o l e m   ( b o s s )   /   B a n s h e e   ( E M P )
-     ✓   H o m i n g   b u l l e t s   w i t h   t r a i l
-     ✓   S p l a s h   d a m a g e   ( K a t a p u l t )
-     ✓   E c o n o m y :   g o l d   ( s t a r t s   8 5 ) ,   l i v e s   ( s t a r t s   2 0 )
-     ✓   T o w e r   u p g r a d e s   ( M A X _ L E V E L = 1 0 )
-     ✓   W a v e   s y s t e m   ( c o u n t d o w n   /   a c t i v e   /   b r e a k )
-     ✓   H i g h   s c o r e s   ( l o c a l S t o r a g e ,   t o p   1 0 )
-     ✓   P a r t i c l e s   +   s c r e e n   s h a k e
-     ✓   E M P   t o w e r   d i s a b l e   ( B a n s h e e )
-     ✓   S k ö l d b o r g   s l o w   a u r a
-     ✓   B l o n d i e   s t u n
-     ✓   S p r i t e   a n i m a t i o n s   ( 5   t o w e r   s p r i t e   s h e e t s   l o a d e d )
-     ✓   N o r s e   v i s u a l   t h e m e :   d a r k   f a n t a s y ,   o r n a t e   g o l d   p a n e l s ,   g l o w   e f f e c t s
-     ✓   G a m e   o v e r   s c r e e n   ( D E F E A T E D )   +   H i g h   s c o r e s   s c r e e n
+ CURRENT PLAYABLE STATE:
+     ✓ Grid renders (50x30, CELL_SIZE=14, canvas fills window)
+     ✓ Wall placement with live path validation
+     ✓ BFS pathfinding (reroutes active enemies on change)
+     ✓ 6 tower types: Shield Wall / Berserker / Valkyrie / Archer / Catapult / Blondie
+     ✓ 4 enemy types: Graveborn / Wisp (flying) / Golem (boss) / Banshee (EMP)
+     ✓ Homing bullets with trail
+     ✓ Splash damage (Catapult)
+     ✓ Economy: gold (starts 85), lives (starts 20)
+     ✓ Tower upgrades (MAX_LEVEL=10)
+     ✓ Wave system (countdown / active / break)
+     ✓ High scores (localStorage, top 10)
+     ✓ Particles + screen shake
+     ✓ EMP tower disable (Banshee)
+     ✓ Shield Wall slow aura
+     ✓ Blondie stun
+     ✓ Sprite animations (5 tower sprite sheets loaded)
+     ✓ Norse visual theme: dark fantasy, ornate gold panels, glow effects
+     ✓ Game over screen (DEFEATED) + High scores screen
 
- N E X T   S H I P - W O R T H Y   M I L E S T O N E S   ( p o t e n t i a l   o r d e r ) :
-     1 .   E n e m y   w a l k   a n i m a t i o n s   —   l o w   c o m p l e x i t y ,   g o o d   p o l i s h
-     2 .   I s j ä t t e   t o w e r   —   e x t e n d s   i c e   t h e m e ,   u s e s   e x i s t i n g   i s m a c i k e r _ s p r i t e s . p n g
-     3 .   H e l a n d e   H y d d a   —   n e w   m e c h a n i c   ( h e a l   l i v e s ) ,   u s e s   v i l d e m a n _ s p r i t e s . p n g
-     4 .   S a v e / l o a d   g a m e   s t a t e
+ NEXT SHIP-WORTHY MILESTONES (potential order):
+     1. Enemy walk animations — low complexity, good polish
+     2. Ice Giant tower — extends ice theme, uses existing ismaciker_sprites.png
+     3. Healing Hut — new mechanic (heal lives), uses wildeman_sprites.png
+     4. Save/load game state
 
- N O T   B L O C K I N G   S H I P :
-     S o u n d ,   c a m p a i g n   m o d e ,   e n d l e s s   m o d e ,   c o - o p ,   p r o c e d u r a l   m a p s .
-     T h e s e   a r e   p o s t - c o r e .   T h e   c o r e   l o o p   m u s t   f e e l   f u n   f i r s t .
+ NOT BLOCKING SHIP:
+     Sound, campaign mode, endless mode, co-op, procedural maps.
+     These are post-core. The core loop must feel fun first.
 
- D E C I S I O N   R U L E :
-     I f   a   f e a t u r e   t a k e s   m o r e   t h a n   1   s e s s i o n   a n d   d o e s n ' t   d i r e c t l y   i m p r o v e   t h e
-     b u i l d - d e f e n d - e a r n   l o o p ,   d e f e r   i t .
+ DECISION RULE:
+     If a feature takes more than 1 session and doesn't directly improve the
+     build-defend-earn loop, defer it.
 
- T h e   g o a l :
- -   P l a y a b l e   q u i c k l y
- -   I t e r a t i v e   i m p r o v e m e n t
- -   V i s i b l e   p r o g r e s s   e a c h   s e s s i o n
- -   L o w   c o g n i t i v e   l o a d   f o r   t h e   d e v e l o p e r
+ The goal:
+ - Playable quickly
+ - Iterative improvement
+ - Visible progress each session
+ - Low cognitive load for the developer

@@ -1,35 +1,35 @@
-D o   n o t   r e w r i t e   l a r g e   p a r t s   o f   N o r t h e r n   S h i e l d   u n l e s s   e x p l i c i t l y   r e q u e s t e d .
+Do not rewrite large parts of Northern Shield unless explicitly requested.
 
- W O R K I N G   S Y S T E M S   —   D O   N O T   T O U C H   U N L E S S   A S K E D :
- -   B F S   p a t h f i n d i n g :   s r c / g r i d / g r i d . j s   G r i d . f i n d P a t h ( )
- -   B u l l e t   h o m i n g   +   k i l l   d e t e c t i o n :   s r c / e n t i t i e s / b u l l e t . j s
- -   T o w e r   t a r g e t i n g   ( h i g h e s t   p a t h I n d e x   i n   r a n g e ) :   s r c / e n t i t i e s / t o w e r . j s   T o w e r . u p d a t e ( )
- -   A c t i v e   e n e m y   r e r o u t i n g :   r e r o u t e A c t i v e E n e m i e s ( )   i n   s r c / c o r e / g a m e . j s
- -   F l y i n g   e n e m y   s t r a i g h t - l i n e   p a t h :   s p a w n E n e m y ( )   i n   s r c / c o r e / g a m e . j s
- -   W a v e   s t a t e   m a c h i n e :   c o u n t d o w n / a c t i v e / b r e a k   s t a t e   +   s p a w n   q u e u e   i n   g a m e . j s
- -   d r a w F a n t a s y P a n e l ( )   —   o r n a t e   p a n e l   h e l p e r ,   u s e d   b y   a l l   H U D   p a n e l s
- -   d r a w S p r i t e F r a m e ( )   —   s p r i t e   r e n d e r e r   h e l p e r   i n   t o w e r . j s
- -   S P R I T E S   r e g i s t r y   l o a d e r   —   s r c / a s s e t s . j s
- -   H i g h   s c o r e   l o c a l S t o r a g e   s y s t e m
- -   W a l l   p l a c e m e n t   +   p a t h   v a l i d a t i o n   f l o w   i n   t h e   m o u s e d o w n   h a n d l e r
- -   B a n s h e e   E M P   t o w e r   d i s a b l e   l o g i c
- -   S k ö l d b o r g   s l o w   a u r a   l o g i c
- -   T o w e r   u p g r a d e   s y s t e m   ( M A X _ L E V E L = 1 0 )
+ WORKING SYSTEMS — DO NOT TOUCH UNLESS ASKED:
+ - BFS pathfinding: src/grid/grid.js Grid.findPath()
+ - Bullet homing + kill detection: src/entities/bullet.js
+ - Tower targeting (highest pathIndex in range): src/entities/tower.js Tower.update()
+ - Active enemy rerouting: rerouteActiveEnemies() in src/core/game.js
+ - Flying enemy straight-line path: spawnEnemy() in src/core/game.js
+ - Wave state machine: countdown/active/break state + spawn queue in game.js
+ - drawFantasyPanel() — ornate panel helper, used by all HUD panels
+ - drawSpriteFrame() — sprite renderer helper in tower.js
+ - SPRITES registry loader — src/assets.js
+ - High score localStorage system
+ - Wall placement + path validation flow in the mousedown handler
+ - Banshee EMP tower disable logic
+ - Shield Wall slow aura logic
+ - Tower upgrade system (MAX_LEVEL=10)
 
- S A F E   T O   M O D I F Y   W I T H O U T   R I S K :
- -   E N E M Y _ D E F S   v a l u e s   ( s t a t   t u n i n g   o n l y )
- -   T O W E R _ D E F S   v a l u e s   ( s t a t   t u n i n g   o n l y )
- -   _ d r a w * ( )   m e t h o d s   o n   E n e m y   ( v i s u a l   c h a n g e s )
- -   _ d r a w * ( )   m e t h o d s   o n   T o w e r   ( v i s u a l   c h a n g e s )
- -   d r a w T o p B a r / d r a w L e f t S i d e b a r / d r a w R i g h t P a n e l / d r a w B o t t o m B u i l d B a r   ( U I   l a y o u t   c h a n g e s )
- -   d r a w B a c k g r o u n d ( )   ( a t m o s p h e r e   c h a n g e s )
- -   a s s e t s . j s   m a n i f e s t   ( a d d i n g   n e w   s p r i t e   e n t r i e s )
+ SAFE TO MODIFY WITHOUT RISK:
+ - ENEMY_DEFS values (stat tuning only)
+ - TOWER_DEFS values (stat tuning only)
+ - _draw*() methods on Enemy (visual changes)
+ - _draw*() methods on Tower (visual changes)
+ - drawTopBar/drawLeftSidebar/drawRightPanel/drawBottomBuildBar (UI layout changes)
+ - drawBackground() (atmosphere changes)
+ - assets.js manifest (adding new sprite entries)
 
- A P P R O A C H :
- -   M a k e   t h e   s m a l l e s t   c h a n g e   t h a t   a c h i e v e s   t h e   g o a l
- -   T e s t   t h a t   e x i s t i n g   b e h a v i o r   s t i l l   w o r k s   a f t e r   t h e   c h a n g e
- -   I f   a   f i x   r e q u i r e s   t o u c h i n g   3 +   f i l e s ,   e x p l a i n   w h y   b e f o r e   d o i n g   i t
- -   P r e s e r v e   w o r k i n g   s y s t e m s   —   a   b r o k e n   f e a t u r e   t h a t   w o r k e d   b e f o r e   t h e   c h a n g e
-     i s   w o r s e   t h a n   n o   c h a n g e   a t   a l l
+ APPROACH:
+ - Make the smallest change that achieves the goal
+ - Test that existing behavior still works after the change
+ - If a fix requires touching 3+ files, explain why before doing it
+ - Preserve working systems — a broken feature that worked before the change
+     is worse than no change at all
 
- W h e n   i n   d o u b t ,   a s k   b e f o r e   r e w r i t i n g .
+ When in doubt, ask before rewriting.

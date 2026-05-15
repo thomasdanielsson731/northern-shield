@@ -1,38 +1,38 @@
-C O L O R E D   B A S E P L A T E S   —   N o r t h e r n   S h i e l d
+COLORED BASEPLATES — Northern Shield
 
- G O A L :
-     V i s u a l l y   d i s t i n g u i s h   t o w e r   t y p e s   o n   t h e   g r i d   e v e n   w i t h o u t   s p r i t e s .
-     B a s e p l a t e s   g r o u n d   t o w e r s   i n   t h e   t e r r a i n   a n d   r e a d   i n s t a n t l y   a t   a   g l a n c e .
+ GOAL:
+     Visually distinguish tower types on the grid even without sprites.
+     Baseplates ground towers in the terrain and read instantly at a glance.
 
- C U R R E N T   S T A T E :
-     T o w e r s   s i t   o n   t h e   g r i d   w i t h   n o   g r o u n d   i n d i c a t o r .
-     S e l e c t e d   t o w e r   s h o w s   r a n g e   c i r c l e   b u t   n o t h i n g   e l s e .
-     T O W E R _ D E F S [ t y p e ] . c o l o r   i s   a l r e a d y   d e f i n e d   —   u s e   i t .
+ CURRENT STATE:
+     Towers sit on the grid with no ground indicator.
+     Selected tower shows range circle but nothing else.
+     TOWER_DEFS[type].color is already defined — use it.
 
- P R O P O S E D   A P P R O A C H :
-     D r a w   a   s m a l l   r o u n d e d - r e c t   b a s e p l a t e   b e h i n d   e a c h   t o w e r   s p r i t e .
-     C o l o r :   d e r i v e d   f r o m   T O W E R _ D E F S [ t y p e ] . c o l o r   w i t h   l o w   o p a c i t y   ( ~ 0 . 2 5 )
-     S i z e :   C E L L _ S I Z E   x   C E L L _ S I Z E   ( 1 4 x 1 4 p x ) ,   r a d i u s   2
+ PROPOSED APPROACH:
+     Draw a small rounded-rect baseplate behind each tower sprite.
+     Color: derived from TOWER_DEFS[type].color with low opacity (~0.25)
+     Size: CELL_SIZE x CELL_SIZE (14x14px), radius 2
 
- I M P L E M E N T A T I O N :
-     I n   T o w e r . d r a w ( c t x ) ,   b e f o r e   c a l l i n g   t h e   _ d r a w X X X   m e t h o d :
+ IMPLEMENTATION:
+     In Tower.draw(ctx), before calling the _drawXXX method:
 
-         c o n s t   d e f   =   T O W E R _ D E F S [ t h i s . t y p e ] ;
-         c t x . s a v e ( ) ;
-         c t x . g l o b a l A l p h a   =   0 . 2 2 ;
-         c t x . f i l l S t y l e   =   d e f . c o l o r ;
-         / /   d r a w R o u n d e d R e c t   a t   ( t h i s . c x   -   7 ,   t h i s . c y   -   7 ,   1 4 ,   1 4 ,   2 )
-         c t x . f i l l ( ) ;
-         c t x . r e s t o r e ( ) ;
+         const def = TOWER_DEFS[this.type];
+         ctx.save();
+         ctx.globalAlpha = 0.22;
+         ctx.fillStyle = def.color;
+         // drawRoundedRect at (this.cx - 7, this.cy - 7, 14, 14, 2)
+         ctx.fill();
+         ctx.restore();
 
-     F o r   w a l l s :   u s e   a   s i m i l a r   b a s e p l a t e   w i t h   t h e   w a l l   c o l o r   ( # 6 6 4 4 a a )
+     For walls: use a similar baseplate with the wall color (#6644aa)
 
- S E L E C T E D   T O W E R   V A R I A N T :
-     W h e n   t o w e r   i s   s e l e c t e d   ( s e l e c t e d T o w e r = = = t o w e r ) :
-     -   I n c r e a s e   o p a c i t y   t o   0 . 5 0
-     -   A d d   a   1 p x   b o r d e r   s t r o k e   i n   t h e   t o w e r ' s   d e f . c o l o r   a t   f u l l   o p a c i t y
+ SELECTED TOWER VARIANT:
+     When tower is selected (selectedTower===tower):
+     - Increase opacity to 0.50
+     - Add a 1px border stroke in the tower's def.color at full opacity
 
- R U L E S :
- -   B a s e p l a t e   d r a w n   B E F O R E   t h e   t o w e r   s p r i t e / s h a p e   —   n e v e r   o n   t o p
- -   D o   n o t   c h a n g e   g r i d . j s   o r   r e n d e r e r . j s   f o r   t h i s   f e a t u r e
- -   K e e p   i t   s u b t l e :   t h e   s p r i t e   i s   t h e   f o c u s ,   t h e   b a s e p l a t e   i s   a m b i e n t
+ RULES:
+ - Baseplate drawn BEFORE the tower sprite/shape — never on top
+ - Do not change grid.js or renderer.js for this feature
+ - Keep it subtle: the sprite is the focus, the baseplate is ambient

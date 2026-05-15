@@ -1,36 +1,36 @@
-R e f a c t o r   N o r t h e r n   S h i e l d   f o r   c l a r i t y   a n d   m a i n t a i n a b i l i t y .
+Refactor Northern Shield for clarity and maintainability.
 
- N A M I N G   C O N V E N T I O N S   I N   U S E   ( d o   n o t   c h a n g e   w i t h o u t   r e a s o n ) :
-     V a r i a b l e s :   g o l d   ( n o t   c r e d i t s ) ,   s l a i n   ( n o t   k i l l s ) ,   l i v e s
-     U I   l a b e l s :     G o l d   /   L i v e s   /   S l a i n   ( E n g l i s h )
-     E n e m y   U I :       G r a v e b o r n   /   W i s p   /   G o l e m   /   B a n s h e e
-     T o w e r   U I :       S k ö l d b o r g   /   B ä r s ä r k a r e   /   V a l k y r i a   /   B å g s k y t t   /   K a t a p u l t   /   B l o n d i e
-     I n t e r n a l   E N E M Y _ T Y P E S   k e y s :   i n f a n t r y ,   d r o n e ,   t a n k ,   b a n s h e e
-     I n t e r n a l   T O W E R _ T Y P E S   k e y s :   W A L L ,   B E R S E R K ,   V A L K Y R I E ,   M I L I T A R Y ,   C A T A P U L T ,   B L O N D I E
-     C e l l   c o n s t :   C E L L . E M P T Y   /   W A L L   /   S P A W N   /   G O A L   /   T O W E R
+ NAMING CONVENTIONS IN USE (do not change without reason):
+     Variables: gold (not credits), slain (not kills), lives
+     UI labels:     Gold / Lives / Slain (English)
+     Enemy UI:     Graveborn / Wisp / Golem / Banshee
+     Tower UI:     Shield Wall / Berserker / Valkyrie / Archer / Catapult / Blondie
+     Internal ENEMY_TYPES keys: infantry, drone, tank, banshee
+     Internal TOWER_TYPES keys: WALL, BERSERK, VALKYRIE, MILITARY, CATAPULT, BLONDIE
+     Cell const: CELL.EMPTY / WALL / SPAWN / GOAL / TOWER
 
- C U R R E N T   F I L E   S I Z E   ( w a t c h   t h e s e ) :
-     g a m e . j s :   ~ 1 4 0 0 +   l i n e s   —   i n t e n t i o n a l l y   l a r g e   ( i n t e g r a t i o n   l a y e r ) ,   a c c e p t a b l e
-     e n e m y . j s :   ~ 2 0 0 +   l i n e s   —   a c c e p t a b l e
-     t o w e r . j s :   ~ 5 0 0 +   l i n e s   —   l a r g e r   d u e   t o   s p r i t e   d r a w   m e t h o d s ,   a c c e p t a b l e
-     g r i d . j s :   ~ 1 2 0   l i n e s   —   f i n e
-     b u l l e t . j s :   ~ 7 5   l i n e s   —   f i n e
-     a s s e t s . j s :   ~ 3 0   l i n e s   —   f i n e
+ CURRENT FILE SIZE (watch these):
+     game.js: ~1400+ lines — intentionally large (integration layer), acceptable
+     enemy.js: ~200+ lines — acceptable
+     tower.js: ~500+ lines — larger due to sprite draw methods, acceptable
+     grid.js: ~120 lines — fine
+     bullet.js: ~75 lines — fine
+     assets.js: ~30 lines — fine
 
- K N O W N   C O D E   S M E L L S   ( l o w   p r i o r i t y ) :
-     -   e n g i n e /   f o l d e r   c o n t a i n s   d e a d   s k e l e t o n   f i l e s   —   s a f e   t o   d e l e t e   w h e n   c o n v e n i e n t
-     -   d r a w H u d   s p l i t   i n t o   d r a w T o p B a r / d r a w L e f t S i d e b a r / d r a w R i g h t P a n e l / d r a w B o t t o m B u i l d B a r
-         i f   a n y   o f   t h e s e   g r o w   b e y o n d   ~ 8 0   l i n e s ,   c o n s i d e r   s p l i t t i n g   f u r t h e r
+ KNOWN CODE SMELLS (low priority):
+     - engine/ folder contains dead skeleton files — safe to delete when convenient
+     - drawHud split into drawTopBar/drawLeftSidebar/drawRightPanel/drawBottomBuildBar
+         if any of these grow beyond ~80 lines, consider splitting further
 
- R E F A C T O R   G O A L S :
-     -   R e d u c e   c o u p l i n g   o n l y   w h e r e   i t   c a u s e s   r e a l   f r i c t i o n
-     -   I m p r o v e   n a m i n g   w h e n   i t   c a u s e s   c o n f u s i o n
-     -   S i m p l i f y   c o n t r o l   f l o w   ( n o   n e s t e d   t e r n a r i e s ,   n o   c l e v e r   o n e - l i n e r s )
-     -   R e m o v e   d u p l i c a t i o n   —   b u t   t h r e e   s i m i l a r   l i n e s   i s   b e t t e r   t h a n   a   p r e m a t u r e   a b s t r a c t i o n
-     -   P r e s e r v e   b e h a v i o r   e x a c t l y
+ REFACTOR GOALS:
+     - Reduce coupling only where it causes real friction
+     - Improve naming when it causes confusion
+     - Simplify control flow (no nested ternaries, no clever one-liners)
+     - Remove duplication — but three similar lines is better than a premature abstraction
+     - Preserve behavior exactly
 
- D O   N O T :
-     -   E x t r a c t   a   c l a s s   o r   m o d u l e   " f o r   c l e a n l i n e s s "   w i t h o u t   a   c o n c r e t e   r e a s o n
-     -   C h a n g e   i n t e r n a l   k e y   n a m e s   ( i n f a n t r y / d r o n e / t a n k / b a n s h e e )   —   u s e d   i n   E N E M Y _ D E F S   l o o k u p s
-     -   R e n a m e   t h e   C E L L   c o n s t a n t s
-     -   A d d   a b s t r a c t i o n   l a y e r s   t h a t   m a k e   t h e   c o d e   h a r d e r   t o   f o l l o w   f o r   a   s o l o   d e v
+ DO NOT:
+     - Extract a class or module "for cleanliness" without a concrete reason
+     - Change internal key names (infantry/drone/tank/banshee) — used in ENEMY_DEFS lookups
+     - Rename the CELL constants
+     - Add abstraction layers that make the code harder to follow for a solo dev

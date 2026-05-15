@@ -1,37 +1,37 @@
-I d e n t i f y   t e c h n i c a l   d e b t   i n   N o r t h e r n   S h i e l d   t h a t   w i l l   r e a l i s t i c a l l y   h u r t   f u t u r e   d e v e l o p m e n t .
+Identify technical debt in Northern Shield that will realistically hurt future development.
 
- K N O W N   E X I S T I N G   D E B T   ( a s s e s s e d ) :
+ KNOWN EXISTING DEBT (assessed):
 
- e n g i n e /   d e a d   c o d e   ( L O W   R I S K ) :
-     e n g i n e / g a m e . j s ,   r e n d e r . j s ,   i n p u t . j s   a r e   o l d   s k e l e t o n   f i l e s ,   n o t   l o a d e d   b y   a n y t h i n g .
-     S a f e   t o   d e l e t e   w h e n   c o n v e n i e n t .   N o t   u r g e n t .
+ engine/ dead code (LOW RISK):
+     engine/game.js, render.js, input.js are old skeleton files, not loaded by anything.
+     Safe to delete when convenient. Not urgent.
 
- g a m e . j s   s i z e   ( L O W   R I S K   —   b y   d e s i g n ) :
-     g a m e . j s   i s   ~ 1 4 0 0 +   l i n e s .   T h i s   i s   i n t e n t i o n a l   —   i t   i s   t h e   i n t e g r a t i o n   l a y e r .
-     d r a w T o p B a r / d r a w L e f t S i d e b a r / d r a w R i g h t P a n e l / d r a w B o t t o m B u i l d B a r   a l r e a d y   s p l i t   H U D .
-     O n l y   e x t r a c t   m o r e   i f   a   s i n g l e   f u n c t i o n   e x c e e d s   ~ 8 0   l i n e s   a n d   i t   i m p r o v e s   c l a r i t y .
+ game.js size (LOW RISK — by design):
+     game.js is ~1400+ lines. This is intentional — it is the integration layer.
+     drawTopBar/drawLeftSidebar/drawRightPanel/drawBottomBuildBar already split HUD.
+     Only extract more if a single function exceeds ~80 lines and it improves clarity.
 
- t o w e r . j s   s p r i t e   m e t h o d s   ( L O W   R I S K ) :
-     E a c h   t o w e r   t y p e   h a s   a   _ d r a w * ( )   m e t h o d .   R e p e t i t i v e   b u t   e a c h   i s   d i f f e r e n t   e n o u g h .
-     d r a w S p r i t e F r a m e ( )   h e l p e r   a l r e a d y   e x t r a c t s   t h e   c o m m o n   l o g i c .
+ tower.js sprite methods (LOW RISK):
+     Each tower type has a _draw*() method. Repetitive but each is different enough.
+     drawSpriteFrame() helper already extracts the common logic.
 
- B u l l e t   →   E n e m y   d i r e c t   r e f e r e n c e   ( L O W   R I S K   —   c u r r e n t l y   s a f e ) :
-     B u l l e t   h o l d s   ` t h i s . t a r g e t `   d i r e c t l y .   S a f e   b e c a u s e   e n e m i e s [ ]   a l w a y s   h o l d s   l i v e   r e f s .
-     B e c o m e s   a   r i s k   i f   e n e m i e s   a r e   e v e r   p o o l e d   o r   r e c y c l e d .   D o c u m e n t   t h i s   a s s u m p t i o n .
+ Bullet → Enemy direct reference (LOW RISK — currently safe):
+     Bullet holds `this.target` directly. Safe because enemies[] always holds live refs.
+     Becomes a risk if enemies are ever pooled or recycled. Document this assumption.
 
- B F S   p e r   w a l l   c h a n g e   ( N E G L I G I B L E   a t   5 0 x 3 0 ) :
-     R e b u i l d i n g   t h e   f u l l   B F S   o n   e v e r y   w a l l   e v e n t   i s   O ( C O L S * R O W S )   =   O ( 1 5 0 0 ) .
-     O n l y   b e c o m e s   a   c o n c e r n   a b o v e   ~ 1 0 0 x 1 0 0   g r i d .   N o   a c t i o n   n e e d e d .
+ BFS per wall change (NEGLIGIBLE at 50x30):
+     Rebuilding the full BFS on every wall event is O(COLS*ROWS) = O(1500).
+     Only becomes a concern above ~100x100 grid. No action needed.
 
- S p r i t e   l o a d i n g   r a c e   ( L O W   R I S K ) :
-     S P R I T E S   p o p u l a t e d   a s y n c h r o n o u s l y .   F i r s t   f e w   f r a m e s   f a l l   b a c k   t o   c a n v a s   s h a p e s .
-     T h i s   i s   b y   d e s i g n   —   V i t e   s e r v e s   f i l e s   f a s t   e n o u g h   t h a t   p l a y e r s   r a r e l y   s e e   t h e   f a l l b a c k .
+ Sprite loading race (LOW RISK):
+     SPRITES populated asynchronously. First few frames fall back to canvas shapes.
+     This is by design — Vite serves files fast enough that players rarely see the fallback.
 
- P R I O R I T I Z E   D E B T   T H A T :
- -   B l o c k s   t h e   n e x t   p l a n n e d   f e a t u r e
- -   C a u s e s   c o n f u s i o n   w h e n   r e a d i n g   t h e   c o d e   ( u n c l e a r   o w n e r s h i p )
- -   C r e a t e s   f r a g i l e   s t a t e   ( m u t a t i o n s   t h a t   a r e   h a r d   t o   t r a c e )
+ PRIORITIZE DEBT THAT:
+ - Blocks the next planned feature
+ - Causes confusion when reading the code (unclear ownership)
+ - Creates fragile state (mutations that are hard to trace)
 
- I G N O R E :
- -   P u r e l y   t h e o r e t i c a l   c o n c e r n s
- -   " I t   c o u l d   b e   c l e a n e r "   w i t h o u t   a   c o n c r e t e   d e v e l o p m e n t   c o s t
+ IGNORE:
+ - Purely theoretical concerns
+ - "It could be cleaner" without a concrete development cost

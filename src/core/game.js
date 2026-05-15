@@ -22,7 +22,7 @@ const WALL_COST = 5;
 const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 
 const BUILD_ITEMS = [
-  { id: 'wall', label: 'Sköldborg', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
+  { id: 'wall', label: 'Shield Wall', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
   ...Object.values(TOWER_TYPES).map(type => ({
     id:    type,
     label: TOWER_DEFS[type].label,
@@ -63,8 +63,9 @@ let speedBtn  = null;
 
 let goldCoins  = [];   // flying coin particles: { sx, sy, t, speed }
 let hoardPulse = 0;    // frames of bounce animation when coin lands
-let hoardX     = 0;    // screen coords of gold hoard (set each frame in drawTopBar)
-let hoardY     = 0;
+// Gold hoard target = trelleborg center (GOAL cell, in screen space — never moves)
+const hoardX   = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+const hoardY   = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
 
 let bossWarnAlpha = 0; // 0-1 fade for boss warning banner
 let portalFlash   = 0; // frames of red portal flash on Golem spawn
@@ -308,7 +309,7 @@ function updateWave() {
     if (waveNumber >= MAX_WAVES) {
       victory  = true;
       gameOver = true;
-      highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('sv-SE') });
+      highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
     } else {
       // Wave-clear bonus
       const clearBonus = 10 + (waveLeak ? 0 : 5);
@@ -668,7 +669,7 @@ function update() {
       enemies.splice(i, 1);
       if (lives <= 0) {
         gameOver   = true;
-        highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('sv-SE') });
+        highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
       }
     }
   }
@@ -1200,43 +1201,15 @@ function drawTopBar() {
   rx -= ctx.measureText(`♥ ${lives}`).width + 20;
   ctx.shadowBlur  = 0;
 
-  // ── Gold hoard: coin stack + number ─────────────────────────────────────────
-  const goldStr  = `${gold}`;
-  const goldNumW = ctx.measureText(goldStr).width;
-  const stackX   = rx - goldNumW - 18;
-
-  hoardX = stackX;
-  hoardY = cy - 2;
-
-  const stackLevels = Math.min(Math.floor(Math.log2(gold + 2)), 7);
-  const pulse       = hoardPulse > 0 ? 1 + (hoardPulse / 10) * 0.30 : 1.0;
-  for (let i = 0; i < stackLevels; i++) {
-    const coinY = cy + 5 - i * 3.5;
-    const cr    = 6 * pulse;
-    ctx.beginPath();
-    ctx.ellipse(stackX, coinY, cr, cr * 0.36, 0, 0, Math.PI * 2);
-    ctx.fillStyle = i === stackLevels - 1 ? '#f0c840' : '#7a5418';
-    ctx.fill();
-    if (i === stackLevels - 1) {
-      ctx.strokeStyle = 'rgba(255,235,110,0.75)';
-      ctx.lineWidth   = 0.8;
-      ctx.stroke();
-    }
-  }
-  if (stackLevels === 0) {
-    ctx.beginPath();
-    ctx.arc(stackX, cy, 4.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(90,60,15,0.5)';
-    ctx.fill();
-  }
-
+  // ── Gold ────────────────────────────────────────────────────────────────────
+  const goldStr = `◆ ${gold}`;
   ctx.font        = 'bold 12px monospace';
   ctx.fillStyle   = hoardPulse > 0 ? '#fff8a0' : '#e8c040';
   ctx.shadowColor = 'rgba(220,180,30,0.5)';
-  ctx.shadowBlur  = hoardPulse > 0 ? 10 : 4;
+  ctx.shadowBlur  = hoardPulse > 0 ? 8 : 3;
   ctx.fillText(goldStr, rx, cy);
   ctx.shadowBlur  = 0;
-  rx -= goldNumW + 38;
+  rx -= ctx.measureText(goldStr).width + 20;
 
   ctx.fillStyle = '#b0d0f0';
   ctx.fillText(`★ ${slain}`, rx, cy);
@@ -1687,6 +1660,8 @@ function draw() {
 
   const time = performance.now() * 0.001;
   grid.healthRatio = Math.max(0, lives / STARTING_LIVES);
+  grid.gold        = gold;
+  grid.hoardPulse  = hoardPulse;
   grid.draw(ctx, time);
   drawPath();
   towers.forEach(t => t.draw(ctx));

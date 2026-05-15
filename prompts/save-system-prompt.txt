@@ -1,45 +1,45 @@
-D e s i g n   s a v e   d a t a   f o r   N o r t h e r n   S h i e l d   t o   b e   v e r s i o n - t o l e r a n t ,   d e b u g g a b l e ,   a n d   m i n i m a l .
+Design save data for Northern Shield to be version-tolerant, debuggable, and minimal.
 
- W H A T   A L R E A D Y   P E R S I S T S   ( i m p l e m e n t e d ) :
-     H i g h   s c o r e s :   l o c a l S t o r a g e ,   k e y   ' n o r t h e r n - s h i e l d - s c o r e s '
-     F o r m a t :   J S O N   a r r a y   o f   {   w a v e ,   s l a i n ,   g o l d E a r n e d ,   d a t e   }
-     T o p   1 0   e n t r i e s ,   s o r t e d   b y   w a v e   n u m b e r   d e s c e n d i n g
+ WHAT ALREADY PERSISTS (implemented):
+     High scores: localStorage, key 'northern-shield-scores'
+     Format: JSON array of { wave, slain, goldEarned, date }
+     Top 10 entries, sorted by wave number descending
 
- W H A T   T O   S A V E   ( w h e n   f u l l   s a v e - g a m e   i s   i m p l e m e n t e d ) :
-     E s s e n t i a l :   g o l d ,   l i v e s ,   w a v e N u m b e r ,   g r i d   s t a t e   ( w a l l s   +   t o w e r s ) ,   t o w e r   l e v e l s
-     D e r i v e   o n   l o a d :   c u r r e n t P a t h   ( r e - r u n   B F S ) ,   e n e m y   p o s i t i o n s   ( r e s t a r t   w a v e ) ,   b u l l e t s   ( d i s c a r d )
+ WHAT TO SAVE (when full save-game is implemented):
+     Essential: gold, lives, waveNumber, grid state (walls + towers), tower levels
+     Derive on load: currentPath (re-run BFS), enemy positions (restart wave), bullets (discard)
 
- A P P R O A C H :
-     -   J S O N   t o   l o c a l S t o r a g e ,   k e y :   ' n o r t h e r n - s h i e l d - s a v e '
-     -   V e r s i o n   f i e l d   f o r   f u t u r e   m i g r a t i o n
-     -   G r i d :   s p a r s e   a r r a y   —   o n l y   n o n - E M P T Y   c e l l s   ( 5 0 x 3 0   =   1 5 0 0   c e l l s   m a x ,   m o s t   a r e   e m p t y )
+ APPROACH:
+     - JSON to localStorage, key: 'northern-shield-save'
+     - Version field for future migration
+     - Grid: sparse array — only non-EMPTY cells (50x30 = 1500 cells max, most are empty)
 
- S C H E M A   D R A F T :
+ SCHEMA DRAFT:
      {
-         " v e r s i o n " :   1 ,
-         " g o l d " :   2 4 0 ,
-         " l i v e s " :   1 8 ,
-         " w a v e " :   5 ,
-         " c e l l s " :   [
-             {   " c o l " :   5 ,     " r o w " :   1 4 ,   " t y p e " :   1   } ,
-             {   " c o l " :   1 0 ,   " r o w " :   1 2 ,   " t y p e " :   4 ,   " t o w e r T y p e " :   " B E R S E R K " ,   " l e v e l " :   2   }
+         "version": 1,
+         "gold": 240,
+         "lives": 18,
+         "wave": 5,
+         "cells": [
+             { "col": 5,   "row": 14, "type": 1 },
+             { "col": 10, "row": 12, "type": 4, "towerType": "BERSERK", "level": 2 }
          ]
      }
 
-     t y p e   v a l u e s :   1 = W A L L ,   4 = T O W E R   ( m a t c h   C E L L   c o n s t a n t s   i n   g r i d . j s )
-     t o w e r T y p e   v a l u e s :   " W A L L " ,   " B E R S E R K " ,   " V A L K Y R I E " ,   " M I L I T A R Y " ,   " C A T A P U L T " ,   " B L O N D I E "
-     ( m a t c h   T O W E R _ T Y P E S   k e y s   i n   t o w e r . j s )
+     type values: 1=WALL, 4=TOWER (match CELL constants in grid.js)
+     towerType values: "WALL", "BERSERK", "VALKYRIE", "MILITARY", "CATAPULT", "BLONDIE"
+     (match TOWER_TYPES keys in tower.js)
 
- L O A D I N G :
-     1 .   P a r s e   J S O N ,   c h e c k   v e r s i o n   f i e l d
-     2 .   R e c o n s t r u c t   g r i d   b y   c a l l i n g   g r i d . s e t C e l l ( )   f o r   e a c h   s a v e d   c e l l
-     3 .   R e c o n s t r u c t   T o w e r   o b j e c t s   f o r   C E L L . T O W E R   c e l l s
-     4 .   R e - r u n   B F S   t o   g e t   c u r r e n t P a t h
-     5 .   S e t   g o l d ,   l i v e s ,   w a v e   f r o m   s a v e   d a t a
-     6 .   M i s s i n g   f i e l d s   s h o u l d   d e f a u l t   g r a c e f u l l y   ( n o   c r a s h   o n   o l d   s a v e   f o r m a t )
+ LOADING:
+     1. Parse JSON, check version field
+     2. Reconstruct grid by calling grid.setCell() for each saved cell
+     3. Reconstruct Tower objects for CELL.TOWER cells
+     4. Re-run BFS to get currentPath
+     5. Set gold, lives, wave from save data
+     6. Missing fields should default gracefully (no crash on old save format)
 
- R U L E S :
- -   V e r s i o n - t o l e r a n t :   m i s s i n g   f i e l d s   u s e   d e f a u l t s ,   n e v e r   t h r o w
- -   H u m a n - r e a d a b l e :   p l a i n   J S O N ,   n o   b i n a r y   e n c o d i n g
- -   M i n i m a l :   d o n ' t   s t o r e   w h a t   c a n   b e   d e r i v e d
- -   N e v e r   s t o r e   e n e m y   o r   b u l l e t   s t a t e   ( e p h e m e r a l ,   r e s t a r t   c l e a n l y )
+ RULES:
+ - Version-tolerant: missing fields use defaults, never throw
+ - Human-readable: plain JSON, no binary encoding
+ - Minimal: don't store what can be derived
+ - Never store enemy or bullet state (ephemeral, restart cleanly)

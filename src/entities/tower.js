@@ -26,7 +26,7 @@ export const TOWER_TYPES = {
 
 export const TOWER_DEFS = {
   [TOWER_TYPES.BERSERK]: {
-    label:        'Bärsärkare',
+    label:        'Berserker',
     key:          '2',
     color:        '#cc3300',
     rangeColor:   'rgba(200,60,20,0.15)',
@@ -38,7 +38,7 @@ export const TOWER_DEFS = {
     bulletSpeed:  40
   },
   [TOWER_TYPES.VALKYRIE]: {
-    label:        'Valkyria',
+    label:        'Valkyrie',
     key:          '3',
     color:        '#88aaee',
     rangeColor:   'rgba(100,140,220,0.12)',
@@ -51,7 +51,7 @@ export const TOWER_DEFS = {
     bulletShape:  'spear'
   },
   [TOWER_TYPES.MILITARY]: {
-    label:        'Bågskytt',
+    label:        'Archer',
     key:          '4',
     color:        '#6688aa',
     rangeColor:   'rgba(80,120,170,0.13)',
@@ -64,7 +64,7 @@ export const TOWER_DEFS = {
     bulletShape:  'arrow'
   },
   [TOWER_TYPES.CATAPULT]: {
-    label:        'Katapult',
+    label:        'Catapult',
     key:          '5',
     color:        '#8a6030',
     rangeColor:   'rgba(130,90,30,0.13)',

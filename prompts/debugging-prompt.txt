@@ -1,52 +1,52 @@
-D e b u g   N o r t h e r n   S h i e l d   s y s t e m a t i c a l l y   u s i n g   e v i d e n c e   f r o m   t h e   c o d e .
+Debug Northern Shield systematically using evidence from the code.
 
- C O M M O N   B U G   A R E A S   A N D   R O O T   C A U S E S :
+ COMMON BUG AREAS AND ROOT CAUSES:
 
- P a t h   b l o c k e d   o n   p l a c e m e n t :
-     g r i d . f i n d P a t h ( )   r e t u r n s   n u l l   w h e n   w a l l s   f u l l y   e n c l o s e   s p a w n   o r   g o a l .
-     g a m e . j s   c h e c k s   t h e   r e t u r n   v a l u e   a n d   r e v e r t s   t h e   c e l l   —   v e r i f y   t h i s   c h e c k   i s   i n   p l a c e .
+ Path blocked on placement:
+     grid.findPath() returns null when walls fully enclose spawn or goal.
+     game.js checks the return value and reverts the cell — verify this check is in place.
 
- E n e m y   t e l e p o r t s   o n   r e r o u t e :
-     E n e m y . s e t P a t h ( )   p r e p e n d s   c u r r e n t   p o s i t i o n :   [ {   x ,   y   } ,   . . . n e w P a t h ]
-     I f   t h i s   p r e f i x   i s   m i s s i n g ,   t h e   e n e m y   j u m p s   t o   t h e   p a t h   s t a r t .
+ Enemy teleports on reroute:
+     Enemy.setPath() prepends current position: [{ x, y }, ...newPath]
+     If this prefix is missing, the enemy jumps to the path start.
 
- B u l l e t   k e e p s   f l y i n g   a f t e r   t a r g e t   d i e s :
-     b u l l e t . u p d a t e ( )   c h e c k s   ! t h i s . t a r g e t . a l i v e   a n d   s e t s   t h i s . a l i v e   =   f a l s e .
-     I f   e n e m y . a l i v e   i s   n o t   s e t   t o   f a l s e   b e f o r e   b u l l e t   p r o c e s s e s ,   i t   c o n t i n u e s .
+ Bullet keeps flying after target dies:
+     bullet.update() checks !this.target.alive and sets this.alive = false.
+     If enemy.alive is not set to false before bullet processes, it continues.
 
- W i s p   n o t   f l y i n g   s t r a i g h t :
-     E N E M Y _ D E F S . d r o n e . f l y i n g   m u s t   b e   t r u e .
-     s p a w n E n e m y ( )   c h e c k s   E N E M Y _ D E F S [ t y p e ] . f l y i n g   f o r   p a t h   t y p e   s e l e c t i o n .
-     r e r o u t e A c t i v e E n e m i e s ( )   m u s t   s k i p   e n e m i e s   w h e r e   e n e m y . f l y i n g   = = =   t r u e .
+ Wisp not flying straight:
+     ENEMY_DEFS.drone.flying must be true.
+     spawnEnemy() checks ENEMY_DEFS[type].flying for path type selection.
+     rerouteActiveEnemies() must skip enemies where enemy.flying === true.
 
- B a n s h e e   E M P   n o t   d i s a b l i n g   t o w e r s :
-     E N E M Y _ D E F S . b a n s h e e . e m p R a d i u s   m u s t   b e   s e t .
-     g a m e . j s   u p d a t e   l o o p   m u s t   c h e c k   e n e m y . t y p e   = = =   E N E M Y _ T Y P E S . B A N S H E E .
-     T o w e r . e m p D i s a b l e d   f l a g   m u s t   p r e v e n t   t o w e r . u p d a t e ( )   f r o m   f i r i n g .
+ Banshee EMP not disabling towers:
+     ENEMY_DEFS.banshee.empRadius must be set.
+     game.js update loop must check enemy.type === ENEMY_TYPES.BANSHEE.
+     Tower.empDisabled flag must prevent tower.update() from firing.
 
- S p r i t e   n o t   a p p e a r i n g :
-     S P R I T E S [ k e y ]   l o a d s   a s y n c h r o n o u s l y   v i a   I m a g e . o n l o a d   —   m a y   n o t   b e   r e a d y   o n   f i r s t   f r a m e .
-     d r a w S p r i t e F r a m e ( )   r e t u r n s   f a l s e   i f   s p r i t e   n o t   l o a d e d   —   f a l l b a c k   s h o u l d   h a n d l e   t h i s .
-     C h e c k :   i s   t h e   s p r i t e   f i l e   a c t u a l l y   i n   a s s e t s / t o w e r s /   a n d   s e r v e d   b y   V i t e ?
+ Sprite not appearing:
+     SPRITES[key] loads asynchronously via Image.onload — may not be ready on first frame.
+     drawSpriteFrame() returns false if sprite not loaded — fallback should handle this.
+     Check: is the sprite file actually in assets/towers/ and served by Vite?
 
- S p r i t e   f l i p p i n g   w r o n g l y :
-     d r a w S p r i t e F r a m e ( )   u s e s   M a t h . c o s ( a i m A n g l e )   <   0   t o   d e t e c t   l e f t - f a c i n g .
-     a i m A n g l e   m u s t   b e   c a l c u l a t e d   c o r r e c t l y :   M a t h . a t a n 2 ( d y ,   d x )   f r o m   t o w e r   t o   t a r g e t .
+ Sprite flipping wrongly:
+     drawSpriteFrame() uses Math.cos(aimAngle) < 0 to detect left-facing.
+     aimAngle must be calculated correctly: Math.atan2(dy, dx) from tower to target.
 
- C a n v a s   s t a t e   b l e e d i n g   b e t w e e n   d r a w s :
-     s h a d o w B l u r   n o t   r e s e t   →   a l l   s u b s e q u e n t   d r a w s   h a v e   u n i n t e n d e d   g l o w .
-     s e t L i n e D a s h   n o t   r e s e t   →   s u b s e q u e n t   l i n e s   a r e   d a s h e d .
-     t e x t A l i g n   n o t   r e s t o r e d   →   t e x t   a l i g n m e n t   w r o n g   a f t e r   H U D   d r a w .
-     U s e   c t x . s a v e ( )   /   c t x . r e s t o r e ( )   o r   e x p l i c i t l y   r e s e t   a f t e r   e a c h   u s e .
+ Canvas state bleeding between draws:
+     shadowBlur not reset → all subsequent draws have unintended glow.
+     setLineDash not reset → subsequent lines are dashed.
+     textAlign not restored → text alignment wrong after HUD draw.
+     Use ctx.save() / ctx.restore() or explicitly reset after each use.
 
- H U D   l a y o u t   ( f o r   r e f e r e n c e ) :
-     C a n v a s   f i l l s   w i n d o w .   G r i d   s t a r t s   a t   ( G R I D _ L E F T ,   G R I D _ T O P )   =   ( 5 2 ,   4 8 ) .
-     S I D E B A R _ W = 5 2   ( l e f t ) ,   R I G H T _ P A N E L _ W = 1 8 8   ( r i g h t ) ,   G R I D _ T O P = 4 8   ( t o p ) .
-     G r i d   p i x e l   s i z e :   5 0 * 1 4   =   7 0 0 p x   w i d e ,   3 0 * 1 4   =   4 2 0 p x   t a l l .
+ HUD layout (for reference):
+     Canvas fills window. Grid starts at (GRID_LEFT, GRID_TOP) = (52, 48).
+     SIDEBAR_W=52 (left), RIGHT_PANEL_W=188 (right), GRID_TOP=48 (top).
+     Grid pixel size: 50*14 = 700px wide, 30*14 = 420px tall.
 
- D E B U G G I N G   P R O C E S S :
- 1 .   I d e n t i f y   t h e   s y m p t o m   p r e c i s e l y
- 2 .   T r a c e   w h i c h   f i l e / f u n c t i o n   o w n s   t h e   b r o k e n   b e h a v i o r
- 3 .   P r o p o s e   t h e   s m a l l e s t   s a f e   f i x
- 4 .   S t a t e   s i d e   e f f e c t s   o f   t h e   f i x
- 5 .   D o   n o t   r e w r i t e   u n r e l a t e d   s y s t e m s   t o   f i x   a   l o c a l i z e d   b u g
+ DEBUGGING PROCESS:
+ 1. Identify the symptom precisely
+ 2. Trace which file/function owns the broken behavior
+ 3. Propose the smallest safe fix
+ 4. State side effects of the fix
+ 5. Do not rewrite unrelated systems to fix a localized bug

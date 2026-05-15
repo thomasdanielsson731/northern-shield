@@ -1,42 +1,42 @@
-E N E M Y   R E A D A B I L I T Y   S Y S T E M   —   N o r t h e r n   S h i e l d
+ENEMY READABILITY SYSTEM — Northern Shield
 
- G O A L :
-     A t   a   g l a n c e ,   p l a y e r   k n o w s   w h i c h   e n e m i e s   a r e   t h r e a t e n i n g ,   w h i c h   a r e   h e a l t h y ,
-     a n d   w h e r e   t h e   p a t h   i s   c r o w d e d .   F o u r   e n e m y   t y p e s   m u s t   r e a d   d i f f e r e n t l y .
+ GOAL:
+     At a glance, player knows which enemies are threatening, which are healthy,
+     and where the path is crowded. Four enemy types must read differently.
 
- C U R R E N T   S T A T E :
-     E n e m y   t y p e s :   G r a v e b o r n   ( p u r p l e ) ,   W i s p   ( b l u e ) ,   G o l e m   ( a m b e r ) ,   B a n s h e e   ( c y a n )
-     E a c h   h a s   r a d i u s ,   c o l o r ,   h i g h l i g h t C o l o r   i n   E N E M Y _ D E F S .
-     N o   H P   b a r s   f o r   r e g u l a r   e n e m i e s .   N o   s t a t u s   i n d i c a t o r s .
+ CURRENT STATE:
+     Enemy types: Graveborn (purple), Wisp (blue), Golem (amber), Banshee (cyan)
+     Each has radius, color, highlightColor in ENEMY_DEFS.
+     No HP bars for regular enemies. No status indicators.
 
- P R O P O S E D   R E A D A B I L I T Y   I M P R O V E M E N T S :
+ PROPOSED READABILITY IMPROVEMENTS:
 
-     H P   B a r s   ( a l l   e n e m i e s ) :
-     -   T h i n   h o r i z o n t a l   b a r   ( 2 p x   t a l l )   a b o v e   e a c h   e n e m y
-     -   W i d t h :   e n e m y . r a d i u s   *   2 . 5   ( s c a l e d   t o   s i z e )
-     -   O n l y   s h o w   i f   e n e m y . h p   <   e n e m y . m a x H p   ( h i d d e n   a t   f u l l   h e a l t h )
-     -   C o l o r :   ' # 4 0 d 0 4 0 '   >   6 6 % ,   ' # e 8 c 0 4 0 '   >   3 3 % ,   ' # f 0 4 0 4 0 '   b e l o w
+     HP Bars (all enemies):
+     - Thin horizontal bar (2px tall) above each enemy
+     - Width: enemy.radius * 2.5 (scaled to size)
+     - Only show if enemy.hp < enemy.maxHp (hidden at full health)
+     - Color: '#40d040' > 66%, '#e8c040' > 33%, '#f04040' below
 
-     T y p e   b a d g e s :
-     -   G o l e m :   l a r g e r   r a d i u s   +   d o u b l e - r i n g   o u t l i n e   s h o w i n g   b o s s   s t a t u s
-     -   W i s p :   d a s h e d   c i r c l e   o u t l i n e   s h o w i n g   f l y i n g   s t a t u s
-     -   B a n s h e e :   E M P   l i g h t n i n g   z a p   i c o n   n e x t   t o   n a m e   ( c y a n   l i g h t n i n g   b o l t )
+     Type badges:
+     - Golem: larger radius + double-ring outline showing boss status
+     - Wisp: dashed circle outline showing flying status
+     - Banshee: EMP lightning zap icon next to name (cyan lightning bolt)
 
-     S t a t u s   i n d i c a t o r s :
-     -   S l o w e d :   b l u e   r i n g   p u l s e   a r o u n d   e n e m y   ( S k ö l d b o r g   e f f e c t )
-     -   S t u n n e d :   g o l d   s t a r s   o r b i t i n g   e n e m y   ( B l o n d i e   e f f e c t )
-     -   T r a c k   ' e n e m y . s l o w e d '   a n d   ' e n e m y . s t u n n e d '   b o o l e a n s   p e r   e n e m y
+     Status indicators:
+     - Slowed: blue ring pulse around enemy (Shield Wall effect)
+     - Stunned: gold stars orbiting enemy (Blondie effect)
+     - Track 'enemy.slowed' and 'enemy.stunned' booleans per enemy
 
-     P a t h   c r o w d i n g   i n d i c a t o r :
-     -   I f   > 5   e n e m i e s   a r e   w i t h i n   5   c e l l s   o f   e a c h   o t h e r :   d r a w   w a r n i n g   a r e a
-     -   L i g h t   r e d   o v e r l a y   o n   t h o s e   g r i d   c e l l s   ( s e m i - t r a n s p a r e n t )
+     Path crowding indicator:
+     - If >5 enemies are within 5 cells of each other: draw warning area
+     - Light red overlay on those grid cells (semi-transparent)
 
- I M P L E M E N T A T I O N   N O T E S :
-     -   H P   b a r s   d r a w n   i n   E n e m y . d r a w ( c t x ) ,   a f t e r   b o d y
-     -   A d d   ' m a x H p '   t o   E n e m y   c o n s t r u c t o r   ( s e t   =   d e f . h p )
-     -   ' s l o w e d '   a n d   ' s t u n n e d '   a l r e a d y   i m p l i c i t l y   p r e s e n t   —   e x p l i c i t i z e   a s   b o o l e a n s
+ IMPLEMENTATION NOTES:
+     - HP bars drawn in Enemy.draw(ctx), after body
+     - Add 'maxHp' to Enemy constructor (set = def.hp)
+     - 'slowed' and 'stunned' already implicitly present — explicitate as booleans
 
- R U L E S :
- -   H P   b a r s   a r e   h i d d e n   a t   f u l l   h e a l t h   —   s c r e e n   m u s t   n o t   f e e l   c l u t t e r e d
- -   N a m e   l a b e l s   a b o v e   e n e m i e s   a r e   N O T   a d d e d   —   t o o   m u c h   n o i s e
- -   S t a t u s   e f f e c t s   s h o u l d   l o o k   v i s u a l l y   d i s t i n c t   f r o m   e a c h   o t h e r
+ RULES:
+ - HP bars are hidden at full health — screen must not feel cluttered
+ - Name labels above enemies are NOT added — too much noise
+ - Status effects should look visually distinct from each other

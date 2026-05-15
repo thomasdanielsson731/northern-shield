@@ -1,46 +1,46 @@
-K e e p   N o r t h e r n   S h i e l d ' s   g a m e   l o o p   d e t e r m i n i s t i c   a n d   e a s y   t o   r e a s o n   a b o u t .
+Keep Northern Shield's game loop deterministic and easy to reason about.
 
- C U R R E N T   L O O P   ( s r c / c o r e / g a m e . j s ) :
-     f u n c t i o n   g a m e L o o p ( )   {
-         u p d a t e ( )       / /   a l l   l o g i c
-         d r a w ( )           / /   a l l   r e n d e r i n g
-         r e q u e s t A n i m a t i o n F r a m e ( g a m e L o o p )
+ CURRENT LOOP (src/core/game.js):
+     function gameLoop() {
+         update()       // all logic
+         draw()           // all rendering
+         requestAnimationFrame(gameLoop)
      }
 
- U P D A T E   O R D E R   ( o r d e r   m a t t e r s   —   d o   n o t   c h a n g e   w i t h o u t   r e a s o n ) :
-     1 .   W a v e   s t a t e   m a c h i n e   ( c o u n t d o w n   /   a c t i v e   /   b r e a k )   +   s p a w n   q u e u e   t i c k
-     2 .   t o w e r s . f o r E a c h   →   t o w e r . u p d a t e ( e n e m i e s ,   b u l l e t s )
-               p u s h e s   n e w   B u l l e t   i n t o   b u l l e t s [ ] ,   r e t u r n s   0   ( k i l l s   h a n d l e d   b y   b u l l e t )
-     3 .   b u l l e t s   r e v e r s e   i t e r a t e   →   b u l l e t . u p d a t e ( )
-               m o v e s   b u l l e t ,   o n   h i t :   s e t s   e n e m y . a l i v e = f a l s e ,   r e t u r n s   e n e m y . r e w a r d   ( > 0   =   k i l l )
-     4 .   e n e m i e s   r e v e r s e   i t e r a t e   →   e n e m y . u p d a t e ( )
-               m o v e s   e n e m y ,   c h e c k s   r e a c h e d / a l i v e ,   B a n s h e e   E M P   r a d i u s   c h e c k
-     5 .   p a r t i c l e s   r e v e r s e   i t e r a t e   →   m o v e ,   d e c a y   l i f e ,   s p l i c e   w h e n   d e a d
-     6 .   S c r e e n   s h a k e :   s h a k e X ,   s h a k e Y   d e c a y   t o w a r d   0   e a c h   f r a m e
+ UPDATE ORDER (order matters — do not change without reason):
+     1. Wave state machine (countdown / active / break) + spawn queue tick
+     2. towers.forEach → tower.update(enemies, bullets)
+               pushes new Bullet into bullets[], returns 0 (kills handled by bullet)
+     3. bullets reverse iterate → bullet.update()
+               moves bullet, on hit: sets enemy.alive=false, returns enemy.reward (>0 = kill)
+     4. enemies reverse iterate → enemy.update()
+               moves enemy, checks reached/alive, Banshee EMP radius check
+     5. particles reverse iterate → move, decay life, splice when dead
+     6. Screen shake: shakeX, shakeY decay toward 0 each frame
 
- W A V E   S T A T E   M A C H I N E :
-     ' c o u n t d o w n ' :   C O U N T D O W N _ F R A M E S = 1 5 0   f r a m e s   ( ~ 2 . 5 s )   —   s h o w s   c o u n t d o w n   t i m e r
-     ' a c t i v e ' :     s p a w n   q u e u e   t i c k s   d o w n ,   e n e m i e s   s p a w n   f r o m   q u e u e
-                         w a v e   e n d s   w h e n   s p a w n   q u e u e   e m p t y   A N D   e n e m i e s [ ]   i s   e m p t y
-     ' b r e a k ' :       B R E A K _ F R A M E S = 2 5 0   f r a m e s   ( ~ 4 s )   —   r e s t   p h a s e   b e t w e e n   w a v e s
+ WAVE STATE MACHINE:
+     'countdown': COUNTDOWN_FRAMES=150 frames (~2.5s) — shows countdown timer
+     'active':     spawn queue ticks down, enemies spawn from queue
+                         wave ends when spawn queue empty AND enemies[] is empty
+     'break':       BREAK_FRAMES=250 frames (~4s) — rest phase between waves
 
- D R A W   O R D E R :
-     d r a w B a c k g r o u n d ( )   →   g r i d . d r a w ( )   →   d r a w P a t h ( )   →   t o w e r s   →   b u l l e t s   →   e n e m i e s
-     →   p a r t i c l e s   →   d r a w T o p B a r ( )   →   d r a w L e f t S i d e b a r ( )   →   d r a w R i g h t P a n e l ( )   →   d r a w B o t t o m B u i l d B a r ( )
-     E n e m i e s   d r a w n   a f t e r   t o w e r s   s o   t h e y   a p p e a r   o n   t o p .
-     H U D   e l e m e n t s   a l w a y s   d r a w n   l a s t   ( o n   t o p   o f   e v e r y t h i n g ) .
-     G r i d   t r a n s l a t e d   b y   ( G R I D _ L E F T + s h a k e X ,   G R I D _ T O P + s h a k e Y )   i n   d r a w ( ) .
+ DRAW ORDER:
+     drawBackground() → grid.draw() → drawPath() → towers → bullets → enemies
+     → particles → drawTopBar() → drawLeftSidebar() → drawRightPanel() → drawBottomBuildBar()
+     Enemies drawn after towers so they appear on top.
+     HUD elements always drawn last (on top of everything).
+     Grid translated by (GRID_LEFT+shakeX, GRID_TOP+shakeY) in draw().
 
- W H Y   R E V E R S E   I T E R A T I O N :
-     B u l l e t s ,   e n e m i e s ,   a n d   p a r t i c l e s   a r e   s p l i c e d   d u r i n g   i t e r a t i o n .
-     R e v e r s e   i t e r a t i o n   e n s u r e s   s p l i c e ( i ,   1 )   d o e s n ' t   s k i p   t h e   n e x t   e l e m e n t .
-     N e v e r   i t e r a t e   f o r w a r d   a n d   s p l i c e   i n   t h e   s a m e   l o o p .
+ WHY REVERSE ITERATION:
+     Bullets, enemies, and particles are spliced during iteration.
+     Reverse iteration ensures splice(i, 1) doesn't skip the next element.
+     Never iterate forward and splice in the same loop.
 
- S I D E   E F F E C T S   T O   T R A C K :
-     -   t o w e r . u p d a t e ( )   m u t a t e s   b u l l e t s [ ]   ( p u s h )
-     -   b u l l e t . u p d a t e ( )   m u t a t e s   e n e m y . a l i v e ,   e n e m y . h p   ( d i r e c t   r e f e r e n c e )
-     -   B a n s h e e   E M P   m u t a t e s   t o w e r . e m p D i s a b l e d   f l a g   o n   n e a r b y   t o w e r s
-     -   g a m e . j s   r e v e r s e   l o o p s   s p l i c e   e n e m i e s [ ]   a n d   b u l l e t s [ ]
-     -   W a l l   p l a c e m e n t   c a l l s   g r i d . f i n d P a t h ( )   s y n c h r o n o u s l y   —   s a f e   a t   5 0 x 3 0   g r i d   s i z e
+ SIDE EFFECTS TO TRACK:
+     - tower.update() mutates bullets[] (push)
+     - bullet.update() mutates enemy.alive, enemy.hp (direct reference)
+     - Banshee EMP mutates tower.empDisabled flag on nearby towers
+     - game.js reverse loops splice enemies[] and bullets[]
+     - Wall placement calls grid.findPath() synchronously — safe at 50x30 grid size
 
- A v o i d   h i d d e n   s i d e   e f f e c t s   d u r i n g   i t e r a t i o n .
+ Avoid hidden side effects during iteration.

@@ -1,42 +1,42 @@
-R e v i e w   N o r t h e r n   S h i e l d   c o d e   l i k e   a   s e n i o r   e n g i n e e r   w h o   k n o w s   t h i s   s p e c i f i c   p r o j e c t .
+Review Northern Shield code like a senior engineer who knows this specific project.
 
- P R O J E C T   C O N T E X T   F O R   R E V I E W :
- -   S o l o   i n d i e   g a m e ,   J a v a S c r i p t   +   C a n v a s ,   E S   M o d u l e s ,   n o   f r a m e w o r k
- -   N o r s e   d a r k   f a n t a s y   t h e m e   —   v i s u a l   c o n s i s t e n c y   m a t t e r s
- -   s r c /   i s   t h e   l i v e   c o d e b a s e .   e n g i n e /   i s   d e a d   s k e l e t o n   c o d e   —   i g n o r e   i t .
- -   g a m e . j s   i s   t h e   i n t e g r a t i o n   l a y e r   —   l a r g e   b y   d e s i g n   ( ~ 1 4 0 0 +   l i n e s ) ,   a c c e p t a b l e
- -   E N E M Y _ D E F S   /   T O W E R _ D E F S   a r e   t h e   s o u r c e   o f   t r u t h   f o r   a l l   e n t i t y   s t a t s
- -   g o l d   ( n o t   c r e d i t s ) ,   s l a i n   ( n o t   k i l l s ) ,   G r a v e b o r n / W i s p / G o l e m / B a n s h e e   i n   U I   l a b e l s
+ PROJECT CONTEXT FOR REVIEW:
+ - Solo indie game, JavaScript + Canvas, ES Modules, no framework
+ - Norse dark fantasy theme — visual consistency matters
+ - src/ is the live codebase. engine/ is dead skeleton code — ignore it.
+ - game.js is the integration layer — large by design (~1400+ lines), acceptable
+ - ENEMY_DEFS / TOWER_DEFS are the source of truth for all entity stats
+ - gold (not credits), slain (not kills), Graveborn/Wisp/Golem/Banshee in UI labels
 
- R E V I E W   C H E C K L I S T :
+ REVIEW CHECKLIST:
 
- G a m e   l o g i c   c o r r e c t n e s s :
- -   R e v e r s e   i t e r a t i o n   w h e n   s p l i c i n g   e n e m i e s [ ] ,   b u l l e t s [ ] ,   o r   p a r t i c l e s [ ] ?
- -   N u l l   c h e c k   o n   g r i d . f i n d P a t h ( )   b e f o r e   u s i n g   t h e   r e s u l t ?
- -   g r i d . s e t C e l l ( )   r e v e r t e d   i f   f i n d P a t h ( )   r e t u r n s   n u l l ?
- -   e n e m y . f l y i n g   c h e c k   i n   r e r o u t e A c t i v e E n e m i e s ( ) ?
- -   g o l d   > =   c o s t   c h e c k   b e f o r e   d e d u c t i n g ?
- -   e n e m y . h p   a n d   l i v e s   f l o o r e d   a t   0   b e f o r e   s e t t i n g   a l i v e / g a m e O v e r ?
- -   W a v e   t r a n s i t i o n :   s p a w n Q u e u e   e m p t y   A N D   e n e m i e s [ ]   e m p t y   b e f o r e   ' b r e a k ' ?
+ Game logic correctness:
+ - Reverse iteration when splicing enemies[], bullets[], or particles[]?
+ - Null check on grid.findPath() before using the result?
+ - grid.setCell() reverted if findPath() returns null?
+ - enemy.flying check in rerouteActiveEnemies()?
+ - gold >= cost check before deducting?
+ - enemy.hp and lives floored at 0 before setting alive/gameOver?
+ - Wave transition: spawnQueue empty AND enemies[] empty before 'break'?
 
- C a n v a s   s t a t e   l e a k s :
- -   c t x . s h a d o w B l u r   r e s e t   t o   0   a f t e r   e a c h   g l o w ?
- -   c t x . s e t L i n e D a s h ( [ ] )   a f t e r   e a c h   d a s h e d   l i n e ?
- -   c t x . s a v e / r e s t o r e   a r o u n d   t e x t A l i g n ,   l e t t e r S p a c i n g ,   t r a n s l a t e ,   r o t a t e ?
- -   c t x . l i n e C a p   r e s e t   a f t e r   ' r o u n d ' ?
+ Canvas state leaks:
+ - ctx.shadowBlur reset to 0 after each glow?
+ - ctx.setLineDash([]) after each dashed line?
+ - ctx.save/restore around textAlign, letterSpacing, translate, rotate?
+ - ctx.lineCap reset after 'round'?
 
- S p r i t e   s a f e t y :
- -   S P R I T E S [ k e y ]   e x i s t e n c e   c h e c k   b e f o r e   d r a w S p r i t e F r a m e ( ) ?
- -   F a l l b a c k   c a n v a s   d r a w   w h e n   s p r i t e   n o t   l o a d e d   y e t ?
+ Sprite safety:
+ - SPRITES[key] existence check before drawSpriteFrame()?
+ - Fallback canvas draw when sprite not loaded yet?
 
- N a m i n g   c o n s i s t e n c y :
- -   ' g o l d '   n o t   ' c r e d i t s ' ,   ' s l a i n '   n o t   ' k i l l s '   i n   v a r i a b l e   n a m e s   a n d   d i s p l a y ?
- -   E N E M Y _ T Y P E S   k e y s   m a t c h   E N E M Y _ D E F S   k e y s   ( i n f a n t r y / d r o n e / t a n k / b a n s h e e ) ?
- -   T O W E R _ T Y P E S   k e y s   m a t c h   T O W E R _ D E F S   k e y s   ( W A L L / B E R S E R K / V A L K Y R I E / M I L I T A R Y / C A T A P U L T / B L O N D I E ) ?
+ Naming consistency:
+ - 'gold' not 'credits', 'slain' not 'kills' in variable names and display?
+ - ENEMY_TYPES keys match ENEMY_DEFS keys (infantry/drone/tank/banshee)?
+ - TOWER_TYPES keys match TOWER_DEFS keys (WALL/BERSERK/VALKYRIE/MILITARY/CATAPULT/BLONDIE)?
 
- P e r f o r m a n c e :
- -   N o   n e w   o b j e c t   a l l o c a t i o n s   i n s i d e   u p d a t e ( )   h o t   p a t h ?
- -   N o   a r r a y . m a p / f i l t e r   i n s i d e   u p d a t e ( )   o r   d r a w ( ) ?
+ Performance:
+ - No new object allocations inside update() hot path?
+ - No array.map/filter inside update() or draw()?
 
- S u g g e s t   i m p r o v e m e n t s   w i t h   e x p l a n a t i o n s .
- D o   n o t   s u g g e s t   a d d i n g   a b s t r a c t i o n   l a y e r s   u n l e s s   t h e y   s o l v e   a   c o n c r e t e   p r o b l e m .
+ Suggest improvements with explanations.
+ Do not suggest adding abstraction layers unless they solve a concrete problem.

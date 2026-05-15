@@ -1,31 +1,31 @@
-O p t i m i z e   N o r t h e r n   S h i e l d   f o r   s o l o   d e v e l o p e r   s u s t a i n a b i l i t y .
+Optimize Northern Shield for solo developer sustainability.
 
- C O N T E X T :
- -   S o l o   p r o j e c t ,   f a s t   i t e r a t i o n ,   n o   t e a m ,   n o   C I
- -   s r c /   i s   t h e   l i v e   c o d e b a s e   —   t h i s   i s   w h a t   r u n s
- -   e n g i n e /   c o n t a i n s   o l d   s k e l e t o n   f i l e s   —   d e a d   c o d e ,   i g n o r e   i t
- -   p r o m p t s /   c o n t a i n s   A I   g u i d a n c e   p r o m p t s   —   u p d a t e   t h e m   w h e n   t h e   p r o j e c t   c h a n g e s   s i g n i f i c a n t l y
- -   N o r s e   d a r k   f a n t a s y   v i s u a l   t h e m e   i s   e s t a b l i s h e d   —   m a i n t a i n   i t   c o n s i s t e n t l y
+ CONTEXT:
+ - Solo project, fast iteration, no team, no CI
+ - src/ is the live codebase — this is what runs
+ - engine/ contains old skeleton files — dead code, ignore it
+ - prompts/ contains AI guidance prompts — update them when the project changes significantly
+ - Norse dark fantasy visual theme is established — maintain it consistently
 
- T H E   C O D E B A S E   S H O U L D :
- -   B e   u n d e r s t a n d a b l e   a f t e r   a   2 - w e e k   b r e a k   w i t h o u t   r e - r e a d i n g   a l l   f i l e s
- -   M i n i m i z e   m e n t a l   o v e r h e a d   —   o n e   c l e a r   p l a c e   f o r   e a c h   t y p e   o f   l o g i c
- -   A v o i d   m a g i c a l   b e h a v i o r   ( n o   h i d d e n   s i d e   e f f e c t s ,   n o   f r a m e w o r k   m a g i c )
- -   S u p p o r t   f a s t   d e b u g g i n g   ( c o n s o l e . l o g   +   b r o w s e r   D e v T o o l s   i s   e n o u g h )
- -   S u p p o r t   s a f e   e x p e r i m e n t a t i o n   ( c h a n g i n g   E N E M Y _ D E F S   v a l u e s   s h o u l d   b e   r i s k - f r e e )
+ THE CODEBASE SHOULD:
+ - Be understandable after a 2-week break without re-reading all files
+ - Minimize mental overhead — one clear place for each type of logic
+ - Avoid magical behavior (no hidden side effects, no framework magic)
+ - Support fast debugging (console.log + browser DevTools is enough)
+ - Support safe experimentation (changing ENEMY_DEFS values should be risk-free)
 
- P R A C T I C A L   R U L E S :
- -   g a m e . j s   i s   t h e   s i n g l e   i n t e g r a t i o n   p o i n t   —   k e e p   a l l   g a m e   s t a t e   h e r e
- -   A l l   t u n a b l e   n u m b e r s   l i v e   i n   E N E M Y _ D E F S   /   T O W E R _ D E F S   —   n e v e r   h a r d c o d e   s t a t s   i n l i n e
- -   I f   a   f u n c t i o n   g r o w s   b e y o n d   ~ 4 0   l i n e s ,   c o n s i d e r   s p l i t t i n g   i t   ( b u t   o n l y   i f   i t   i m p r o v e s   c l a r i t y )
- -   N a m e   t h i n g s   f r o m   t h e   p l a y e r ' s   p e r s p e c t i v e :   g o l d   n o t   c r e d i t s ,   s l a i n   n o t   k i l l s
- -   U I   n a m e s   v s   i n t e r n a l   k e y s :   G r a v e b o r n / W i s p / G o l e m / B a n s h e e   i n   l a b e l s ,
-     i n f a n t r y / d r o n e / t a n k / b a n s h e e   i n   c o d e   k e y s
- -   V i s u a l   t h e m e :   N o r s e   d a r k   f a n t a s y   —   d e e p   p u r p l e s ,   w a r m   g o l d s ,   d r a m a t i c   g l o w s
-     D o n ' t   d r i f t   f r o m   t h i s   w i t h o u t   i n t e n t
+ PRACTICAL RULES:
+ - game.js is the single integration point — keep all game state here
+ - All tunable numbers live in ENEMY_DEFS / TOWER_DEFS — never hardcode stats inline
+ - If a function grows beyond ~40 lines, consider splitting it (but only if it improves clarity)
+ - Name things from the player's perspective: gold not credits, slain not kills
+ - UI names vs internal keys: Graveborn/Wisp/Golem/Banshee in labels,
+     infantry/drone/tank/banshee in code keys
+ - Visual theme: Norse dark fantasy — deep purples, warm golds, dramatic glows
+     Don't drift from this without intent
 
- S I G N S   O F   D R I F T   T O   W A T C H   F O R :
- -   A   f u n c t i o n   t h a t   d o e s   t w o   u n r e l a t e d   t h i n g s
- -   A   v a r i a b l e   t h a t   m e a n s   d i f f e r e n t   t h i n g s   i n   d i f f e r e n t   c o n t e x t s
- -   A   " t e m p o r a r y "   w o r k a r o u n d   t h a t ' s   s t i l l   t h e r e   3   s e s s i o n s   l a t e r
- -   C o p y - p a s t e d   d r a w   l o g i c   t h a t   s h o u l d   b e   s h a r e d   ( e . g .   d r a w S p r i t e F r a m e   w a s   a d d e d   f o r   t h i s )
+ SIGNS OF DRIFT TO WATCH FOR:
+ - A function that does two unrelated things
+ - A variable that means different things in different contexts
+ - A "temporary" workaround that's still there 3 sessions later
+ - Copy-pasted draw logic that should be shared (e.g. drawSpriteFrame was added for this)

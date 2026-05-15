@@ -1,39 +1,39 @@
-K e e p   N o r t h e r n   S h i e l d ' s   a r c h i t e c t u r e   l i g h t w e i g h t   a n d   m a i n t a i n a b l e .
+Keep Northern Shield's architecture lightweight and maintainable.
 
- F I L E   R E S P O N S I B I L I T I E S :
- -   s r c / m a i n . j s                     e n t r y   p o i n t   o n l y ,   o n e   i m p o r t
- -   s r c / c o r e / r e n d e r e r . j s     c a n v a s   s e t u p   +   D P R   s c a l i n g ,   e x p o r t s   {   c a n v a s ,   c t x   }
- -   s r c / c o r e / g a m e . j s             g a m e   s t a t e   ( g o l d ,   l i v e s ,   s l a i n ,   e n e m i e s ,   t o w e r s ,   b u l l e t s ,   p a r t i c l e s ) ,
-                                               g a m e   l o o p ,   i n p u t   h a n d l i n g ,   H U D   r e n d e r i n g ,   s p a w n i n g   l o g i c ,   w a v e   s t a t e .
-                                               T h i s   i s   t h e   i n t e g r a t i o n   l a y e r   —   i n t e n t i o n a l l y   l a r g e   ( ~ 1 4 0 0 +   l i n e s ) .
- -   s r c / g r i d / g r i d . j s             G r i d   c l a s s ,   C E L L   e n u m ,   B F S   p a t h f i n d i n g ,   d r a w ( )
- -   s r c / e n t i t i e s / e n e m y . j s   E n e m y   c l a s s   +   E N E M Y _ T Y P E S   +   E N E M Y _ D E F S   ( a l l   c o n f i g   h e r e )
- -   s r c / e n t i t i e s / t o w e r . j s   T o w e r   c l a s s   +   T O W E R _ T Y P E S   +   T O W E R _ D E F S   +   d r a w S p r i t e F r a m e ( )   h e l p e r
- -   s r c / e n t i t i e s / b u l l e t . j s B u l l e t   c l a s s   ( h o m i n g ,   t r a i l ,   r e t u r n s   r e w a r d   o n   k i l l )
- -   s r c / a s s e t s . j s                   S P R I T E S   r e g i s t r y :   k e y   →   {   i m g ,   f r a m e W ,   f r a m e H ,   c o l s ,   r o w s ,   t o t a l   }
+ FILE RESPONSIBILITIES:
+ - src/main.js                     entry point only, one import
+ - src/core/renderer.js     canvas setup + DPR scaling, exports { canvas, ctx }
+ - src/core/game.js             game state (gold, lives, slain, enemies, towers, bullets, particles),
+                                               game loop, input handling, HUD rendering, spawning logic, wave state.
+                                               This is the integration layer — intentionally large (~1400+ lines).
+ - src/grid/grid.js             Grid class, CELL enum, BFS pathfinding, draw()
+ - src/entities/enemy.js   Enemy class + ENEMY_TYPES + ENEMY_DEFS (all config here)
+ - src/entities/tower.js   Tower class + TOWER_TYPES + TOWER_DEFS + drawSpriteFrame() helper
+ - src/entities/bullet.js Bullet class (homing, trail, returns reward on kill)
+ - src/assets.js                   SPRITES registry: key → { img, frameW, frameH, cols, rows, total }
 
- K N O W N   C O U P L I N G S :
- -   g a m e . j s   i m p o r t s   e v e r y t h i n g   —   i t   i s   t h e   i n t e n t i o n a l   i n t e g r a t i o n   l a y e r
- -   B u l l e t   h o l d s   a   d i r e c t   r e f e r e n c e   t o   i t s   t a r g e t   e n e m y   ( a l i v e   f l a g   g u a r d s   t h i s )
- -   T o w e r . u p d a t e ( )   p u s h e s   t o   t h e   b u l l e t s [ ]   a r r a y   p a s s e d   i n   f r o m   g a m e . j s
- -   E n e m y . r e w a r d   i s   r e a d   b y   b u l l e t . j s   o n   k i l l   a n d   r e t u r n e d   a s   u p d a t e ( )   r e t u r n   v a l u e
- -   B U I L D _ I T E M S   i n   g a m e . j s   d e r i v e s   f r o m   T O W E R _ D E F S   a u t o m a t i c a l l y   ( O b j e c t . v a l u e s )
- -   d r a w S p r i t e F r a m e ( )   i n   t o w e r . j s   r e a d s   f r o m   S P R I T E S   ( s r c / a s s e t s . j s )   —   g u a r d e d   b y   e x i s t e n c e   c h e c k
+ KNOWN COUPLINGS:
+ - game.js imports everything — it is the intentional integration layer
+ - Bullet holds a direct reference to its target enemy (alive flag guards this)
+ - Tower.update() pushes to the bullets[] array passed in from game.js
+ - Enemy.reward is read by bullet.js on kill and returned as update() return value
+ - BUILD_ITEMS in game.js derives from TOWER_DEFS automatically (Object.values)
+ - drawSpriteFrame() in tower.js reads from SPRITES (src/assets.js) — guarded by existence check
 
- D O   N O T   I N T R O D U C E :
- -   E C S   ( E n t i t y   C o m p o n e n t   S y s t e m )
- -   D e p e n d e n c y   i n j e c t i o n
- -   A b s t r a c t   f a c t o r i e s
- -   S e r v i c e   l o c a t o r s
- -   E v e n t   b u s e s
- -   O b s e r v e r / p u b - s u b   p a t t e r n s
- -   A n y   e n t e r p r i s e   p a t t e r n
+ DO NOT INTRODUCE:
+ - ECS (Entity Component System)
+ - Dependency injection
+ - Abstract factories
+ - Service locators
+ - Event buses
+ - Observer/pub-sub patterns
+ - Any enterprise pattern
 
- W H E N   T O   C R E A T E   A   N E W   F I L E :
- -   O n l y   w h e n   a n   e x i s t i n g   f i l e   g e n u i n e l y   e x c e e d s   ~ 2 5 0   l i n e s   o f   l o g i c
- -   N o t   f o r   t h e o r e t i c a l   s e p a r a t i o n   o f   c o n c e r n s
- -   N o t   f o r   " f u t u r e   f l e x i b i l i t y "
- -   g a m e . j s   i s   a n   e x c e p t i o n :   i t   i s   i n t e n t i o n a l l y   l a r g e   a s   t h e   i n t e g r a t i o n   l a y e r
+ WHEN TO CREATE A NEW FILE:
+ - Only when an existing file genuinely exceeds ~250 lines of logic
+ - Not for theoretical separation of concerns
+ - Not for "future flexibility"
+ - game.js is an exception: it is intentionally large as the integration layer
 
- T h i s   i s   a   s o l o   i n d i e   g a m e .   O p t i m i z e   f o r   i t e r a t i o n   s p e e d   a n d   t h e   a b i l i t y   t o
- u n d e r s t a n d   t h e   c o d e   a f t e r   a   2 - w e e k   b r e a k .
+ This is a solo indie game. Optimize for iteration speed and the ability to
+ understand the code after a 2-week break.

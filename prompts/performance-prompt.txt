@@ -1,35 +1,35 @@
-O p t i m i z e   N o r t h e r n   S h i e l d   f o r   a   s t a b l e   6 0 f p s   f r a m e   r a t e .
+Optimize Northern Shield for a stable 60fps frame rate.
 
- C U R R E N T   R E N D E R I N G   L O A D   P E R   F R A M E :
- -   d r a w B a c k g r o u n d ( ) :   1   l i n e a r   g r a d i e n t   +   2   r a d i a l   g r a d i e n t s   ( r e c r e a t e d   e a c h   f r a m e   —   a c c e p t a b l e )
- -   g r i d . d r a w ( ) :   u p   t o   1 5 0 0   c e l l s ,   E M P T Y   c e l l s   s k i p p e d   ( f a s t )
- -   d r a w P a t h ( ) :   o n e   p o l y l i n e   o v e r   B F S   p a t h   l e n g t h   ( ~ 5 0 - 1 5 0   n o d e s   t y p i c a l l y )
- -   E n e m i e s :   t y p i c a l l y   5 - 2 0   a c t i v e ,   e a c h :   1 - 3   a r c ( )   c a l l s   +   H P   b a r
- -   T o w e r s :   t y p i c a l l y   5 - 2 0 ,   e a c h :   r a n g e   r i n g   +   s p r i t e   d r a w I m a g e ( )   o r   c a n v a s   s h a p e s
- -   B u l l e t s :   t y p i c a l l y   5 - 3 0 ,   e a c h :   t r a i l   p o l y l i n e   +   g l o w   c i r c l e
- -   P a r t i c l e s :   u p   t o   ~ 2 0   a t   p e a k ,   e a c h :   s m a l l   f i l l R e c t ( )   o r   a r c ( )
- -   H U D :   d r a w T o p B a r ,   d r a w L e f t S i d e b a r   ( 5   t a b s ) ,   d r a w R i g h t P a n e l ,   d r a w B o t t o m B u i l d B a r
+ CURRENT RENDERING LOAD PER FRAME:
+ - drawBackground(): 1 linear gradient + 2 radial gradients (recreated each frame — acceptable)
+ - grid.draw(): up to 1500 cells, EMPTY cells skipped (fast)
+ - drawPath(): one polyline over BFS path length (~50-150 nodes typically)
+ - Enemies: typically 5-20 active, each: 1-3 arc() calls + HP bar
+ - Towers: typically 5-20, each: range ring + sprite drawImage() or canvas shapes
+ - Bullets: typically 5-30, each: trail polyline + glow circle
+ - Particles: up to ~20 at peak, each: small fillRect() or arc()
+ - HUD: drawTopBar, drawLeftSidebar (5 tabs), drawRightPanel, drawBottomBuildBar
 
- S P R I T E   R E N D E R I N G :
- -   d r a w I m a g e ( )   i s   f a s t   —   n o   p e r f o r m a n c e   c o n c e r n s   a t   c u r r e n t   t o w e r   c o u n t s
- -   S P R I T E S [ k e y ]   c h e c k   b e f o r e   d r a w   i s   f r e e   ( s i m p l e   p r o p e r t y   l o o k u p )
- -   d r a w S p r i t e F r a m e ( )   u s e s   c t x . s a v e / r e s t o r e   +   t r a n s l a t e / s c a l e   —   a c c e p t a b l e   p e r   t o w e r
+ SPRITE RENDERING:
+ - drawImage() is fast — no performance concerns at current tower counts
+ - SPRITES[key] check before draw is free (simple property lookup)
+ - drawSpriteFrame() uses ctx.save/restore + translate/scale — acceptable per tower
 
- K N O W N   E X P E N S I V E   O P E R A T I O N S :
- -   c t x . s h a d o w B l u r   —   n o n - z e r o   s h a d o w B l u r   a f f e c t s   A L L   s u b s e q u e n t   d r a w   c a l l s .
-     A l w a y s   r e s e t   t o   0   i m m e d i a t e l y   a f t e r   e a c h   g l o w   e f f e c t .
- -   c r e a t e R a d i a l G r a d i e n t   i n   d r a w B a c k g r o u n d ( )   —   r e c r e a t e d   e v e r y   f r a m e .
-     A c c e p t a b l e   a t   c u r r e n t   s c a l e .   D o   n o t   c a c h e   u n l e s s   F P S   d r o p s   b e l o w   4 5 .
- -   B F S   f i n d P a t h ( )   —   c a l l e d   o n l y   o n   w a l l   p l a c e m e n t / r e m o v a l ,   n e v e r   p e r - f r a m e .   C o r r e c t .
- -   c t x . s e t L i n e D a s h ( )   —   m u s t   b e   r e s e t   w i t h   s e t L i n e D a s h ( [ ] )   a f t e r   e a c h   u s e .
+ KNOWN EXPENSIVE OPERATIONS:
+ - ctx.shadowBlur — non-zero shadowBlur affects ALL subsequent draw calls.
+     Always reset to 0 immediately after each glow effect.
+ - createRadialGradient in drawBackground() — recreated every frame.
+     Acceptable at current scale. Do not cache unless FPS drops below 45.
+ - BFS findPath() — called only on wall placement/removal, never per-frame. Correct.
+ - ctx.setLineDash() — must be reset with setLineDash([]) after each use.
 
- H O T   P A T H   R U L E S :
- -   A v o i d   a r r a y . m a p / f i l t e r / r e d u c e   i n s i d e   u p d a t e ( )   —   u s e   p l a i n   f o r   l o o p s
- -   A v o i d   o b j e c t   a l l o c a t i o n   i n s i d e   t h e   g a m e   l o o p   ( n o   ` n e w `   i n   u p d a t e / d r a w   h o t   p a t h s )
- -   D o   n o t   s o r t   e n e m i e s   a r r a y   e v e r y   f r a m e   —   t o w e r . u p d a t e ( )   u s e s   a   s i n g l e   l i n e a r   s c a n
- -   E n e m y . u p d a t e ( )   a n d   B u l l e t . u p d a t e ( )   a r e   c a l l e d   6 0 x / s e c o n d   —   k e e p   t h e m   m i n i m a l
+ HOT PATH RULES:
+ - Avoid array.map/filter/reduce inside update() — use plain for loops
+ - Avoid object allocation inside the game loop (no `new` in update/draw hot paths)
+ - Do not sort enemies array every frame — tower.update() uses a single linear scan
+ - Enemy.update() and Bullet.update() are called 60x/second — keep them minimal
 
- M E A S U R E   F I R S T :
- -   U s e   b r o w s e r   D e v T o o l s   P e r f o r m a n c e   t a b   b e f o r e   o p t i m i z i n g   a n y t h i n g
- -   D o   n o t   o p t i m i z e   d r a w B a c k g r o u n d ( )   u n l e s s   m e a s u r e d   F P S   <   4 5
- -   T h e   B F S   d o e s   n o t   n e e d   o p t i m i z a t i o n   f o r   a   5 0 x 3 0   g r i d
+ MEASURE FIRST:
+ - Use browser DevTools Performance tab before optimizing anything
+ - Do not optimize drawBackground() unless measured FPS < 45
+ - The BFS does not need optimization for a 50x30 grid

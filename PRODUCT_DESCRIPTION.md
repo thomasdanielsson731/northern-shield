@@ -9,13 +9,13 @@ Strategiskt grid-baserat Tower Defense med fokus på:
 - taktiska försvarslinjer
 - emergent gameplay
 
-Inspirerat av klassiska maze TD-spel men med modern, minimalistisk militär estetik.
+Inspirerat av klassiska maze TD-spel med Clash of Clans-estetik och nordisk/fantasy-tema.
 
 ## Kärnidé
 
-Spelaren försvarar ett territorium mot vågor av autonoma robotstyrkor, drönare och tunga mekaniserade bossar genom att:
+Spelaren försvarar ett territorium mot vågor av fantasy-fiender — skelettkrigar, andar, lavagolem och banshees — genom att:
 
-- bygga murar
+- bygga murar (Sköldborg)
 - forma fiendens väg
 - skapa kill-zones
 - placera försvarstorn strategiskt
@@ -42,13 +42,13 @@ Repeat
 ## Spelplan
 
 - Grid-baserad karta
-- 50x50 rutnät
+- 50×30 rutnät
 - Varje ruta kan innehålla:
   - tom mark
-  - mur
+  - mur (Sköldborg)
   - tower
-  - spawn
-  - målpunkt
+  - spawn (tidsportal)
+  - målpunkt (guldvalv)
 
 Murarna används för att:
 
@@ -58,9 +58,9 @@ Murarna används för att:
 
 ## Fiendetyper
 
-### Robot Infantry
+### Graveborn (infanteri)
 
-- snabb
+- medelhög hastighet
 - låg HP
 - stora grupper
 
@@ -68,9 +68,9 @@ Hot:
 
 - överväldigande antal
 
-### Attack Drones
+### Wisp (flygande)
 
-- flygande
+- snabb
 - ignorerar murar
 - medelstark
 
@@ -78,17 +78,17 @@ Hot:
 
 - bypassar försvarslinjer
 
-### Heavy Tanks
+### Golem (boss)
 
-- långsamma
+- extremt långsam
 - enorm HP
-- boss-enemies
+- stor radie
 
 Hot:
 
 - bryter igenom försvar
 
-### EMP Units
+### Banshee (EMP)
 
 - stör towers temporärt
 - låg skada
@@ -100,52 +100,66 @@ Hot:
 
 ## Towers
 
-### Wall
+### Sköldborg (mur)
 
 - billig
 - ingen attack
 - blockerar väg
+- saktar ner angränsande fiender 20%
 
 Kärnan i spelets strategi.
 
-### Machine Gun Tower
+### Bärsärkare
+
+- extremt kort räckvidd
+- hög skada
+- melee axe swing
+
+Bra mot:
+
+- täta grupper i kill-zones
+
+### Valkyria
+
+- mycket lång räckvidd
+- hög precision
+- skjuter spjut
+
+Bra mot:
+
+- tanks / Golem
+- prioriterade mål
+
+### Bågskytt
 
 - snabb attack
-- kort range
+- medellång räckvidd
+- skjuter pilar
 
 Bra mot:
 
-- swarm-fiender
+- svärm-fiender / Graveborn
 
-### Sniper Tower
-
-- lång range
-- hög precision
-- långsam attack
-
-Bra mot:
-
-- tanks
-- elites
-
-### Missile Tower
+### Katapult
 
 - splash damage
-- långsammare
+- lång räckvidd
+- skjuter stenar
 
 Bra mot:
 
 - grupper
+- klustrade fiender
 
-### EMP Tower
+### Blondie
 
-- slow
-- stun
-- support tower
+- stun-effekt (fullständigt stopp)
+- medellång räckvidd
+- skjuter guldstjärnor
 
 Bra för:
 
-- kontroll
+- kontroll och synergy med övriga torn
 
 ## Viktig Gameplay-princip
 
@@ -180,9 +194,9 @@ Inte genom snabb klickhastighet.
 
 ### Easy to learn
 
-- enkel visuell design
-- tydliga towers
-- tydliga fiender
+- tydlig CoC-inspirerad visuell design
+- tydliga towers med karaktär
+- tydliga fiender med unika silhuetter
 - läsbar gameplay
 
 ### Hard to master
@@ -194,18 +208,23 @@ Inte genom snabb klickhastighet.
 
 ## Visuell stil
 
-Minimalistisk militär sci-fi:
+Clash of Clans-inspirerad fantasy-estetik med nordiskt/vikinga-tema:
 
-- mörka bakgrunder
-- neon/radar-estetik
-- tydliga färgkontraster
+- varma jordfärger och mörk stenbakgrund (nordisk dungeonatmosfär)
+- ornamenterade guldinramningar (silver yttre kant → mörk separator → guld centerband)
+- detaljerade handritade karaktärer — berserkar, valkyrior, skelett, lavagolem
+- CoC-stil smutsig stig (varm sandbrun) med animerade flödande markeringar
+- färgkodade fiendetyper med unika visuella signaturer
+- rund tidsportal i lila/cyan som spawn-punkt
+- guldvalv med befästa murar som mål (skalar med spelarens livskraft)
 
 Exempel:
 
-- röda fiender
-- blå towers
-- gula projektiler
-- grå murar
+- lila/benvit Graveborn (skelettkrigar med glödande ögon)
+- blå diamant Wisp (flygande energiorb med roterande ringar)
+- mörkbrun Golem (lavagolem med sprickande eld)
+- cyan diamant Banshee (elektrisk ande med EMP-bult-badge)
+- guld/brun panel-UI med fantasiinramning och nitdekor
 
 ## Teknisk vision
 
@@ -225,31 +244,26 @@ Byggt med:
 
 ## Produktmål
 
-### MVP
+### MVP (klart)
 
-Första spelbara versionen ska innehålla:
-
-- grid-system
-- wall placement
-- pathfinding
-- towers
-- waves
-- economy
-- upgrades
-- game over state
+- grid-system (50×30)
+- wall placement + BFS pathfinding
+- 5 tower-typer med CoC-stil
+- 4 fiende-typer med unik grafik
+- vågsystem med 100 vågor
+- ekonomi (guld, uppgraderingar, sälj)
+- game over + topplista (localStorage)
 
 ### Långsiktig potential
 
 Möjliga framtida features:
 
-- fler enemy-faktioner
-- specialbossar
-- campaign mode
-- endless mode
-- co-op
-- procedural maps
-- weather systems
-- advanced upgrades
+- fler torn: Helande Hydda, Isjätte, Drakship, Piltorn
+- Sköldmur-segment som kopplar ihop till hela väggar
+- fler fiendefaktioner: Kinesiska Robotar, Ryska Drönare, Ryska Bossar
+- vänster kategorisidebar (TORN / TRUPPER / FÖRSVAR / DEKORATIONER / KARTA)
+- kampanjläge / endless mode
+- gånganimeringar för fiender (spritesheets)
 
 Men:
 
@@ -265,4 +279,4 @@ Projektet optimeras för:
 - enkel underhållbar kod
 - låg teknisk komplexitet
 
-Målet är ett strategiskt, beroendeframkallande och lättläst tower defense-spel med starkt fokus på maze-building och taktiska beslut.
+Målet är ett strategiskt, beroendeframkallande och lättläst tower defense-spel med starkt fokus på maze-building, taktiska beslut och en varm fantasy-estetik inspirerad av Clash of Clans.

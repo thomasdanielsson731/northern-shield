@@ -1,35 +1,35 @@
-D e s i g n   g a m e p l a y   s y s t e m s   f o r   N o r t h e r n   S h i e l d   t h a t   a r e   e a s y   t o   e x t e n d ,   b a l a n c e ,   a n d   d e b u g .
+Design gameplay systems for Northern Shield that are easy to extend, balance, and debug.
 
- C U R R E N T L Y   I M P L E M E N T E D :
- -   G r i d   ( 5 0 x 3 0 ,   C E L L _ S I Z E = 1 4 ,   B F S   p a t h f i n d i n g )   —   s r c / g r i d / g r i d . j s
- -   W a v e   s y s t e m :   ' c o u n t d o w n '   →   ' a c t i v e '   →   ' b r e a k '   s t a t e   m a c h i n e   —   s r c / c o r e / g a m e . j s
-     C O U N T D O W N _ F R A M E S = 1 5 0 ,   B R E A K _ F R A M E S = 2 5 0 ,   w a v e - d r i v e n   s p a w n   q u e u e s
- -   6   t o w e r   t y p e s :   S k ö l d b o r g ,   B ä r s ä r k a r e ,   V a l k y r i a ,   B å g s k y t t ,   K a t a p u l t ,   B l o n d i e
- -   4   e n e m y   t y p e s :   G r a v e b o r n ,   W i s p   ( f l y i n g ) ,   G o l e m   ( t a n k ) ,   B a n s h e e   ( E M P )
- -   T o w e r   t a r g e t i n g :   h i g h e s t   p a t h I n d e x   i n   r a n g e   ( f u r t h e s t   a l o n g   p a t h )   —   s r c / e n t i t i e s / t o w e r . j s
- -   H o m i n g   b u l l e t s   w i t h   g o l d   t r a i l   —   s r c / e n t i t i e s / b u l l e t . j s
- -   W a l l   p l a c e m e n t   w i t h   l i v e   p a t h   v a l i d a t i o n   ( B F S   b e f o r e   c o m m i t )   —   s r c / c o r e / g a m e . j s
- -   A c t i v e   e n e m y   r e r o u t i n g   w h e n   g r i d   c h a n g e s   —   s r c / c o r e / g a m e . j s
- -   F l y i n g   e n e m i e s   ( W i s p )   f o l l o w   s t r a i g h t   l i n e ,   b y p a s s   w a l l s   e n t i r e l y
- -   B a n s h e e   E M P :   d i s a b l e s   n e a r b y   t o w e r s   w i t h i n   r a d i u s   w h e n   p a s s i n g   —   s r c / c o r e / g a m e . j s
- -   S k ö l d b o r g   s l o w   a u r a :   s l o w s   e n e m i e s   i n   r a n g e   ( s l o w F a c t o r < 1 )
- -   B l o n d i e   s t u n :   s e t s   e n e m y . s l o w F a c t o r = 0   o n   h i t   f o r   N   f r a m e s
- -   T o w e r   u p g r a d e s :   m a x   M A X _ L E V E L = 1 0 ,   s c a l e s   d a m a g e / r a n g e / f i r e R a t e
- -   H i g h   s c o r e s :   l o c a l S t o r a g e ,   t o p   1 0   e n t r i e s   p e r s i s t   a c r o s s   s e s s i o n s
- -   S c r e e n   s h a k e :   s h a k e X / s h a k e Y   o f f s e t   a p p l i e d   i n   d r a w ( )
- -   P a r t i c l e   s y s t e m :   p l a i n   p a r t i c l e s [ ]   a r r a y ,   { x , y , v x , v y , l i f e , m a x L i f e , c o l o r }
- -   S p r i t e   a n i m a t i o n s :   4 - f r a m e   s t r i p s   ( I D L E / W A L K / A T T A C K / D E A T H ) ,   d r a w S p r i t e F r a m e ( )   h e l p e r
+ CURRENTLY IMPLEMENTED:
+ - Grid (50x30, CELL_SIZE=14, BFS pathfinding) — src/grid/grid.js
+ - Wave system: 'countdown' → 'active' → 'break' state machine — src/core/game.js
+     COUNTDOWN_FRAMES=150, BREAK_FRAMES=250, wave-driven spawn queues
+ - 6 tower types: Shield Wall, Berserker, Valkyrie, Archer, Catapult, Blondie
+ - 4 enemy types: Graveborn, Wisp (flying), Golem (tank), Banshee (EMP)
+ - Tower targeting: highest pathIndex in range (furthest along path) — src/entities/tower.js
+ - Homing bullets with gold trail — src/entities/bullet.js
+ - Wall placement with live path validation (BFS before commit) — src/core/game.js
+ - Active enemy rerouting when grid changes — src/core/game.js
+ - Flying enemies (Wisp) follow straight line, bypass walls entirely
+ - Banshee EMP: disables nearby towers within radius when passing — src/core/game.js
+ - Shield Wall slow aura: slows enemies in range (slowFactor<1)
+ - Blondie stun: sets enemy.slowFactor=0 on hit for N frames
+ - Tower upgrades: max MAX_LEVEL=10, scales damage/range/fireRate
+ - High scores: localStorage, top 10 entries persist across sessions
+ - Screen shake: shakeX/shakeY offset applied in draw()
+ - Particle system: plain particles[] array, {x,y,vx,vy,life,maxLife,color}
+ - Sprite animations: 4-frame strips (IDLE/WALK/ATTACK/DEATH), drawSpriteFrame() helper
 
- D A T A - D R I V E N   P A T T E R N S   I N   U S E :
- -   E N E M Y _ D E F S   d r i v e s   a l l   e n e m y   s t a t s   +   v i s u a l   c o n f i g   ( e n e m y . j s )
- -   T O W E R _ D E F S   d r i v e s   a l l   t o w e r   s t a t s   +   b u t t o n   l a b e l s   +   h o t k e y s   ( t o w e r . j s )
- -   B U I L D _ I T E M S   i n   g a m e . j s   a u t o - d e r i v e s   f r o m   T O W E R _ D E F S   —   a d d i n g   a   t o w e r   t y p e
-     o n l y   r e q u i r e s   a n   e n t r y   i n   T O W E R _ D E F S   a n d   a   d r a w   m e t h o d
- -   E n e m y . r e w a r d   i s   r e t u r n e d   b y   b u l l e t . u p d a t e ( )   o n   k i l l   —   g o l d   a n d   k i l l   t r a c k i n g
-     h a p p e n   i n   g a m e . j s   f r o m   t h i s   s i n g l e   r e t u r n   v a l u e
+ DATA-DRIVEN PATTERNS IN USE:
+ - ENEMY_DEFS drives all enemy stats + visual config (enemy.js)
+ - TOWER_DEFS drives all tower stats + button labels + hotkeys (tower.js)
+ - BUILD_ITEMS in game.js auto-derives from TOWER_DEFS — adding a tower type
+     only requires an entry in TOWER_DEFS and a draw method
+ - Enemy.reward is returned by bullet.update() on kill — gold and kill tracking
+     happen in game.js from this single return value
 
- D E S I G N   R U L E S :
- -   N e w   e n e m y / t o w e r   t y p e s   s h o u l d   o n l y   r e q u i r e   a d d i n g   t o   E N E M Y _ D E F S   /   T O W E R _ D E F S
- -   A v o i d   t i g h t l y   c o u p l e d   g a m e p l a y   l o g i c
- -   K e e p   s y s t e m s   e a s y   t o   t u n e   ( a l l   n u m b e r s   i n   D E F   o b j e c t s ,   n e v e r   h a r d c o d e d   i n l i n e )
- -   S i m p l e   t o   d e b u g   —   n o   h i d d e n   s t a t e   t r a n s f o r m a t i o n s
+ DESIGN RULES:
+ - New enemy/tower types should only require adding to ENEMY_DEFS / TOWER_DEFS
+ - Avoid tightly coupled gameplay logic
+ - Keep systems easy to tune (all numbers in DEF objects, never hardcoded inline)
+ - Simple to debug — no hidden state transformations

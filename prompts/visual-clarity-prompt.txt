@@ -1,49 +1,49 @@
-P r i o r i t i z e   g a m e p l a y   r e a d a b i l i t y   i n   N o r t h e r n   S h i e l d .   V i s u a l   s t y l e :   N o r s e   d a r k   f a n t a s y .
+Prioritize gameplay readability in Northern Shield. Visual style: Norse dark fantasy.
 
- E S T A B L I S H E D   C O L O R   L A N G U A G E :
-     G r a v e b o r n :   b o d y   # 6 6 2 8 a 8   ( d e e p   p u r p l e ) ,   g l o w   r g b a ( 1 6 0 , 6 0 , 2 5 5 , 0 . 5 5 )
-     W i s p :           b o d y   # 8 8 b b f f   ( e t h e r e a l   b l u e ) ,   g l o w   r g b a ( 1 4 0 , 1 9 0 , 2 5 5 , 0 . 9 5 )   —   s i g n a l s   f l y i n g
-     G o l e m :         b o d y   # 5 c 4 0 3 0   ( s t o n e   b r o w n ) ,   a m b e r   c o r e   # c 0 7 8 2 0 ,   a m b e r   e y e s
-     B a n s h e e :     b o d y   # 0 0 e e f f   ( c y a n ) ,   E M P   p u l s e   r i n g   a n i m a t i o n   o n   d i s c h a r g e
-     S k ö l d b o r g :   # 4 0 4 0 6 0   ( d a r k   s t o n e ) ,   s l o w   a u r a   r i n g
-     B ä r s ä r k a r e : s p r i t e - r e n d e r e d   ( b a r b a r i a n _ s p r i t e s . p n g ) ,   f i r e F l a s h   t r i g g e r s   A T T A C K   f r a m e
-     V a l k y r i a :     s p r i t e - r e n d e r e d   ( v a l k y r i a _ s p r i t e s . p n g )
-     B å g s k y t t :     s p r i t e - r e n d e r e d   ( a r c h e r _ s p r i t e s . p n g )
-     K a t a p u l t :     s p r i t e - r e n d e r e d   ( d v a r g _ s p r i t e s . p n g )
-     B l o n d i e :       s p r i t e - r e n d e r e d   ( b r y n h i l d _ s p r i t e s . p n g )
-     W a l l   c e l l :   # 1 e 1 4 3 0   ( d a r k   s t o n e   p u r p l e )
-     S p a w n   c e l l : # 6 a 3 e 0 8   ( a m b e r   p o r t a l   g a t e )
-     G o a l   c e l l :   # 5 8 0 8 1 0   ( d e e p   c r i m s o n   a l t a r )
-     P a t h :             r g b a ( 2 0 0 , 1 5 0 , 3 5 )   w a r m   g o l d   g l o w
-     U I   p a n e l s :   r g b a ( 6 , 3 , 1 6 )   d a r k   f i l l   +   r g b a ( 2 1 0 , 1 6 0 , 4 0 )   g o l d   b o r d e r   +   c o r n e r   d i a m o n d s
-     B a c k g r o u n d :   # 0 6 0 3 0 f   →   # 0 e 0 8 2 0   g r a d i e n t   +   p u l s i n g   p u r p l e   a n d   a m b e r   g l o w s
+ ESTABLISHED COLOR LANGUAGE:
+     Graveborn: body #6628a8 (deep purple), glow rgba(160,60,255,0.55)
+     Wisp:       body #88bbff (ethereal blue), glow rgba(140,190,255,0.95) — signals flying
+     Golem:     body #5c4030 (stone brown), amber core #c07820, amber eyes
+     Banshee: body #00eeff (cyan), EMP pulse ring animation on discharge
+     Shield Wall: #404060 (dark stone), slow aura ring
+     Berserker: sprite-rendered (barbarian_sprites.png), fireFlash triggers ATTACK frame
+     Valkyrie:   sprite-rendered (valkyria_sprites.png)
+     Archer:       sprite-rendered (archer_sprites.png)
+     Catapult:   sprite-rendered (dvarg_sprites.png)
+     Blondie:     sprite-rendered (brynhild_sprites.png)
+     Wall cell:   #1e1430 (dark stone purple)
+     Spawn cell: #6a3e08 (amber portal gate)
+     Goal cell:   #580810 (deep crimson altar)
+     Path:         rgba(200,150,35) warm gold glow
+     UI panels:   rgba(6,3,16) dark fill + rgba(210,160,40) gold border + corner diamonds
+     Background: #06030f → #0e0820 gradient + pulsing purple and amber glows
 
- S H A P E   L A N G U A G E   ( m u s t   s t a y   d i s t i n g u i s h a b l e   a t   1 4 p x   c e l l   s i z e ) :
-     G r a v e b o r n :   c i r c l e   —   c o m m o n ,   f a s t ,   f o r g e t t a b l e
-     W i s p :           r o t a t e d   s q u a r e   ( d i a m o n d )   —   d i s t i n c t i v e ,   s i g n a l s   b y p a s s   t h r e a t
-     G o l e m :         l a r g e   c i r c l e   ( r a d i u s   1 1 )   w i t h   r i n g s   +   g l o w i n g   c o r e   —   u n m i s t a k a b l y   b o s s - t i e r
-     B a n s h e e :     c i r c l e   w i t h   E M P   p u l s e   r i n g   —   s i g n a l s   t h r e a t   t o   t o w e r s
+ SHAPE LANGUAGE (must stay distinguishable at 14px cell size):
+     Graveborn: circle — common, fast, forgettable
+     Wisp:       rotated square (diamond) — distinctive, signals bypass threat
+     Golem:     large circle (radius 11) with rings + glowing core — unmistakably boss-tier
+     Banshee: circle with EMP pulse ring — signals threat to towers
 
- S P R I T E   S Y S T E M :
- -   4 - f r a m e   s t r i p s :   f r a m e   0 = I D L E ,   1 = W A L K ,   2 = A T T A C K ,   3 = D E A T H
- -   d r a w S p r i t e F r a m e ( c t x ,   k e y ,   f r a m e ,   x ,   y ,   a i m A n g l e ,   d w )   —   f l i p s   h o r i z o n t a l l y   w h e n   a i m i n g   l e f t
- -   f i r e F l a s h   >   0   →   s h o w   f r a m e   2   ( A T T A C K ) ,   o t h e r w i s e   f r a m e   0   ( I D L E )
- -   S P R I T E S   r e g i s t r y   c h e c k e d   b e f o r e   u s e :   i f   ( ! S P R I T E S [ k e y ] )   f a l l   b a c k   t o   c a n v a s   d r a w
+ SPRITE SYSTEM:
+ - 4-frame strips: frame 0=IDLE, 1=WALK, 2=ATTACK, 3=DEATH
+ - drawSpriteFrame(ctx, key, frame, x, y, aimAngle, dw) — flips horizontally when aiming left
+ - fireFlash > 0 → show frame 2 (ATTACK), otherwise frame 0 (IDLE)
+ - SPRITES registry checked before use: if (!SPRITES[key]) fall back to canvas draw
 
- C L A R I T Y   R U L E S :
- -   T o w e r   r a n g e   r i n g s :   d a s h e d ,   t o w e r   c o l o r   a t   l o w   o p a c i t y   —   v i s i b l e   b u t   n o t   d i s t r a c t i n g
- -   H P   b a r s :   g r e e n   ( > 5 0 % )   →   y e l l o w   ( > 2 5 % )   →   r e d   —   u n i v e r s a l   l a n g u a g e
- -   W i s p   e t h e r e a l   g l o w   s i g n a l s   " t h i s   b y p a s s e s   y o u r   w a l l s "
- -   G o l e m   a m b e r   e y e s   +   m o l t e n   c o r e   s i g n a l   " t h i s   i s   a   b o s s "
- -   B a n s h e e   c y a n   s i g n a l s   " t h i s   z a p s   y o u r   t o w e r s "
- -   T o w e r   s p r i t e   f l i p s   t o   f a c e   t a r g e t   —   a l w a y s   s h o w s   w h a t   e a c h   t o w e r   i s   s h o o t i n g
- -   P a t h   h i g h l i g h t   ( g o l d e n )   s h o w s   w h e r e   t h e   e n e m y   r o u t e   g o e s
+ CLARITY RULES:
+ - Tower range rings: dashed, tower color at low opacity — visible but not distracting
+ - HP bars: green (>50%) → yellow (>25%) → red — universal language
+ - Wisp ethereal glow signals "this bypasses your walls"
+ - Golem amber eyes + molten core signal "this is a boss"
+ - Banshee cyan signals "this zaps your towers"
+ - Tower sprite flips to face target — always shows what each tower is shooting
+ - Path highlight (golden) shows where the enemy route goes
 
- T h e   p l a y e r   s h o u l d   i n s t a n t l y   u n d e r s t a n d   a t   a   g l a n c e :
- -   E n e m y   m o v e m e n t   d i r e c t i o n   a n d   r e l a t i v e   s p e e d
- -   W h i c h   e n e m i e s   a r e   t h r e a t s   a n d   w h y
- -   T o w e r   a t t a c k   r a n g e
- -   P r o j e c t i l e   t r a j e c t o r i e s
- -   D a m a g e   s t a t e   o f   e a c h   e n e m y
+ The player should instantly understand at a glance:
+ - Enemy movement direction and relative speed
+ - Which enemies are threats and why
+ - Tower attack range
+ - Projectile trajectories
+ - Damage state of each enemy
 
- C l a r i t y   o v e r   v i s u a l   c o m p l e x i t y .   N e v e r   a d d   a n   e f f e c t   t h a t   o b s c u r e s   e n e m y   r e a d a b i l i t y .
+ Clarity over visual complexity. Never add an effect that obscures enemy readability.

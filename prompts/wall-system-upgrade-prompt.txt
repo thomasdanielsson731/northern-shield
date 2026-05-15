@@ -1,46 +1,46 @@
-W A L L   S Y S T E M   U P G R A D E   —   N o r t h e r n   S h i e l d
+WALL SYSTEM UPGRADE — Northern Shield
 
- G O A L :
-     S k ö l d b o r g   w a l l s   s h o u l d   l o o k   l i k e   a   c o n n e c t e d   f o r t i f i c a t i o n ,
-     n o t   a   g r i d   o f   i s o l a t e d   s q u a r e s .   A u t o - c o n n e c t i n g   s e g m e n t s   i m p r o v e
-     r e a d a b i l i t y   a n d   f e e l .
+ GOAL:
+     Shield Wall walls should look like a connected fortification,
+     not a grid of isolated squares. Auto-connecting segments improve
+     readability and feel.
 
- C U R R E N T   S T A T E :
-     W a l l s   a r e   d r a w n   a s   i n d i v i d u a l   r e c t a n g l e s   w i t h   a   p u r p l e   c o l o r .
-     N o   c o n n e c t i o n   t o   a d j a c e n t   w a l l s .
-     R e f e r e n c e :   a s s e t s / t o w e r s / r e f e r e n c e _ s k o l d m u r _ v a r i a n t s . p n g   s h o w s
-     r a k   d e l ,   h ö r n   v ä n s t e r / h ö g e r ,   t - k o p p l i n g ,   s l u t s t y c k e   v a r i a n t s .
+ CURRENT STATE:
+     Walls are drawn as individual rectangles with a purple color.
+     No connection to adjacent walls.
+     Reference: assets/towers/reference_skoldmur_variants.png shows
+     straight segment, corner left/right, T-junction, end piece variants.
 
- P R O P O S E D   S Y S T E M :
+ PROPOSED SYSTEM:
 
-     C o n n e c t i v i t y   c h e c k :
-     F o r   e a c h   w a l l   c e l l ,   c h e c k   4   n e i g h b o r s   ( N / S / E / W ) .
-     B u i l d   a   ' m a s k '   =   ( n o r t h   ?   1 : 0 )   |   ( e a s t   ?   2 : 0 )   |   ( s o u t h   ?   4 : 0 )   |   ( w e s t   ?   8 : 0 )
+     Connectivity check:
+     For each wall cell, check 4 neighbors (N/S/E/W).
+     Build a 'mask' = (north ? 1:0) | (east ? 2:0) | (south ? 4:0) | (west ? 8:0)
 
-     V a r i a n t   s e l e c t i o n :
-     -   m a s k   = = =   0 :   i s o l a t e d   ( c a p   o n   a l l   s i d e s )
-     -   m a s k   =   h a s   o n l y   o p p o s i t e s   ( 1 + 4   o r   2 + 8 ) :   s t r a i g h t   s e g m e n t
-     -   m a s k   =   L - s h a p e d :   c o r n e r
-     -   m a s k   =   T - s h a p e d :   t - j u n c t i o n
-     -   m a s k   =   a l l   4 :   c r o s s
+     Variant selection:
+     - mask === 0: isolated (cap on all sides)
+     - mask = has only opposites (1+4 or 2+8): straight segment
+     - mask = L-shaped: corner
+     - mask = T-shaped: T-junction
+     - mask = all 4: cross
 
-     D r a w i n g :
-     -   U s e   c a n v a s   p a t h s   t o   d r a w   t h e   c o r r e c t   v a r i a n t   p e r   m a s k
-     -   O r   s p r i t e   s h e e t   i f   r e f e r e n c e _ s k o l d m u r _ v a r i a n t s . p n g   i s   s l i c e d   a n d   a d d e d   t o   a s s e t s . j s
+     Drawing:
+     - Use canvas paths to draw the correct variant per mask
+     - Or sprite sheet if reference_skoldmur_variants.png is sliced and added to assets.js
 
- A D J A C E N C Y   S L O W :
-     S k ö l d b o r g   a l r e a d y   s l o w s   n e a r b y   e n e m i e s .
-     E n h a n c e m e n t :   m o r e   a d j a c e n t   w a l l s   =   s t r o n g e r   s l o w
-     -   1   w a l l   n e i g h b o r :   + 0 %   b o n u s   ( b a s e )
-     -   2 - 3   w a l l   n e i g h b o r s :   + 1 0 %   s l o w   b o n u s
-     -   4   w a l l   n e i g h b o r s :   + 2 0 %   s l o w   b o n u s
+ ADJACENCY SLOW:
+     Shield Wall already slows nearby enemies.
+     Enhancement: more adjacent walls = stronger slow
+     - 1 wall neighbor: +0% bonus (base)
+     - 2-3 wall neighbors: +10% slow bonus
+     - 4 wall neighbors: +20% slow bonus
 
- I M P L E M E N T A T I O N   N O T E S :
-     -   C o n n e c t i v i t y   c h e c k e d   i n   d r a w i n g   c o d e   o n l y   ( n o   g r i d   l o g i c   c h a n g e )
-     -   g r i d . g e t C e l l ( c ,   r )   r e t u r n s   C E L L   t y p e   —   c o m p a r e   a g a i n s t   C E L L . W A L L
-     -   S l o w   b o n u s   l o g i c   g o e s   i n   T o w e r . u p d a t e ( )   a r e a - e f f e c t   b l o c k
+ IMPLEMENTATION NOTES:
+     - Connectivity checked in drawing code only (no grid logic change)
+     - grid.getCell(c, r) returns CELL type — compare against CELL.WALL
+     - Slow bonus logic goes in Tower.update() area-effect block
 
- R U L E S :
- -   C o n n e c t i v i t y   i s   v i s u a l - o n l y   —   d o   n o t   c h a n g e   w a l l   c o l l i s i o n   o r   B F S
- -   W a l l s   s t i l l   b l o c k   p a t h   r e g a r d l e s s   o f   v a r i a n t
- -   S p r i t e   v a r i a n t s   a r e   o p t i o n a l ;   s t a r t   w i t h   c a n v a s - d r a w n   v a r i a n t s
+ RULES:
+ - Connectivity is visual-only — do not change wall collision or BFS
+ - Walls still block path regardless of variant
+ - Sprite variants are optional; start with canvas-drawn variants

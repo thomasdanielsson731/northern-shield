@@ -1,44 +1,44 @@
-W o r k   o n l y   f r o m   k n o w n   c o d e   i n   N o r t h e r n   S h i e l d .   D o   n o t   i n v e n t   A P I s   o r   a s s u m e   f i l e   c o n t e n t s .
+Work only from known code in Northern Shield. Do not invent APIs or assume file contents.
 
- K N O W N   F I L E   S T R U C T U R E :
-     s r c / m a i n . j s
-     s r c / c o r e / g a m e . j s
-     s r c / c o r e / r e n d e r e r . j s
-     s r c / g r i d / g r i d . j s
-     s r c / e n t i t i e s / e n e m y . j s
-     s r c / e n t i t i e s / t o w e r . j s
-     s r c / e n t i t i e s / b u l l e t . j s
-     s r c / a s s e t s . j s
+ KNOWN FILE STRUCTURE:
+     src/main.js
+     src/core/game.js
+     src/core/renderer.js
+     src/grid/grid.js
+     src/entities/enemy.js
+     src/entities/tower.js
+     src/entities/bullet.js
+     src/assets.js
 
- N O T E :   e n g i n e /   c o n t a i n s   o l d   d e a d   s k e l e t o n   f i l e s   —   d o   n o t   r e f e r e n c e   t h e m .
+ NOTE: engine/ contains old dead skeleton files — do not reference them.
 
- K N O W N   E X P O R T S :
-     g r i d . j s :         e x p o r t   c o n s t   C E L L ,   e x p o r t   c l a s s   G r i d
-     e n e m y . j s :       e x p o r t   c o n s t   E N E M Y _ T Y P E S ,   E N E M Y _ D E F S ,   e x p o r t   c l a s s   E n e m y
-     t o w e r . j s :       e x p o r t   c o n s t   T O W E R _ T Y P E S ,   T O W E R _ D E F S ,   e x p o r t   c l a s s   T o w e r
-     b u l l e t . j s :     e x p o r t   c l a s s   B u l l e t
-     r e n d e r e r . j s : e x p o r t   {   c a n v a s ,   c t x   }
-     a s s e t s . j s :     e x p o r t   c o n s t   S P R I T E S
-     g a m e . j s :         n o   e x p o r t s   ( t o p - l e v e l   s i d e - e f f e c t   m o d u l e )
+ KNOWN EXPORTS:
+     grid.js:         export const CELL, export class Grid
+     enemy.js:       export const ENEMY_TYPES, ENEMY_DEFS, export class Enemy
+     tower.js:       export const TOWER_TYPES, TOWER_DEFS, export class Tower
+     bullet.js:     export class Bullet
+     renderer.js: export { canvas, ctx }
+     assets.js:     export const SPRITES
+     game.js:         no exports (top-level side-effect module)
 
- K N O W N   G A M E   S T A T E   V A R I A B L E S   ( i n   g a m e . j s   m o d u l e   s c o p e ) :
-     g r i d ,   c u r r e n t P a t h ,   e n e m i e s [ ] ,   t o w e r s [ ] ,   b u l l e t s [ ] ,   p a r t i c l e s [ ]
-     g o l d ,   l i v e s ,   s l a i n ,   g o l d E a r n e d ,   l e a k e d
-     b u i l d M o d e ,   s e l e c t e d T o w e r T y p e ,   g a m e O v e r
-     w a v e S t a t e ,   w a v e N u m b e r ,   w a v e T i m e r ,   s p a w n Q u e u e [ ]
-     s h a k e X ,   s h a k e Y
+ KNOWN GAME STATE VARIABLES (in game.js module scope):
+     grid, currentPath, enemies[], towers[], bullets[], particles[]
+     gold, lives, slain, goldEarned, leaked
+     buildMode, selectedTowerType, gameOver
+     waveState, waveNumber, waveTimer, spawnQueue[]
+     shakeX, shakeY
 
- K N O W N   C O N S T A N T S   ( g a m e . j s ) :
-     C O L S = 5 0 ,   R O W S = 3 0 ,   C E L L _ S I Z E = 1 4 ,   W A L L _ C O S T = 5
-     S I D E B A R _ W = 5 2 ,   R I G H T _ P A N E L _ W = 1 8 8 ,   G R I D _ L E F T = 5 2 ,   G R I D _ T O P = 4 8
-     S P A W N = { c o l : 0 , r o w : 1 5 } ,   G O A L = { c o l : 4 9 , r o w : 1 5 }
-     S T A R T I N G _ G O L D = 8 5 ,   S T A R T I N G _ L I V E S = 2 0 ,   M A X _ L E V E L = 1 0
-     C O U N T D O W N _ F R A M E S = 1 5 0 ,   B R E A K _ F R A M E S = 2 5 0
-     B U I L D _ B T N ,   B U I L D _ I T E M S   ( d e r i v e s   f r o m   T O W E R _ D E F S )
+ KNOWN CONSTANTS (game.js):
+     COLS=50, ROWS=30, CELL_SIZE=14, WALL_COST=5
+     SIDEBAR_W=52, RIGHT_PANEL_W=188, GRID_LEFT=52, GRID_TOP=48
+     SPAWN={col:0,row:15}, GOAL={col:49,row:15}
+     STARTING_GOLD=85, STARTING_LIVES=20, MAX_LEVEL=10
+     COUNTDOWN_FRAMES=150, BREAK_FRAMES=250
+     BUILD_BTN, BUILD_ITEMS (derives from TOWER_DEFS)
 
- R U L E S :
- -   I f   y o u   n e e d   t o   k n o w   w h a t ' s   i n   a   f i l e ,   r e a d   i t   f i r s t
- -   D o   n o t   i n v e n t   n e w   e x p o r t e d   f u n c t i o n s   t h a t   d o n ' t   e x i s t   y e t
- -   D o   n o t   a s s u m e   a   m e t h o d   e x i s t s   o n   G r i d ,   E n e m y ,   T o w e r ,   o r   B u l l e t   w i t h o u t   c h e c k i n g
- -   I f   i n f o r m a t i o n   i s   m i s s i n g ,   a s k   a   c o n c i s e   q u e s t i o n
- -   D o   n o t   h a l l u c i n a t e   g a m e   e n g i n e   s y s t e m s   ( t h e r e   i s   n o   e n g i n e   —   i t ' s   v a n i l l a   J S )
+ RULES:
+ - If you need to know what's in a file, read it first
+ - Do not invent new exported functions that don't exist yet
+ - Do not assume a method exists on Grid, Enemy, Tower, or Bullet without checking
+ - If information is missing, ask a concise question
+ - Do not hallucinate game engine systems (there is no engine — it's vanilla JS)
