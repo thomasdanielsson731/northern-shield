@@ -8,7 +8,7 @@ const COLS = 36;
 const ROWS = 22;
 const CELL_SIZE = 14;
 
-const SIDEBAR_W     = 52;
+const SIDEBAR_W     = 0;
 const RIGHT_PANEL_W = 188;
 const GRID_LEFT     = SIDEBAR_W;
 const GRID_TOP      = 48;
@@ -66,6 +66,10 @@ let nextWaveBtn     = null;
 let activeSidebarTab = 'towers';
 let gameSpeed = 1;
 let speedBtn  = null;
+
+let dragItem  = null;  // { id, label, color, cost, mode } while dragging from build bar
+let dragX     = 0;
+let dragY     = 0;
 
 let goldCoins  = [];   // flying coin particles: { sx, sy, t, speed }
 let hoardPulse = 0;    // frames of bounce animation when coin lands
@@ -346,7 +350,8 @@ const STARS = Array.from({ length: 120 }, () => ({
 
 // ── terrain canvas — static grass, generated once at startup ─────────────────
 
-let terrainCanvas = null;
+let terrainCanvas    = null;
+let terrainUsesSprite = false;  // true once ground sprite has been baked in
 
 function initTerrain() {
   terrainCanvas = document.createElement('canvas');
@@ -355,6 +360,21 @@ function initTerrain() {
   const tc = terrainCanvas.getContext('2d');
   const cs = CELL_SIZE;
 
+  const groundSp = SPRITES['ground'];
+  if (groundSp && groundSp.img.complete && groundSp.img.naturalWidth > 0) {
+    // ── Sprite-based ground — tile the texture across every cell ────────────
+    terrainUsesSprite = true;
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        tc.drawImage(groundSp.img, 0, 0, groundSp.frameW, groundSp.frameH,
+          col * cs, row * cs, cs, cs);
+      }
+    }
+    return;
+  }
+
+  // ── Procedural fallback — hand-drawn grass ────────────────────────────────
+  terrainUsesSprite = false;
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const x = col * cs;
@@ -390,7 +410,7 @@ function initTerrain() {
         const green = Math.floor(58 + v1 * 36);
         tc.strokeStyle = `rgb(18,${green},10)`;
         tc.lineWidth   = 0.85;
-        const blades = 2 + Math.floor(v4 * 3);   // 2–4 blades
+        const blades = 2 + Math.floor(v4 * 3);
         for (let b = 0; b < blades; b++) {
           const bx   = tx + b * 2.2 - blades;
           const lean = (v2 - 0.5) * 5;
@@ -411,7 +431,7 @@ function initTerrain() {
         tc.lineWidth   = 0.7;
         const blades2 = 2 + (s & 1);
         for (let b = 0; b < blades2; b++) {
-          const bx2  = tx2 + b * 2;
+          const bx2   = tx2 + b * 2;
           const lean2 = (v1 - 0.5) * 4;
           tc.beginPath();
           tc.moveTo(bx2, ty2);
@@ -503,12 +523,18 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
 function getBuildButtons() {
-  const btnY = GRID_BOTTOM + 9;
+  const nBtn   = BUILD_ITEMS.length;
+  const panelX = SIDEBAR_W + 2;
+  const panelW = BASE_W - 4;
+  const padX   = 8;
+  const gap    = 5;
+  const cardW  = Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn);
+  const btnY   = GRID_BOTTOM + 9;
   return BUILD_ITEMS.map((item, i) => ({
     ...item,
-    x:      BUILD_BTN.x + i * (BUILD_BTN.w + BUILD_BTN.gap),
+    x:      panelX + padX + i * (cardW + gap),
     y:      btnY,
-    width:  BUILD_BTN.w,
+    width:  cardW,
     height: BUILD_BTN.h
   }));
 }
@@ -563,6 +589,31 @@ function hasEnemyInCell(col, row) {
   });
 }
 
+function tryPlaceAt(col, row, mode, towerType) {
+  const cell = grid.getCell(col, row);
+  if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) return false;
+  if (cell !== CELL.EMPTY) return false;
+  if (hasEnemyInCell(col, row)) return false;
+
+  const cost = mode === CELL.WALL ? WALL_COST : TOWER_DEFS[towerType].cost;
+  if (gold < cost) return false;
+
+  grid.setCell(col, row, mode);
+  const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+  if (!newPath) { grid.setCell(col, row, CELL.EMPTY); return false; }
+
+  currentPath = newPath;
+  rerouteActiveEnemies();
+  goldSpent += cost;
+  gold      -= cost;
+
+  if (mode === CELL.TOWER) {
+    const { x, y } = grid.cellCenter(col, row);
+    towers.push(new Tower(x, y, col, row, towerType));
+  }
+  return true;
+}
+
 // ── input ─────────────────────────────────────────────────────────────────────
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -601,13 +652,16 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // Build-mode button row (left-click only)
+  // Build-mode button row — left-click starts a drag
   if (e.button === 0) {
     const btn = getBuildButtonAt(mouseX, mouseY);
     if (btn) {
       buildMode = btn.mode;
       if (btn.mode === CELL.TOWER) selectedTowerType = btn.id;
       selectedTower = null;
+      dragItem = btn;
+      dragX    = mouseX;
+      dragY    = mouseY;
       return;
     }
   }
@@ -685,31 +739,25 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // Left-click elsewhere: deselect
+  // Left-click elsewhere: deselect then try to place
   selectedTower = null;
+  tryPlaceAt(col, row, buildMode, selectedTowerType);
+});
 
-  if (cell !== CELL.EMPTY) return;
-  if (hasEnemyInCell(col, row)) return;
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  dragX = (e.clientX - rect.left) / gameScale;
+  dragY = (e.clientY - rect.top)  / gameScale;
+});
 
-  const cost = buildMode === CELL.WALL ? WALL_COST : TOWER_DEFS[selectedTowerType].cost;
-  if (gold < cost) return;
-
-  grid.setCell(col, row, buildMode);
-  const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  if (!newPath) {
-    grid.setCell(col, row, CELL.EMPTY);
-    return;
-  }
-
-  currentPath = newPath;
-  rerouteActiveEnemies();
-  goldSpent += cost;
-  gold      -= cost;
-
-  if (buildMode === CELL.TOWER) {
-    const { x, y } = grid.cellCenter(col, row);
-    towers.push(new Tower(x, y, col, row, selectedTowerType));
-  }
+canvas.addEventListener('mouseup', e => {
+  if (!dragItem || gameOver) { dragItem = null; return; }
+  const rect   = canvas.getBoundingClientRect();
+  const mouseX = (e.clientX - rect.left) / gameScale;
+  const mouseY = (e.clientY - rect.top)  / gameScale;
+  const { col, row } = grid.pixelToCell(mouseX - GRID_LEFT, mouseY - GRID_TOP);
+  tryPlaceAt(col, row, dragItem.mode, dragItem.id);
+  dragItem = null;
 });
 
 // ── update ────────────────────────────────────────────────────────────────────
@@ -861,7 +909,9 @@ function drawBackground() {
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
 
-  const time = performance.now() * 0.001;
+  const time  = performance.now() * 0.001;
+  const cs    = CELL_SIZE;
+  const pathSp = SPRITES['path'];
 
   function buildPathShape() {
     const { x: sx, y: sy } = grid.cellCenter(currentPath[0].col, currentPath[0].row);
@@ -873,32 +923,43 @@ function drawPath() {
     }
   }
 
-  // CoC dirt path — warm sandy brown
   ctx.save();
-  ctx.lineWidth   = CELL_SIZE * 0.72;
-  ctx.lineJoin    = 'round';
-  ctx.lineCap     = 'round';
-  ctx.strokeStyle = 'rgba(180,130,60,0.55)';
-  ctx.shadowColor = 'rgba(200,150,60,0.3)';
-  ctx.shadowBlur  = 8;
-  ctx.setLineDash([]);
-  buildPathShape();
-  ctx.stroke();
-  ctx.shadowBlur = 0;
 
-  // Animated flowing dashes (direction indicator)
-  ctx.lineWidth      = CELL_SIZE * 0.2;
+  if (pathSp && pathSp.img.complete && pathSp.img.naturalWidth > 0) {
+    // ── Sprite path — tile texture on every path cell ─────────────────────
+    for (const { col, row } of currentPath) {
+      ctx.drawImage(pathSp.img, 0, 0, pathSp.frameW, pathSp.frameH,
+        col * cs, row * cs, cs, cs);
+    }
+  } else {
+    // ── Procedural fallback — warm sandy brown stroke ─────────────────────
+    ctx.lineWidth   = cs * 0.72;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.strokeStyle = 'rgba(180,130,60,0.55)';
+    ctx.shadowColor = 'rgba(200,150,60,0.3)';
+    ctx.shadowBlur  = 8;
+    buildPathShape();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Animated flowing dashes on top regardless of sprite/procedural
+  ctx.lineWidth      = cs * 0.2;
+  ctx.lineJoin       = 'round';
+  ctx.lineCap        = 'round';
   ctx.strokeStyle    = 'rgba(240,200,90,0.5)';
   ctx.setLineDash([6, 14]);
   ctx.lineDashOffset = -(time * 28) % 20;
   buildPathShape();
   ctx.stroke();
   ctx.setLineDash([]);
+
   ctx.restore();
 }
 
 function drawFrames() {
-  const { width, height } = getViewSize();
+  const width = BASE_W, height = BASE_H;
   const gx = GRID_LEFT, gy = GRID_TOP;
   const gw = COLS * CELL_SIZE, gh = ROWS * CELL_SIZE;
 
@@ -1053,44 +1114,62 @@ function drawFrames() {
 }
 
 function drawRightPanel() {
-  const { width, height } = getViewSize();
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const pw = width - px - 4;
+  const pw = BASE_W - px - 4;
   speedBtn = null;
   if (pw < 60) return;
 
-  const fullH = height - GRID_TOP - 4;
+  const fullH = BASE_H - GRID_TOP - 4;
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(42,22,6,0.97)');
 
   const lx    = px + 10;
   const dotX  = px + 7;
-  let   ly    = GRID_TOP + 18;
+  let   ly    = GRID_TOP + 14;
   const rEdge = px + pw - 8;
+  const barW  = pw - 20;
 
   ctx.save();
 
-  // ── INCOMING ENEMIES header ────────────────────────────────────────────────
-  ctx.font        = 'bold 10px monospace';
-  ctx.fillStyle   = '#f0c840';
-  ctx.shadowColor = 'rgba(220,170,30,0.8)';
-  ctx.shadowBlur  = 8;
-  ctx.textAlign   = 'left';
-  ctx.fillText('INCOMING', lx, ly); ly += 13;
-  ctx.fillText('ENEMIES', lx, ly);  ly += 16;
-  ctx.shadowBlur  = 0;
-
   function divider() {
-    ctx.strokeStyle = 'rgba(200,150,30,0.20)';
+    ctx.strokeStyle = 'rgba(200,150,30,0.18)';
     ctx.lineWidth   = 0.5;
     ctx.beginPath();
     ctx.moveTo(px + 6, ly); ctx.lineTo(px + pw - 6, ly);
     ctx.stroke();
-    ly += 8;
+    ly += 9;
   }
+
+  // ── WAVE PROGRESS ──────────────────────────────────────────────────────────
+  ctx.font      = 'bold 9px monospace';
+  ctx.fillStyle = '#c0a060';
+  ctx.textAlign = 'left';
+  ctx.fillText('WAVE', lx, ly);
+  ctx.fillStyle = '#f0c840';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${waveNumber} / ${MAX_WAVES}`, rEdge, ly);
+  ctx.textAlign = 'left';
+  ly += 7;
+
+  const progress  = waveNumber / MAX_WAVES;
+  const barColor  = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
+  ctx.fillStyle   = 'rgba(60,30,8,0.8)';
+  ctx.beginPath(); ctx.roundRect(lx, ly, barW, 6, 3); ctx.fill();
+  if (progress > 0) {
+    ctx.fillStyle = barColor;
+    ctx.beginPath(); ctx.roundRect(lx, ly, barW * progress, 6, 3); ctx.fill();
+  }
+  ly += 14;
   divider();
 
-  const nextNum = waveNumber + 1;
-  const next    = waveComposition(nextNum);
+  // ── INCOMING ───────────────────────────────────────────────────────────────
+  ctx.font        = 'bold 10px monospace';
+  ctx.fillStyle   = '#f0c840';
+  ctx.shadowColor = 'rgba(220,170,30,0.7)';
+  ctx.shadowBlur  = 6;
+  ctx.fillText('INCOMING', lx, ly); ly += 14;
+  ctx.shadowBlur  = 0;
+
+  const next    = waveComposition(waveNumber + 1);
   const entries = [
     { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false },
     { label: 'Myling', count: next.mylings, color: '#88bbff', skip: next.mylings === 0, boss: false },
@@ -1098,132 +1177,114 @@ function drawRightPanel() {
     { label: 'Mara',   count: next.maras,   color: '#00ddcc', skip: next.maras   === 0, boss: false },
   ];
 
-  // BOSS sub-header before first boss entry
   let bossHeaderDrawn = false;
   ctx.font = '10px monospace';
   for (const e of entries) {
     if (e.skip) continue;
     if (e.boss && !bossHeaderDrawn) {
-      ctx.font      = 'bold 8px monospace';
-      ctx.fillStyle = 'rgba(220,130,30,0.7)';
-      ctx.textAlign = 'left';
-      ctx.fillText('— BOSS —', lx + 4, ly);
-      ly += 12;
-      bossHeaderDrawn = true;
-      ctx.font = '10px monospace';
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
+      ctx.fillText('— BOSS —', lx + 4, ly); ly += 12;
+      bossHeaderDrawn = true; ctx.font = '10px monospace';
     }
-    // colored dot icon
-    ctx.beginPath();
-    ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
-    ctx.fillStyle = e.color;
-    ctx.fill();
-
-    ctx.fillStyle = e.color;
-    ctx.textAlign = 'left';
+    ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
+    ctx.fillStyle = e.color; ctx.fill();
+    ctx.fillStyle = e.color; ctx.textAlign = 'left';
     ctx.fillText(e.label, lx + 2, ly);
-    ctx.fillStyle = '#e8c040';
-    ctx.textAlign = 'right';
+    ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
     ctx.fillText(`×${e.count}`, rEdge, ly);
-    ctx.textAlign = 'left';
-    ly += 16;
+    ctx.textAlign = 'left'; ly += 15;
   }
 
   ly += 4;
   divider();
 
-  // ── Tower stats ─────────────────────────────────────────────────────────────
-  ctx.font      = 'bold 9px monospace';
-  ctx.fillStyle = '#c0a060';
-  ctx.textAlign = 'left';
-  ctx.fillText('TOWERS', lx, ly); ly += 14;
+  // ── COMBAT ─────────────────────────────────────────────────────────────────
+  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
+  ctx.fillText('COMBAT', lx, ly); ly += 13;
 
-  ctx.font = '9px monospace';
-  for (const tower of towers.slice(0, 6)) {
-    const def = TOWER_DEFS[tower.type];
-    ctx.fillStyle = def.color;
-    ctx.fillText(def.label, lx, ly);
-    if (tower.level > 1) {
-      ctx.fillStyle = tower.maxed ? '#ff9040' : '#e8c040';
-      ctx.textAlign = 'right';
-      ctx.fillText(tower.maxed ? 'MAX' : `L${tower.level}`, rEdge, ly);
-      ctx.textAlign = 'left';
-    }
-    ly += 13;
-  }
-  if (towers.length > 6) {
-    ctx.fillStyle = 'rgba(180,150,80,0.5)';
-    ctx.fillText(`+${towers.length - 6} more`, lx, ly);
-    ly += 13;
-  }
-
-  ly += 4;
-  divider();
-
-  // ── Economy ──────────────────────────────────────────────────────────────────
-  ctx.font      = '9px monospace';
-  ctx.fillStyle = '#e8c040';
-  ctx.textAlign = 'left';
-  ctx.fillText(`+${goldEarned}`, lx, ly);
-  ctx.fillStyle = 'rgba(180,140,60,0.7)';
-  ctx.textAlign = 'right';
-  ctx.fillText(`-${goldSpent}`, rEdge, ly);
-  ctx.textAlign = 'left';
-  ly += 14;
-
-  ctx.fillStyle = '#b8c8e0';
-  ctx.fillText(`★ Slain: ${slain}`, lx, ly); ly += 13;
+  ctx.font = '10px monospace';
   const leaked = STARTING_LIVES - lives;
-  ctx.fillStyle = leaked > 0 ? '#ff9090' : '#60e880';
-  ctx.fillText(`♥ Leaked: ${leaked}/${STARTING_LIVES}`, lx, ly);
 
-  // ── ×2 speed toggle button ───────────────────────────────────────────────────
-  const spR  = 17;
-  const spX  = px + pw / 2;
-  const spY  = GRID_TOP + fullH - (gameOver || waveState === 'active' ? 54 : 104);
+  const rows = [
+    { label: '★ Slain',   value: `${slain}`,                      color: '#f0e060' },
+    { label: '♥ Lives',   value: `${lives} / ${STARTING_LIVES}`,  color: lives <= 3 ? '#ff6060' : lives <= 7 ? '#ffaa60' : '#60e880' },
+    { label: '⚡ Leaked',  value: `${leaked}`,                     color: leaked > 0 ? '#ff8080' : '#60e880' },
+  ];
+  if (waveState === 'active') {
+    rows.push({ label: '◈ On field', value: `${enemies.length} / ${waveTotal}`, color: '#e8a060' });
+  }
+  for (const r of rows) {
+    ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
+    ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
+    ctx.textAlign = 'left'; ly += 13;
+  }
+
+  // Top damage dealer
+  if (towers.length > 0) {
+    const top = towers.reduce((a, b) => b.damageDealt > a.damageDealt ? b : a, towers[0]);
+    if (top.damageDealt > 0) {
+      const def = TOWER_DEFS[top.type];
+      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';
+      ctx.fillText('⚔ Top dealer', lx, ly);
+      ctx.fillStyle = def.color; ctx.textAlign = 'right';
+      ctx.fillText(`${def.label} ${top.damageDealt}`, rEdge, ly);
+      ctx.textAlign = 'left'; ly += 13;
+    }
+  }
+
+  ly += 2;
+  divider();
+
+  // ── ECONOMY ────────────────────────────────────────────────────────────────
+  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
+  ctx.fillText('ECONOMY', lx, ly); ly += 13;
+
+  ctx.font = '10px monospace';
+  const net = goldEarned - goldSpent;
+  const econRows = [
+    { label: '◆ Earned', value: `+${goldEarned}`,                       color: '#e8c040' },
+    { label: '◆ Spent',  value: `-${goldSpent}`,                        color: 'rgba(200,140,60,0.75)' },
+    { label: '◆ Net',    value: `${net >= 0 ? '+' : ''}${net}`,         color: net >= 0 ? '#a0e880' : '#ff9090' },
+  ];
+  for (const r of econRows) {
+    ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
+    ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
+    ctx.textAlign = 'left'; ly += 13;
+  }
+
+  // ── SPEED TOGGLE ───────────────────────────────────────────────────────────
+  const spR      = 17;
+  const spX      = px + pw / 2;
+  const spY      = GRID_TOP + fullH - (gameOver || waveState === 'active' ? 54 : 104);
   const spActive = gameSpeed >= 2;
 
-  ctx.beginPath();
-  ctx.arc(spX, spY, spR, 0, Math.PI * 2);
-  ctx.fillStyle = spActive ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(spX, spY, spR, 0, Math.PI * 2);
+  ctx.fillStyle   = spActive ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)'; ctx.fill();
   ctx.strokeStyle = spActive ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
-  ctx.lineWidth   = 1.5;
-  ctx.stroke();
-
-  ctx.font      = 'bold 11px monospace';
-  ctx.fillStyle = spActive ? '#fff' : 'rgba(200,160,80,0.6)';
-  ctx.textAlign = 'center';
-  ctx.fillText('×2', spX, spY + 4);
-  ctx.textAlign = 'left';
-
+  ctx.lineWidth   = 1.5; ctx.stroke();
+  ctx.font        = 'bold 11px monospace';
+  ctx.fillStyle   = spActive ? '#fff' : 'rgba(200,160,80,0.6)';
+  ctx.textAlign   = 'center'; ctx.fillText('×2', spX, spY + 4); ctx.textAlign = 'left';
   speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
 
-  // ── NEXT WAVE button ──────────────────────────────────────────────────────────
+  // ── NEXT WAVE ──────────────────────────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
     const btnH = 44;
     const btnY = GRID_TOP + fullH - btnH - 10;
     const btnX = px + 6;
     const btnW = pw - 12;
 
-    ctx.shadowColor = 'rgba(200,30,20,0.8)';
-    ctx.shadowBlur  = 12;
+    ctx.shadowColor = 'rgba(200,30,20,0.8)'; ctx.shadowBlur = 12;
     drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(140,18,18,0.97)', 0.92, 6);
     ctx.shadowBlur  = 0;
-
-    ctx.textAlign   = 'center';
-    ctx.font        = 'bold 11px monospace';
-    ctx.fillStyle   = '#ffffff';
-    ctx.shadowColor = 'rgba(255,100,80,0.7)';
-    ctx.shadowBlur  = 8;
+    ctx.textAlign   = 'center'; ctx.font = 'bold 11px monospace';
+    ctx.fillStyle   = '#ffffff'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
     ctx.fillText('NEXT WAVE', btnX + btnW / 2, btnY + 17);
     const secs = waveState === 'countdown'
       ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
-      : Math.ceil((BREAK_FRAMES - waveTimer) / 60);
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = 'rgba(255,200,180,0.8)';
+      : Math.ceil((BREAK_FRAMES    - waveTimer) / 60);
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(255,200,180,0.8)'; ctx.shadowBlur = 0;
     ctx.fillText(`auto ${secs}s`, btnX + btnW / 2, btnY + 32);
-    ctx.shadowBlur  = 0;
-
     nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
   } else {
     nextWaveBtn = null;
@@ -1233,8 +1294,7 @@ function drawRightPanel() {
 }
 
 function drawTopBar() {
-  const { width } = getViewSize();
-  drawFantasyPanel(2, 2, width - 4, GRID_TOP - 4, 'rgba(42,22,6,0.97)');
+  drawFantasyPanel(2, 2, BASE_W - 4, GRID_TOP - 4, 'rgba(42,22,6,0.97)');
 
   const barH = GRID_TOP - 6;
   const cy   = Math.round(barH / 2) + 8;
@@ -1263,7 +1323,7 @@ function drawTopBar() {
   ctx.shadowBlur  = 0;
 
   // ── CENTER: wave label + timer ───────────────────────────────────────────────
-  const midX = Math.round(width / 2);
+  const midX = Math.round(BASE_W / 2);
   const wLabel = `WAVE ${waveNumber} / ${MAX_WAVES}`;
 
   ctx.font        = 'bold 14px monospace';
@@ -1294,7 +1354,7 @@ function drawTopBar() {
   }
 
   // ── RIGHT: resources ─────────────────────────────────────────────────────────
-  let rx = width - 14;
+  let rx = BASE_W - 14;
   ctx.font      = 'bold 12px monospace';
   ctx.textAlign = 'right';
 
@@ -1334,8 +1394,8 @@ function drawBottomBuildBar() {
   };
 
   const buttons     = getBuildButtons();
-  const buildPanelW = buttons.length * (BUILD_BTN.w + BUILD_BTN.gap) - BUILD_BTN.gap + 20;
   const buildPanelX = SIDEBAR_W + 2;
+  const buildPanelW = BASE_W - 4;
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
@@ -1825,17 +1885,80 @@ function draw() {
   }
 
   drawFrames();
-  drawLeftSidebar();
   drawRightPanel();
   drawHud();
   drawGoldCoins();
   drawBossWarning();
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
+  drawDragGhost();
+  ctx.restore();
+}
+
+function drawDragGhost() {
+  if (!dragItem) return;
+
+  const col    = Math.floor((dragX - GRID_LEFT) / CELL_SIZE);
+  const row    = Math.floor((dragY - GRID_TOP)  / CELL_SIZE);
+  const onGrid = col >= 0 && col < COLS && row >= 0 && row < ROWS;
+
+  if (onGrid) {
+    const cell     = grid.getCell(col, row);
+    const canPlace = cell === CELL.EMPTY && gold >= dragItem.cost && !hasEnemyInCell(col, row);
+    ctx.save();
+    ctx.translate(GRID_LEFT, GRID_TOP);
+    ctx.fillStyle   = canPlace ? 'rgba(80,220,80,0.28)' : 'rgba(220,60,60,0.28)';
+    ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    ctx.strokeStyle = canPlace ? 'rgba(120,255,120,0.75)' : 'rgba(255,80,80,0.75)';
+    ctx.lineWidth   = 1.5;
+    ctx.strokeRect(col * CELL_SIZE + 0.75, row * CELL_SIZE + 0.75, CELL_SIZE - 1.5, CELL_SIZE - 1.5);
+    ctx.restore();
+  }
+
+  // Ghost card floating above cursor
+  const gw = 64, gh = 46;
+  const gx = dragX - gw / 2;
+  const gy = dragY - gh - 12;
+  const cx = gx + gw / 2;
+
+  ctx.save();
+  ctx.globalAlpha = 0.88;
+  drawFantasyPanel(gx, gy, gw, gh, 'rgba(18,9,28,0.96)', 0.9, 6);
+
+  const _ghostSpriteKeys = {
+    [TOWER_TYPES.BERSERK]:  'berserker',
+    [TOWER_TYPES.VALKYRIE]: 'valkyrie',
+    [TOWER_TYPES.MILITARY]: 'archer',
+    [TOWER_TYPES.CATAPULT]: 'catapult',
+    [TOWER_TYPES.BLONDIE]:  'blondie',
+  };
+  const _gsp = SPRITES[_ghostSpriteKeys[dragItem.id]];
+  const ppx = gx + 4, ppy = gy + 3, ppw = gw - 8, pph = gh - 20;
+  if (_gsp && _gsp.img.complete && _gsp.img.naturalWidth > 0) {
+    ctx.drawImage(_gsp.img, 0, 0, _gsp.frameW, _gsp.frameH, ppx, ppy, ppw, pph);
+  } else {
+    ctx.beginPath();
+    ctx.arc(cx, gy + 14, 10, 0, Math.PI * 2);
+    ctx.fillStyle = dragItem.color;
+    ctx.fill();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font      = 'bold 8px monospace';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(dragItem.label, cx, gy + 31);
+
+  ctx.font      = '8px monospace';
+  ctx.fillStyle = gold >= dragItem.cost ? '#e8c040' : '#ff6060';
+  ctx.fillText(`◆${dragItem.cost}`, cx, gy + gh - 3);
   ctx.restore();
 }
 
 function gameLoop() {
+  // Re-bake terrain once the ground sprite finishes loading
+  if (!terrainUsesSprite && SPRITES['ground']?.img.complete && SPRITES['ground'].img.naturalWidth > 0) {
+    initTerrain();
+  }
   update();
   if (gameSpeed >= 2) update();
   draw();

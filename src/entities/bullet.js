@@ -18,6 +18,7 @@ export class Bullet {
     this.trail        = [{ x, y }];
     this.maxTrailPoints = shape === 'spear' ? 8 : splashRadius > 0 ? 4 : 6;
     this.angle        = 0;
+    this.source       = null;
   }
 
   update() {
@@ -35,7 +36,9 @@ export class Bullet {
     this.angle = Math.atan2(dy, dx);
 
     if (dist <= Math.max(this.speed, hitDistance)) {
+      const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
       this.target.hp -= this.damage;
+      if (this.source) this.source.damageDealt += actualDamage;
 
       if (this.slowDuration > 0) {
         this.target.slowTimer  = Math.max(this.target.slowTimer ?? 0, this.slowDuration);
@@ -80,7 +83,7 @@ export class Bullet {
     }
   }
 
-  // ── Spear (Valkyria) ─────────────────────────────────────────────────────────
+  // ── Spear (Valkyrie) ─────────────────────────────────────────────────────────
   _drawSpear(ctx) {
     const angle = this.angle;
     const perpA = angle + Math.PI / 2;
@@ -270,7 +273,7 @@ export class Bullet {
     ctx.restore();
   }
 
-  // ── Arrow (Bågskytt) ────────────────────────────────────────────────────────
+  // ── Arrow (Archer) ──────────────────────────────────────────────────────────
   _drawArrow(ctx) {
     const angle = this.angle;
     const perpA = angle + Math.PI / 2;
@@ -326,31 +329,6 @@ export class Bullet {
     ctx.lineTo(this.x + Math.cos(perpA) * 1.6, this.y + Math.sin(perpA) * 1.6);
     ctx.lineTo(this.x - Math.cos(perpA) * 1.6, this.y - Math.sin(perpA) * 1.6);
     ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.lineCap = 'butt';
-  }
-
-  // ── Charm sparkle (Blondie — legacy shape, unused) ────────────────────────────
-  _drawCharm(ctx) {
-    if (this.trail.length > 1) {
-      ctx.strokeStyle = 'rgba(255,140,200,0.5)';
-      ctx.lineWidth   = 1.4;
-      ctx.lineCap     = 'round';
-      ctx.beginPath();
-      ctx.moveTo(this.trail[0].x, this.trail[0].y);
-      for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
-      ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(255,130,200,0.28)';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 2.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowColor = '#ff88cc';
-    ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#ffaadd';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.lineCap = 'butt';

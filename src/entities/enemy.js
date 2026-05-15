@@ -1,3 +1,5 @@
+import { SPRITES } from '../assets.js';
+
 export const ENEMY_TYPES = {
   DRAUGR: 'draugr',
   MYLING: 'myling',
@@ -109,14 +111,16 @@ export class Enemy {
   draw(ctx) {
     if (!this.alive) return;
 
-    if (this.type === ENEMY_TYPES.MYLING) {
-      this._drawWisp(ctx);
-    } else if (this.type === ENEMY_TYPES.JOTUNN) {
-      this._drawGolem(ctx);
-    } else if (this.type === ENEMY_TYPES.MARA) {
-      this._drawBanshee(ctx);
-    } else {
-      this._drawGraveborn(ctx);
+    if (!this._drawSprite(ctx)) {
+      if (this.type === ENEMY_TYPES.MYLING) {
+        this._drawWisp(ctx);
+      } else if (this.type === ENEMY_TYPES.JOTUNN) {
+        this._drawGolem(ctx);
+      } else if (this.type === ENEMY_TYPES.MARA) {
+        this._drawBanshee(ctx);
+      } else {
+        this._drawGraveborn(ctx);
+      }
     }
 
     // Slow / stun overlay
@@ -166,6 +170,50 @@ export class Enemy {
     }
 
     this._drawHpBar(ctx);
+  }
+
+  _drawSprite(ctx) {
+    const sp = SPRITES[this.type];
+    if (!sp || !sp.img.complete || sp.img.naturalWidth === 0) return false;
+
+    const frame = Math.floor(performance.now() / 200) % sp.total;
+    const dh    = this.radius * 4.2;
+    const dw    = dh * sp.frameW / sp.frameH;
+
+    // Ground shadow
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + 1, this.y + this.radius * 0.55, dw * 0.52, dw * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    // Flip to face movement direction
+    const dx = this.path && this.pathIndex + 1 < this.path.length
+      ? this.path[this.pathIndex + 1].x - this.x : 1;
+    if (dx < 0) ctx.scale(-1, 1);
+    ctx.drawImage(sp.img,
+      frame * sp.frameW, 0, sp.frameW, sp.frameH,
+      -dw / 2, -dh * 0.88, dw, dh);
+    ctx.restore();
+
+    // Flying badge for Myling
+    if (this.flying) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(200,230,255,0.65)';
+      ctx.beginPath();
+      const fty = this.y - this.radius * 1.7;
+      ctx.moveTo(this.x,     fty - 3.5);
+      ctx.lineTo(this.x - 3, fty + 2.5);
+      ctx.lineTo(this.x + 3, fty + 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    return true;
   }
 
   // ── Graveborn: undead skeleton warrior ───────────────────────────────────────

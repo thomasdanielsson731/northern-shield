@@ -106,6 +106,7 @@ export class Tower {
     this.type = type;
     this.fireCooldown  = 0;
     this.level         = 1;
+    this.damageDealt   = 0;
 
     const def = TOWER_DEFS[this.type] || TOWER_DEFS[TOWER_TYPES.BERSERK];
     this.baseDamage    = def.damage;
@@ -165,12 +166,14 @@ export class Tower {
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
-      bullets.push(new Bullet(
+      const b = new Bullet(
         this.x, this.y, target, this.damage, this.bulletSpeed,
         this.splashRadius, this.splashDamage,
         this.slowFactor, this.slowDuration,
         this.bulletShape
-      ));
+      );
+      b.source = this;
+      bullets.push(b);
       this.fireCooldown = this.fireRate;
       this.fireFlash    = 8;
       return 0;
@@ -280,7 +283,7 @@ export class Tower {
     }
   }
 
-  // ── Bärsärkare: huge berserker warrior swinging a battle axe ─────────────────
+  // ── Berserker: huge berserker warrior swinging a battle axe ──────────────────
   _drawBerserk(ctx, t) {
     const x = this.x, y = this.y;
 
@@ -443,7 +446,7 @@ export class Tower {
     ctx.restore();
   }
 
-  // ── Valkyria: winged warrior with spear ───────────────────────────────────────
+  // ── Valkyrie: winged warrior with spear ───────────────────────────────────────
   _drawValkyrie(ctx, t) {
     const x = this.x, y = this.y;
 
@@ -601,7 +604,7 @@ export class Tower {
     ctx.lineCap = 'butt';
   }
 
-  // ── Bågskytt: Viking archer on stone watchtower ──────────────────────────────
+  // ── Archer: Viking archer on stone watchtower ────────────────────────────────
   _drawMilitary(ctx, t) {
     const x = this.x, y = this.y;
     const glow = 0.6 + Math.sin(t * 3.5) * 0.4;
@@ -749,7 +752,7 @@ export class Tower {
     ctx.restore();
   }
 
-  // ── Katapult: medieval trebuchet with swinging arm ───────────────────────────
+  // ── Catapult: medieval trebuchet with swinging arm ───────────────────────────
   _drawCatapult(ctx, t) {
     const x = this.x, y = this.y;
 
