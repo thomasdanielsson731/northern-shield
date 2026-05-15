@@ -382,7 +382,7 @@ function initTerrain() {
     tileCtx.drawImage(groundSp.img, 0, 0, groundSp.frameW, groundSp.frameH,
       0, 0, tileSize, tileSize);
     // Darken midtones so the palette reads as cold Nordic ground
-    tileCtx.fillStyle = 'rgba(0,0,0,0.30)';
+    tileCtx.fillStyle = 'rgba(0,0,0,0.48)';
     tileCtx.fillRect(0, 0, tileSize, tileSize);
     const pattern = tc.createPattern(tileCanvas, 'repeat');
     tc.fillStyle = pattern;
@@ -440,8 +440,8 @@ function initTerrain() {
     const ry = rx * (0.28 + rng() * 0.45);
     const a  = rng() * Math.PI;
     const fg = tc.createRadialGradient(px, py, 0, px, py, rx);
-    fg.addColorStop(0,   `rgba(200,225,255,${0.26 + rng() * 0.18})`);
-    fg.addColorStop(0.55,`rgba(185,215,255,${0.10 + rng() * 0.08})`);
+    fg.addColorStop(0,   `rgba(200,225,255,${0.13 + rng() * 0.09})`);
+    fg.addColorStop(0.55,`rgba(185,215,255,${0.05 + rng() * 0.04})`);
     fg.addColorStop(1,   'rgba(170,205,250,0)');
     tc.fillStyle = fg;
     tc.beginPath(); tc.ellipse(px, py, rx, ry, a, 0, Math.PI * 2); tc.fill();
@@ -540,13 +540,13 @@ function initTerrain() {
   // ── Vignette — darken edges, slight warm centre ───────────────────────────
   const vig = tc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.22, W / 2, H / 2, Math.max(W, H) * 0.82);
   vig.addColorStop(0,   'rgba(0,0,0,0)');
-  vig.addColorStop(0.65,'rgba(0,0,0,0.14)');
-  vig.addColorStop(1,   'rgba(0,0,0,0.58)');
+  vig.addColorStop(0.65,'rgba(0,0,0,0.22)');
+  vig.addColorStop(1,   'rgba(0,0,0,0.72)');
   tc.fillStyle = vig;
   tc.fillRect(0, 0, W, H);
 
   const glow = tc.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.min(W, H) * 0.48);
-  glow.addColorStop(0, 'rgba(255,200,120,0.07)');
+  glow.addColorStop(0, 'rgba(255,200,120,0.03)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   tc.fillStyle = glow;
   tc.fillRect(0, 0, W, H);
@@ -1034,22 +1034,49 @@ function drawPath() {
 
   ctx.save();
 
-  // ── Faint route line — barely-visible ghostly trail ──────────────────────
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.strokeStyle = 'rgba(130,200,255,0.10)';
-  ctx.lineWidth   = cs * 0.55;
-  ctx.lineJoin    = 'round';
-  ctx.lineCap     = 'round';
-  ctx.shadowColor = 'rgba(100,180,255,0.35)';
-  ctx.shadowBlur  = 7;
-  ctx.stroke();
-  ctx.shadowBlur  = 0;
+  // ── Stone road ────────────────────────────────────────────────────────────
+  const mkPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  };
+  ctx.lineJoin = 'round';
+  ctx.lineCap  = 'round';
+  // outer shadow
+  mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.62)';       ctx.lineWidth = cs * 1.00; ctx.stroke();
+  // dark stone base
+  mkPath(); ctx.strokeStyle = 'rgba(30,22,12,0.95)';    ctx.lineWidth = cs * 0.82; ctx.stroke();
+  // mid stone
+  mkPath(); ctx.strokeStyle = 'rgba(54,42,26,0.90)';    ctx.lineWidth = cs * 0.64; ctx.stroke();
+  // lighter centre / worn wheel strip
+  mkPath(); ctx.strokeStyle = 'rgba(74,60,38,0.65)';    ctx.lineWidth = cs * 0.38; ctx.stroke();
+  // snow/frost dusting along edges (dashed)
+  ctx.setLineDash([1, Math.round(cs * 0.55)]);
+  ctx.lineDashOffset = 4;
+  mkPath(); ctx.strokeStyle = 'rgba(190,210,235,0.13)'; ctx.lineWidth = cs * 0.87; ctx.stroke();
+  ctx.setLineDash([]);
+  // stone block joint lines at each node
+  ctx.lineCap = 'butt';
+  for (let i = 1; i < pts.length - 1; i++) {
+    const ddx = pts[i + 1 < pts.length ? i + 1 : i].x - pts[i - 1].x;
+    const ddy = pts[i + 1 < pts.length ? i + 1 : i].y - pts[i - 1].y;
+    const ll  = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+    const nx  = (-ddy / ll) * cs * 0.37;
+    const ny  = ( ddx / ll) * cs * 0.37;
+    ctx.strokeStyle = 'rgba(10,6,2,0.50)';
+    ctx.lineWidth   = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(pts[i].x - nx, pts[i].y - ny);
+    ctx.lineTo(pts[i].x + nx, pts[i].y + ny);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'round';
+  // faint embedded glow in stone
+  mkPath(); ctx.strokeStyle = 'rgba(100,160,255,0.07)'; ctx.lineWidth = cs * 0.30; ctx.stroke();
 
   // ── Will-o'-wisps — glowing orbs that travel along the path ──────────────
-  const orbCount = 7;
-  const speed    = totalLen / 3.8;
+  const orbCount = 5;
+  const speed    = totalLen / 4.2;
 
   for (let i = 0; i < orbCount; i++) {
     const phase  = i / orbCount;
@@ -1062,7 +1089,7 @@ function drawPath() {
     const wx = pos.x + Math.cos(wAngle) * wobble;
     const wy = pos.y + Math.sin(wAngle) * wobble;
 
-    const outerR = cs * (0.75 + pulse * 0.45);
+    const outerR = cs * (0.42 + pulse * 0.28);
     const grad = ctx.createRadialGradient(wx, wy, 0, wx, wy, outerR);
     grad.addColorStop(0,    `rgba(195,238,255,${0.48 + pulse * 0.28})`);
     grad.addColorStop(0.28, `rgba(110,205,255,${0.22 * pulse})`);
@@ -1071,7 +1098,7 @@ function drawPath() {
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.arc(wx, wy, outerR, 0, Math.PI * 2); ctx.fill();
 
-    const innerR = cs * (0.28 + pulse * 0.18);
+    const innerR = cs * (0.16 + pulse * 0.12);
     const halo = ctx.createRadialGradient(wx, wy, 0, wx, wy, innerR);
     halo.addColorStop(0, `rgba(220,180,255,${0.35 + pulse * 0.25})`);
     halo.addColorStop(1, 'rgba(160,100,255,0)');

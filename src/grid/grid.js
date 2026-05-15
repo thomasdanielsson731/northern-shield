@@ -288,38 +288,109 @@ export class Grid {
       ctx.fill();
     }
 
-    // ── Gold pile (always on top) ────────────────────────────────────────────────
+    // ── Warm hoard aura — drawn BEFORE the gold so it glows behind ───────────────
+    const hPulseF = this.hoardPulse > 0 ? this.hoardPulse / 14 : 0;
+    const glowPulse = 0.5 + Math.sin(time * 2.3) * 0.5;
+    const auraR   = cs * 3.8 + hPulseF * cs * 1.2;
+    const aura    = ctx.createRadialGradient(cx, cy, 0, cx, cy, auraR);
+    aura.addColorStop(0,   `rgba(255,185,40,${0.28 + glowPulse * 0.14 + hPulseF * 0.22})`);
+    aura.addColorStop(0.35,`rgba(200,110,15,${0.12 + glowPulse * 0.07})`);
+    aura.addColorStop(1,   'rgba(100,45,0,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2); ctx.fill();
+
+    // ── Gold pile (much bigger) ──────────────────────────────────────────────────
     const goldCount = Math.min(Math.floor(Math.log2((this.gold || 0) + 2)), 8);
-    const pileScale = this.hoardPulse > 0 ? 1 + (this.hoardPulse / 10) * 0.38 : 1.0;
+    const pileScale = 1 + hPulseF * 0.5;
     const gPulse    = 0.5 + Math.sin(time * 5.5 + 0.8) * 0.5;
-    const pileRx    = cs * 0.52 * pileScale;
+    const pileRx    = cs * 1.5 * pileScale;
 
     ctx.save();
     if (goldCount > 0) {
-      ctx.shadowColor = 'rgba(255,210,30,0.85)';
-      ctx.shadowBlur  = 5 + gPulse * 4 + (this.hoardPulse > 0 ? 9 : 0);
+      ctx.shadowColor = 'rgba(255,210,30,0.95)';
+      ctx.shadowBlur  = 10 + gPulse * 8 + hPulseF * 18;
       for (let i = 0; i < goldCount; i++) {
-        const coinY = cy + 2.5 - i * 2.0;
+        const coinY = cy + 4 - i * cs * 0.32;
         const rx    = pileRx * (1 - i * 0.04);
         ctx.beginPath();
-        ctx.ellipse(cx, coinY, rx, rx * 0.36, 0, 0, Math.PI * 2);
-        ctx.fillStyle = i === goldCount - 1 ? '#f0c840' : '#7a5018';
+        ctx.ellipse(cx, coinY, rx, rx * 0.34, 0, 0, Math.PI * 2);
+        ctx.fillStyle = i === goldCount - 1 ? '#f5d040' : (i % 2 === 0 ? '#8a5418' : '#704010');
         ctx.fill();
         if (i === goldCount - 1) {
-          ctx.strokeStyle = 'rgba(255,240,110,0.85)';
-          ctx.lineWidth   = 0.8;
+          ctx.strokeStyle = 'rgba(255,245,120,0.90)';
+          ctx.lineWidth   = 1.2;
           ctx.stroke();
         }
       }
       ctx.shadowBlur = 0;
     } else {
-      ctx.strokeStyle = 'rgba(100,70,20,0.4)';
-      ctx.lineWidth   = 0.8;
+      // Empty hoard ring
+      ctx.strokeStyle = 'rgba(130,90,25,0.5)';
+      ctx.lineWidth   = 1.2;
       ctx.beginPath();
-      ctx.arc(cx, cy, cs * 0.32, 0, Math.PI * 2);
+      ctx.arc(cx, cy, cs * 0.55, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
+
+    // ── Rune artifact (glowing stone left of pile) ──────────────────────────────
+    const runePulse = 0.5 + Math.sin(time * 3.1 + 1.2) * 0.5;
+    const runeX = cx - Math.round(cs * 1.1);
+    const runeY = cy - Math.round(cs * 0.6);
+    ctx.save();
+    ctx.shadowColor = `rgba(120,170,255,${0.65 + runePulse * 0.35})`;
+    ctx.shadowBlur  = 5 + runePulse * 9;
+    ctx.fillStyle   = '#3a4455';
+    ctx.fillRect(runeX - 3, runeY - 5, 6, 11);
+    ctx.fillStyle   = '#505870';
+    ctx.fillRect(runeX - 3, runeY - 5, 6, 2);
+    ctx.strokeStyle = `rgba(100,165,255,${0.65 + runePulse * 0.35})`;
+    ctx.lineWidth   = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(runeX, runeY - 3); ctx.lineTo(runeX, runeY + 3);
+    ctx.moveTo(runeX - 2, runeY - 1); ctx.lineTo(runeX + 2, runeY + 2);
+    ctx.moveTo(runeX - 2, runeY + 1); ctx.lineTo(runeX + 2, runeY - 1);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // ── Treasure chest (right of pile) ─────────────────────────────────────────
+    const chX = cx + Math.round(cs * 1.0);
+    const chY = cy + Math.round(cs * 0.4);
+    ctx.save();
+    ctx.shadowColor = 'rgba(200,140,30,0.6)';
+    ctx.shadowBlur  = 4 + gPulse * 3;
+    ctx.fillStyle   = '#3a1c08';  // chest shadow
+    ctx.fillRect(chX - 6, chY - 3, 12, 9);
+    ctx.fillStyle   = '#5a3012';  // chest body
+    ctx.fillRect(chX - 6, chY - 3, 12, 8);
+    ctx.fillStyle   = '#7a4820';  // chest lid
+    ctx.fillRect(chX - 6, chY - 3, 12, 3);
+    ctx.fillStyle   = 'rgba(255,220,100,0.35)';
+    ctx.fillRect(chX - 6, chY - 3, 12, 1);
+    ctx.fillStyle   = '#c09020';  // latch
+    ctx.fillRect(chX - 1, chY - 1, 3, 4);
+    ctx.shadowBlur  = 0;
+    ctx.restore();
+
+    // ── Orbiting gold sparkles ──────────────────────────────────────────────────
+    for (let i = 0; i < 5; i++) {
+      const sa  = time * 1.9 + (i / 5) * Math.PI * 2;
+      const sr  = cs * (1.2 + Math.sin(time * 2.8 + i) * 0.3);
+      const spx = cx + Math.cos(sa) * sr;
+      const spy = cy + Math.sin(sa) * sr * 0.42;
+      const spA = Math.max(0, 0.25 + Math.sin(time * 6 + i * 1.6) * 0.22);
+      ctx.save();
+      ctx.globalAlpha = spA;
+      ctx.shadowColor = '#ffd030';
+      ctx.shadowBlur  = 5;
+      ctx.fillStyle   = '#ffe050';
+      ctx.beginPath();
+      ctx.arc(spx, spy, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
   }
 
   _wallAdjacency(col, row) {
