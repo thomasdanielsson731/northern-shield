@@ -1100,115 +1100,81 @@ function drawPath() {
 }
 
 function drawFrames() {
-  const W  = BASE_W, H = BASE_H;
+  const W = BASE_W, H = BASE_H;
 
-  const corner = SPRITES['frameCorner'];
-  const borderH = SPRITES['frameBorderH'];
-  const borderV = SPRITES['frameBorderV'];
+  const spCorner  = SPRITES['frameCorner'];
+  const spBorderH = SPRITES['frameBorderH'];
+  const spBorderV = SPRITES['frameBorderV'];
 
-  // Border thickness derived from corner sprite aspect (height maps to border thickness)
-  // Corner sprite is 1536×1024 — we render it so its short side = borderThick
-  const borderThick = 28;  // px — thickness of the frame band
-  const cornerW = Math.round(borderThick * (corner ? corner.frameW / corner.frameH : 1));
-  const cornerH = borderThick;
+  const spritesReady = spCorner  && spCorner.img.complete  && spCorner.img.naturalWidth  > 0
+                    && spBorderH && spBorderH.img.complete && spBorderH.img.naturalWidth > 0
+                    && spBorderV && spBorderV.img.complete && spBorderV.img.naturalWidth > 0;
 
   ctx.save();
 
-  if (corner && borderH && borderV &&
-      corner.img.complete && borderH.img.complete && borderV.img.complete &&
-      corner.img.naturalWidth > 0) {
+  if (spritesReady) {
+    // Corner sprite is 1536x1024 (3:2). Render so short side = thick.
+    const thick  = 30;
+    const cW     = Math.round(thick * spCorner.frameW / spCorner.frameH);
+    const cH     = thick;
+    const hTileW = Math.round(thick * spBorderH.frameW / spBorderH.frameH);
+    const vTileH = Math.round(thick * spBorderV.frameH / spBorderV.frameW);
 
-    // Helper: draw rotated image at (ox,oy) with (dw,dh), rotated deg° around its own centre
-    function drawRotated(sp, ox, oy, dw, dh, deg) {
-      ctx.save();
-      ctx.translate(ox + dw / 2, oy + dh / 2);
-      ctx.rotate(deg * Math.PI / 180);
-      ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, -dw / 2, -dh / 2, dw, dh);
-      ctx.restore();
-    }
-
-    // ── Horizontal edges (top & bottom) ──────────────────────────────────────
-    const hEdgeX = cornerW;
-    const hEdgeW = W - cornerW * 2;
+    const blit = (sp, dx, dy, dw, dh) =>
+      ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, dx, dy, dw, dh);
 
     // Top edge
     ctx.save();
-    const patH = ctx.createPattern((() => {
-      const tc = document.createElement('canvas');
-      tc.width = Math.round(hEdgeW); tc.height = borderH.frameH;
-      const tctx = tc.getContext('2d');
-      // Tile horizontally at borderThick height
-      const tileW = Math.round(borderThick * borderH.frameW / borderH.frameH);
-      for (let x = 0; x < hEdgeW; x += tileW)
-        tctx.drawImage(borderH.img, 0, 0, borderH.frameW, borderH.frameH, x, 0, tileW, borderH.frameH);
-      return tc;
-    })(), 'no-repeat');
-    ctx.fillStyle = patH;
-    ctx.save();
-    ctx.translate(hEdgeX, 0);
-    ctx.scale(1, borderThick / borderH.frameH);
-    ctx.fillRect(0, 0, hEdgeW, borderH.frameH);
+    ctx.beginPath(); ctx.rect(cW, 0, W - cW * 2, thick); ctx.clip();
+    for (let x = cW; x < W - cW; x += hTileW) blit(spBorderH, x, 0, hTileW, thick);
     ctx.restore();
 
-    // Bottom edge (flip vertically)
+    // Bottom edge (flip V)
     ctx.save();
-    ctx.translate(hEdgeX + hEdgeW, H);
-    ctx.scale(-1, -1);
-    ctx.scale(1, borderThick / borderH.frameH);
-    ctx.fillRect(0, 0, hEdgeW, borderH.frameH);
-    ctx.restore();
+    ctx.translate(0, H); ctx.scale(1, -1);
+    ctx.beginPath(); ctx.rect(cW, 0, W - cW * 2, thick); ctx.clip();
+    for (let x = cW; x < W - cW; x += hTileW) blit(spBorderH, x, 0, hTileW, thick);
     ctx.restore();
 
-    // ── Vertical edges (left & right) ────────────────────────────────────────
-    const vEdgeY = cornerH;
-    const vEdgeH = H - cornerH * 2;
-
-    ctx.save();
-    const tileVH = Math.round(borderThick * borderV.frameH / borderV.frameW);
     // Left edge
-    for (let y = 0; y < vEdgeH; y += tileVH)
-      ctx.drawImage(borderV.img, 0, 0, borderV.frameW, borderV.frameH,
-        0, vEdgeY + y, borderThick, Math.min(tileVH, vEdgeH - y));
-    // Right edge (flip horizontally)
     ctx.save();
-    ctx.translate(W, 0);
-    ctx.scale(-1, 1);
-    for (let y = 0; y < vEdgeH; y += tileVH)
-      ctx.drawImage(borderV.img, 0, 0, borderV.frameW, borderV.frameH,
-        0, vEdgeY + y, borderThick, Math.min(tileVH, vEdgeH - y));
-    ctx.restore();
+    ctx.beginPath(); ctx.rect(0, cH, thick, H - cH * 2); ctx.clip();
+    for (let y = cH; y < H - cH; y += vTileH) blit(spBorderV, 0, y, thick, vTileH);
     ctx.restore();
 
-    // ── Corners ───────────────────────────────────────────────────────────────
-    drawRotated(corner,   0,       0,      cornerW, cornerH,   0);   // TL
-    drawRotated(corner,   W - cornerW, 0,  cornerW, cornerH,  90);   // TR
-    drawRotated(corner,   0,       H - cornerH, cornerW, cornerH, 270); // BL
-    drawRotated(corner,   W - cornerW, H - cornerH, cornerW, cornerH, 180); // BR
+    // Right edge (flip H)
+    ctx.save();
+    ctx.translate(W, 0); ctx.scale(-1, 1);
+    ctx.beginPath(); ctx.rect(0, cH, thick, H - cH * 2); ctx.clip();
+    for (let y = cH; y < H - cH; y += vTileH) blit(spBorderV, 0, y, thick, vTileH);
+    ctx.restore();
+
+    // Top-left corner (as-is)
+    blit(spCorner, 0, 0, cW, cH);
+    // Top-right (flip H)
+    ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1);
+    blit(spCorner, 0, 0, cW, cH); ctx.restore();
+    // Bottom-left (flip V)
+    ctx.save(); ctx.translate(0, H); ctx.scale(1, -1);
+    blit(spCorner, 0, 0, cW, cH); ctx.restore();
+    // Bottom-right (flip both)
+    ctx.save(); ctx.translate(W, H); ctx.scale(-1, -1);
+    blit(spCorner, 0, 0, cW, cH); ctx.restore();
 
   } else {
-    // ── Procedural fallback while sprites load ────────────────────────────────
-    ctx.shadowColor   = 'rgba(0,0,0,0.95)';
-    ctx.shadowBlur    = 18;
-    ctx.shadowOffsetY = 3;
-    ctx.strokeStyle   = '#080401';
-    ctx.lineWidth     = 9;
+    // Procedural fallback while sprites load
+    ctx.shadowColor = 'rgba(0,0,0,0.95)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 3;
+    ctx.strokeStyle = '#080401'; ctx.lineWidth = 9;
     ctx.strokeRect(4.5, 4.5, W - 9, H - 9);
     ctx.shadowBlur = ctx.shadowOffsetY = 0;
-    ctx.shadowColor = 'rgba(190,210,230,0.40)';
-    ctx.shadowBlur  = 5;
-    ctx.strokeStyle = '#a8b8c4';
-    ctx.lineWidth   = 2;
+    ctx.strokeStyle = '#a8b8c4'; ctx.lineWidth = 2;
     ctx.strokeRect(2, 2, W - 4, H - 4);
-    ctx.shadowBlur  = 0;
-    ctx.strokeStyle = '#181004';
-    ctx.lineWidth   = 4;
+    ctx.strokeStyle = '#181004'; ctx.lineWidth = 4;
     ctx.strokeRect(5, 5, W - 10, H - 10);
-    ctx.shadowColor = 'rgba(210,148,18,0.70)';
-    ctx.shadowBlur  = 10;
-    ctx.strokeStyle = '#c8901e';
-    ctx.lineWidth   = 2.5;
+    ctx.shadowColor = 'rgba(210,148,18,0.70)'; ctx.shadowBlur = 10;
+    ctx.strokeStyle = '#c8901e'; ctx.lineWidth = 2.5;
     ctx.strokeRect(7.75, 7.75, W - 15.5, H - 15.5);
-    ctx.shadowBlur  = 0;
+    ctx.shadowBlur = 0;
   }
 
   ctx.restore();

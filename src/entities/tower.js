@@ -198,6 +198,19 @@ export class Tower {
     ctx.fill();
     ctx.restore();
 
+    // Ground shadow — soft ellipse beneath the sprite
+    ctx.save();
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.38;
+    const grad = ctx.createRadialGradient(this.x, this.y + 3, 0, this.x, this.y + 3, 9);
+    grad.addColorStop(0,   'rgba(0,0,0,0.85)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y + 3, 9, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     // Range ring (skip for berserk — tiny ring looks bad)
     if (this.type !== TOWER_TYPES.BERSERK) {
       ctx.strokeStyle = this.rangeColor;
