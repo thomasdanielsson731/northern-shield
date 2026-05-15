@@ -348,40 +348,38 @@ export class Grid {
     ctx.fillRect(x, y, cs, cs);
 
     if (adj === 0) {
-      // ── Isolated: two-shield design ────────────────────────────────────
-      ctx.strokeStyle = 'rgba(80,40,10,0.55)';
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(x, y + cs * (0.25 + i * 0.25));
-        ctx.lineTo(x + cs, y + cs * (0.25 + i * 0.25));
-        ctx.stroke();
-      }
-      const shieldR = cs * 0.38;
-      for (const [ox, oy] of [[-cs * 0.17, 0], [cs * 0.17, 0]]) {
+      // ── Isolated: two round shields leaning against wall ───────────────
+      const shieldR = cs * 0.30;
+      for (const [ox, oy] of [[-cs * 0.28, 0], [cs * 0.28, 0]]) {
         const sx = cx + ox, sy = cy + oy;
-        ctx.fillStyle = '#3a3028';
+
+        // Wooden rim (dark border ring)
+        ctx.fillStyle = '#3a2410';
         ctx.beginPath(); ctx.arc(sx, sy, shieldR, 0, Math.PI * 2); ctx.fill();
+
+        // Shield face — four quadrant colours clipped to interior
         ctx.save();
-        ctx.beginPath(); ctx.arc(sx, sy, shieldR - 1, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#aa1a10';
+        ctx.beginPath(); ctx.arc(sx, sy, shieldR - 0.8, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = '#b01808';            // top-left red
         ctx.fillRect(sx - shieldR, sy - shieldR, shieldR, shieldR);
         ctx.fillRect(sx, sy, shieldR, shieldR);
-        ctx.fillStyle = '#e8d8a0';
+        ctx.fillStyle = '#d8c888';            // top-right cream
         ctx.fillRect(sx, sy - shieldR, shieldR, shieldR);
         ctx.fillRect(sx - shieldR, sy, shieldR, shieldR);
-        ctx.strokeStyle = 'rgba(30,15,5,0.6)'; ctx.lineWidth = 0.8;
+        // Divider cross
+        ctx.strokeStyle = 'rgba(20,10,4,0.55)'; ctx.lineWidth = 0.7;
         ctx.beginPath();
         ctx.moveTo(sx - shieldR, sy); ctx.lineTo(sx + shieldR, sy);
         ctx.moveTo(sx, sy - shieldR); ctx.lineTo(sx, sy + shieldR);
         ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = '#888880';
-        ctx.beginPath(); ctx.arc(sx, sy, shieldR * 0.24, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(220,220,200,0.7)';
-        ctx.beginPath();
-        ctx.arc(sx - shieldR * 0.07, sy - shieldR * 0.08, shieldR * 0.1, 0, Math.PI * 2);
-        ctx.fill();
+
+        // Small iron boss — not too large, clearly a rivet not a ring
+        const bossR = shieldR * 0.14;
+        ctx.fillStyle = '#706860';
+        ctx.beginPath(); ctx.arc(sx, sy, bossR, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(230,220,200,0.75)';
+        ctx.beginPath(); ctx.arc(sx - bossR * 0.3, sy - bossR * 0.35, bossR * 0.4, 0, Math.PI * 2); ctx.fill();
       }
     } else {
       // ── Connected: stone/wood palisade wall ────────────────────────────

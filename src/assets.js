@@ -14,6 +14,9 @@ const manifest = [
   { key: 'trelleborg',      src: '/assets/ui/goal_trelleborg_fort.png',           cols: 1, rows: 1 },
   { key: 'ground',          src: '/assets/terrain/ground_tile.png',               cols: 1, rows: 1 },
   { key: 'path',            src: '/assets/terrain/path_tile.png',                 cols: 1, rows: 1 },
+  { key: 'frameCorner',     src: '/assets/ui/ui_corner_ornament_top_left.png',    cols: 1, rows: 1 },
+  { key: 'frameBorderH',    src: '/assets/ui/ui_border_horizontal_tile.png',      cols: 1, rows: 1 },
+  { key: 'frameBorderV',    src: '/assets/ui/ui_border_vertical_tile.png',        cols: 1, rows: 1 },
 ];
 
 for (const { key, src, cols, rows } of manifest) {

@@ -359,100 +359,195 @@ function initTerrain() {
   terrainCanvas.height = ROWS * CELL_SIZE;
   const tc = terrainCanvas.getContext('2d');
   const cs = CELL_SIZE;
+  const W  = COLS * cs;
+  const H  = ROWS * cs;
 
+  // Deterministic sequential RNG — consistent look every restart
+  let _s = 0x9e3779b9;
+  const rng = () => {
+    _s ^= _s << 13; _s ^= _s >>> 7; _s ^= _s << 17;
+    return (_s >>> 0) / 0xffffffff;
+  };
+
+  // ── Base layer ────────────────────────────────────────────────────────────
   const groundSp = SPRITES['ground'];
   if (groundSp && groundSp.img.complete && groundSp.img.naturalWidth > 0) {
-    // ── Sprite-based ground — tile the texture across every cell ────────────
     terrainUsesSprite = true;
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        tc.drawImage(groundSp.img, 0, 0, groundSp.frameW, groundSp.frameH,
-          col * cs, row * cs, cs, cs);
-      }
+    const tileSize = cs * 7;
+    const tileCanvas = document.createElement('canvas');
+    tileCanvas.width = tileCanvas.height = tileSize;
+    const tileCtx = tileCanvas.getContext('2d');
+    tileCtx.drawImage(groundSp.img, 0, 0, groundSp.frameW, groundSp.frameH,
+      0, 0, tileSize, tileSize);
+    // Darken midtones so the palette reads as cold Nordic ground
+    tileCtx.fillStyle = 'rgba(0,0,0,0.30)';
+    tileCtx.fillRect(0, 0, tileSize, tileSize);
+    const pattern = tc.createPattern(tileCanvas, 'repeat');
+    tc.fillStyle = pattern;
+    tc.fillRect(0, 0, W, H);
+  } else {
+    // ── Procedural fallback ───────────────────────────────────────────────
+    terrainUsesSprite = false;
+
+    // Dark tundra base
+    tc.fillStyle = '#0e1407';
+    tc.fillRect(0, 0, W, H);
+
+    // Large coherent colour patches (not per-cell noise)
+    for (let i = 0; i < 45; i++) {
+      const px = rng() * W, py = rng() * H;
+      const rx = cs * 2 + rng() * cs * 5;
+      const ry = rx * (0.4 + rng() * 0.55);
+      const g  = Math.floor(18 + rng() * 10);
+      tc.fillStyle = `rgba(8,${g},4,${0.22 + rng() * 0.22})`;
+      tc.beginPath();
+      tc.ellipse(px, py, rx, ry, rng() * Math.PI, 0, Math.PI * 2);
+      tc.fill();
     }
-    return;
-  }
-
-  // ── Procedural fallback — hand-drawn grass ────────────────────────────────
-  terrainUsesSprite = false;
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const x = col * cs;
-      const y = row * cs;
-
-      // Deterministic per-cell values — same look every game restart
-      const s  = (col * 1103515245 + row * 22695477 + col * row * 6364136223) | 0;
-      const v1 = ((s ^ (s >>> 7))  * 0x5851f42d & 0x7fffffff) / 0x7fffffff;
-      const v2 = ((s * 0x27bb2ee6) & 0x7fffffff) / 0x7fffffff;
-      const v3 = ((s ^ (s <<  5))  * 0xbf58476d & 0x7fffffff) / 0x7fffffff;
-      const v4 = ((s * 0x94d049bb) & 0x7fffffff) / 0x7fffffff;
-
-      // Base grass — dark olive green with per-cell brightness variation
-      const br = Math.floor(v1 * 14);
-      tc.fillStyle = `rgb(${18 + br},${28 + br * 2},${9 + br})`;
-      tc.fillRect(x, y, cs, cs);
-
-      // Dirt/soil patches — warm brown blotch on some cells
-      if (v2 < 0.3) {
-        tc.fillStyle = `rgba(28,18,6,${0.22 + v2 * 0.3})`;
-        tc.fillRect(
-          x + Math.floor(v4 * 3),
-          y + Math.floor(v3 * 3),
-          Math.floor(cs * 0.6),
-          Math.floor(cs * 0.5)
-        );
-      }
-
-      // Primary grass tuft cluster — dense, ~1 in 3 cells
-      if (v3 < 0.34) {
-        const tx    = x + 2 + Math.floor(v1 * (cs - 6));
-        const ty    = y + 3 + Math.floor(v2 * (cs - 5));
-        const green = Math.floor(58 + v1 * 36);
-        tc.strokeStyle = `rgb(18,${green},10)`;
-        tc.lineWidth   = 0.85;
-        const blades = 2 + Math.floor(v4 * 3);
-        for (let b = 0; b < blades; b++) {
-          const bx   = tx + b * 2.2 - blades;
-          const lean = (v2 - 0.5) * 5;
-          const tall = 2.5 + v3 * 2;
-          tc.beginPath();
-          tc.moveTo(bx, ty);
-          tc.lineTo(bx + lean, ty - tall);
-          tc.stroke();
-        }
-      }
-
-      // Secondary smaller cluster — adds density on ~half the cells
-      if (v4 < 0.45) {
-        const tx2    = x + 1 + Math.floor(v2 * (cs - 4));
-        const ty2    = y + 2 + Math.floor(v4 * (cs - 5));
-        const green2 = Math.floor(50 + v3 * 28);
-        tc.strokeStyle = `rgb(16,${green2},9)`;
-        tc.lineWidth   = 0.7;
-        const blades2 = 2 + (s & 1);
-        for (let b = 0; b < blades2; b++) {
-          const bx2   = tx2 + b * 2;
-          const lean2 = (v1 - 0.5) * 4;
-          tc.beginPath();
-          tc.moveTo(bx2, ty2);
-          tc.lineTo(bx2 + lean2, ty2 - (2 + v2 * 1.8));
-          tc.stroke();
-        }
-      }
-
-      // Occasional tall single blade for variety
-      if (v1 < 0.12) {
-        const tx3 = x + Math.floor(v3 * (cs - 2));
-        const ty3 = y + cs - 2;
-        tc.strokeStyle = `rgba(30,${Math.floor(70 + v4 * 25)},14,0.9)`;
-        tc.lineWidth   = 0.6;
+    // Soil patches
+    for (let i = 0; i < 22; i++) {
+      const px = rng() * W, py = rng() * H;
+      const rx = cs + rng() * cs * 3;
+      tc.fillStyle = `rgba(20,10,3,${0.28 + rng() * 0.28})`;
+      tc.beginPath();
+      tc.ellipse(px, py, rx, rx * (0.4 + rng() * 0.55), rng() * Math.PI, 0, Math.PI * 2);
+      tc.fill();
+    }
+    // Sparse grass — in clusters, not per-cell
+    for (let ci = 0; ci < 32; ci++) {
+      const gcx = rng() * W, gcy = rng() * H;
+      const count = 3 + Math.floor(rng() * 6);
+      const gr = Math.floor(52 + rng() * 28);
+      tc.strokeStyle = `rgb(12,${gr},7)`;
+      tc.lineWidth = 0.65;
+      for (let b = 0; b < count; b++) {
+        const bx = gcx + (rng() - 0.5) * cs * 1.6;
+        const by = gcy + (rng() - 0.5) * cs;
         tc.beginPath();
-        tc.moveTo(tx3, ty3);
-        tc.lineTo(tx3 + (v2 - 0.5) * 6, ty3 - 4 - v1 * 3);
+        tc.moveTo(bx, by);
+        tc.lineTo(bx + (rng() - 0.5) * 3.5, by - 2 - rng() * 2.5);
         tc.stroke();
       }
     }
   }
+
+  // ── Frost patches ─────────────────────────────────────────────────────────
+  for (let i = 0, n = 10 + Math.floor(rng() * 8); i < n; i++) {
+    const px = rng() * W, py = rng() * H;
+    const rx = cs * 1.2 + rng() * cs * 4.5;
+    const ry = rx * (0.28 + rng() * 0.45);
+    const a  = rng() * Math.PI;
+    const fg = tc.createRadialGradient(px, py, 0, px, py, rx);
+    fg.addColorStop(0,   `rgba(200,225,255,${0.26 + rng() * 0.18})`);
+    fg.addColorStop(0.55,`rgba(185,215,255,${0.10 + rng() * 0.08})`);
+    fg.addColorStop(1,   'rgba(170,205,250,0)');
+    tc.fillStyle = fg;
+    tc.beginPath(); tc.ellipse(px, py, rx, ry, a, 0, Math.PI * 2); tc.fill();
+    // Crystal arms at the edge
+    tc.strokeStyle = `rgba(195,218,255,${0.30 + rng() * 0.22})`;
+    tc.lineWidth   = 0.45;
+    const nc = 4 + Math.floor(rng() * 5);
+    for (let c = 0; c < nc; c++) {
+      const ca  = rng() * Math.PI * 2;
+      const cr  = rx * (0.45 + rng() * 0.4);
+      const ccx = px + Math.cos(ca) * cr;
+      const ccy = py + Math.sin(ca) * cr * (ry / rx);
+      const cl  = 1 + rng() * 2;
+      for (let arm = 0; arm < 3; arm++) {
+        const aa = ca + arm * Math.PI / 3;
+        tc.beginPath();
+        tc.moveTo(ccx, ccy);
+        tc.lineTo(ccx + Math.cos(aa) * cl, ccy + Math.sin(aa) * cl);
+        tc.stroke();
+      }
+    }
+  }
+
+  // ── Stones ────────────────────────────────────────────────────────────────
+  for (let i = 0, n = 28 + Math.floor(rng() * 22); i < n; i++) {
+    const sx = rng() * W, sy = rng() * H;
+    const sr = 0.7 + rng() * 2.4;
+    const fl = 0.45 + rng() * 0.5;
+    const sa = rng() * Math.PI;
+    tc.fillStyle = 'rgba(0,0,0,0.38)';
+    tc.beginPath(); tc.ellipse(sx + sr * 0.28, sy + sr * 0.18, sr, sr * fl * 0.75, sa, 0, Math.PI * 2); tc.fill();
+    const sg = Math.floor(52 + rng() * 42);
+    tc.fillStyle = `rgb(${sg},${sg - 3},${sg + 5})`;
+    tc.beginPath(); tc.ellipse(sx, sy, sr, sr * fl, sa, 0, Math.PI * 2); tc.fill();
+    tc.fillStyle = `rgba(${sg + 58},${sg + 54},${sg + 48},0.55)`;
+    tc.beginPath(); tc.ellipse(sx - sr * 0.2, sy - sr * fl * 0.25, sr * 0.38, sr * fl * 0.26, sa, 0, Math.PI * 2); tc.fill();
+  }
+
+  // ── Dead roots ────────────────────────────────────────────────────────────
+  tc.lineCap = 'round';
+  for (let i = 0, n = 7 + Math.floor(rng() * 6); i < n; i++) {
+    const rx = rng() * W, ry = rng() * H;
+    const br = Math.floor(28 + rng() * 14);
+    const baseAlpha = 0.50 + rng() * 0.32;
+    const branches  = 2 + Math.floor(rng() * 4);
+    for (let b = 0; b < branches; b++) {
+      const ba  = rng() * Math.PI * 2;
+      const len = cs * 0.9 + rng() * cs * 2.8;
+      const cpx = rx + Math.cos(ba + (rng() - 0.5) * 0.9) * len * 0.42;
+      const cpy = ry + Math.sin(ba + (rng() - 0.5) * 0.9) * len * 0.42;
+      const ex  = rx + Math.cos(ba) * len;
+      const ey  = ry + Math.sin(ba) * len;
+      tc.strokeStyle = `rgba(${br},${Math.floor(br * 0.55)},${Math.floor(br * 0.22)},${baseAlpha})`;
+      tc.lineWidth   = 0.55 + rng() * 0.6;
+      tc.beginPath(); tc.moveTo(rx, ry); tc.quadraticCurveTo(cpx, cpy, ex, ey); tc.stroke();
+      if (rng() < 0.55) {
+        const mx = (rx + ex) / 2, my = (ry + ey) / 2;
+        const sl = len * (0.28 + rng() * 0.28);
+        const sa = ba + (rng() - 0.5) * 1.3;
+        tc.lineWidth *= 0.6;
+        tc.beginPath(); tc.moveTo(mx, my); tc.lineTo(mx + Math.cos(sa) * sl, my + Math.sin(sa) * sl); tc.stroke();
+        tc.lineWidth /= 0.6;
+      }
+    }
+  }
+  tc.lineCap = 'butt';
+
+  // ── Small runestones ──────────────────────────────────────────────────────
+  for (let i = 0, n = 3 + Math.floor(rng() * 4); i < n; i++) {
+    const rstx = cs * 0.6 + rng() * (W - cs * 1.2);
+    const rsty = cs * 0.6 + rng() * (H - cs * 1.2);
+    const rw   = Math.max(2, Math.round(cs * 0.26));
+    const rh   = Math.max(3, Math.round(cs * 0.46));
+    const lean = (rng() - 0.5) * 0.1;
+    const sg   = Math.floor(58 + rng() * 30);
+    tc.save();
+    tc.translate(rstx, rsty);
+    tc.rotate(lean);
+    tc.fillStyle = 'rgba(0,0,0,0.42)';
+    tc.fillRect(-rw / 2 + 1, -rh / 2 + 1, rw, rh);
+    tc.fillStyle = `rgb(${sg},${sg - 2},${sg + 6})`;
+    tc.fillRect(-rw / 2, -rh / 2, rw, rh);
+    tc.fillStyle = `rgba(${sg + 48},${sg + 46},${sg + 55},0.52)`;
+    tc.fillRect(-rw / 2, -rh / 2, rw, 1);
+    // Carved rune
+    tc.strokeStyle = 'rgba(18,12,6,0.62)';
+    tc.lineWidth   = 0.45;
+    tc.beginPath();
+    tc.moveTo(0, -rh * 0.3); tc.lineTo(0, rh * 0.3);          // vertical
+    tc.moveTo(-rw * 0.3, -rh * 0.05); tc.lineTo(rw * 0.3, -rh * 0.05); // crossarm
+    tc.moveTo(-rw * 0.28, -rh * 0.22); tc.lineTo(rw * 0.28, rh * 0.12); // diagonal
+    tc.stroke();
+    tc.restore();
+  }
+
+  // ── Vignette — darken edges, slight warm centre ───────────────────────────
+  const vig = tc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.22, W / 2, H / 2, Math.max(W, H) * 0.82);
+  vig.addColorStop(0,   'rgba(0,0,0,0)');
+  vig.addColorStop(0.65,'rgba(0,0,0,0.14)');
+  vig.addColorStop(1,   'rgba(0,0,0,0.58)');
+  tc.fillStyle = vig;
+  tc.fillRect(0, 0, W, H);
+
+  const glow = tc.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.min(W, H) * 0.48);
+  glow.addColorStop(0, 'rgba(255,200,120,0.07)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  tc.fillStyle = glow;
+  tc.fillRect(0, 0, W, H);
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -525,7 +620,7 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 function getBuildButtons() {
   const nBtn   = BUILD_ITEMS.length;
   const panelX = SIDEBAR_W + 2;
-  const panelW = BASE_W - 4;
+  const panelW = COLS * CELL_SIZE - 4;   // grid width only, not full BASE_W
   const padX   = 8;
   const gap    = 5;
   const cardW  = Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn);
@@ -909,205 +1004,211 @@ function drawBackground() {
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
 
-  const time  = performance.now() * 0.001;
-  const cs    = CELL_SIZE;
-  const pathSp = SPRITES['path'];
+  const t  = performance.now() * 0.001;
+  const cs = CELL_SIZE;
 
-  function buildPathShape() {
-    const { x: sx, y: sy } = grid.cellCenter(currentPath[0].col, currentPath[0].row);
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    for (let i = 1; i < currentPath.length; i++) {
-      const { x, y } = grid.cellCenter(currentPath[i].col, currentPath[i].row);
-      ctx.lineTo(x, y);
+  // Build world-space polyline with cumulative distances
+  const pts = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+  const segs = [];
+  let totalLen = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x;
+    const dy = pts[i + 1].y - pts[i].y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    segs.push({ x0: pts[i].x, y0: pts[i].y, x1: pts[i + 1].x, y1: pts[i + 1].y, len, cum: totalLen });
+    totalLen += len;
+  }
+
+  function posAt(d) {
+    d = ((d % totalLen) + totalLen) % totalLen;
+    for (const s of segs) {
+      if (d < s.cum + s.len) {
+        const f = (d - s.cum) / s.len;
+        return { x: s.x0 + (s.x1 - s.x0) * f, y: s.y0 + (s.y1 - s.y0) * f };
+      }
     }
+    return pts[pts.length - 1];
   }
 
   ctx.save();
 
-  if (pathSp && pathSp.img.complete && pathSp.img.naturalWidth > 0) {
-    // ── Sprite path — tile texture on every path cell ─────────────────────
-    for (const { col, row } of currentPath) {
-      ctx.drawImage(pathSp.img, 0, 0, pathSp.frameW, pathSp.frameH,
-        col * cs, row * cs, cs, cs);
-    }
-  } else {
-    // ── Procedural fallback — warm sandy brown stroke ─────────────────────
-    ctx.lineWidth   = cs * 0.72;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
-    ctx.strokeStyle = 'rgba(180,130,60,0.55)';
-    ctx.shadowColor = 'rgba(200,150,60,0.3)';
-    ctx.shadowBlur  = 8;
-    buildPathShape();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // Animated flowing dashes on top regardless of sprite/procedural
-  ctx.lineWidth      = cs * 0.2;
-  ctx.lineJoin       = 'round';
-  ctx.lineCap        = 'round';
-  ctx.strokeStyle    = 'rgba(240,200,90,0.5)';
-  ctx.setLineDash([6, 14]);
-  ctx.lineDashOffset = -(time * 28) % 20;
-  buildPathShape();
+  // ── Faint route line — barely-visible ghostly trail ──────────────────────
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.strokeStyle = 'rgba(130,200,255,0.10)';
+  ctx.lineWidth   = cs * 0.55;
+  ctx.lineJoin    = 'round';
+  ctx.lineCap     = 'round';
+  ctx.shadowColor = 'rgba(100,180,255,0.35)';
+  ctx.shadowBlur  = 7;
   ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.shadowBlur  = 0;
+
+  // ── Will-o'-wisps — glowing orbs that travel along the path ──────────────
+  const orbCount = 7;
+  const speed    = totalLen / 3.8;
+
+  for (let i = 0; i < orbCount; i++) {
+    const phase  = i / orbCount;
+    const d      = (t * speed + phase * totalLen) % totalLen;
+    const pos    = posAt(d);
+    const pulse  = 0.5 + Math.sin(t * 5.2 + i * 1.8) * 0.5;
+    const wobble = Math.sin(t * 6.5 + i * 2.4) * 0.9;
+
+    const wAngle = t * 1.8 + i * 1.05;
+    const wx = pos.x + Math.cos(wAngle) * wobble;
+    const wy = pos.y + Math.sin(wAngle) * wobble;
+
+    const outerR = cs * (0.75 + pulse * 0.45);
+    const grad = ctx.createRadialGradient(wx, wy, 0, wx, wy, outerR);
+    grad.addColorStop(0,    `rgba(195,238,255,${0.48 + pulse * 0.28})`);
+    grad.addColorStop(0.28, `rgba(110,205,255,${0.22 * pulse})`);
+    grad.addColorStop(0.65, `rgba(70,150,255,${0.10 * pulse})`);
+    grad.addColorStop(1,    'rgba(50,110,220,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(wx, wy, outerR, 0, Math.PI * 2); ctx.fill();
+
+    const innerR = cs * (0.28 + pulse * 0.18);
+    const halo = ctx.createRadialGradient(wx, wy, 0, wx, wy, innerR);
+    halo.addColorStop(0, `rgba(220,180,255,${0.35 + pulse * 0.25})`);
+    halo.addColorStop(1, 'rgba(160,100,255,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(wx, wy, innerR, 0, Math.PI * 2); ctx.fill();
+
+    ctx.shadowColor = 'rgba(200,240,255,0.98)';
+    ctx.shadowBlur  = 9 + pulse * 6;
+    ctx.fillStyle   = `rgba(235,250,255,${0.82 + pulse * 0.18})`;
+    ctx.beginPath(); ctx.arc(wx, wy, 1.1 + pulse * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur  = 0;
+
+    if (pulse > 0.72) {
+      const si = (pulse - 0.72) / 0.28;
+      const sl = 2.8 * si;
+      ctx.strokeStyle = `rgba(255,255,255,${si * 0.85})`;
+      ctx.lineWidth   = 0.45;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(wx - sl, wy); ctx.lineTo(wx + sl, wy);
+      ctx.moveTo(wx, wy - sl); ctx.lineTo(wx, wy + sl);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+  }
 
   ctx.restore();
 }
 
 function drawFrames() {
-  const width = BASE_W, height = BASE_H;
-  const gx = GRID_LEFT, gy = GRID_TOP;
-  const gw = COLS * CELL_SIZE, gh = ROWS * CELL_SIZE;
+  const W  = BASE_W, H = BASE_H;
+
+  const corner = SPRITES['frameCorner'];
+  const borderH = SPRITES['frameBorderH'];
+  const borderV = SPRITES['frameBorderV'];
+
+  // Border thickness derived from corner sprite aspect (height maps to border thickness)
+  // Corner sprite is 1536×1024 — we render it so its short side = borderThick
+  const borderThick = 28;  // px — thickness of the frame band
+  const cornerW = Math.round(borderThick * (corner ? corner.frameW / corner.frameH : 1));
+  const cornerH = borderThick;
 
   ctx.save();
 
-  // ── Ornate grid border: silver outer → dark body → gold center ───────────────
+  if (corner && borderH && borderV &&
+      corner.img.complete && borderH.img.complete && borderV.img.complete &&
+      corner.img.naturalWidth > 0) {
 
-  // 1. Deep drop shadow — sits just outside the grid
-  ctx.shadowColor   = 'rgba(0,0,0,0.95)';
-  ctx.shadowBlur    = 20;
-  ctx.shadowOffsetY = 4;
-  ctx.strokeStyle   = '#0a0501';
-  ctx.lineWidth     = 10;
-  ctx.strokeRect(gx - 5, gy - 5, gw + 10, gh + 10);
-  ctx.shadowBlur = ctx.shadowOffsetY = 0;
+    // Helper: draw rotated image at (ox,oy) with (dw,dh), rotated deg° around its own centre
+    function drawRotated(sp, ox, oy, dw, dh, deg) {
+      ctx.save();
+      ctx.translate(ox + dw / 2, oy + dh / 2);
+      ctx.rotate(deg * Math.PI / 180);
+      ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+    }
 
-  // 2. Silver outer edge
-  ctx.shadowColor = 'rgba(190,210,230,0.45)';
-  ctx.shadowBlur  = 6;
-  ctx.strokeStyle = '#b0bcc8';
-  ctx.lineWidth   = 3;
-  ctx.strokeRect(gx - 1.5, gy - 1.5, gw + 3, gh + 3);
-  ctx.shadowBlur  = 0;
+    // ── Horizontal edges (top & bottom) ──────────────────────────────────────
+    const hEdgeX = cornerW;
+    const hEdgeW = W - cornerW * 2;
 
-  // 3. Dark charcoal separator
-  ctx.strokeStyle = '#1e1208';
-  ctx.lineWidth   = 4;
-  ctx.strokeRect(gx - 4, gy - 4, gw + 8, gh + 8);
+    // Top edge
+    ctx.save();
+    const patH = ctx.createPattern((() => {
+      const tc = document.createElement('canvas');
+      tc.width = Math.round(hEdgeW); tc.height = borderH.frameH;
+      const tctx = tc.getContext('2d');
+      // Tile horizontally at borderThick height
+      const tileW = Math.round(borderThick * borderH.frameW / borderH.frameH);
+      for (let x = 0; x < hEdgeW; x += tileW)
+        tctx.drawImage(borderH.img, 0, 0, borderH.frameW, borderH.frameH, x, 0, tileW, borderH.frameH);
+      return tc;
+    })(), 'no-repeat');
+    ctx.fillStyle = patH;
+    ctx.save();
+    ctx.translate(hEdgeX, 0);
+    ctx.scale(1, borderThick / borderH.frameH);
+    ctx.fillRect(0, 0, hEdgeW, borderH.frameH);
+    ctx.restore();
 
-  // 4. Gold center band with warm glow
-  ctx.shadowColor = 'rgba(220,155,20,0.85)';
-  ctx.shadowBlur  = 14;
-  ctx.strokeStyle = '#d4982a';
-  ctx.lineWidth   = 3.5;
-  ctx.strokeRect(gx - 6.75, gy - 6.75, gw + 13.5, gh + 13.5);
-  ctx.shadowBlur  = 0;
+    // Bottom edge (flip vertically)
+    ctx.save();
+    ctx.translate(hEdgeX + hEdgeW, H);
+    ctx.scale(-1, -1);
+    ctx.scale(1, borderThick / borderH.frameH);
+    ctx.fillRect(0, 0, hEdgeW, borderH.frameH);
+    ctx.restore();
+    ctx.restore();
 
-  // 5. Bright gold inner highlight
-  ctx.strokeStyle = 'rgba(255,235,100,0.5)';
-  ctx.lineWidth   = 1;
-  ctx.strokeRect(gx - 9, gy - 9, gw + 18, gh + 18);
+    // ── Vertical edges (left & right) ────────────────────────────────────────
+    const vEdgeY = cornerH;
+    const vEdgeH = H - cornerH * 2;
 
-  // 6. Corner ornaments — silver shell + gold inner gem
-  const ds = 11;
-  for (const [cx, cy] of [[gx, gy], [gx + gw, gy], [gx, gy + gh], [gx + gw, gy + gh]]) {
-    // silver outer diamond
-    ctx.shadowColor = 'rgba(200,220,240,0.7)';
+    ctx.save();
+    const tileVH = Math.round(borderThick * borderV.frameH / borderV.frameW);
+    // Left edge
+    for (let y = 0; y < vEdgeH; y += tileVH)
+      ctx.drawImage(borderV.img, 0, 0, borderV.frameW, borderV.frameH,
+        0, vEdgeY + y, borderThick, Math.min(tileVH, vEdgeH - y));
+    // Right edge (flip horizontally)
+    ctx.save();
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+    for (let y = 0; y < vEdgeH; y += tileVH)
+      ctx.drawImage(borderV.img, 0, 0, borderV.frameW, borderV.frameH,
+        0, vEdgeY + y, borderThick, Math.min(tileVH, vEdgeH - y));
+    ctx.restore();
+    ctx.restore();
+
+    // ── Corners ───────────────────────────────────────────────────────────────
+    drawRotated(corner,   0,       0,      cornerW, cornerH,   0);   // TL
+    drawRotated(corner,   W - cornerW, 0,  cornerW, cornerH,  90);   // TR
+    drawRotated(corner,   0,       H - cornerH, cornerW, cornerH, 270); // BL
+    drawRotated(corner,   W - cornerW, H - cornerH, cornerW, cornerH, 180); // BR
+
+  } else {
+    // ── Procedural fallback while sprites load ────────────────────────────────
+    ctx.shadowColor   = 'rgba(0,0,0,0.95)';
+    ctx.shadowBlur    = 18;
+    ctx.shadowOffsetY = 3;
+    ctx.strokeStyle   = '#080401';
+    ctx.lineWidth     = 9;
+    ctx.strokeRect(4.5, 4.5, W - 9, H - 9);
+    ctx.shadowBlur = ctx.shadowOffsetY = 0;
+    ctx.shadowColor = 'rgba(190,210,230,0.40)';
+    ctx.shadowBlur  = 5;
+    ctx.strokeStyle = '#a8b8c4';
+    ctx.lineWidth   = 2;
+    ctx.strokeRect(2, 2, W - 4, H - 4);
+    ctx.shadowBlur  = 0;
+    ctx.strokeStyle = '#181004';
+    ctx.lineWidth   = 4;
+    ctx.strokeRect(5, 5, W - 10, H - 10);
+    ctx.shadowColor = 'rgba(210,148,18,0.70)';
     ctx.shadowBlur  = 10;
-    ctx.fillStyle   = '#c0ccd8';
-    ctx.beginPath();
-    ctx.moveTo(cx,                cy - ds);
-    ctx.lineTo(cx + ds * 0.72,   cy);
-    ctx.lineTo(cx,                cy + ds);
-    ctx.lineTo(cx - ds * 0.72,   cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // gold inner diamond
-    const gi = ds * 0.58;
-    ctx.shadowColor = '#ffe070';
-    ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#e8a820';
-    ctx.beginPath();
-    ctx.moveTo(cx,               cy - gi);
-    ctx.lineTo(cx + gi * 0.72,  cy);
-    ctx.lineTo(cx,               cy + gi);
-    ctx.lineTo(cx - gi * 0.72,  cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // facet gleam
-    ctx.fillStyle = 'rgba(255,255,200,0.9)';
-    ctx.beginPath();
-    ctx.arc(cx - gi * 0.2, cy - gi * 0.28, gi * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // ── Outer game border: silver outer, gold middle, dark inner ─────────────────
-
-  // 1. Black shadow
-  ctx.shadowColor   = 'rgba(0,0,0,0.98)';
-  ctx.shadowBlur    = 16;
-  ctx.shadowOffsetY = 3;
-  ctx.strokeStyle   = '#0a0501';
-  ctx.lineWidth     = 8;
-  ctx.strokeRect(4, 4, width - 8, height - 8);
-  ctx.shadowBlur = ctx.shadowOffsetY = 0;
-
-  // 2. Silver outer line
-  ctx.shadowColor = 'rgba(180,200,220,0.4)';
-  ctx.shadowBlur  = 5;
-  ctx.strokeStyle = '#a0aeb8';
-  ctx.lineWidth   = 2.5;
-  ctx.strokeRect(2, 2, width - 4, height - 4);
-  ctx.shadowBlur  = 0;
-
-  // 3. Dark separator
-  ctx.strokeStyle = '#1a0f05';
-  ctx.lineWidth   = 4;
-  ctx.strokeRect(5.5, 5.5, width - 11, height - 11);
-
-  // 4. Gold middle band
-  ctx.shadowColor = 'rgba(200,140,15,0.65)';
-  ctx.shadowBlur  = 8;
-  ctx.strokeStyle = '#b8861e';
-  ctx.lineWidth   = 2.5;
-  ctx.strokeRect(8, 8, width - 16, height - 16);
-  ctx.shadowBlur  = 0;
-
-  // 5. Faint inner gold gleam
-  ctx.strokeStyle = 'rgba(255,210,60,0.2)';
-  ctx.lineWidth   = 1;
-  ctx.strokeRect(10.5, 10.5, width - 21, height - 21);
-
-  // 6. Outer corner ornaments — silver outer, gold inner
-  const os = 8;
-  for (const [cx, cy] of [[14, 14], [width - 14, 14], [14, height - 14], [width - 14, height - 14]]) {
-    ctx.shadowColor = 'rgba(190,210,230,0.6)';
-    ctx.shadowBlur  = 8;
-    ctx.fillStyle   = '#b0bcc8';
-    ctx.beginPath();
-    ctx.moveTo(cx,               cy - os);
-    ctx.lineTo(cx + os * 0.72,  cy);
-    ctx.lineTo(cx,               cy + os);
-    ctx.lineTo(cx - os * 0.72,  cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    const oi = os * 0.55;
-    ctx.shadowColor = '#ffd060';
-    ctx.shadowBlur  = 8;
-    ctx.fillStyle   = '#c88c18';
-    ctx.beginPath();
-    ctx.moveTo(cx,               cy - oi);
-    ctx.lineTo(cx + oi * 0.72,  cy);
-    ctx.lineTo(cx,               cy + oi);
-    ctx.lineTo(cx - oi * 0.72,  cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = 'rgba(255,250,180,0.8)';
-    ctx.beginPath();
-    ctx.arc(cx - oi * 0.2, cy - oi * 0.28, oi * 0.22, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.strokeStyle = '#c8901e';
+    ctx.lineWidth   = 2.5;
+    ctx.strokeRect(7.75, 7.75, W - 15.5, H - 15.5);
+    ctx.shadowBlur  = 0;
   }
 
   ctx.restore();
@@ -1395,7 +1496,7 @@ function drawBottomBuildBar() {
 
   const buttons     = getBuildButtons();
   const buildPanelX = SIDEBAR_W + 2;
-  const buildPanelW = BASE_W - 4;
+  const buildPanelW = COLS * CELL_SIZE - 4;  // grid width only, not full BASE_W
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
