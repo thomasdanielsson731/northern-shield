@@ -5,7 +5,7 @@ You are an experienced indie game developer helping build Northern Shield — a 
  - Background: deep purple/navy (#06030f) with pulsing amber and purple ambient glows
  - Color language: golds (#e8c040), deep purples, dark stone, ethereal blues
  - Tower names (UI): Shield Wall, Berserker, Valkyrie, Archer, Catapult, Blondie
- - Enemy names (UI): Graveborn (infantry), Wisp (flying), Golem (tank), Banshee (EMP)
+ - Enemy names (UI): Draugr (infantry), Myling (flying, ignores path), Jötunn (tank), Mara (EMP disables towers)
  - HUD labels: Gold / Lives / Slain (English)
  - Panels: dark fill + gold border + inner line + corner diamond gems (drawFantasyPanel)
 
@@ -29,10 +29,10 @@ You are an experienced indie game developer helping build Northern Shield — a 
  NOTE: engine/ folder contains old dead skeleton files — ignore it.
 
  CURRENT GAME STATE:
- - Grid: 50 cols x 30 rows, CELL_SIZE=14px, canvas fills window
- - Layout: SIDEBAR_W=52 (left), RIGHT_PANEL_W=188 (right), GRID_TOP=48 (top bar)
- - Spawn: col 0, row 15 | Goal: col 49, row 15
- - Pathfinding: BFS (not A*). Wisps fly straight line, ground enemies follow BFS
+ - Grid: 36 cols x 22 rows, CELL_SIZE=14px, BASE_W=692, BASE_H=488
+ - Layout: SIDEBAR_W=0 (no left panel), RIGHT_PANEL_W=188 (right), GRID_TOP=48 (top bar)
+ - Spawn: col 0, row 11 | Goal: col 35, row 11
+ - Pathfinding: BFS (not A*). Myling fly straight line, ground enemies follow BFS
  - Tower targeting: highest pathIndex in range (furthest along path)
  - Economy: gold starts 85, Shield Wall $5, towers $20-$50
  - Wave system: 'countdown' → 'active' → 'break' cycle

@@ -39,12 +39,12 @@ Stylized Viking dark fantasy. NOT realistic. NOT pixel art.
 | Accent     | Deep amber glow   | `#c07820` |
 
 ### Enemies
-| Enemy     | Body color         | Glow/accent     | Hex body  |
-|-----------|--------------------|-----------------|-----------|
-| Graveborn | Deep purple        | Purple spectral | `#6628a8` |
-| Wisp      | Ethereal blue      | Electric blue   | `#88bbff` |
-| Golem     | Dark stone brown   | Molten amber    | `#5c4030` |
-| Banshee   | Cyan ghost         | Electric cyan   | `#00eeff` |
+| Enemy         | Body color         | Glow/accent     | Hex body  |
+|---------------|--------------------|-----------------|-----------|
+| Draugr        | Deep purple        | Purple spectral | `#6628a8` |
+| Myling        | Ethereal blue      | Electric blue   | `#88bbff` |
+| Jötunn (boss) | Dark stone brown   | Molten amber    | `#5c4030` |
+| Mara          | Cyan ghost         | Electric cyan   | `#00eeff` |
 
 ### Environment
 | Element    | Color                  | Hex / note |
@@ -97,10 +97,10 @@ Every unit must be **instantly readable as a silhouette** at small sizes.
 | Catapult   | Large wooden arm/frame, dwarf figure beside   |
 | Blondie    | Feminine, round shield on left, mace raised   |
 | Shield Wall| Thick stone block, battlements on top         |
-| Graveborn  | Hunched skeleton, jagged weapon, ragged form  |
-| Wisp       | Diamond/rhombus floating shape, glowing rings |
-| Golem      | Massive round form, chunky, cracks of light   |
-| Banshee    | Wispy ghost trail, screaming face, oval body  |
+| Draugr     | Hunched skeleton, jagged weapon, ragged form  |
+| Myling     | Diamond/rhombus floating shape, glowing rings |
+| Jötunn     | Massive round form, chunky, cracks of light   |
+| Mara       | Wispy ghost trail, screaming face, oval body  |
 
 ---
 
@@ -150,9 +150,9 @@ Then add the specific asset description.
 | 4 | Berserker              | `towers/berserker_sprites.png` | 512 × 128 px (4f) |
 | 5 | Valkyrie               | `towers/valkyrie_sprites.png`  | 512 × 128 px (4f) |
 | 6 | Catapult               | `towers/catapult_sprites.png`  | 512 × 128 px (4f) |
-| 7 | Graveborn              | `enemies/graveborn_sprites.png` | 384 × 96 px (4f) |
-| 8 | Wisp                   | `enemies/wisp_sprites.png`   | 384 × 96 px (4f)  |
-| 9 | Golem (boss)           | `enemies/golem_sprites.png`  | 768 × 192 px (4f) |
+| 7 | Draugr (infantry)      | `enemies/draugr_sprites.png`    | 384 × 96 px (4f)  |
+| 8 | Myling (flying)        | `enemies/myling_sprites.png`    | 384 × 96 px (4f)  |
+| 9 | Jötunn (boss)          | `enemies/jotunn_sprites.png`    | 768 × 192 px (4f) |
 | 10 | Gold coin icon        | `ui/gold_icon.png`           | 64 × 64 px        |
 
 ### PHASE 2 — Polish
@@ -161,7 +161,7 @@ Then add the specific asset description.
 |---|---------------------|----------------------------------|-------------------|
 | 11 | Archer             | `towers/archer_sprites.png`      | 512 × 128 px (4f) |
 | 12 | Blondie            | `towers/blondie_sprites.png`     | 512 × 128 px (4f) |
-| 13 | Banshee            | `enemies/banshee_sprites.png`    | 384 × 96 px (4f)  |
+| 13 | Mara               | `enemies/mara_sprites.png`       | 384 × 96 px (4f)  |
 | 14 | Shield Wall (5 variants) | `towers/wall_variants.png` | 640 × 128 px (5f) |
 | 15 | Explosion FX       | `fx/explosion.png`               | 384 × 96 px (4f)  |
 | 16 | EMP pulse FX       | `fx/emp_pulse.png`               | 384 × 96 px (4f)  |
@@ -227,7 +227,7 @@ silver-gold armor, throwing gold star-shaped projectiles that sparkle,
 512x128px, transparent background
 ```
 
-### Graveborn
+### Draugr (infantry)
 ```
 [MASTER STYLE PREFIX]
 Undead skeleton warrior enemy sprite sheet, 4 frames horizontal (IDLE WALK ATTACK DEATH),
@@ -235,32 +235,36 @@ hunched shambling posture, bone-white skeleton, deep purple spectral glow,
 tattered dark armor fragments, jagged sword, glowing purple eye sockets,
 384x96px total, transparent background
 ```
+*File: `enemies/draugr_sprites.png`*
 
-### Wisp
+### Myling (flying)
 ```
 [MASTER STYLE PREFIX]
-Ethereal flying energy orb enemy sprite sheet, 4 frames horizontal (IDLE HOVER CHARGE DISSIPATE),
+Ethereal flying ghost enemy sprite sheet, 4 frames horizontal (IDLE HOVER CHARGE DISSIPATE),
 diamond/rhombus shape, bright blue-white ethereal glow, rotating energy rings,
 ghostly light trails, clearly floating above ground, 384x96px total, transparent background
 ```
+*File: `enemies/myling_sprites.png`*
 
-### Golem (boss)
+### Jötunn (boss tank)
 ```
 [MASTER STYLE PREFIX]
-Massive lava golem boss enemy sprite sheet, 4 frames horizontal (IDLE WALK ROAR COLLAPSE),
-enormous chunky round form, dark cracked stone exterior,
+Massive Norse giant boss enemy sprite sheet, 4 frames horizontal (IDLE WALK ROAR COLLAPSE),
+enormous chunky round form, dark cracked stone-grey skin,
 glowing molten amber-orange core visible through cracks, glowing amber eyes,
 boss-tier scale (twice height of normal enemies), 768x192px total, transparent background
 ```
+*File: `enemies/jotunn_sprites.png`*
 
-### Banshee
+### Mara (EMP spirit)
 ```
 [MASTER STYLE PREFIX]
-Ghost wraith enemy sprite sheet, 4 frames horizontal (IDLE GLIDE EMP-DISCHARGE VANISH),
+Norse nightmare spirit enemy sprite sheet, 4 frames horizontal (IDLE GLIDE EMP-DISCHARGE VANISH),
 wispy ghost trail lower body, oval torso, screaming face with hollow eyes,
 cyan electrical aura crackling around body, lightning bolt symbol glowing on chest,
 semi-transparent, 384x96px total, transparent background
 ```
+*File: `enemies/mara_sprites.png`*
 
 ### Time Portal (Spawn gate)
 ```
