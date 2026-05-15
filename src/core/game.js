@@ -64,8 +64,9 @@ let restartBtn      = null;
 let toplistBtn      = null;
 let nextWaveBtn     = null;
 let activeSidebarTab = 'towers';
-let gameSpeed = 1;
-let speedBtn  = null;
+let gameSpeed  = 1;
+let speedBtn   = null;
+let _frameTick = 0;
 
 let dragItem  = null;  // { id, label, color, cost, mode } while dragging from build bar
 let dragX     = 0;
@@ -126,6 +127,7 @@ function restartGame() {
   showTopList   = false;
   highScores    = loadHighScores();
   gameSpeed     = 1;
+  _frameTick    = 0;
   goldCoins     = [];
   hoardPulse    = 0;
   bossWarnAlpha = 0;
@@ -1114,7 +1116,7 @@ function drawFrames() {
 
   if (spritesReady) {
     // Corner sprite is 1536x1024 (3:2). Render so short side = thick.
-    const thick  = 30;
+    const thick  = 18;
     const cW     = Math.round(thick * spCorner.frameW / spCorner.frameH);
     const cH     = thick;
     const hTileW = Math.round(thick * spBorderH.frameW / spBorderH.frameH);
@@ -1182,11 +1184,11 @@ function drawFrames() {
 
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const pw = BASE_W - px - 4;
+  const pw = BASE_W - px - 22;  // 18px frame + 4px inner gap
   speedBtn = null;
   if (pw < 60) return;
 
-  const fullH = BASE_H - GRID_TOP - 4;
+  const fullH = BASE_H - GRID_TOP - 22;  // 18px frame + 4px inner gap
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(42,22,6,0.97)');
 
   const lx    = px + 10;
@@ -1951,7 +1953,6 @@ function draw() {
     ctx.fillRect(0, 0, width, height);
   }
 
-  drawFrames();
   drawRightPanel();
   drawHud();
   drawGoldCoins();
@@ -1959,6 +1960,7 @@ function draw() {
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawDragGhost();
+  drawFrames();
   ctx.restore();
 }
 
@@ -2026,8 +2028,9 @@ function gameLoop() {
   if (!terrainUsesSprite && SPRITES['ground']?.img.complete && SPRITES['ground'].img.naturalWidth > 0) {
     initTerrain();
   }
-  update();
-  if (gameSpeed >= 2) update();
+  _frameTick++;
+  // Normal speed = 30 logic ticks/sec (every other frame). Fast = 60/sec.
+  if (gameSpeed >= 2 || _frameTick % 2 === 1) update();
   draw();
   requestAnimationFrame(gameLoop);
 }

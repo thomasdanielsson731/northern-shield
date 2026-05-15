@@ -3,13 +3,14 @@ import { SPRITES } from '../assets.js';
 
 // Draw one frame from a 4-frame (IDLE/WALK/ATTACK/DEATH) sprite strip.
 // frame: 0=idle, 2=attack. Flips sprite horizontally when aimAngle faces left.
-function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36) {
+function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null) {
   const sp = SPRITES[spriteKey];
   if (!sp) return false;
   const dh = Math.round(dw * sp.frameH / sp.frameW);
   ctx.save();
   ctx.translate(x, y);
   if (Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
+  if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = 14; }
   ctx.drawImage(sp.img, frame * sp.frameW, 0, sp.frameW, sp.frameH,
     -dw / 2, -dh * 0.88, dw, dh);
   ctx.restore();
@@ -41,7 +42,7 @@ export const TOWER_DEFS = {
     label:        'Valkyrie',
     key:          '3',
     color:        '#88aaee',
-    rangeColor:   'rgba(100,140,220,0.12)',
+    rangeColor:   'rgba(100,140,220,0.28)',
     cost:         35,
     range:        180,
     fireRate:     58,
@@ -54,7 +55,7 @@ export const TOWER_DEFS = {
     label:        'Archer',
     key:          '4',
     color:        '#6688aa',
-    rangeColor:   'rgba(80,120,170,0.13)',
+    rangeColor:   'rgba(80,120,170,0.26)',
     cost:         28,
     range:        80,
     fireRate:     8,
@@ -67,7 +68,7 @@ export const TOWER_DEFS = {
     label:        'Catapult',
     key:          '5',
     color:        '#8a6030',
-    rangeColor:   'rgba(130,90,30,0.13)',
+    rangeColor:   'rgba(130,90,30,0.26)',
     cost:         50,
     range:        120,
     fireRate:     90,
@@ -82,7 +83,7 @@ export const TOWER_DEFS = {
     label:        'Blondie',
     key:          '6',
     color:        '#ff88cc',
-    rangeColor:   'rgba(255,100,190,0.12)',
+    rangeColor:   'rgba(255,100,190,0.28)',
     cost:         30,
     range:        90,
     fireRate:     35,
@@ -201,13 +202,13 @@ export class Tower {
     // Ground shadow — soft ellipse beneath the sprite
     ctx.save();
     ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.38;
-    const grad = ctx.createRadialGradient(this.x, this.y + 3, 0, this.x, this.y + 3, 9);
+    const grad = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, 14);
     grad.addColorStop(0,   'rgba(0,0,0,0.85)');
     grad.addColorStop(0.5, 'rgba(0,0,0,0.45)');
     grad.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(this.x, this.y + 3, 9, 4.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x, this.y + 4, 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
@@ -306,7 +307,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
+    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(220,70,10,0.85)')) return;
 
     const axeSpin = t * 3.5;
 
@@ -467,7 +468,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 40)) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(120,170,255,0.9)')) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -627,7 +628,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
+    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 50, 'rgba(90,140,190,0.75)')) return;
 
     // Stone base
     ctx.fillStyle = '#9aaa9a';
@@ -773,7 +774,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 38)) return;
+    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(200,130,30,0.85)')) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const armAng = this.aimAngle - Math.PI * 0.5;
@@ -865,7 +866,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle)) return;
+    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 52, 'rgba(255,110,200,0.9)')) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
