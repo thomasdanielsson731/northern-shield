@@ -410,6 +410,10 @@ export class Grid {
     const cy = y + cs / 2;
     const hw = Math.round(cs * 5 / 14);  // wall half-width (5px at cs=14)
 
+    // Position-seeded pseudo-random for stone color variation
+    const seed = x * 0.17 + y * 0.31;
+    const stoneV = Math.sin(seed * 7.3) * 0.12;  // ±12% brightness shift
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, cs, cs);
@@ -453,37 +457,122 @@ export class Grid {
         ctx.beginPath(); ctx.arc(sx - bossR * 0.3, sy - bossR * 0.35, bossR * 0.4, 0, Math.PI * 2); ctx.fill();
       }
     } else {
-      // ── Connected: stone/wood palisade wall ────────────────────────────
+      // ── Connected: stone palisade wall ─────────────────────────────────
+
+      // Stone base color with per-cell variation
+      const sv = Math.round(stoneV * 30);
+      const stoneR = Math.min(255, 110 + sv), stoneG = Math.min(255, 80 + sv), stoneB = Math.min(255, 56 + sv);
+      const stoneColor = `rgb(${stoneR},${stoneG},${stoneB})`;
+      const stoneDark  = `rgb(${Math.max(0,stoneR-22)},${Math.max(0,stoneG-18)},${Math.max(0,stoneB-14)})`;
 
       // Main stone body
-      ctx.fillStyle = '#6e5038';
+      ctx.fillStyle = stoneColor;
       ctx.fillRect(cx - hw, cy - hw, hw * 2, hw * 2);
       if (N) ctx.fillRect(cx - hw, y,       hw * 2, cy - hw - y);
       if (S) ctx.fillRect(cx - hw, cy + hw, hw * 2, y + cs - cy - hw);
       if (E) ctx.fillRect(cx + hw, cy - hw, x + cs - cx - hw, hw * 2);
       if (W) ctx.fillRect(x,       cy - hw, cx - hw - x,      hw * 2);
 
-      // Top-face highlight (lit from above)
-      ctx.fillStyle = '#9a7050';
+      // Stone block divisions — horizontal lines in vertical arms
+      ctx.strokeStyle = 'rgba(20,10,4,0.38)'; ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      if (N) {
+        const armTop = y, armBot = cy - hw;
+        const armH = armBot - armTop;
+        for (let li = 1; li < 3; li++) {
+          const ly = armTop + armH * li / 3;
+          ctx.moveTo(cx - hw + 0.5, ly); ctx.lineTo(cx + hw - 0.5, ly);
+        }
+      }
+      if (S) {
+        const armTop = cy + hw, armBot = y + cs;
+        const armH = armBot - armTop;
+        for (let li = 1; li < 3; li++) {
+          const ly = armTop + armH * li / 3;
+          ctx.moveTo(cx - hw + 0.5, ly); ctx.lineTo(cx + hw - 0.5, ly);
+        }
+      }
+      // Vertical lines in horizontal arms
+      if (E) {
+        const armL = cx + hw, armR = x + cs;
+        const armW = armR - armL;
+        for (let li = 1; li < 3; li++) {
+          const lx = armL + armW * li / 3;
+          ctx.moveTo(lx, cy - hw + 0.5); ctx.lineTo(lx, cy + hw - 0.5);
+        }
+      }
+      if (W) {
+        const armL = x, armR = cx - hw;
+        const armW = armR - armL;
+        for (let li = 1; li < 3; li++) {
+          const lx = armL + armW * li / 3;
+          ctx.moveTo(lx, cy - hw + 0.5); ctx.lineTo(lx, cy + hw - 0.5);
+        }
+      }
+      ctx.stroke();
+
+      // Darker inset center block for depth
+      ctx.fillStyle = stoneDark;
+      ctx.fillRect(cx - hw + 1.5, cy - hw + 1.5, hw * 2 - 3, hw * 2 - 3);
+
+      // Top-face highlight (lit from above — brightest surface)
+      ctx.fillStyle = '#b08868';
       const topY = N ? y : cy - hw;
-      ctx.fillRect(cx - hw, topY, hw * 2, 2);
-      if (W) ctx.fillRect(x,       cy - hw, cx - hw - x, 2);
-      if (E) ctx.fillRect(cx + hw, cy - hw, x + cs - cx - hw, 2);
-      if (S) ctx.fillRect(cx - hw, cy + hw, 2, y + cs - cy - hw);  // left highlight of S arm
+      ctx.fillRect(cx - hw, topY, hw * 2, 1.5);
+      if (W) ctx.fillRect(x,       cy - hw, cx - hw - x, 1.5);
+      if (E) ctx.fillRect(cx + hw, cy - hw, x + cs - cx - hw, 1.5);
+
+      // Left-face highlight
+      ctx.fillStyle = 'rgba(160,130,90,0.4)';
+      const leftX = W ? x : cx - hw;
+      ctx.fillRect(leftX, cy - hw + 1.5, 1.5, hw * 2 - 1.5);
+      if (N) ctx.fillRect(cx - hw, y, 1.5, cy - hw - y);
+      if (S) ctx.fillRect(cx - hw, cy + hw, 1.5, y + cs - cy - hw);
+
+      // Shadow on bottom/right faces
+      ctx.fillStyle = 'rgba(0,0,0,0.30)';
+      if (!S) ctx.fillRect(cx - hw, cy + hw - 1.5, hw * 2, 1.5);
+      if (!E) ctx.fillRect(cx + hw - 1.5, cy - hw, 1.5, hw * 2);
 
       // Dark mortar cross through center
-      ctx.fillStyle = 'rgba(20, 10, 3, 0.55)';
-      ctx.fillRect(cx - 0.4, cy - hw, 0.8, hw * 2);
-      ctx.fillRect(cx - hw, cy - 0.4, hw * 2, 0.8);
+      ctx.fillStyle = 'rgba(18, 9, 2, 0.60)';
+      ctx.fillRect(cx - 0.5, cy - hw, 1, hw * 2);
+      ctx.fillRect(cx - hw, cy - 0.5, hw * 2, 1);
 
       // Metal boss at center
       const br = hw * 0.46;
       ctx.fillStyle = '#504840';
       ctx.beginPath(); ctx.arc(cx, cy, br, 0, Math.PI * 2); ctx.fill();
+      // Rivets on boss edge
+      ctx.fillStyle = '#383228';
+      for (let ri = 0; ri < 4; ri++) {
+        const ra = ri * Math.PI * 0.5 + Math.PI * 0.25;
+        ctx.beginPath(); ctx.arc(cx + Math.cos(ra) * br * 0.72, cy + Math.sin(ra) * br * 0.72, br * 0.16, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.fillStyle = 'rgba(210,200,175,0.65)';
       ctx.beginPath();
       ctx.arc(cx - br * 0.22, cy - br * 0.26, br * 0.38, 0, Math.PI * 2);
       ctx.fill();
+
+      // ── Battlements on exposed top edges ───────────────────────────────
+      if (!N) {
+        const merlonW = hw * 0.72, merlonH = Math.max(2, cs * 0.15);
+        const wallTop = cy - hw;
+        // Left merlon
+        ctx.fillStyle = stoneColor;
+        ctx.fillRect(cx - hw, wallTop - merlonH, merlonW, merlonH);
+        ctx.fillStyle = '#b08868';
+        ctx.fillRect(cx - hw, wallTop - merlonH, merlonW, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.fillRect(cx - hw + merlonW, wallTop - merlonH, 1, merlonH);
+        // Right merlon
+        ctx.fillStyle = stoneColor;
+        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, merlonW, merlonH);
+        ctx.fillStyle = '#b08868';
+        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, merlonW, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, 1, merlonH);
+      }
     }
 
     ctx.restore();

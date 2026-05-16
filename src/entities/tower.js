@@ -93,7 +93,7 @@ export const TOWER_DEFS = {
     slowFactor:   0,
     slowDuration: 90,
     bulletShape:  'stun'
-  }
+  },
 };
 
 const MAX_LEVEL = 10;
@@ -212,7 +212,7 @@ export class Tower {
     ctx.fill();
     ctx.restore();
 
-    // Range ring (skip for berserk — tiny ring looks bad)
+    // Range ring (skip for berserk — melee tower)
     if (this.type !== TOWER_TYPES.BERSERK) {
       ctx.strokeStyle = this.rangeColor;
       ctx.lineWidth   = 1;

@@ -866,6 +866,8 @@ function update() {
 
   for (const tower of towers) tower.update(enemies, bullets);
 
+
+
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
     const reward = b.update();
@@ -1043,30 +1045,45 @@ function drawPath() {
   ctx.lineJoin = 'round';
   ctx.lineCap  = 'round';
 
-  const pathSp = SPRITES['path'];
-  if (pathSp && pathSp.img.complete && pathSp.img.naturalWidth > 0) {
-    // Use path_tile.png as a stroked texture pattern
-    const tileSize = cs * 4;
-    const tileCvs  = document.createElement('canvas');
-    tileCvs.width  = tileSize;
-    tileCvs.height = tileSize;
-    const tileCtx  = tileCvs.getContext('2d');
-    tileCtx.drawImage(pathSp.img, 0, 0, pathSp.frameW, pathSp.frameH, 0, 0, tileSize, tileSize);
-    const pat = ctx.createPattern(tileCvs, 'repeat');
-    // Outer shadow
-    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = cs * 1.05; ctx.stroke();
-    // Path sprite fill
-    mkPath(); ctx.strokeStyle = pat;                 ctx.lineWidth = cs * 0.88; ctx.stroke();
-    // Subtle dark edge to contain the sprite
-    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = cs * 0.92; ctx.globalCompositeOperation = 'multiply'; ctx.stroke();
-    ctx.globalCompositeOperation = 'source-over';
-  } else {
-    // Procedural fallback (no joint lines — continuous stone look)
-    mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.62)';    ctx.lineWidth = cs * 1.00; ctx.stroke();
-    mkPath(); ctx.strokeStyle = 'rgba(30,22,12,0.95)'; ctx.lineWidth = cs * 0.82; ctx.stroke();
-    mkPath(); ctx.strokeStyle = 'rgba(54,42,26,0.90)'; ctx.lineWidth = cs * 0.64; ctx.stroke();
-    mkPath(); ctx.strokeStyle = 'rgba(74,60,38,0.65)'; ctx.lineWidth = cs * 0.38; ctx.stroke();
+  // Procedural cobblestone road (tile patterns create cement-block seams at bends)
+  mkPath(); ctx.strokeStyle = 'rgba(0,0,0,0.72)';    ctx.lineWidth = cs * 1.04; ctx.stroke();
+  mkPath(); ctx.strokeStyle = 'rgba(26,18,8,0.97)';  ctx.lineWidth = cs * 0.86; ctx.stroke();
+  mkPath(); ctx.strokeStyle = 'rgba(50,38,22,0.93)'; ctx.lineWidth = cs * 0.68; ctx.stroke();
+  mkPath(); ctx.strokeStyle = 'rgba(68,54,34,0.70)'; ctx.lineWidth = cs * 0.44; ctx.stroke();
+
+  // Scattered cobblestone marks along each segment
+  for (const seg of segs) {
+    const segDx = (seg.x1 - seg.x0) / seg.len;
+    const segDy = (seg.y1 - seg.y0) / seg.len;
+    const nx = -segDy;
+    const ny =  segDx;
+    const count = Math.max(1, Math.floor(seg.len / (cs * 0.65)));
+    for (let i = 0; i < count; i++) {
+      const f    = (i + 0.5) / count;
+      const bx   = seg.x0 + (seg.x1 - seg.x0) * f;
+      const by   = seg.y0 + (seg.y1 - seg.y0) * f;
+      const seed = bx * 0.31 + by * 0.47;
+      const perp  = (Math.sin(seed * 6.28) * 0.5 + Math.sin(seed * 11.7) * 0.35) * cs * 0.24;
+      const along = Math.sin(seed * 8.41) * cs * 0.10;
+      const angle = Math.sin(seed * 4.52) * 0.28;
+      const sw    = cs * (0.20 + Math.abs(Math.sin(seed * 3.7)) * 0.10);
+      const sh    = cs * (0.11 + Math.abs(Math.sin(seed * 5.3)) * 0.05);
+      const bright = 0.46 + Math.sin(seed * 7.1) * 0.07;
+      const r = Math.round(bright * 108), g = Math.round(bright * 90), b = Math.round(bright * 62);
+      const sx = bx + nx * perp + segDx * along;
+      const sy = by + ny * perp + segDy * along;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(Math.atan2(segDy, segDx) + angle);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.52)`;
+      ctx.beginPath(); ctx.ellipse(0, 0, sw * 0.5, sh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(140,115,80,${bright * 0.38})`;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath(); ctx.moveTo(-sw * 0.4, -sh * 0.35); ctx.lineTo(sw * 0.4, -sh * 0.35); ctx.stroke();
+      ctx.restore();
+    }
   }
+
   // Faint embedded glow on road surface
   mkPath(); ctx.strokeStyle = 'rgba(100,160,255,0.07)'; ctx.lineWidth = cs * 0.30; ctx.stroke();
 
@@ -1575,14 +1592,16 @@ function drawBottomBuildBar() {
     ctx.moveTo(btn.x + 4, infoY); ctx.lineTo(btn.x + btn.width - 4, infoY);
     ctx.stroke();
 
-    ctx.font      = 'bold 9px monospace';
+    const labelSz = btn.width < 60 ? 7 : 9;
+    ctx.font      = `bold ${labelSz}px monospace`;
     ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#fff' : '#c0b090';
     ctx.textAlign = 'left';
-    ctx.fillText(btn.label, btn.x + 5, infoY + 11);
+    ctx.fillText(btn.label, btn.x + 4, infoY + 11);
 
+    ctx.font      = `${labelSz}px monospace`;
     ctx.fillStyle = !affordable ? '#302818' : isSelected ? '#e8c040' : '#907840';
     ctx.textAlign = 'right';
-    ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 4, infoY + 11);
+    ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 11);
     ctx.textAlign = 'left';
   }
 }
