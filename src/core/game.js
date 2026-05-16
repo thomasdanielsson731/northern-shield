@@ -183,13 +183,15 @@ function restartGame() {
   waveSlainCount    = 0;
   waveGoldStart     = goldEarned;
 
-  waveNumber    = 0;
-  waveTotal     = 0;
-  waveState     = 'countdown';
-  waveTimer     = 0;
-  spawnQueue    = [];
-  spawnTimer    = 0;
-  waveHpScale   = 1;
+  waveNumber       = 0;
+  waveTotal        = 0;
+  waveState        = 'countdown';
+  waveTimer        = 0;
+  spawnQueue       = [];
+  spawnTimer       = 0;
+  waveHpScale      = 1;
+  waveSpeedScale   = 1;
+  waveActiveFrames = 0;
 }
 
 // ── wave system ───────────────────────────────────────────────────────────────
@@ -209,13 +211,25 @@ const BOSS_CONFIGS = {
   50: { name: 'MARA-VOID',         type: ENEMY_TYPES.MARA,   hp: 6000, radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
 };
 
-let waveNumber  = 0;
-let waveTotal   = 0;
-let waveState   = 'countdown';  // 'countdown' | 'active' | 'break'
-let waveTimer   = 0;
-let spawnQueue  = [];
-let spawnTimer  = 0;
-let waveHpScale = 1;
+let waveNumber      = 0;
+let waveTotal       = 0;
+let waveState       = 'countdown';  // 'countdown' | 'active' | 'break'
+let waveTimer       = 0;
+let spawnQueue      = [];
+let spawnTimer      = 0;
+let waveHpScale     = 1;
+let waveSpeedScale  = 1;
+let waveActiveFrames = 0;
+
+function getWaveBands(waveNum) {
+  if (waveNum <= 5)   return { hp: 1.00, speed: 1.00 };
+  if (waveNum <= 10)  return { hp: 1.15, speed: 1.05 };
+  if (waveNum <= 20)  return { hp: 1.30, speed: 1.10 };
+  if (waveNum <= 35)  return { hp: 1.50, speed: 1.15 };
+  if (waveNum <= 50)  return { hp: 1.75, speed: 1.20 };
+  if (waveNum <= 75)  return { hp: 2.10, speed: 1.30 };
+  return                     { hp: 2.80, speed: 1.40 };
+}
 
 let particles     = [];
 let screenShake   = 0;
@@ -300,15 +314,12 @@ function drawGoldCoins() {
 }
 
 function waveComposition(num) {
-  // Phase scaling: harder as waves progress
   const n = Math.min(num, MAX_WAVES);
-  const speedBonus = n > 50 ? (n - 50) * 0.005 : 0;  // stored for use in spawnEnemy
   return {
-    draugr:     Math.min(8  + Math.floor(n * 2.2), 40),
-    mylings:    n >= 2  ? Math.min(Math.floor(n * 1.1),  16) : 0,
-    jotunn:     n >= 3  ? Math.min(Math.floor((n - 2) * 0.85), n >= 51 ? 8 : 6) : 0,
-    maras:      n >= 2  ? Math.min(Math.floor((n - 1) * 0.6),  8) : 0,
-    speedBonus,
+    draugr:  Math.min(8 + Math.floor(n * 2.2), 40),
+    mylings: n >= 6  ? Math.min(Math.floor((n - 5) * 1.4), 18) : 0,
+    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 0.7), 8) : 0,
+    maras:   n >= 21 ? Math.min(Math.floor((n - 20) * 0.5), 8) : 0,
   };
 }
 
@@ -346,10 +357,13 @@ let waveLeak  = false;
 
 function startNextWave() {
   waveNumber++;
-  waveHpScale = 1 + (waveNumber - 1) * 0.16;
+  const _bands   = getWaveBands(waveNumber);
+  waveHpScale    = _bands.hp;
+  waveSpeedScale = _bands.speed;
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
+  waveActiveFrames = 0;
   waveState   = 'active';
   waveSlainCount = 0;
   waveGoldStart  = goldEarned;
@@ -381,10 +395,12 @@ function updateWave() {
     return;
   }
 
-  // active — spawn from queue
+  // active — spawn from queue (governor: speed up if wave drags past 180s)
   if (spawnQueue.length > 0) {
+    waveActiveFrames++;
     spawnTimer++;
-    if (spawnTimer >= SPAWN_FRAMES) {
+    const spawnInterval = waveActiveFrames > 5400 ? Math.ceil(SPAWN_FRAMES * 0.5) : SPAWN_FRAMES;
+    if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
       const next = spawnQueue.shift();
       if (next && next.__boss) {
@@ -747,7 +763,10 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
     portalFlash      = 14;
     portalFlashColor = 'blue';  // regular Jötunn — cold blue, not the boss red
   }
-  enemies.push(new Enemy(path, type, hpScale));
+  const newEnemy = new Enemy(path, type, hpScale);
+  newEnemy.baseSpeed *= waveSpeedScale;
+  newEnemy.speed     *= waveSpeedScale;
+  enemies.push(newEnemy);
 }
 
 function spawnBoss(waveNum) {
@@ -814,9 +833,25 @@ function tryPlaceAt(col, row, mode, towerType) {
   gold      -= cost;
   if (mode === CELL.WALL) wallFrostDirty = true;
 
+  if (mode === CELL.WALL) {
+    const adjTW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
+    for (const [ac, ar] of adjTW) {
+      const bt = towers.find(t => t.col === ac && t.row === ar && t.type === TOWER_TYPES.BERSERK);
+      if (bt) bt.synergyRingTimer = 30;
+    }
+  }
+
   if (mode === CELL.TOWER) {
     const { x, y } = grid.cellCenter(col, row);
-    towers.push(new Tower(x, y, col, row, towerType));
+    const t = new Tower(x, y, col, row, towerType);
+    towers.push(t);
+    // Synergy ring: Berserker placed next to a wall
+    if (towerType === TOWER_TYPES.BERSERK) {
+      const adjBW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
+      if (adjBW.some(([ac,ar]) => grid.getCell(ac,ar) === CELL.WALL)) {
+        t.synergyRingTimer = 30;
+      }
+    }
   }
   firstTowerPlaced = true;
   return true;
@@ -1077,15 +1112,15 @@ function update() {
     }
   }
 
-  // Sköldborg: adjacent wall blocks slow passing enemies by 20%
+  // Sköldborg: adjacent wall slows enemies to 65% speed (RUNE: 35% slow, 8-frame linger)
   for (const enemy of enemies) {
     if (!enemy.alive || enemy.reached || enemy.slowImmune) continue;
     const { col, row } = grid.pixelToCell(enemy.x, enemy.y);
     const adj = [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]];
     for (const [ac, ar] of adj) {
       if (grid.getCell(ac, ar) === CELL.WALL) {
-        enemy.slowTimer  = Math.max(enemy.slowTimer, 4);
-        enemy.slowFactor = Math.min(enemy.slowFactor, 0.8);
+        enemy.slowTimer  = Math.max(enemy.slowTimer, 8);
+        enemy.slowFactor = Math.min(enemy.slowFactor, 0.65);
         break;
       }
     }

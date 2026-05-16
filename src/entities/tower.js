@@ -123,9 +123,10 @@ export class Tower {
     this.slowDuration  = def.slowDuration  ?? 0;
     this.bulletShape   = def.bulletShape   ?? 'orb';
     this.aimAngle      = -Math.PI / 2;
-    this.fireFlash     = 0;
-    this.disabledTimer = 0;
-    this.levelFlash    = 0;   // frames of milestone glow on level 5 / 10
+    this.fireFlash       = 0;
+    this.disabledTimer   = 0;
+    this.levelFlash      = 0;   // frames of milestone glow on level 5 / 10
+    this.synergyRingTimer = 0;  // frames of gold ring on Berserker-wall synergy
 
     this._applyLevel();
   }
@@ -309,6 +310,21 @@ export class Tower {
       }
       ctx.restore();
       this.levelFlash--;
+    }
+
+    // Synergy ring — Berserker + wall placement feedback
+    if (this.synergyRingTimer > 0) {
+      const sf   = this.synergyRingTimer / 30;
+      const ringR = this.radius + 3 + (1 - sf) * 18;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,210,40,${sf * 0.85})`;
+      ctx.shadowColor = 'rgba(255,180,20,0.9)';
+      ctx.shadowBlur  = 14;
+      ctx.lineWidth   = 2.5;
+      ctx.beginPath(); ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur  = 0;
+      ctx.restore();
+      this.synergyRingTimer--;
     }
 
     // Level badge
