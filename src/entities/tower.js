@@ -468,25 +468,25 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(120,170,255,0.9)')) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(220,180,60,0.9)')) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
 
-    // Stone pedestal
-    ctx.fillStyle = '#c0c8d8';
+    // Stone pedestal — warm Norse gold-stone
+    ctx.fillStyle = '#8a7030';
     ctx.fillRect(x - 8, y + 5, 16, 4);
-    ctx.fillStyle = '#8898b8';
+    ctx.fillStyle = '#604820';
     ctx.fillRect(x - 8, y + 8, 16, 1);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = 'rgba(255,220,120,0.3)';
     ctx.fillRect(x - 8, y + 5, 16, 1.2);
 
-    // Wings
+    // Wings — warm off-white feathers, gold glow
     ctx.save();
-    ctx.shadowColor = 'rgba(160,200,255,0.75)';
+    ctx.shadowColor = 'rgba(220,190,100,0.75)';
     ctx.shadowBlur  = 14 * glow;
     // Left wing
-    ctx.fillStyle = '#dce8ff';
+    ctx.fillStyle = '#f0ece0';
     ctx.beginPath();
     ctx.moveTo(x - 3, y - 1);
     ctx.bezierCurveTo(x - 9 - wingFlap * 6, y - 9, x - 17 - wingFlap * 8, y - 5, x - 19 - wingFlap * 10, y + 2);
@@ -502,7 +502,7 @@ export class Tower {
     ctx.fill();
     ctx.shadowBlur = 0;
     // Feather lines
-    ctx.strokeStyle = 'rgba(100,150,255,0.35)';
+    ctx.strokeStyle = 'rgba(180,150,60,0.35)';
     ctx.lineWidth   = 0.6;
     for (let i = 0; i < 4; i++) {
       const f = i / 3;
@@ -517,8 +517,8 @@ export class Tower {
     }
     ctx.restore();
 
-    // Lower body / skirt-armor
-    ctx.fillStyle = '#8098b8';
+    // Lower body / skirt-armor — warm bronze
+    ctx.fillStyle = '#7a6030';
     ctx.beginPath();
     ctx.moveTo(x - 4, y + 5);
     ctx.lineTo(x + 4, y + 5);
@@ -527,8 +527,8 @@ export class Tower {
     ctx.closePath();
     ctx.fill();
 
-    // Chest plate
-    ctx.fillStyle = '#b8c8e4';
+    // Chest plate — Norse gold
+    ctx.fillStyle = '#c8b060';
     ctx.beginPath();
     ctx.moveTo(x - 4.5, y - 1);
     ctx.lineTo(x + 4.5, y - 1);
@@ -536,7 +536,7 @@ export class Tower {
     ctx.lineTo(x - 3.2, y - 7);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = 'rgba(255,230,150,0.3)';
     ctx.beginPath();
     ctx.moveTo(x - 4.5, y - 1);
     ctx.lineTo(x - 0.5, y - 1);
@@ -544,26 +544,26 @@ export class Tower {
     ctx.lineTo(x - 3.2, y - 7);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(80,120,200,0.4)';
+    ctx.strokeStyle = 'rgba(100,70,20,0.4)';
     ctx.lineWidth   = 0.5;
     ctx.beginPath();
     ctx.moveTo(x, y - 1); ctx.lineTo(x, y - 7);
     ctx.stroke();
 
-    // Helmet
-    ctx.fillStyle = '#c0d0e8';
+    // Helmet — warm gold
+    ctx.fillStyle = '#c0a840';
     ctx.beginPath();
     ctx.arc(x, y - 9.5, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillStyle = 'rgba(255,230,160,0.45)';
     ctx.beginPath();
     ctx.arc(x - 1.5, y - 10.5, 1.8, 0, Math.PI * 2);
     ctx.fill();
     // Nose guard
-    ctx.fillStyle = '#8098b8';
+    ctx.fillStyle = '#806020';
     ctx.fillRect(x - 0.8, y - 11, 1.6, 3.5);
-    // Horns
-    ctx.fillStyle = '#d8e4f8';
+    // Horns — warm ivory
+    ctx.fillStyle = '#e0d0b0';
     ctx.beginPath();
     ctx.moveTo(x - 3.5, y - 11);
     ctx.lineTo(x - 7, y - 16);
@@ -576,10 +576,10 @@ export class Tower {
     ctx.lineTo(x + 1.8, y - 11.5);
     ctx.closePath();
     ctx.fill();
-    // Visor glow eyes
-    ctx.shadowColor = '#88aaff';
+    // Visor glow eyes — gold
+    ctx.shadowColor = '#c8a030';
     ctx.shadowBlur  = 8 * glow;
-    ctx.fillStyle   = '#99bbff';
+    ctx.fillStyle   = '#f0c040';
     ctx.beginPath();
     ctx.ellipse(x - 1.8, y - 9.5, 1.3, 0.8, -0.15, 0, Math.PI * 2);
     ctx.ellipse(x + 1.8, y - 9.5, 1.3, 0.8,  0.15, 0, Math.PI * 2);
@@ -595,18 +595,18 @@ export class Tower {
     const tipY      = spearEndY + Math.sin(this.aimAngle) * tipLen;
     const perpA     = this.aimAngle + Math.PI / 2;
 
-    ctx.strokeStyle = '#7a8ec0';
+    ctx.strokeStyle = '#8a6030';
     ctx.lineWidth   = 2;
     ctx.lineCap     = 'round';
-    ctx.shadowColor = 'rgba(140,180,255,0.55)';
+    ctx.shadowColor = 'rgba(200,160,60,0.55)';
     ctx.shadowBlur  = 6 * glow;
     ctx.beginPath();
     ctx.moveTo(x, y - 3);
     ctx.lineTo(spearEndX, spearEndY);
     ctx.stroke();
-    // Tip
-    ctx.fillStyle   = '#ddeeff';
-    ctx.shadowColor = 'rgba(180,210,255,0.85)';
+    // Tip — warm iron
+    ctx.fillStyle   = '#e8e0c0';
+    ctx.shadowColor = 'rgba(220,200,140,0.85)';
     ctx.shadowBlur  = 10 * glow;
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);
@@ -888,7 +888,7 @@ export class Tower {
     ctx.lineTo(x - 2.5, y - 2);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#f0ece0';
     ctx.beginPath();
     ctx.moveTo(x - 3.5, y + 5);
     ctx.lineTo(x - 1, y + 5);

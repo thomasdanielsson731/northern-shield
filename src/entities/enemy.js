@@ -14,8 +14,8 @@ export const ENEMY_DEFS = {
     hp:             90,
     radius:         7,
     reward:         14,
-    color:          '#00bbcc',
-    highlightColor: '#aaffff',
+    color:          '#5020a0',   // void purple — dream entity
+    highlightColor: '#c080ff',
     flying:         false
   },
   draugr: {
@@ -24,8 +24,8 @@ export const ENEMY_DEFS = {
     hp:             60,
     radius:         7,
     reward:         4,
-    color:          '#6628a8',
-    highlightColor: '#cc88ff',
+    color:          '#506070',   // desaturated blue-grey — corrupted corpse
+    highlightColor: '#8ab0d0',
     flying:         false
   },
   myling: {
@@ -34,8 +34,8 @@ export const ENEMY_DEFS = {
     hp:             75,
     radius:         6,
     reward:         8,
-    color:          '#88bbff',
-    highlightColor: '#e8f8ff',
+    color:          '#70c860',   // sickly yellow-green — diseased child spirit
+    highlightColor: '#c8f0a0',
     flying:         true
   },
   jotunn: {
@@ -44,8 +44,8 @@ export const ENEMY_DEFS = {
     hp:             500,
     radius:         13,
     reward:         20,
-    color:          '#5c4030',
-    highlightColor: '#d08820',
+    color:          '#2a4060',   // deep cold stone-blue — frost giant
+    highlightColor: '#c8e8ff',
     flying:         false
   }
 };
@@ -230,7 +230,7 @@ export class Enemy {
     ctx.fill();
 
     // Tattered robe
-    ctx.shadowColor = 'rgba(140,50,240,0.45)';
+    ctx.shadowColor = 'rgba(40,70,110,0.45)';
     ctx.shadowBlur  = 10;
     ctx.fillStyle   = '#220e22';
     ctx.beginPath();
@@ -280,7 +280,7 @@ export class Enemy {
     ctx.lineCap = 'butt';
 
     // Skull
-    ctx.shadowColor = 'rgba(160,60,255,0.65)';
+    ctx.shadowColor = 'rgba(60,90,140,0.65)';
     ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#d0c8bc';
     ctx.beginPath();
@@ -327,11 +327,11 @@ export class Enemy {
     const rot   = t * 2.1;
     const pulse = 0.65 + Math.sin(t * 3.5) * 0.35;
 
-    // Outer glow haze
+    // Outer glow haze — sickly green
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.8);
-    grad.addColorStop(0,   `rgba(120,180,255,${0.22 * pulse})`);
-    grad.addColorStop(0.5, `rgba(100,160,255,${0.1 * pulse})`);
-    grad.addColorStop(1,   'rgba(100,160,255,0)');
+    grad.addColorStop(0,   `rgba(100,200,70,${0.22 * pulse})`);
+    grad.addColorStop(0.5, `rgba(80,170,50,${0.1 * pulse})`);
+    grad.addColorStop(1,   'rgba(80,170,50,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(x, y, r * 2.8, 0, Math.PI * 2);
@@ -342,7 +342,7 @@ export class Enemy {
     ctx.translate(x, y);
     for (let ring = 0; ring < 2; ring++) {
       ctx.rotate(ring === 0 ? rot : -rot * 1.4);
-      ctx.strokeStyle = `rgba(${ring === 0 ? '160,210,255' : '200,230,255'},${(0.5 - ring * 0.15) * pulse})`;
+      ctx.strokeStyle = `rgba(${ring === 0 ? '120,200,80' : '160,220,100'},${(0.5 - ring * 0.15) * pulse})`;
       ctx.lineWidth   = 1.2 - ring * 0.2;
       ctx.setLineDash([3 + ring, 5 - ring]);
       ctx.beginPath();
@@ -356,7 +356,7 @@ export class Enemy {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(140,200,255,0.95)';
+    ctx.shadowColor = 'rgba(100,180,60,0.95)';
     ctx.shadowBlur  = 18 * pulse;
     ctx.fillStyle   = this.color;
     ctx.fillRect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
@@ -365,8 +365,8 @@ export class Enemy {
     ctx.fillRect(-r * 0.36, -r * 0.36, r * 0.72, r * 0.72);
     ctx.restore();
 
-    // Bright white core
-    ctx.fillStyle = '#ffffff';
+    // Sickly pale core
+    ctx.fillStyle = '#e8f8d0';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.22, 0, Math.PI * 2);
     ctx.fill();
@@ -376,8 +376,8 @@ export class Enemy {
       const a  = rot * 2.5 + (i / 5) * Math.PI * 2;
       const sr = r * 1.45;
       const alpha = Math.max(0, 0.45 + Math.sin(rot * 4 + i * 1.3) * 0.35);
-      ctx.fillStyle   = `rgba(200,230,255,${alpha})`;
-      ctx.shadowColor = '#aaddff';
+      ctx.fillStyle   = `rgba(160,220,100,${alpha})`;
+      ctx.shadowColor = '#88cc40';
       ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr * 0.5, r * 0.14, 0, Math.PI * 2);
@@ -387,8 +387,8 @@ export class Enemy {
 
     // Flying badge: small upward triangle above body
     ctx.save();
-    ctx.fillStyle   = 'rgba(200,230,255,0.65)';
-    ctx.shadowColor = 'rgba(140,190,255,0.5)';
+    ctx.fillStyle   = 'rgba(180,230,120,0.65)';
+    ctx.shadowColor = 'rgba(100,180,60,0.5)';
     ctx.shadowBlur  = 5;
     const fty = y - r * 1.7;
     ctx.beginPath();
@@ -401,7 +401,7 @@ export class Enemy {
     ctx.restore();
   }
 
-  // ── Golem: massive stone creature with lava cracks ───────────────────────────
+  // ── Golem: frost giant — corrupted ancient stone with ice fractures ──────────
   _drawGolem(ctx) {
     const x = this.x, y = this.y;
     const r = this.radius;
@@ -414,22 +414,22 @@ export class Enemy {
     ctx.ellipse(x + 4, y + r * 0.72, r * 1.3, r * 0.38, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dark stone outer shell
-    ctx.shadowColor = 'rgba(200,120,10,0.4)';
+    // Dark stone outer shell — cold blue-black
+    ctx.shadowColor = 'rgba(30,80,160,0.4)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#0e0c08';
+    ctx.fillStyle   = '#06080e';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Stone body
+    // Stone body — cold deep blue
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(x, y, r - 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Stone texture bumps
+    // Stone texture bumps — dark cold tint
     const bumps = [
       [-r * 0.5, -r * 0.45, r * 0.22],
       [ r * 0.48, -r * 0.38, r * 0.18],
@@ -437,30 +437,30 @@ export class Enemy {
       [ r * 0.42,  r * 0.45, r * 0.16],
       [ 0,        -r * 0.6,  r * 0.14]
     ];
-    ctx.fillStyle = 'rgba(30,18,8,0.55)';
+    ctx.fillStyle = 'rgba(8,12,30,0.55)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx, y + by, br, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = 'rgba(100,65,30,0.35)';
+    ctx.fillStyle = 'rgba(80,120,180,0.25)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx - br * 0.35, y + by - br * 0.35, br * 0.45, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Lava crack lines
+    // Frost fracture lines — radiating ice cracks
     ctx.save();
     for (let i = 0; i < 7; i++) {
       const angle = (i / 7) * Math.PI * 2 + 0.4;
-      const len   = r * (0.48 + Math.sin(t * 2.8 + i * 1.2) * 0.18);
+      const len   = r * (0.48 + Math.sin(t * 1.8 + i * 1.2) * 0.14);
       const grad  = ctx.createLinearGradient(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
-      grad.addColorStop(0, `rgba(255,170,20,${0.85 * pulse})`);
-      grad.addColorStop(0.6, `rgba(255,80,10,${0.5 * pulse})`);
-      grad.addColorStop(1, 'rgba(200,50,0,0)');
+      grad.addColorStop(0,   `rgba(180,230,255,${0.80 * pulse})`);
+      grad.addColorStop(0.6, `rgba(100,180,240,${0.45 * pulse})`);
+      grad.addColorStop(1,   'rgba(60,120,200,0)');
       ctx.strokeStyle = grad;
-      ctx.lineWidth   = 1.8;
+      ctx.lineWidth   = 1.4;
       ctx.beginPath();
       ctx.moveTo(x, y);
       const mx = x + Math.cos(angle + 0.2) * len * 0.5;
@@ -470,50 +470,50 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Stone rim border
-    ctx.strokeStyle = '#1e1008';
+    // Stone rim border — cold dark
+    ctx.strokeStyle = '#0c1020';
     ctx.lineWidth   = 2.5;
     ctx.beginPath();
     ctx.arc(x, y, r - 1.5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Molten core
-    ctx.shadowColor = 'rgba(255,140,10,0.95)';
+    // Frozen core — ice blue glow
+    ctx.shadowColor = 'rgba(140,210,255,0.95)';
     ctx.shadowBlur  = 20 * pulse;
     ctx.fillStyle   = this.highlightColor;
     ctx.beginPath();
     ctx.arc(x, y, r * 0.38, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#fff080';
+    ctx.fillStyle = '#e8f4ff';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.17, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Eyes
+    // Eyes — cold ice blue
     const eyeY   = y - r * 0.3;
     const eyeOff = r * 0.32;
-    ctx.shadowColor = 'rgba(255,170,30,0.95)';
+    ctx.shadowColor = 'rgba(140,210,255,0.95)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#ff9020';
+    ctx.fillStyle   = '#80d8ff';
     ctx.beginPath();
     ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2);
     ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ffe060';
+    ctx.fillStyle = '#c8f0ff';
     ctx.beginPath();
     ctx.arc(x - eyeOff, eyeY, 1.2, 0, Math.PI * 2);
     ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Boss double-ring indicator
-    ctx.strokeStyle = 'rgba(255,140,20,0.50)';
+    // Boss double-ring indicator — cold blue
+    ctx.strokeStyle = 'rgba(100,180,255,0.50)';
     ctx.lineWidth   = 1.2;
     ctx.beginPath();
     ctx.arc(x, y, r + 5, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,180,40,0.25)';
+    ctx.strokeStyle = 'rgba(140,210,255,0.25)';
     ctx.lineWidth   = 0.7;
     ctx.beginPath();
     ctx.arc(x, y, r + 9, 0, Math.PI * 2);
@@ -533,11 +533,11 @@ export class Enemy {
     ctx.ellipse(x + 2, y + r * 0.78, r * 1.1, r * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Rotating aura rings
+    // Rotating void aura rings — dark purple
     for (let ring = 0; ring < 3; ring++) {
       const ringR = r * (1.5 + ring * 0.45);
       const alpha = (0.18 - ring * 0.045) * (0.55 + pulse * 0.45);
-      ctx.strokeStyle = `rgba(0,255,220,${alpha})`;
+      ctx.strokeStyle = `rgba(140,60,220,${alpha})`;
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, ring + 3]);
       ctx.lineDashOffset = t * (ring % 2 === 0 ? 22 : -16);
@@ -547,12 +547,12 @@ export class Enemy {
     }
     ctx.setLineDash([]);
 
-    // Electric arcs
+    // Void tendrils — dim purple wisps
     for (let i = 0; i < 6; i++) {
       const a   = t * (3.5 + i * 0.6) + i * (Math.PI * 2 / 6);
       const len = r * (0.75 + Math.sin(t * 14 + i * 2.5) * 0.45);
-      const alpha = Math.max(0, 0.28 + Math.sin(t * 16 + i) * 0.22);
-      ctx.strokeStyle = `rgba(0,255,220,${alpha})`;
+      const alpha = Math.max(0, 0.22 + Math.sin(t * 16 + i) * 0.18);
+      ctx.strokeStyle = `rgba(180,80,255,${alpha})`;
       ctx.lineWidth   = 0.9;
       ctx.beginPath();
       ctx.moveTo(x + Math.cos(a) * r * 0.38, y + Math.sin(a) * r * 0.38);
@@ -563,8 +563,8 @@ export class Enemy {
       ctx.stroke();
     }
 
-    // Diamond body
-    ctx.shadowColor = '#00ffee';
+    // Diamond body — void purple
+    ctx.shadowColor = '#8840dd';
     ctx.shadowBlur  = 18 * pulse;
     ctx.fillStyle   = this.color;
     ctx.beginPath();
@@ -576,7 +576,7 @@ export class Enemy {
     ctx.fill();
 
     // Facet lines
-    ctx.strokeStyle = 'rgba(0,230,210,0.4)';
+    ctx.strokeStyle = 'rgba(160,80,240,0.4)';
     ctx.lineWidth   = 0.7;
     ctx.beginPath();
     ctx.moveTo(x, y - r);      ctx.lineTo(x + r * 0.72, y);
@@ -590,26 +590,26 @@ export class Enemy {
     const hs = r * 0.45;
     ctx.fillStyle = this.highlightColor;
     ctx.beginPath();
-    ctx.moveTo(x,           y - hs);
+    ctx.moveTo(x,             y - hs);
     ctx.lineTo(x + hs * 0.72, y);
-    ctx.lineTo(x,           y + hs);
+    ctx.lineTo(x,             y + hs);
     ctx.lineTo(x - hs * 0.72, y);
     ctx.closePath();
     ctx.fill();
 
-    // Bright core
-    ctx.fillStyle = '#ffffff';
+    // Void core — pale purple, not white
+    ctx.fillStyle = '#e8d8f8';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.15, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // EMP lightning-bolt badge — top-right of body
+    // Dream-rune badge — top-right of body (replaces EMP bolt)
     ctx.save();
     const bx = x + r * 0.78, by = y - r * 0.78, bs = 5.5;
-    ctx.shadowColor = '#00ffcc';
+    ctx.shadowColor = '#9940ee';
     ctx.shadowBlur  = 7;
-    ctx.fillStyle   = '#00ffdd';
+    ctx.fillStyle   = '#b060ff';
     ctx.beginPath();
     ctx.moveTo(bx + bs * 0.12,  by - bs * 0.52);
     ctx.lineTo(bx - bs * 0.18,  by + bs * 0.05);
