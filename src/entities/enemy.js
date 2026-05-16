@@ -70,6 +70,17 @@ export class Enemy {
     this.alive          = true;
     this.reached        = false;
 
+    // Boss fields — set externally by spawnBoss()
+    this.isBoss      = false;
+    this.bossName    = null;
+    this.waveNum     = null;
+    this.phase75Done = false;
+    this.phase50Done = false;
+    this.stunTimer    = 0;    // frames frozen during summon stutter
+    this.slowImmune   = false;
+    this.hitFlash     = 0;    // frames of white ring on hit
+    this.empPulseTimer = 0;   // cooldown between EMP shockwave rings
+
     this.x = path[0].x;
     this.y = path[0].y;
   }
@@ -87,11 +98,16 @@ export class Enemy {
       return;
     }
 
+    // Boss summon stutter — frozen in place
+    if (this.stunTimer > 0) { this.stunTimer--; return; }
+
     if (this.slowTimer > 0) {
       this.slowTimer--;
       if (this.slowTimer === 0) this.slowFactor = 1;
     }
-    const effectiveSpeed = this.slowTimer > 0 ? this.baseSpeed * this.slowFactor : this.baseSpeed;
+    const effectiveSpeed = (this.slowTimer > 0 && !this.slowImmune)
+      ? this.baseSpeed * this.slowFactor
+      : this.baseSpeed;
 
     const target = this.path[this.pathIndex + 1];
     const dx   = target.x - this.x;
@@ -111,6 +127,24 @@ export class Enemy {
   draw(ctx) {
     if (!this.alive) return;
 
+    // Myling flight shadow — offset ellipse below sprite shows it is airborne
+    if (this.type === ENEMY_TYPES.MYLING) {
+      const shadowY = this.y + this.radius + 2;
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle   = 'rgba(0,0,0,0.7)';
+      ctx.beginPath();
+      ctx.ellipse(this.x, shadowY, this.radius * 0.9, this.radius * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ── Damage state — desaturate sprite based on HP band ───────────────────
+    const hpRatio = this.hp / this.maxHp;
+    if (hpRatio < 0.50) {
+      ctx.filter = hpRatio < 0.25 ? 'grayscale(40%) brightness(0.72)' : 'grayscale(18%)';
+    }
+
     if (!this._drawSprite(ctx)) {
       if (this.type === ENEMY_TYPES.MYLING) {
         this._drawWisp(ctx);
@@ -121,6 +155,28 @@ export class Enemy {
       } else {
         this._drawGraveborn(ctx);
       }
+    }
+
+    ctx.filter = 'none';
+
+    // Critical HP — rapid red pulse ring (0-25%)
+    if (hpRatio < 0.25 && hpRatio > 0) {
+      const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
+      ctx.strokeStyle = `rgba(255,55,35,${0.22 + pulse * 0.32})`;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Hit flash — white ring when damage lands
+    if (this.hitFlash > 0) {
+      ctx.strokeStyle = `rgba(255,255,255,${(this.hitFlash / 4) * 0.78})`;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      this.hitFlash--;
     }
 
     // Slow / stun overlay
@@ -626,22 +682,51 @@ export class Enemy {
   _drawHpBar(ctx) {
     if (this.hp >= this.maxHp) return;
 
-    const isBoss = this.type === ENEMY_TYPES.JOTUNN;
-    const barW = this.radius * (isBoss ? 3.2 : 2.8);
-    const barH = isBoss ? 5 : 3;
+    const barW = this.radius * (this.isBoss ? 4.0 : 2.8);
+    const barH = this.isBoss ? 7 : 3;
     const barX = this.x - barW / 2;
-    const barY = this.y - this.radius - (isBoss ? 14 : 10);
-
-    // Background
-    ctx.fillStyle = 'rgba(6,3,14,0.88)';
-    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+    const barY = this.y - this.radius - (this.isBoss ? 18 : 10);
 
     const pct = this.hp / this.maxHp;
-    ctx.fillStyle = pct > 0.5 ? '#56e894' : pct > 0.25 ? '#e8c040' : '#e84040';
-    ctx.fillRect(barX, barY, barW * pct, barH);
 
-    ctx.strokeStyle = 'rgba(200,160,40,0.32)';
-    ctx.lineWidth   = 0.5;
-    ctx.strokeRect(barX, barY, barW, barH);
+    if (this.isBoss) {
+      // Boss: dark border + gold trim + phase-tinted fill
+      ctx.fillStyle = 'rgba(4,2,8,0.95)';
+      ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+      ctx.strokeStyle = 'rgba(200,150,30,0.6)';
+      ctx.lineWidth   = 0.8;
+      ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
+
+      const fillColor = pct > 0.5 ? '#e84848' : pct > 0.25 ? '#e07020' : '#cc2020';
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(barX, barY, barW * pct, barH);
+
+      // Phase-50 marker line
+      ctx.strokeStyle = 'rgba(255,200,60,0.55)';
+      ctx.lineWidth   = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(barX + barW * 0.5, barY);
+      ctx.lineTo(barX + barW * 0.5, barY + barH);
+      ctx.stroke();
+
+      // Name plate
+      ctx.save();
+      ctx.font      = 'bold 7px monospace';
+      ctx.fillStyle = 'rgba(255,200,80,0.9)';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(220,100,20,0.9)';
+      ctx.shadowBlur  = 6;
+      ctx.fillText(this.bossName ?? 'BOSS', this.x, barY - 3);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    } else {
+      ctx.fillStyle = 'rgba(6,3,14,0.88)';
+      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+      ctx.fillStyle = pct > 0.5 ? '#56e894' : pct > 0.25 ? '#e8c040' : '#e84040';
+      ctx.fillRect(barX, barY, barW * pct, barH);
+      ctx.strokeStyle = 'rgba(200,160,40,0.32)';
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(barX, barY, barW, barH);
+    }
   }
 }

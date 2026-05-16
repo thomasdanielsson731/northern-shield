@@ -125,6 +125,7 @@ export class Tower {
     this.aimAngle      = -Math.PI / 2;
     this.fireFlash     = 0;
     this.disabledTimer = 0;
+    this.levelFlash    = 0;   // frames of milestone glow on level 5 / 10
 
     this._applyLevel();
   }
@@ -144,6 +145,7 @@ export class Tower {
     if (this.maxed) return false;
     this.level++;
     this._applyLevel();
+    if (this.level === 5 || this.level === 10) this.levelFlash = 55;
     return true;
   }
 
@@ -258,21 +260,21 @@ export class Tower {
       this.fireFlash--;
     }
 
-    // Mara disabled shimmer
+    // Disabled shimmer — amber-red (reads as broken, not buffed)
     if (this.disabledTimer > 0) {
-      const flicker = 0.45 + Math.sin(t * 28) * 0.3;
+      const flicker = 0.30 + Math.sin(t * 26) * 0.15;
       ctx.save();
-      ctx.fillStyle   = `rgba(0,220,200,${flicker * 0.4})`;
-      ctx.shadowColor = '#00ffee';
-      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = `rgba(180,55,18,${flicker * 0.32})`;
+      ctx.shadowColor = 'rgba(120,35,8,0.55)';
+      ctx.shadowBlur  = 6;
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
       ctx.fill();
       for (let i = 0; i < 3; i++) {
-        const a  = t * 9 + (i * Math.PI * 2 / 3);
-        const r1 = this.radius + 3, r2 = this.radius + 9;
-        ctx.strokeStyle = `rgba(0,255,220,${0.35 + Math.sin(t * 18 + i) * 0.25})`;
-        ctx.lineWidth   = 0.9;
+        const a  = t * 7 + (i * Math.PI * 2 / 3);
+        const r1 = this.radius + 2, r2 = this.radius + 7;
+        ctx.strokeStyle = `rgba(160,48,14,${0.22 + Math.sin(t * 13 + i) * 0.14})`;
+        ctx.lineWidth   = 0.8;
         ctx.beginPath();
         ctx.moveTo(this.x + Math.cos(a) * r1,       this.y + Math.sin(a) * r1);
         ctx.lineTo(this.x + Math.cos(a + 0.5) * r2, this.y + Math.sin(a + 0.5) * r2);
@@ -280,6 +282,33 @@ export class Tower {
       }
       ctx.shadowBlur = 0;
       ctx.restore();
+    }
+
+    // Level milestone burst (levels 5 and 10)
+    if (this.levelFlash > 0) {
+      const lf = this.levelFlash / 55;
+      const ringR = this.radius + 4 + (1 - lf) * 14;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,230,80,${lf * 0.9})`;
+      ctx.shadowColor = 'rgba(255,200,40,0.9)';
+      ctx.shadowBlur  = 12;
+      ctx.lineWidth   = 2;
+      ctx.beginPath(); ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur  = 0;
+      // Radiating sparks
+      for (let i = 0; i < 6; i++) {
+        const a  = (i / 6) * Math.PI * 2 + (1 - lf) * Math.PI;
+        const r0 = this.radius + 3;
+        const r1 = r0 + (1 - lf) * 18;
+        ctx.strokeStyle = `rgba(255,220,60,${lf * 0.7})`;
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(this.x + Math.cos(a) * r0, this.y + Math.sin(a) * r0);
+        ctx.lineTo(this.x + Math.cos(a) * r1, this.y + Math.sin(a) * r1);
+        ctx.stroke();
+      }
+      ctx.restore();
+      this.levelFlash--;
     }
 
     // Level badge

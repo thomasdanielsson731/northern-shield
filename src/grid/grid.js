@@ -1,5 +1,41 @@
 import { SPRITES } from '../assets.js';
 
+function _drawVikingShield(ctx, sx, sy, r, isBlue) {
+  // Wooden rim
+  ctx.fillStyle = '#2a1408';
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+
+  // Face — four quadrant colors clipped to interior
+  ctx.save();
+  ctx.beginPath(); ctx.arc(sx, sy, r - 0.7, 0, Math.PI * 2); ctx.clip();
+  const c1 = isBlue ? '#17388c' : '#7a1208';
+  const c2 = '#c8b850';
+  ctx.fillStyle = c1;
+  ctx.fillRect(sx - r, sy - r, r, r);
+  ctx.fillRect(sx,     sy,     r, r);
+  ctx.fillStyle = c2;
+  ctx.fillRect(sx,     sy - r, r, r);
+  ctx.fillRect(sx - r, sy,     r, r);
+  // Divider cross
+  ctx.strokeStyle = 'rgba(15,6,1,0.6)'; ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(sx - r, sy); ctx.lineTo(sx + r, sy);
+  ctx.moveTo(sx, sy - r); ctx.lineTo(sx, sy + r);
+  ctx.stroke();
+  // Rune ring
+  ctx.strokeStyle = isBlue ? 'rgba(140,190,255,0.4)' : 'rgba(255,180,130,0.4)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.arc(sx, sy, r * 0.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+
+  // Metal boss
+  const br = r * 0.25;
+  ctx.fillStyle = '#686050';
+  ctx.beginPath(); ctx.arc(sx, sy, br, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(210,200,170,0.65)';
+  ctx.beginPath(); ctx.arc(sx - br * 0.28, sy - br * 0.3, br * 0.4, 0, Math.PI * 2); ctx.fill();
+}
+
 export const CELL = {
   EMPTY: 0,
   WALL:  1,
@@ -299,26 +335,29 @@ export class Grid {
     ctx.fillStyle = aura;
     ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2); ctx.fill();
 
-    // ── Gold pile (much bigger) ──────────────────────────────────────────────────
-    const goldCount = Math.min(Math.floor(Math.log2((this.gold || 0) + 2)), 8);
-    const pileScale = 1 + hPulseF * 0.5;
-    const gPulse    = 0.5 + Math.sin(time * 5.5 + 0.8) * 0.5;
-    const pileRx    = cs * 1.5 * pileScale;
+    // ── Gold pile — scattered small coins matching flying coin size ──────────────
+    const stackLevel = Math.min(Math.floor(Math.log2((this.gold || 0) + 2)), 8);
+    const coinTotal  = stackLevel === 0 ? 0 : stackLevel * 3 + 2;
+    const gPulse     = 0.5 + Math.sin(time * 5.5 + 0.8) * 0.5;
+    const pileBaseY  = cy + cs * 0.3;
 
     ctx.save();
-    if (goldCount > 0) {
-      ctx.shadowColor = 'rgba(255,210,30,0.95)';
-      ctx.shadowBlur  = 10 + gPulse * 8 + hPulseF * 18;
-      for (let i = 0; i < goldCount; i++) {
-        const coinY = cy + 4 - i * cs * 0.32;
-        const rx    = pileRx * (1 - i * 0.04);
+    if (coinTotal > 0) {
+      ctx.shadowColor = 'rgba(255,210,30,0.9)';
+      ctx.shadowBlur  = 6 + gPulse * 4 + hPulseF * 12;
+      for (let i = 0; i < coinTotal; i++) {
+        const angle = i * 2.399963;  // golden angle spread
+        const dist  = Math.sqrt(i / coinTotal) * cs * (1.6 + hPulseF * 0.4);
+        const px    = cx + Math.cos(angle) * dist;
+        const py    = pileBaseY + Math.sin(angle) * dist * 0.45;
+        const r     = 3.8 + (i % 3) * 0.4;
         ctx.beginPath();
-        ctx.ellipse(cx, coinY, rx, rx * 0.34, 0, 0, Math.PI * 2);
-        ctx.fillStyle = i === goldCount - 1 ? '#f5d040' : (i % 2 === 0 ? '#8a5418' : '#704010');
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = i % 5 === 0 ? '#f0b820' : '#f5d030';
         ctx.fill();
-        if (i === goldCount - 1) {
-          ctx.strokeStyle = 'rgba(255,245,120,0.90)';
-          ctx.lineWidth   = 1.2;
+        if (i % 4 === 3) {
+          ctx.strokeStyle = 'rgba(255,245,120,0.65)';
+          ctx.lineWidth   = 0.6;
           ctx.stroke();
         }
       }
@@ -408,177 +447,77 @@ export class Grid {
     const W  = (adj & 8) !== 0;
     const cx = x + cs / 2;
     const cy = y + cs / 2;
-    const hw = Math.round(cs * 5 / 14);  // wall half-width (5px at cs=14)
 
-    // Position-seeded pseudo-random for stone color variation
-    const seed = x * 0.17 + y * 0.31;
-    const stoneV = Math.sin(seed * 7.3) * 0.12;  // ±12% brightness shift
+    // Alternating shield color (blue/red) by grid position
+    const isBlue = (((x / cs) | 0) + ((y / cs) | 0)) % 2 === 0;
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, cs, cs);
     ctx.clip();
 
-    ctx.fillStyle = '#2a1408';
+    ctx.fillStyle = '#1a0e04';
     ctx.fillRect(x, y, cs, cs);
 
     if (adj === 0) {
-      // ── Isolated: two round shields leaning against wall ───────────────
-      const shieldR = cs * 0.30;
-      for (const [ox, oy] of [[-cs * 0.28, 0], [cs * 0.28, 0]]) {
-        const sx = cx + ox, sy = cy + oy;
-
-        // Wooden rim (dark border ring)
-        ctx.fillStyle = '#3a2410';
-        ctx.beginPath(); ctx.arc(sx, sy, shieldR, 0, Math.PI * 2); ctx.fill();
-
-        // Shield face — four quadrant colours clipped to interior
-        ctx.save();
-        ctx.beginPath(); ctx.arc(sx, sy, shieldR - 0.8, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#b01808';            // top-left red
-        ctx.fillRect(sx - shieldR, sy - shieldR, shieldR, shieldR);
-        ctx.fillRect(sx, sy, shieldR, shieldR);
-        ctx.fillStyle = '#d8c888';            // top-right cream
-        ctx.fillRect(sx, sy - shieldR, shieldR, shieldR);
-        ctx.fillRect(sx - shieldR, sy, shieldR, shieldR);
-        // Divider cross
-        ctx.strokeStyle = 'rgba(20,10,4,0.55)'; ctx.lineWidth = 0.7;
-        ctx.beginPath();
-        ctx.moveTo(sx - shieldR, sy); ctx.lineTo(sx + shieldR, sy);
-        ctx.moveTo(sx, sy - shieldR); ctx.lineTo(sx, sy + shieldR);
-        ctx.stroke();
-        ctx.restore();
-
-        // Small iron boss — not too large, clearly a rivet not a ring
-        const bossR = shieldR * 0.14;
-        ctx.fillStyle = '#706860';
-        ctx.beginPath(); ctx.arc(sx, sy, bossR, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(230,220,200,0.75)';
-        ctx.beginPath(); ctx.arc(sx - bossR * 0.3, sy - bossR * 0.35, bossR * 0.4, 0, Math.PI * 2); ctx.fill();
-      }
+      // ── Isolated: two shields side by side ───────────────────────────────
+      const r = cs * 0.25;
+      _drawVikingShield(ctx, cx - cs * 0.22, cy, r, isBlue);
+      _drawVikingShield(ctx, cx + cs * 0.22, cy, r, !isBlue);
     } else {
-      // ── Connected: stone palisade wall ─────────────────────────────────
+      // ── Connected: wooden frame + center shield ───────────────────────────
+      const beamHW = 2;
+      const wood   = '#5c3212';
+      const woodDk = '#3a1e08';
 
-      // Stone base color with per-cell variation
-      const sv = Math.round(stoneV * 30);
-      const stoneR = Math.min(255, 110 + sv), stoneG = Math.min(255, 80 + sv), stoneB = Math.min(255, 56 + sv);
-      const stoneColor = `rgb(${stoneR},${stoneG},${stoneB})`;
-      const stoneDark  = `rgb(${Math.max(0,stoneR-22)},${Math.max(0,stoneG-18)},${Math.max(0,stoneB-14)})`;
-
-      // Main stone body
-      ctx.fillStyle = stoneColor;
-      ctx.fillRect(cx - hw, cy - hw, hw * 2, hw * 2);
-      if (N) ctx.fillRect(cx - hw, y,       hw * 2, cy - hw - y);
-      if (S) ctx.fillRect(cx - hw, cy + hw, hw * 2, y + cs - cy - hw);
-      if (E) ctx.fillRect(cx + hw, cy - hw, x + cs - cx - hw, hw * 2);
-      if (W) ctx.fillRect(x,       cy - hw, cx - hw - x,      hw * 2);
-
-      // Stone block divisions — horizontal lines in vertical arms
-      ctx.strokeStyle = 'rgba(20,10,4,0.38)'; ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      if (N) {
-        const armTop = y, armBot = cy - hw;
-        const armH = armBot - armTop;
-        for (let li = 1; li < 3; li++) {
-          const ly = armTop + armH * li / 3;
-          ctx.moveTo(cx - hw + 0.5, ly); ctx.lineTo(cx + hw - 0.5, ly);
-        }
+      // Horizontal beam
+      if (W || E) {
+        ctx.fillStyle = wood;
+        const bx1 = W ? x : cx - beamHW;
+        const bx2 = E ? x + cs : cx + beamHW;
+        ctx.fillRect(bx1, cy - beamHW, bx2 - bx1, beamHW * 2);
+        ctx.fillStyle = 'rgba(25,10,2,0.35)';
+        ctx.fillRect(bx1, cy - 0.4, bx2 - bx1, 0.8);
       }
-      if (S) {
-        const armTop = cy + hw, armBot = y + cs;
-        const armH = armBot - armTop;
-        for (let li = 1; li < 3; li++) {
-          const ly = armTop + armH * li / 3;
-          ctx.moveTo(cx - hw + 0.5, ly); ctx.lineTo(cx + hw - 0.5, ly);
-        }
+      // Vertical beam
+      if (N || S) {
+        ctx.fillStyle = wood;
+        const by1 = N ? y : cy - beamHW;
+        const by2 = S ? y + cs : cy + beamHW;
+        ctx.fillRect(cx - beamHW, by1, beamHW * 2, by2 - by1);
+        ctx.fillStyle = 'rgba(25,10,2,0.35)';
+        ctx.fillRect(cx - 0.4, by1, 0.8, by2 - by1);
       }
-      // Vertical lines in horizontal arms
-      if (E) {
-        const armL = cx + hw, armR = x + cs;
-        const armW = armR - armL;
-        for (let li = 1; li < 3; li++) {
-          const lx = armL + armW * li / 3;
-          ctx.moveTo(lx, cy - hw + 0.5); ctx.lineTo(lx, cy + hw - 0.5);
-        }
-      }
-      if (W) {
-        const armL = x, armR = cx - hw;
-        const armW = armR - armL;
-        for (let li = 1; li < 3; li++) {
-          const lx = armL + armW * li / 3;
-          ctx.moveTo(lx, cy - hw + 0.5); ctx.lineTo(lx, cy + hw - 0.5);
-        }
-      }
-      ctx.stroke();
 
-      // Darker inset center block for depth
-      ctx.fillStyle = stoneDark;
-      ctx.fillRect(cx - hw + 1.5, cy - hw + 1.5, hw * 2 - 3, hw * 2 - 3);
+      // Wooden posts at arm ends (edge caps)
+      ctx.fillStyle = woodDk;
+      const postR = 1.6;
+      if (N) { ctx.beginPath(); ctx.arc(cx,          y + 1,      postR, 0, Math.PI * 2); ctx.fill(); }
+      if (S) { ctx.beginPath(); ctx.arc(cx,          y + cs - 1, postR, 0, Math.PI * 2); ctx.fill(); }
+      if (E) { ctx.beginPath(); ctx.arc(x + cs - 1, cy,          postR, 0, Math.PI * 2); ctx.fill(); }
+      if (W) { ctx.beginPath(); ctx.arc(x + 1,      cy,          postR, 0, Math.PI * 2); ctx.fill(); }
 
-      // Top-face highlight (lit from above — brightest surface)
-      ctx.fillStyle = '#b08868';
-      const topY = N ? y : cy - hw;
-      ctx.fillRect(cx - hw, topY, hw * 2, 1.5);
-      if (W) ctx.fillRect(x,       cy - hw, cx - hw - x, 1.5);
-      if (E) ctx.fillRect(cx + hw, cy - hw, x + cs - cx - hw, 1.5);
+      // Center shield (on top of beams)
+      const shieldR = cs * 0.34;
+      _drawVikingShield(ctx, cx, cy, shieldR, isBlue);
 
-      // Left-face highlight
-      ctx.fillStyle = 'rgba(160,130,90,0.4)';
-      const leftX = W ? x : cx - hw;
-      ctx.fillRect(leftX, cy - hw + 1.5, 1.5, hw * 2 - 1.5);
-      if (N) ctx.fillRect(cx - hw, y, 1.5, cy - hw - y);
-      if (S) ctx.fillRect(cx - hw, cy + hw, 1.5, y + cs - cy - hw);
-
-      // Shadow on bottom/right faces
-      ctx.fillStyle = 'rgba(0,0,0,0.30)';
-      if (!S) ctx.fillRect(cx - hw, cy + hw - 1.5, hw * 2, 1.5);
-      if (!E) ctx.fillRect(cx + hw - 1.5, cy - hw, 1.5, hw * 2);
-
-      // Dark mortar cross through center
-      ctx.fillStyle = 'rgba(18, 9, 2, 0.60)';
-      ctx.fillRect(cx - 0.5, cy - hw, 1, hw * 2);
-      ctx.fillRect(cx - hw, cy - 0.5, hw * 2, 1);
-
-      // Metal boss at center
-      const br = hw * 0.46;
-      ctx.fillStyle = '#504840';
-      ctx.beginPath(); ctx.arc(cx, cy, br, 0, Math.PI * 2); ctx.fill();
-      // Rivets on boss edge
-      ctx.fillStyle = '#383228';
-      for (let ri = 0; ri < 4; ri++) {
-        const ra = ri * Math.PI * 0.5 + Math.PI * 0.25;
-        ctx.beginPath(); ctx.arc(cx + Math.cos(ra) * br * 0.72, cy + Math.sin(ra) * br * 0.72, br * 0.16, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = 'rgba(210,200,175,0.65)';
-      ctx.beginPath();
-      ctx.arc(cx - br * 0.22, cy - br * 0.26, br * 0.38, 0, Math.PI * 2);
-      ctx.fill();
-
-      // ── Battlements on exposed top edges ───────────────────────────────
+      // Wooden merlons on exposed top edge
       if (!N) {
-        const merlonW = hw * 0.72, merlonH = Math.max(2, cs * 0.15);
-        const wallTop = cy - hw;
-        // Left merlon
-        ctx.fillStyle = stoneColor;
-        ctx.fillRect(cx - hw, wallTop - merlonH, merlonW, merlonH);
-        ctx.fillStyle = '#b08868';
-        ctx.fillRect(cx - hw, wallTop - merlonH, merlonW, 1);
-        ctx.fillStyle = 'rgba(0,0,0,0.30)';
-        ctx.fillRect(cx - hw + merlonW, wallTop - merlonH, 1, merlonH);
-        // Right merlon
-        ctx.fillStyle = stoneColor;
-        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, merlonW, merlonH);
-        ctx.fillStyle = '#b08868';
-        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, merlonW, 1);
-        ctx.fillStyle = 'rgba(0,0,0,0.30)';
-        ctx.fillRect(cx + hw - merlonW, wallTop - merlonH, 1, merlonH);
+        const merlonH = Math.max(2, cs * 0.18);
+        const wallTop = cy - shieldR;
+        for (const mx of [cx - 3.5, cx + 0.5]) {
+          ctx.fillStyle = wood;
+          ctx.fillRect(mx, wallTop - merlonH, 2.5, merlonH);
+          ctx.fillStyle = 'rgba(190,150,80,0.4)';
+          ctx.fillRect(mx, wallTop - merlonH, 2.5, 0.7);
+        }
       }
     }
 
     ctx.restore();
 
     ctx.strokeStyle = 'rgba(30,15,5,0.4)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth   = 0.5;
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
   }
 }

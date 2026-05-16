@@ -8,7 +8,7 @@ const COLS = 36;
 const ROWS = 22;
 const CELL_SIZE = 14;
 
-const SIDEBAR_W     = 0;
+const SIDEBAR_W     = 32;
 const RIGHT_PANEL_W = 188;
 const GRID_LEFT     = SIDEBAR_W;
 const GRID_TOP      = 48;
@@ -22,8 +22,8 @@ const WALL_COST = 5;
 const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 
 // Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
-const BASE_W = SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W; // 940
-const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56; // 580
+const BASE_W = SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
+const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
 let gameScale = 1;
 
@@ -78,8 +78,18 @@ let hoardPulse = 0;    // frames of bounce animation when coin lands
 const hoardX   = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
 const hoardY   = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
 
-let bossWarnAlpha = 0; // 0-1 fade for boss warning banner
-let portalFlash   = 0; // frames of red portal flash on Golem spawn
+let bossWarnAlpha    = 0;   // 0-1 fade for boss warning banner
+let portalFlash      = 0;   // frames of portal flash on spawn
+let portalFlashColor = 'red'; // 'red' for boss, 'blue' for regular Jötunn
+let bossDefeatTimer  = 0;   // frames to show boss defeat announcement
+let bossDefeatText   = '';  // e.g. "DRAUGEN-JARL DEFEATED"
+let bossDefeatGold   = 0;   // gold earned from boss kill
+
+let splashRings       = [];  // catapult impact rings: { x, y, r, maxR, life, maxLife }
+let empRings          = [];  // Mara EMP rings: { x, y, r, life, maxLife }
+let fortressHeldTimer = 0;   // countdown for FORTRESS HELD display (frames)
+let wallFrostCells    = [];  // cached cells adjacent to walls: [{ x, y, cs }]
+let wallFrostDirty    = true;
 
 // ── high-score table ──────────────────────────────────────────────────────────
 
@@ -130,8 +140,18 @@ function restartGame() {
   _frameTick    = 0;
   goldCoins     = [];
   hoardPulse    = 0;
-  bossWarnAlpha = 0;
-  portalFlash   = 0;
+  bossWarnAlpha    = 0;
+  portalFlash      = 0;
+  portalFlashColor = 'red';
+  bossDefeatTimer  = 0;
+  bossDefeatText   = '';
+  bossDefeatGold   = 0;
+
+  splashRings       = [];
+  empRings          = [];
+  fortressHeldTimer = 0;
+  wallFrostCells    = [];
+  wallFrostDirty    = true;
 
   waveNumber    = 0;
   waveTotal     = 0;
@@ -150,6 +170,14 @@ const SPAWN_FRAMES      = 30;
 const EMP_RANGE         = 50;
 const EMP_DISABLE_FRAMES = 150;
 const MAX_WAVES          = 100;
+
+const BOSS_WAVES = new Set([10, 25, 50]);
+
+const BOSS_CONFIGS = {
+  10: { name: 'DRAUGEN-JARL',      type: ENEMY_TYPES.JOTUNN, hp: 800,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true, phase50SlowImmune: true  },
+  25: { name: 'JÖTUNHELM WALKER',  type: ENEMY_TYPES.JOTUNN, hp: 2400, radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false },
+  50: { name: 'MARA-VOID',         type: ENEMY_TYPES.MARA,   hp: 6000, radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
+};
 
 let waveNumber  = 0;
 let waveTotal   = 0;
@@ -173,7 +201,7 @@ function spawnParticles(x, y, color, count = 10) {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 0.5,
       life: 1,
-      decay: 0.022 + Math.random() * 0.018,
+      decay: 0.042 + Math.random() * 0.022,
       radius: 1.5 + Math.random() * 2.5,
       color
     });
@@ -255,20 +283,31 @@ function waveComposition(num) {
 }
 
 function buildWave(num) {
-  const { draugr, mylings, jotunn, maras } = waveComposition(num);
+  if (BOSS_WAVES.has(num)) {
+    // Boss wave: small herald squad, then the boss enters last
+    const heralds = [
+      ...Array(6).fill(ENEMY_TYPES.DRAUGR),
+      ...Array(2).fill(ENEMY_TYPES.MYLING),
+    ];
+    for (let i = heralds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [heralds[i], heralds[j]] = [heralds[j], heralds[i]];
+    }
+    heralds.push({ __boss: true, waveNum: num });
+    return heralds;
+  }
 
+  const { draugr, mylings, jotunn, maras } = waveComposition(num);
   const queue = [
     ...Array(draugr).fill(ENEMY_TYPES.DRAUGR),
     ...Array(mylings).fill(ENEMY_TYPES.MYLING),
     ...Array(jotunn).fill(ENEMY_TYPES.JOTUNN),
     ...Array(maras).fill(ENEMY_TYPES.MARA),
   ];
-
   for (let i = queue.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [queue[i], queue[j]] = [queue[j], queue[i]];
   }
-
   return queue;
 }
 
@@ -290,8 +329,7 @@ function updateWave() {
   if (portalFlash > 0) portalFlash--;
 
   if (waveState === 'countdown' || waveState === 'break') {
-    const nextHasBoss = waveComposition(waveNumber + 1).jotunn > 0;
-    bossWarnAlpha = nextHasBoss
+    bossWarnAlpha = BOSS_WAVES.has(waveNumber + 1)
       ? Math.min(1, bossWarnAlpha + 0.025)
       : Math.max(0, bossWarnAlpha - 0.04);
   } else {
@@ -315,7 +353,12 @@ function updateWave() {
     spawnTimer++;
     if (spawnTimer >= SPAWN_FRAMES) {
       spawnTimer = 0;
-      spawnEnemy(spawnQueue.shift(), waveHpScale);
+      const next = spawnQueue.shift();
+      if (next && next.__boss) {
+        spawnBoss(next.waveNum);
+      } else {
+        spawnEnemy(next, waveHpScale);
+      }
     }
   } else if (enemies.length === 0) {
     if (waveNumber >= MAX_WAVES) {
@@ -327,7 +370,12 @@ function updateWave() {
       const clearBonus = 10 + (waveLeak ? 0 : 5);
       gold       += clearBonus;
       goldEarned += clearBonus;
-      hoardPulse  = 14;
+      if (!waveLeak) {
+        fortressHeldTimer = 200;
+        hoardPulse = 60;
+      } else {
+        hoardPulse = 18;
+      }
       // Hoard interest (5% of gold, max 50g)
       const interest = Math.min(Math.floor(gold * 0.05), 50);
       if (interest > 0) {
@@ -657,10 +705,33 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   }
 
   if (type === ENEMY_TYPES.JOTUNN) {
-    screenShake = Math.max(screenShake, 9);
-    portalFlash = 22;
+    screenShake     = Math.max(screenShake, 6);
+    portalFlash      = 14;
+    portalFlashColor = 'blue';  // regular Jötunn — cold blue, not the boss red
   }
   enemies.push(new Enemy(path, type, hpScale));
+}
+
+function spawnBoss(waveNum) {
+  if (!currentPath || gameOver) return;
+  const cfg  = BOSS_CONFIGS[waveNum];
+  const path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+
+  screenShake      = Math.max(screenShake, 14);
+  portalFlash      = 32;
+  portalFlashColor = 'red';
+
+  const boss        = new Enemy(path, cfg.type, 1);
+  boss.hp           = cfg.hp;
+  boss.maxHp        = cfg.hp;
+  boss.radius       = cfg.radius;
+  boss.speed        = ENEMY_DEFS[cfg.type].speed * cfg.speedMult;
+  boss.baseSpeed    = boss.speed;
+  boss.reward       = cfg.reward;
+  boss.isBoss       = true;
+  boss.bossName     = cfg.name;
+  boss.waveNum      = waveNum;
+  enemies.push(boss);
 }
 
 // ── rerouting ─────────────────────────────────────────────────────────────────
@@ -703,6 +774,7 @@ function tryPlaceAt(col, row, mode, towerType) {
   rerouteActiveEnemies();
   goldSpent += cost;
   gold      -= cost;
+  if (mode === CELL.WALL) wallFrostDirty = true;
 
   if (mode === CELL.TOWER) {
     const { x, y } = grid.cellCenter(col, row);
@@ -820,6 +892,7 @@ canvas.addEventListener('mousedown', e => {
       if (selectedTower && selectedTower.col === col && selectedTower.row === row) {
         selectedTower = null;
       }
+      if (cell === CELL.WALL) wallFrostDirty = true;
       grid.setCell(col, row, CELL.EMPTY);
       towers      = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
@@ -876,15 +949,20 @@ function update() {
       gold        += reward;
       goldEarned  += reward;
       if (b.target) {
-        spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 12);
-        spawnGoldCoins(GRID_LEFT + b.target.x, GRID_TOP + b.target.y, reward);
+        if (b.target.isBoss) {
+          onBossKilled(b.target);
+        } else {
+          spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 8);
+          spawnGoldCoins(GRID_LEFT + b.target.x, GRID_TOP + b.target.y, reward);
+        }
       }
     }
     if (!b.alive) {
       // Splash damage for missile bullets
       if (b.splashRadius > 0) {
         const ix = b.x, iy = b.y;
-        spawnParticles(ix, iy, '#ff6622', 20);
+        spawnParticles(ix, iy, '#ff6622', 8);
+        splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 12, maxLife: 12 });
         for (const enemy of enemies) {
           if (!enemy.alive || enemy.reached || enemy === b.target) continue;
           const dx = enemy.x - ix;
@@ -897,8 +975,12 @@ function update() {
               slain++;
               gold       += enemy.reward;
               goldEarned += enemy.reward;
-              spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 10);
-              spawnGoldCoins(GRID_LEFT + enemy.x, GRID_TOP + enemy.y, enemy.reward);
+              if (enemy.isBoss) {
+                onBossKilled(enemy);
+              } else {
+                spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 6);
+                spawnGoldCoins(GRID_LEFT + enemy.x, GRID_TOP + enemy.y, enemy.reward);
+              }
             }
           }
         }
@@ -925,21 +1007,29 @@ function update() {
     }
   }
 
-  // Mara: supernatural fear disables nearby towers
+  // Mara: supernatural fear disables nearby towers + EMP shockwave rings
   for (const enemy of enemies) {
     if (enemy.type !== ENEMY_TYPES.MARA || !enemy.alive || enemy.reached) continue;
+    let anyInRange = false;
     for (const tower of towers) {
       const dx = tower.x - enemy.x;
       const dy = tower.y - enemy.y;
       if (dx * dx + dy * dy <= EMP_RANGE * EMP_RANGE) {
         tower.disabledTimer = Math.max(tower.disabledTimer, EMP_DISABLE_FRAMES);
+        anyInRange = true;
       }
+    }
+    if (enemy.empPulseTimer > 0) {
+      enemy.empPulseTimer--;
+    } else if (anyInRange) {
+      empRings.push({ x: enemy.x, y: enemy.y, r: 0, life: 28, maxLife: 28 });
+      enemy.empPulseTimer = 50;
     }
   }
 
   // Sköldborg: adjacent wall blocks slow passing enemies by 20%
   for (const enemy of enemies) {
-    if (!enemy.alive || enemy.reached) continue;
+    if (!enemy.alive || enemy.reached || enemy.slowImmune) continue;
     const { col, row } = grid.pixelToCell(enemy.x, enemy.y);
     const adj = [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]];
     for (const [ac, ar] of adj) {
@@ -949,6 +1039,40 @@ function update() {
         break;
       }
     }
+  }
+
+  // Boss phase transitions
+  for (const enemy of enemies) {
+    if (!enemy.isBoss || !enemy.alive || enemy.reached) continue;
+    const ratio = enemy.hp / enemy.maxHp;
+
+    if (!enemy.phase75Done && ratio <= 0.75) {
+      enemy.phase75Done = true;
+      onBossPhase75(enemy);
+    }
+    if (!enemy.phase50Done && ratio <= 0.50) {
+      enemy.phase50Done = true;
+      onBossPhase50(enemy);
+    }
+  }
+
+  if (bossDefeatTimer   > 0) bossDefeatTimer--;
+  if (fortressHeldTimer > 0) fortressHeldTimer--;
+
+  // Update splash rings
+  for (let i = splashRings.length - 1; i >= 0; i--) {
+    const sr = splashRings[i];
+    sr.r    = sr.maxR * (1 - sr.life / sr.maxLife);
+    sr.life--;
+    if (sr.life <= 0) splashRings.splice(i, 1);
+  }
+
+  // Update EMP rings
+  for (let i = empRings.length - 1; i >= 0; i--) {
+    const er = empRings[i];
+    er.r    = EMP_RANGE * (1 - er.life / er.maxLife);
+    er.life--;
+    if (er.life <= 0) empRings.splice(i, 1);
   }
 
   updateParticles();
@@ -1023,17 +1147,6 @@ function drawPath() {
     totalLen += len;
   }
 
-  function posAt(d) {
-    d = ((d % totalLen) + totalLen) % totalLen;
-    for (const s of segs) {
-      if (d < s.cum + s.len) {
-        const f = (d - s.cum) / s.len;
-        return { x: s.x0 + (s.x1 - s.x0) * f, y: s.y0 + (s.y1 - s.y0) * f };
-      }
-    }
-    return pts[pts.length - 1];
-  }
-
   ctx.save();
 
   // ── Stone road ────────────────────────────────────────────────────────────
@@ -1084,57 +1197,90 @@ function drawPath() {
     }
   }
 
-  // Faint embedded glow on road surface
-  mkPath(); ctx.strokeStyle = 'rgba(100,160,255,0.07)'; ctx.lineWidth = cs * 0.30; ctx.stroke();
+  // ── Small torches at path corners ────────────────────────────────────────
+  // Collect corner points where the path changes direction
+  const corners = [];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const ax = pts[i].x - pts[i - 1].x, ay = pts[i].y - pts[i - 1].y;
+    const bx = pts[i + 1].x - pts[i].x, by = pts[i + 1].y - pts[i].y;
+    const la = Math.sqrt(ax * ax + ay * ay);
+    const lb = Math.sqrt(bx * bx + by * by);
+    if (la < 0.01 || lb < 0.01) continue;
+    const cos = (ax * bx + ay * by) / (la * lb);
+    if (cos > 0.97) continue;  // nearly straight — no torch
+    corners.push({ x: pts[i].x, y: pts[i].y, nx: -ay / la, ny: ax / la, idx: i });
+  }
 
-  // ── Will-o'-wisps — glowing orbs that travel along the path ──────────────
-  const orbCount = 5;
-  const speed    = totalLen / 4.2;
+  for (const c of corners) {
+    for (const side of [-1, 1]) {
+      const ox = c.x + c.nx * side * cs * 0.58;
+      const oy = c.y + c.ny * side * cs * 0.58;
+      const flicker = 0.65 + Math.sin(t * 13.7 + c.idx * 3.7 + side * 2.1) * 0.35;
+      const fh = cs * 0.22 * flicker;
+      const fw = cs * 0.13 * flicker;
 
-  for (let i = 0; i < orbCount; i++) {
-    const phase  = i / orbCount;
-    const d      = (t * speed + phase * totalLen) % totalLen;
-    const pos    = posAt(d);
-    const pulse  = 0.5 + Math.sin(t * 5.2 + i * 1.8) * 0.5;
-    const wobble = Math.sin(t * 6.5 + i * 2.4) * 0.9;
+      // torch post
+      ctx.fillStyle = 'rgba(45,30,12,0.90)';
+      ctx.fillRect(ox - 0.8, oy, 1.6, cs * 0.26);
 
-    const wAngle = t * 1.8 + i * 1.05;
-    const wx = pos.x + Math.cos(wAngle) * wobble;
-    const wy = pos.y + Math.sin(wAngle) * wobble;
-
-    const outerR = cs * (0.42 + pulse * 0.28);
-    const grad = ctx.createRadialGradient(wx, wy, 0, wx, wy, outerR);
-    grad.addColorStop(0,    `rgba(195,238,255,${0.48 + pulse * 0.28})`);
-    grad.addColorStop(0.28, `rgba(110,205,255,${0.22 * pulse})`);
-    grad.addColorStop(0.65, `rgba(70,150,255,${0.10 * pulse})`);
-    grad.addColorStop(1,    'rgba(50,110,220,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(wx, wy, outerR, 0, Math.PI * 2); ctx.fill();
-
-    const innerR = cs * (0.16 + pulse * 0.12);
-    const halo = ctx.createRadialGradient(wx, wy, 0, wx, wy, innerR);
-    halo.addColorStop(0, `rgba(220,180,255,${0.35 + pulse * 0.25})`);
-    halo.addColorStop(1, 'rgba(160,100,255,0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath(); ctx.arc(wx, wy, innerR, 0, Math.PI * 2); ctx.fill();
-
-    ctx.shadowColor = 'rgba(200,240,255,0.98)';
-    ctx.shadowBlur  = 9 + pulse * 6;
-    ctx.fillStyle   = `rgba(235,250,255,${0.82 + pulse * 0.18})`;
-    ctx.beginPath(); ctx.arc(wx, wy, 1.1 + pulse * 0.9, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur  = 0;
-
-    if (pulse > 0.72) {
-      const si = (pulse - 0.72) / 0.28;
-      const sl = 2.8 * si;
-      ctx.strokeStyle = `rgba(255,255,255,${si * 0.85})`;
-      ctx.lineWidth   = 0.45;
-      ctx.lineCap     = 'round';
+      // flame
+      ctx.save();
+      ctx.shadowColor = `rgba(255,120,20,${0.45 * flicker})`;
+      ctx.shadowBlur  = 3 + flicker * 2;
+      const fg = ctx.createRadialGradient(ox, oy, 0, ox, oy, fh);
+      fg.addColorStop(0,    `rgba(255,230,100,${0.9 * flicker})`);
+      fg.addColorStop(0.45, `rgba(255,110,15,${0.6 * flicker})`);
+      fg.addColorStop(1,    'rgba(160,50,0,0)');
+      ctx.fillStyle = fg;
       ctx.beginPath();
-      ctx.moveTo(wx - sl, wy); ctx.lineTo(wx + sl, wy);
-      ctx.moveTo(wx, wy - sl); ctx.lineTo(wx, wy + sl);
-      ctx.stroke();
-      ctx.lineCap = 'butt';
+      ctx.ellipse(ox + Math.sin(t * 7 + c.idx) * 0.4, oy - fh * 0.4, fw, fh, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      // single drifting ember
+      const ePhase = (t * 0.55 + c.idx * 1.37 + side * 0.7) % 1;
+      if (ePhase < 0.6) {
+        const eAlpha = ePhase < 0.12 ? ePhase / 0.12 : (0.6 - ePhase) / 0.48;
+        const ex = ox + Math.sin(t * 3.1 + c.idx + side) * cs * 0.07;
+        const ey = oy - fh - ePhase * cs * 0.65;
+        ctx.fillStyle = `rgba(255,150,35,${eAlpha * 0.65})`;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 0.65, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // ── Will-o'-wisps: 5 ghostly orbs drifting along the path ────────────────
+  if (totalLen > 0) {
+    for (let wi = 0; wi < 5; wi++) {
+      const phase    = ((t * 0.09 + wi * 0.21) % 1);
+      const dist0    = phase * totalLen;
+      let   rem      = dist0;
+      let   wsx = pts[0].x, wsy = pts[0].y;
+      for (const seg of segs) {
+        if (rem <= seg.len) {
+          const f  = rem / seg.len;
+          wsx = seg.x0 + (seg.x1 - seg.x0) * f;
+          wsy = seg.y0 + (seg.y1 - seg.y0) * f;
+          break;
+        }
+        rem -= seg.len;
+      }
+      const wobX   = Math.sin(t * 2.3 + wi * 1.9) * cs * 0.38;
+      const wobY   = Math.cos(t * 1.7 + wi * 2.5) * cs * 0.28;
+      const alpha  = 0.30 + Math.sin(t * 2.1 + wi * 1.4) * 0.18;
+      const radius = 2.2 + Math.sin(t * 1.5 + wi * 0.8) * 0.6;
+      ctx.save();
+      ctx.fillStyle   = `rgba(130,220,255,${alpha})`;
+      ctx.shadowColor = 'rgba(100,200,255,0.55)';
+      ctx.shadowBlur  = 5;
+      ctx.beginPath();
+      ctx.arc(wsx + wobX, wsy + wobY, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
   }
 
@@ -1148,21 +1294,12 @@ function drawFrames() {
 
   ctx.save();
 
-  // ── Solid border fills — always connected, never dashed ───────────────────
-  ctx.fillStyle = '#12080200';  // start transparent
-  const bands = [
-    { c: '#100802', w: thick },
-    { c: '#1c1006', w: thick - 4 },
-    { c: '#241408', w: thick - 10 },
-  ];
-  // Fill border rectangles with darkening bands
-  for (const { c, w } of bands) {
-    ctx.fillStyle = c;
-    ctx.fillRect(0, 0, W, w);              // top
-    ctx.fillRect(0, H - w, W, w);          // bottom
-    ctx.fillRect(0, w, w, H - w * 2);     // left (between corners)
-    ctx.fillRect(W - w, w, w, H - w * 2); // right
-  }
+  // ── Single connected border region (evenodd) ─────────────────────────────
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.rect(thick, thick, W - thick * 2, H - thick * 2);
+  ctx.fillStyle = '#1a0e05';
+  ctx.fill('evenodd');
 
   // ── Outer hard edge ───────────────────────────────────────────────────────
   ctx.strokeStyle = 'rgba(4,2,0,0.95)';
@@ -1272,95 +1409,129 @@ function drawRightPanel() {
   ly += 14;
   divider();
 
-  // ── INCOMING ───────────────────────────────────────────────────────────────
-  ctx.font        = 'bold 10px monospace';
-  ctx.fillStyle   = '#f0c840';
-  ctx.shadowColor = 'rgba(220,170,30,0.7)';
-  ctx.shadowBlur  = 6;
-  ctx.fillText('INCOMING', lx, ly); ly += 14;
-  ctx.shadowBlur  = 0;
-
-  const next    = waveComposition(waveNumber + 1);
-  const entries = [
-    { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false },
-    { label: 'Myling', count: next.mylings, color: '#88bbff', skip: next.mylings === 0, boss: false },
-    { label: 'Jötunn', count: next.jotunn,  color: '#d08820', skip: next.jotunn  === 0, boss: true  },
-    { label: 'Mara',   count: next.maras,   color: '#00ddcc', skip: next.maras   === 0, boss: false },
-  ];
-
-  let bossHeaderDrawn = false;
-  ctx.font = '10px monospace';
-  for (const e of entries) {
-    if (e.skip) continue;
-    if (e.boss && !bossHeaderDrawn) {
-      ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
-      ctx.fillText('— BOSS —', lx + 4, ly); ly += 12;
-      bossHeaderDrawn = true; ctx.font = '10px monospace';
-    }
-    ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
-    ctx.fillStyle = e.color; ctx.fill();
-    ctx.fillStyle = e.color; ctx.textAlign = 'left';
-    ctx.fillText(e.label, lx + 2, ly);
-    ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
-    ctx.fillText(`×${e.count}`, rEdge, ly);
-    ctx.textAlign = 'left'; ly += 15;
-  }
-
-  ly += 4;
-  divider();
-
-  // ── COMBAT ─────────────────────────────────────────────────────────────────
-  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
-  ctx.fillText('COMBAT', lx, ly); ly += 13;
-
-  ctx.font = '10px monospace';
-  const leaked = STARTING_LIVES - lives;
-
-  const rows = [
-    { label: '★ Slain',   value: `${slain}`,                      color: '#f0e060' },
-    { label: '♥ Lives',   value: `${lives} / ${STARTING_LIVES}`,  color: lives <= 3 ? '#ff6060' : lives <= 7 ? '#ffaa60' : '#60e880' },
-    { label: '⚡ Leaked',  value: `${leaked}`,                     color: leaked > 0 ? '#ff8080' : '#60e880' },
-  ];
   if (waveState === 'active') {
-    rows.push({ label: '◈ On field', value: `${enemies.length} / ${waveTotal}`, color: '#e8a060' });
-  }
-  for (const r of rows) {
-    ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
-    ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
-    ctx.textAlign = 'left'; ly += 13;
-  }
+    // ── COMBAT MODE: lives + on-field count ──────────────────────────────────
+    const livesColor = lives <= 3 ? '#ff5050' : lives <= 7 ? '#ffaa50' : '#60ee80';
+    const livesRatio = lives / STARTING_LIVES;
 
-  // Top damage dealer
-  if (towers.length > 0) {
-    const top = towers.reduce((a, b) => b.damageDealt > a.damageDealt ? b : a, towers[0]);
-    if (top.damageDealt > 0) {
-      const def = TOWER_DEFS[top.type];
-      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';
-      ctx.fillText('⚔ Top dealer', lx, ly);
-      ctx.fillStyle = def.color; ctx.textAlign = 'right';
-      ctx.fillText(`${def.label} ${top.damageDealt}`, rEdge, ly);
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = '#c0a060';
+    ctx.textAlign = 'left';
+    ctx.fillText('DEFEND', lx, ly); ly += 14;
+
+    // Big lives bar
+    ctx.fillStyle = 'rgba(60,30,8,0.8)';
+    ctx.beginPath(); ctx.roundRect(lx, ly, barW, 9, 4); ctx.fill();
+    ctx.fillStyle = livesColor;
+    ctx.shadowColor = livesColor; ctx.shadowBlur = lives <= 5 ? 6 : 0;
+    ctx.beginPath(); ctx.roundRect(lx, ly, barW * livesRatio, 9, 4); ctx.fill();
+    ctx.shadowBlur = 0;
+    ly += 13;
+
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = livesColor;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${lives}`, px + pw / 2, ly); ly += 4;
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.6)';
+    ctx.fillText('lives remaining', px + pw / 2, ly); ly += 13;
+    ctx.textAlign = 'left';
+
+    divider();
+
+    // On-field count + slain
+    ctx.font = '10px monospace';
+    const onFieldRows = [
+      { label: '◈ On field', value: `${enemies.length} / ${waveTotal}`, color: '#e8a060' },
+      { label: '★ Slain',    value: `${slain}`,                         color: '#f0e060' },
+      { label: '⚡ Leaked',   value: `${STARTING_LIVES - lives}`,        color: (STARTING_LIVES - lives) > 0 ? '#ff8080' : '#60e880' },
+    ];
+    for (const r of onFieldRows) {
+      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
+      ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
       ctx.textAlign = 'left'; ly += 13;
     }
-  }
 
-  ly += 2;
-  divider();
+    // Top damage dealer
+    if (towers.length > 0) {
+      const top = towers.reduce((a, b) => b.damageDealt > a.damageDealt ? b : a, towers[0]);
+      if (top.damageDealt > 0) {
+        const def = TOWER_DEFS[top.type];
+        ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';
+        ctx.fillText('⚔ Top', lx, ly);
+        ctx.fillStyle = def.color; ctx.textAlign = 'right';
+        ctx.fillText(`${def.label} ${top.damageDealt}`, rEdge, ly);
+        ctx.textAlign = 'left'; ly += 13;
+      }
+    }
+  } else {
+    // ── BREAK / COUNTDOWN MODE: incoming + economy ───────────────────────────
+    ctx.font        = 'bold 10px monospace';
+    ctx.fillStyle   = '#f0c840';
+    ctx.shadowColor = 'rgba(220,170,30,0.7)';
+    ctx.shadowBlur  = 6;
+    ctx.fillText('INCOMING', lx, ly); ly += 14;
+    ctx.shadowBlur  = 0;
 
-  // ── ECONOMY ────────────────────────────────────────────────────────────────
-  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
-  ctx.fillText('ECONOMY', lx, ly); ly += 13;
+    const nextIsBossWave = BOSS_WAVES.has(waveNumber + 1);
+    const nextBossCfg    = nextIsBossWave ? BOSS_CONFIGS[waveNumber + 1] : null;
 
-  ctx.font = '10px monospace';
-  const net = goldEarned - goldSpent;
-  const econRows = [
-    { label: '◆ Earned', value: `+${goldEarned}`,                       color: '#e8c040' },
-    { label: '◆ Spent',  value: `-${goldSpent}`,                        color: 'rgba(200,140,60,0.75)' },
-    { label: '◆ Net',    value: `${net >= 0 ? '+' : ''}${net}`,         color: net >= 0 ? '#a0e880' : '#ff9090' },
-  ];
-  for (const r of econRows) {
-    ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
-    ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
-    ctx.textAlign = 'left'; ly += 13;
+    if (nextIsBossWave && nextBossCfg) {
+      const pulse = 0.6 + Math.sin(performance.now() * 0.004) * 0.4;
+      ctx.font        = `bold 9px monospace`;
+      ctx.fillStyle   = `rgba(255,${Math.round(80 + pulse * 60)},30,${0.7 + pulse * 0.3})`;
+      ctx.shadowColor = 'rgba(255,80,20,0.8)';
+      ctx.shadowBlur  = 6 + pulse * 6;
+      ctx.textAlign   = 'left';
+      ctx.fillText(nextBossCfg.name, lx, ly); ly += 14;
+      ctx.font      = '9px monospace';
+      ctx.fillStyle = 'rgba(200,140,80,0.75)';
+      ctx.shadowBlur = 0;
+      ctx.fillText('Herald squad + BOSS', lx, ly); ly += 14;
+    } else {
+      const next    = waveComposition(waveNumber + 1);
+      const entries = [
+        { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false },
+        { label: 'Myling', count: next.mylings,  color: '#88bbff', skip: next.mylings === 0, boss: false },
+        { label: 'Jötunn', count: next.jotunn,   color: '#d08820', skip: next.jotunn  === 0, boss: true  },
+        { label: 'Mara',   count: next.maras,    color: '#00ddcc', skip: next.maras   === 0, boss: false },
+      ];
+      let bossHeaderDrawn = false;
+      ctx.font = '10px monospace';
+      for (const e of entries) {
+        if (e.skip) continue;
+        if (e.boss && !bossHeaderDrawn) {
+          ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
+          ctx.fillText('— BOSS —', lx + 4, ly); ly += 12;
+          bossHeaderDrawn = true; ctx.font = '10px monospace';
+        }
+        ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
+        ctx.fillStyle = e.color; ctx.fill();
+        ctx.fillStyle = e.color; ctx.textAlign = 'left';
+        ctx.fillText(e.label, lx + 2, ly);
+        ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
+        ctx.fillText(`×${e.count}`, rEdge, ly);
+        ctx.textAlign = 'left'; ly += 15;
+      }
+    }
+
+    ly += 2;
+    divider();
+
+    // Economy section (break only)
+    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
+    ctx.fillText('ECONOMY', lx, ly); ly += 13;
+    ctx.font = '10px monospace';
+    const net = goldEarned - goldSpent;
+    const econRows = [
+      { label: '◆ Earned', value: `+${goldEarned}`,                   color: '#e8c040' },
+      { label: '◆ Spent',  value: `-${goldSpent}`,                    color: 'rgba(200,140,60,0.75)' },
+      { label: '◆ Net',    value: `${net >= 0 ? '+' : ''}${net}`,     color: net >= 0 ? '#a0e880' : '#ff9090' },
+    ];
+    for (const r of econRows) {
+      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
+      ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
+      ctx.textAlign = 'left'; ly += 13;
+    }
   }
 
   // ── SPEED TOGGLE ───────────────────────────────────────────────────────────
@@ -1827,6 +1998,78 @@ function drawTowerPanel(tower) {
   panelSellBtn    = { x: sellX, y: btnY, w: sellW, h: btnH };
 }
 
+function onBossPhase75(boss) {
+  screenShake = Math.max(screenShake, 8);
+  spawnParticles(boss.x, boss.y, boss.highlightColor, 22);
+
+  if (boss.waveNum === 10) {
+    // Draugen-Jarl: stutter + summon 4 Draugr
+    boss.stunTimer = 38;
+    for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.DRAUGR, waveHpScale * 0.85);
+  }
+}
+
+function onBossPhase50(boss) {
+  // All bosses: speed surge + particles + screen event
+  boss.baseSpeed   *= 1.28;
+  boss.slowTimer    = 0;
+  boss.slowFactor   = 1;
+  screenShake       = Math.max(screenShake, 12);
+  spawnParticles(boss.x, boss.y, boss.highlightColor, 35);
+  spawnParticles(boss.x, boss.y, '#f5d030', 15);
+
+  const cfg = BOSS_CONFIGS[boss.waveNum];
+  if (cfg?.phase50SlowImmune) boss.slowImmune = true;
+}
+
+function onBossKilled(boss) {
+  screenShake    = Math.max(screenShake, 20);
+  hoardPulse     = 22;
+  bossDefeatTimer = 210;
+  bossDefeatText  = boss.bossName + ' DEFEATED';
+  bossDefeatGold  = boss.reward;
+
+  // Particle explosion
+  spawnParticles(boss.x, boss.y, boss.highlightColor, 50);
+  spawnParticles(boss.x, boss.y, '#f5d030', 25);
+  spawnParticles(boss.x, boss.y, boss.color, 20);
+
+  // Gold flood — many coins arc to hoard simultaneously
+  for (let i = 0; i < 10; i++) {
+    spawnGoldCoins(
+      GRID_LEFT + boss.x + (Math.random() - 0.5) * boss.radius * 2,
+      GRID_TOP  + boss.y + (Math.random() - 0.5) * boss.radius * 2,
+      20
+    );
+  }
+}
+
+function drawBossDefeat() {
+  if (bossDefeatTimer <= 0) return;
+  const alpha = bossDefeatTimer > 30 ? 1 : bossDefeatTimer / 30;
+  const cy    = GRID_TOP + ROWS * CELL_SIZE * 0.38;
+  const cx    = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign   = 'center';
+
+  ctx.font        = 'bold 22px monospace';
+  ctx.shadowColor = 'rgba(255,160,20,0.95)';
+  ctx.shadowBlur  = 20;
+  ctx.fillStyle   = '#ffe080';
+  ctx.fillText(bossDefeatText, cx, cy);
+
+  ctx.font        = 'bold 13px monospace';
+  ctx.shadowColor = 'rgba(255,210,30,0.9)';
+  ctx.shadowBlur  = 12;
+  ctx.fillStyle   = '#f5d030';
+  ctx.fillText(`+${bossDefeatGold}g`, cx, cy + 20);
+
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
 function drawBossWarning() {
   if (bossWarnAlpha <= 0.01 || gameOver) return;
   const { width } = getViewSize();
@@ -1844,12 +2087,19 @@ function drawBossWarning() {
   ctx.lineWidth   = 1.2;
   ctx.stroke();
 
+  const bossCfg  = BOSS_CONFIGS[waveNumber + 1];
+  const bossLabel = bossCfg ? bossCfg.name : 'BOSS';
+
   ctx.textAlign   = 'center';
-  ctx.font        = 'bold 13px monospace';
+  ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = '#fff';
   ctx.shadowColor = 'rgba(255,50,20,0.95)';
   ctx.shadowBlur  = 14;
-  ctx.fillText('⚠  BOSS INCOMING  ⚠', cx, bannerY + 22);
+  ctx.fillText(`⚠  ${bossLabel}  ⚠`, cx, bannerY + 14);
+  ctx.font        = '9px monospace';
+  ctx.fillStyle   = 'rgba(255,180,140,0.85)';
+  ctx.shadowBlur  = 6;
+  ctx.fillText('BOSS APPROACHING', cx, bannerY + 27);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }
@@ -1969,8 +2219,45 @@ function draw() {
   // Grass terrain (blit pre-rendered offscreen canvas — free per frame)
   if (terrainCanvas) ctx.drawImage(terrainCanvas, 0, 0);
 
-  grid.draw(ctx, time);
+  // ── Hoard ambient glow — warm amber light radiating from Trelleborg ────────
+  {
+    const hgx = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+    const hgy = GOAL.row * CELL_SIZE + CELL_SIZE / 2;
+    const pulse = hoardPulse > 0 ? 1 + (hoardPulse / 60) * 0.25 : 1;
+    const hg = ctx.createRadialGradient(hgx, hgy, 0, hgx, hgy, 65 * pulse);
+    hg.addColorStop(0,    'rgba(220,140,30,0.22)');
+    hg.addColorStop(0.35, 'rgba(200,110,20,0.12)');
+    hg.addColorStop(1,    'rgba(140,70,10,0)');
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(hgx, hgy, 65 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Wall slow-field frost haze (cached, invalidated on wall layout change) ─
+  if (wallFrostDirty) {
+    wallFrostCells = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid.getCell(c, r) !== CELL.EMPTY) continue;
+        const adj = [[c-1,r],[c+1,r],[c,r-1],[c,r+1]];
+        if (adj.some(([nc,nr]) => grid.getCell(nc, nr) === CELL.WALL)) {
+          wallFrostCells.push({ x: c * CELL_SIZE, y: r * CELL_SIZE, cs: CELL_SIZE });
+        }
+      }
+    }
+    wallFrostDirty = false;
+  }
+  if (wallFrostCells.length > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle   = 'rgba(160,210,255,1)';
+    for (const fc of wallFrostCells) ctx.fillRect(fc.x, fc.y, fc.cs, fc.cs);
+    ctx.restore();
+  }
+
   drawPath();
+  grid.draw(ctx, time);
   towers.forEach(t => t.draw(ctx));
 
   // Selection ring on active tower
@@ -1990,20 +2277,88 @@ function draw() {
     ctx.restore();
   }
 
-  bullets.forEach(b => b.draw(ctx));
   enemies.forEach(e => e.draw(ctx));
+  bullets.forEach(b => b.draw(ctx));
   drawParticles();
 
-  // Portal flash on Golem spawn
+  // ── Catapult splash rings ───────────────────────────────────────────────────
+  for (const sr of splashRings) {
+    const alpha = (sr.life / sr.maxLife) * 0.55;
+    ctx.save();
+    ctx.strokeStyle = `rgba(220,130,40,${alpha})`;
+    ctx.lineWidth   = 1.4;
+    ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,200,80,${alpha * 0.4})`;
+    ctx.lineWidth   = 2.5;
+    ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r * 0.65, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Mara EMP shockwave rings ────────────────────────────────────────────────
+  for (const er of empRings) {
+    const alpha = (er.life / er.maxLife) * 0.7;
+    ctx.save();
+    ctx.strokeStyle = `rgba(80,180,255,${alpha})`;
+    ctx.lineWidth   = 1.2;
+    ctx.beginPath(); ctx.arc(er.x, er.y, er.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(160,220,255,${alpha * 0.3})`;
+    ctx.lineWidth   = 3;
+    ctx.beginPath(); ctx.arc(er.x, er.y, er.r * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── FORTRESS HELD celebration (flawless wave) ───────────────────────────────
+  if (fortressHeldTimer > 0) {
+    const ft    = fortressHeldTimer / 200;
+    const alpha = ft > 0.8 ? (ft - 0.8) / 0.2 : (ft < 0.15 ? ft / 0.15 : 1);
+    const hgx   = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+    const hgy   = GOAL.row * CELL_SIZE + CELL_SIZE / 2 - 28;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font      = 'bold 13px monospace';
+    ctx.fillStyle = `rgba(255,230,80,${alpha})`;
+    ctx.shadowColor = `rgba(200,160,20,${alpha * 0.9})`;
+    ctx.shadowBlur  = 10;
+    ctx.fillText('FORTRESS HELD', hgx, hgy);
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = `rgba(200,210,255,${alpha * 0.75})`;
+    ctx.shadowBlur = 4;
+    ctx.fillText('FLAWLESS WAVE', hgx, hgy + 13);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // Priority marker — chevron above the most advanced living enemy
+  {
+    const leader = enemies.reduce((best, e) => {
+      if (!e.alive || e.reached) return best;
+      if (!best || e.pathIndex > best.pathIndex) return e;
+      return best;
+    }, null);
+    if (leader) {
+      const cy = leader.y - leader.radius - 7;
+      ctx.fillStyle = 'rgba(255,55,35,0.82)';
+      ctx.beginPath();
+      ctx.moveTo(leader.x,     cy - 4);
+      ctx.lineTo(leader.x - 4, cy + 2);
+      ctx.lineTo(leader.x + 4, cy + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Portal flash on enemy spawn (red = boss, blue = regular Jötunn)
   if (portalFlash > 0) {
     const { x: spx, y: spy } = grid.cellCenter(SPAWN.col, SPAWN.row);
-    const fa = (portalFlash / 22) * 0.7;
+    const maxFrames = portalFlashColor === 'red' ? 32 : 14;
+    const fa = (portalFlash / maxFrames) * 0.75;
+    const [fr, fg, fb] = portalFlashColor === 'red' ? [255, 40, 20] : [60, 140, 255];
     ctx.save();
-    ctx.shadowColor = `rgba(255,40,20,${fa})`;
-    ctx.shadowBlur  = 28;
-    ctx.fillStyle   = `rgba(255,55,20,${fa * 0.6})`;
+    ctx.shadowColor = `rgba(${fr},${fg},${fb},${fa})`;
+    ctx.shadowBlur  = portalFlashColor === 'red' ? 36 : 20;
+    ctx.fillStyle   = `rgba(${fr},${fg},${fb},${fa * 0.55})`;
     ctx.beginPath();
-    ctx.arc(spx, spy, CELL_SIZE * 0.9, 0, Math.PI * 2);
+    ctx.arc(spx, spy, CELL_SIZE * (portalFlashColor === 'red' ? 1.2 : 0.85), 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -2026,6 +2381,7 @@ function draw() {
   drawHud();
   drawGoldCoins();
   drawBossWarning();
+  drawBossDefeat();
   drawWaveAnnouncement();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawDragGhost();

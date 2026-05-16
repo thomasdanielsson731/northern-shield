@@ -39,6 +39,7 @@ export class Bullet {
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
       this.target.hp -= this.damage;
       if (this.source) this.source.damageDealt += actualDamage;
+      this.target.hitFlash = 8;
 
       if (this.slowDuration > 0) {
         this.target.slowTimer  = Math.max(this.target.slowTimer ?? 0, this.slowDuration);
@@ -150,6 +151,21 @@ export class Bullet {
   // ── Rock (Katapult) ─────────────────────────────────────────────────────────
   _drawRock(ctx) {
     const spin = performance.now() * 0.003;
+
+    // AoE preview ring — expands into view as rock approaches impact
+    if (this.target && this.splashRadius > 0) {
+      const tdx = this.target.x - this.x;
+      const tdy = this.target.y - this.y;
+      const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+      if (tdist < 68) {
+        const progress = 1 - tdist / 68;
+        ctx.strokeStyle = `rgba(255,120,25,${0.10 + progress * 0.30})`;
+        ctx.lineWidth   = 1.2;
+        ctx.beginPath();
+        ctx.arc(this.target.x, this.target.y, this.splashRadius * (0.55 + progress * 0.45), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
 
     // Trail
     if (this.trail.length > 1) {
@@ -287,7 +303,7 @@ export class Bullet {
 
     // Short trail
     if (this.trail.length > 1) {
-      ctx.strokeStyle = 'rgba(200,170,100,0.28)';
+      ctx.strokeStyle = 'rgba(220,190,130,0.52)';
       ctx.lineWidth   = 1;
       ctx.lineCap     = 'round';
       ctx.beginPath();
