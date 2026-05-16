@@ -91,6 +91,26 @@ let fortressHeldTimer = 0;   // countdown for FORTRESS HELD display (frames)
 let wallFrostCells    = [];  // cached cells adjacent to walls: [{ x, y, cs }]
 let wallFrostDirty    = true;
 
+// Playtest UX
+let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
+let firstKillDone     = false;  // triggers enhanced coin arc on first kill
+let chainKillDone     = false;  // one-shot CHAIN KILL! text (catapult 3+)
+let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
+let lifeLostTimer     = 0;      // frames for LIFE LOST text near hoard
+let pathChevronsTimer = 0;      // countdown for wave-1 path direction chevrons
+let bestWave          = { wave: 0, slain: 0, gold: 0 };  // best single-wave record
+let waveSlainCount    = 0;      // enemies killed this wave (for best-wave tracking)
+let waveGoldStart     = 0;      // goldEarned at wave start (delta = wave earnings)
+
+const ABILITY_LABELS = {
+  wall:     'SLOW',
+  berserk:  'MELEE',
+  valkyrie: 'SNIPER',
+  military: 'RAPID',
+  catapult: 'SPLASH',
+  blondie:  'STUN',
+};
+
 // ── high-score table ──────────────────────────────────────────────────────────
 
 const HS_KEY    = 'northern-shield-hs';
@@ -153,6 +173,16 @@ function restartGame() {
   wallFrostCells    = [];
   wallFrostDirty    = true;
 
+  firstTowerPlaced  = false;
+  firstKillDone     = false;
+  chainKillDone     = false;
+  chainKillDisplay  = null;
+  lifeLostTimer     = 0;
+  pathChevronsTimer = 0;
+  bestWave          = { wave: 0, slain: 0, gold: 0 };
+  waveSlainCount    = 0;
+  waveGoldStart     = goldEarned;
+
   waveNumber    = 0;
   waveTotal     = 0;
   waveState     = 'countdown';
@@ -208,14 +238,14 @@ function spawnParticles(x, y, color, count = 10) {
   }
 }
 
-function spawnGoldCoins(screenX, screenY, reward) {
+function spawnGoldCoins(screenX, screenY, reward, overrideSpeed) {
   const n = reward >= 20 ? 3 : reward >= 8 ? 2 : 1;
   for (let i = 0; i < n; i++) {
     goldCoins.push({
       sx:    screenX + (Math.random() - 0.5) * 10,
       sy:    screenY + (Math.random() - 0.5) * 10,
       t:     0,
-      speed: 0.028 + Math.random() * 0.018,
+      speed: overrideSpeed ?? (0.028 + Math.random() * 0.018),
     });
   }
 }
@@ -321,6 +351,9 @@ function startNextWave() {
   waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
   waveState   = 'active';
+  waveSlainCount = 0;
+  waveGoldStart  = goldEarned;
+  if (waveNumber === 1) pathChevronsTimer = 240;
 }
 
 function updateWave() {
@@ -381,6 +414,11 @@ function updateWave() {
       if (interest > 0) {
         gold       += interest;
         goldEarned += interest;
+      }
+      // Track best wave
+      const waveGoldDelta = goldEarned - waveGoldStart;
+      if (waveSlainCount > bestWave.slain || (waveSlainCount === bestWave.slain && waveGoldDelta > bestWave.gold)) {
+        bestWave = { wave: waveNumber, slain: waveSlainCount, gold: waveGoldDelta };
       }
       waveLeak  = false;
       waveTimer = 0;
@@ -780,6 +818,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     const { x, y } = grid.cellCenter(col, row);
     towers.push(new Tower(x, y, col, row, towerType));
   }
+  firstTowerPlaced = true;
   return true;
 }
 
@@ -946,6 +985,7 @@ function update() {
     const reward = b.update();
     if (reward > 0) {
       slain++;
+      waveSlainCount++;
       gold        += reward;
       goldEarned  += reward;
       if (b.target) {
@@ -953,7 +993,9 @@ function update() {
           onBossKilled(b.target);
         } else {
           spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 8);
-          spawnGoldCoins(GRID_LEFT + b.target.x, GRID_TOP + b.target.y, reward);
+          const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
+          firstKillDone = true;
+          spawnGoldCoins(GRID_LEFT + b.target.x, GRID_TOP + b.target.y, reward, coinSpeed);
         }
       }
     }
@@ -963,6 +1005,7 @@ function update() {
         const ix = b.x, iy = b.y;
         spawnParticles(ix, iy, '#ff6622', 8);
         splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 12, maxLife: 12 });
+        let splashKills = 0;
         for (const enemy of enemies) {
           if (!enemy.alive || enemy.reached || enemy === b.target) continue;
           const dx = enemy.x - ix;
@@ -973,6 +1016,8 @@ function update() {
               enemy.hp    = 0;
               enemy.alive = false;
               slain++;
+              waveSlainCount++;
+              splashKills++;
               gold       += enemy.reward;
               goldEarned += enemy.reward;
               if (enemy.isBoss) {
@@ -983,6 +1028,10 @@ function update() {
               }
             }
           }
+        }
+        if (splashKills >= 3 && !chainKillDone) {
+          chainKillDone    = true;
+          chainKillDisplay = { x: ix, y: iy - 20, life: 100, maxLife: 100, count: splashKills };
         }
       }
       bullets.splice(i, 1);
@@ -999,6 +1048,7 @@ function update() {
       lives--;
       waveLeak   = true;
       screenShake = 10;
+      lifeLostTimer = 90;
       enemies.splice(i, 1);
       if (lives <= 0) {
         gameOver   = true;
@@ -1058,6 +1108,9 @@ function update() {
 
   if (bossDefeatTimer   > 0) bossDefeatTimer--;
   if (fortressHeldTimer > 0) fortressHeldTimer--;
+  if (lifeLostTimer     > 0) lifeLostTimer--;
+  if (pathChevronsTimer > 0) pathChevronsTimer--;
+  if (chainKillDisplay) { chainKillDisplay.life--; if (chainKillDisplay.life <= 0) chainKillDisplay = null; }
 
   // Update splash rings
   for (let i = splashRings.length - 1; i >= 0; i--) {
@@ -1490,10 +1543,10 @@ function drawRightPanel() {
     } else {
       const next    = waveComposition(waveNumber + 1);
       const entries = [
-        { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false },
-        { label: 'Myling', count: next.mylings,  color: '#88bbff', skip: next.mylings === 0, boss: false },
-        { label: 'Jötunn', count: next.jotunn,   color: '#d08820', skip: next.jotunn  === 0, boss: true  },
-        { label: 'Mara',   count: next.maras,    color: '#00ddcc', skip: next.maras   === 0, boss: false },
+        { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false, flying: false },
+        { label: 'Myling', count: next.mylings,  color: '#88bbff', skip: next.mylings === 0, boss: false, flying: true  },
+        { label: 'Jötunn', count: next.jotunn,   color: '#d08820', skip: next.jotunn  === 0, boss: true,  flying: false },
+        { label: 'Mara',   count: next.maras,    color: '#00ddcc', skip: next.maras   === 0, boss: false, flying: false },
       ];
       let bossHeaderDrawn = false;
       ctx.font = '10px monospace';
@@ -1507,7 +1560,7 @@ function drawRightPanel() {
         ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
         ctx.fillStyle = e.color; ctx.fill();
         ctx.fillStyle = e.color; ctx.textAlign = 'left';
-        ctx.fillText(e.label, lx + 2, ly);
+        ctx.fillText(e.label + (e.flying ? ' ▲' : ''), lx + 2, ly);
         ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
         ctx.fillText(`×${e.count}`, rEdge, ly);
         ctx.textAlign = 'left'; ly += 15;
@@ -1773,6 +1826,14 @@ function drawBottomBuildBar() {
     ctx.fillStyle = !affordable ? '#302818' : isSelected ? '#e8c040' : '#907840';
     ctx.textAlign = 'right';
     ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 11);
+
+    const abilityLabel = ABILITY_LABELS[btn.id];
+    if (abilityLabel) {
+      ctx.font      = `${labelSz}px monospace`;
+      ctx.fillStyle = !affordable ? '#2a2010' : isSelected ? 'rgba(160,200,255,0.9)' : 'rgba(100,140,190,0.6)';
+      ctx.textAlign = 'center';
+      ctx.fillText(abilityLabel, btn.x + btn.width / 2, infoY + 22);
+    }
     ctx.textAlign = 'left';
   }
 }
@@ -1859,7 +1920,7 @@ function drawHud() {
 
   } else {
     const panelColor = victory ? 'rgba(2,12,6,0.97)' : 'rgba(6,2,14,0.97)';
-    drawFantasyPanel(cx - 220, cy - 120, 440, 230, panelColor, 0.82, 12);
+    drawFantasyPanel(cx - 220, cy - 120, 440, 250, panelColor, 0.82, 12);
     ctx.save();
     ctx.textAlign = 'center';
 
@@ -1885,12 +1946,17 @@ function drawHud() {
     ctx.font        = '14px monospace';
     ctx.fillText(`Enemies slain: ${slain}`, cx, cy + 2);
     ctx.fillText(`Waves: ${waveNumber}   Gold earned: ${goldEarned}`, cx, cy + 22);
+    if (bestWave.wave > 0) {
+      ctx.font      = '11px monospace';
+      ctx.fillStyle = 'rgba(160,200,255,0.80)';
+      ctx.fillText(`Best wave: W${bestWave.wave} — ${bestWave.slain} slain, +${bestWave.gold}g`, cx, cy + 42);
+    }
     ctx.restore();
 
     const rbW = 160, rbH = 38, tlW = 160, tlH = 38, gap = 12;
     const totalW = rbW + gap + tlW;
-    const rbX = cx - totalW / 2,              rbY = cy + 52;
-    const tlX = cx - totalW / 2 + rbW + gap,  tlY = cy + 52;
+    const rbX = cx - totalW / 2,              rbY = cy + 72;
+    const tlX = cx - totalW / 2 + rbW + gap,  tlY = cy + 72;
 
     drawFantasyPanel(rbX, rbY, rbW, rbH, 'rgba(8,26,8,0.97)', 0.75, 6);
     ctx.save();
@@ -2325,6 +2391,67 @@ function draw() {
     ctx.shadowBlur = 4;
     ctx.fillText('FLAWLESS WAVE', hgx, hgy + 13);
     ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // ── Path direction chevrons (wave 1 tutorial, first 4s) ──────────────────────
+  if (pathChevronsTimer > 0 && currentPath && currentPath.length >= 2) {
+    const pts2  = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.45;
+    const alpha = Math.min(1, pathChevronsTimer / 30) * pulse;
+    const chevSize = 4;
+    ctx.save();
+    ctx.fillStyle   = `rgba(255,230,80,${alpha * 0.85})`;
+    ctx.shadowColor = `rgba(220,180,20,${alpha})`;
+    ctx.shadowBlur  = 6;
+    for (let i = 0; i < pts2.length - 1; i++) {
+      const mx  = (pts2[i].x + pts2[i + 1].x) / 2;
+      const my  = (pts2[i].y + pts2[i + 1].y) / 2;
+      const ang = Math.atan2(pts2[i + 1].y - pts2[i].y, pts2[i + 1].x - pts2[i].x);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      ctx.moveTo( chevSize,          0);
+      ctx.lineTo(-chevSize * 0.7, -chevSize * 0.6);
+      ctx.lineTo(-chevSize * 0.7,  chevSize * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // ── LIFE LOST flash near hoard ────────────────────────────────────────────────
+  if (lifeLostTimer > 0) {
+    const alpha = Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60);
+    const hx    = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+    const hy    = GOAL.row * CELL_SIZE + CELL_SIZE / 2 - 42;
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 11px monospace';
+    ctx.fillStyle   = `rgba(255,80,60,${alpha})`;
+    ctx.shadowColor = `rgba(220,40,20,${alpha})`;
+    ctx.shadowBlur  = 8;
+    ctx.fillText('LIFE LOST', hx, hy);
+    ctx.shadowBlur  = 0;
+    ctx.restore();
+  }
+
+  // ── CHAIN KILL! burst text ────────────────────────────────────────────────────
+  if (chainKillDisplay) {
+    const prog  = chainKillDisplay.life / chainKillDisplay.maxLife;
+    const alpha = prog < 0.2 ? prog / 0.2 : 1;
+    const rise  = (1 - prog) * 14;
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 13px monospace';
+    ctx.fillStyle   = `rgba(255,210,50,${alpha})`;
+    ctx.shadowColor = `rgba(220,160,20,${alpha * 0.9})`;
+    ctx.shadowBlur  = 10;
+    ctx.fillText(`×${chainKillDisplay.count} CHAIN KILL!`, chainKillDisplay.x, chainKillDisplay.y - rise);
+    ctx.shadowBlur  = 0;
     ctx.restore();
   }
 
