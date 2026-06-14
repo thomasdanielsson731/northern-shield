@@ -29,7 +29,7 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.BERSERK]: {
     label:        'Berserker',
     key:          '2',
-    color:        '#cc3300',
+    color:        '#8a4018',
     rangeColor:   'rgba(200,60,20,0.15)',
     cost:         20,
     range:        22,
@@ -49,7 +49,8 @@ export const TOWER_DEFS = {
     damage:       88,
     radius:       8,
     bulletSpeed:  13,
-    bulletShape:  'spear'
+    bulletShape:  'spear',
+    fireFlashDuration: 16
   },
   [TOWER_TYPES.MILITARY]: {
     label:        'Archer',
@@ -77,12 +78,13 @@ export const TOWER_DEFS = {
     bulletSpeed:  3.5,
     splashRadius: 40,
     splashDamage: 35,
-    bulletShape:  'rock'
+    bulletShape:  'rock',
+    fireFlashDuration: 12
   },
   [TOWER_TYPES.BLONDIE]: {
     label:        'Blondie',
     key:          '6',
-    color:        '#ff88cc',
+    color:        '#9050c8',
     rangeColor:   'rgba(255,100,190,0.28)',
     cost:         30,
     range:        90,
@@ -124,6 +126,7 @@ export class Tower {
     this.bulletShape   = def.bulletShape   ?? 'orb';
     this.aimAngle      = -Math.PI / 2;
     this.fireFlash       = 0;
+    this.maxFireFlash    = def.fireFlashDuration ?? 8;
     this.disabledTimer   = 0;
     this.levelFlash      = 0;   // frames of milestone glow on level 5 / 10
     this.synergyRingTimer = 0;  // frames of gold ring on Berserker-wall synergy
@@ -184,7 +187,7 @@ export class Tower {
       b.source = this;
       bullets.push(b);
       this.fireCooldown = this.fireRate;
-      this.fireFlash    = 8;
+      this.fireFlash    = this.maxFireFlash;
       return 0;
     }
 
@@ -239,7 +242,7 @@ export class Tower {
 
     // Attack flash
     if (this.fireFlash > 0) {
-      const alpha = this.fireFlash / 8;
+      const alpha = this.fireFlash / this.maxFireFlash;
       ctx.save();
       if (this.type === TOWER_TYPES.BERSERK) {
         // Axe sweep arc
@@ -258,7 +261,7 @@ export class Tower {
         ctx.shadowBlur  = 14 * alpha;
         ctx.lineWidth   = 2.5 * alpha;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius + 4 + (8 - this.fireFlash), 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.radius + 2 + (this.maxFireFlash - this.fireFlash) * 1.5, 0, Math.PI * 2);
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
@@ -768,7 +771,7 @@ export class Tower {
     ctx.fillStyle = '#8898b0';
     ctx.fillRect(x - 0.8, y - 11.5, 1.6, 4.2);
     // Blue warpaint
-    ctx.fillStyle = '#3366cc';
+    ctx.fillStyle = '#4460a8';
     ctx.fillRect(x - 3.5, y - 10.5, 2.3, 1);
     ctx.fillRect(x + 1.2, y - 10.5, 2.3, 1);
 
@@ -1009,7 +1012,7 @@ export class Tower {
     // Floating heart above head
     const hy = y - 15 - Math.sin(t * 2.5) * 1.5;
     ctx.shadowColor = this.color;
-    ctx.shadowBlur  = 18 * pulse;
+    ctx.shadowBlur  = 8 * pulse;
     ctx.fillStyle   = this.color;
     ctx.beginPath();
     ctx.arc(x - 1.8, hy, 3, 0, Math.PI * 2);

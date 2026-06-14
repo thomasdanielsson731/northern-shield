@@ -39,7 +39,7 @@ let rightClickDragged = false;
 let rightClickSaved   = null;
 
 const BUILD_ITEMS = [
-  { id: 'wall', label: 'Shield Wall', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
+  { id: 'wall', label: 'Shield Wall', key: '1', color: '#b4d2f0', cost: WALL_COST, mode: CELL.WALL },
   ...Object.values(TOWER_TYPES).map(type => ({
     id:    type,
     label: TOWER_DEFS[type].label,
@@ -316,13 +316,15 @@ function drawGoldCoins() {
   for (const c of goldCoins) {
     const t  = c.t;
     // quadratic bezier: start → control point (arc apex) → hoard
+    const dx = hoardX - c.sx, dy = hoardY - c.sy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
     const mx = (c.sx + hoardX) / 2;
-    const my = Math.min(c.sy, hoardY) - 72;
+    const my = Math.min(c.sy, hoardY) - Math.min(120, dist * 0.30);
     const bx = (1-t)*(1-t)*c.sx + 2*(1-t)*t*mx + t*t*hoardX;
     const by = (1-t)*(1-t)*c.sy + 2*(1-t)*t*my + t*t*hoardY;
-    const r  = Math.max(4.5 - t * 2, 1.2);
+    const r  = Math.max(5.5 - t * 2.5, 2.5);
     ctx.save();
-    ctx.globalAlpha = t > 0.82 ? (1 - t) / 0.18 : 1;
+    ctx.globalAlpha = t > 0.90 ? (1 - t) / 0.10 : 1;
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
     ctx.fillStyle   = '#f5d030';
@@ -389,6 +391,7 @@ function startNextWave() {
   waveSlainCount = 0;
   waveGoldStart  = goldEarned;
   if (waveNumber === 1) pathChevronsTimer = 240;
+  screenShake = Math.max(screenShake, waveNumber > 5 ? 5 : 2);
 }
 
 function updateWave() {
@@ -443,6 +446,7 @@ function updateWave() {
       if (!waveLeak) {
         fortressHeldTimer = 200;
         hoardPulse = 60;
+        spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 16);
       } else {
         hoardPulse = 18;
       }
@@ -864,7 +868,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   }
 
   if (type === ENEMY_TYPES.JOTUNN) {
-    screenShake     = Math.max(screenShake, 6);
+    screenShake     = Math.max(screenShake, 10);
     portalFlash      = 14;
     portalFlashColor = 'blue';  // regular Jötunn — cold blue, not the boss red
   }
@@ -880,7 +884,7 @@ function spawnBoss(waveNum) {
   const cfg  = BOSS_CONFIGS[waveNum];
   const path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
 
-  screenShake      = Math.max(screenShake, 14);
+  screenShake      = Math.max(screenShake, 16);
   portalFlash      = 32;
   portalFlashColor = 'red';
 
@@ -1265,7 +1269,8 @@ function update() {
         if (b.target.isBoss) {
           onBossKilled(b.target);
         } else {
-          spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 8);
+          const _pc = b.target.type === ENEMY_TYPES.JOTUNN ? 20 : b.target.type === ENEMY_TYPES.MARA ? 18 : b.target.type === ENEMY_TYPES.MYLING ? 12 : 10;
+          spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, _pc);
           const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
           firstKillDone = true;
           spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * b.target.x, GRID_TOP + gridPanY + gridZoom * b.target.y, reward, coinSpeed);
@@ -1276,8 +1281,8 @@ function update() {
       // Splash damage for missile bullets
       if (b.splashRadius > 0) {
         const ix = b.x, iy = b.y;
-        spawnParticles(ix, iy, '#ff6622', 8);
-        splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 12, maxLife: 12 });
+        spawnParticles(ix, iy, '#ff6622', 14);
+        splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 22, maxLife: 22 });
         let splashKills = 0;
         for (const enemy of enemies) {
           if (!enemy.alive || enemy.reached) continue;
@@ -1297,7 +1302,7 @@ function update() {
               if (enemy.isBoss) {
                 onBossKilled(enemy);
               } else {
-                spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 6);
+                spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 10);
                 spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * enemy.x, GRID_TOP + gridPanY + gridZoom * enemy.y, enemy.reward);
               }
             }
@@ -1321,7 +1326,7 @@ function update() {
     if (enemies[i].reached) {
       lives--;
       waveLeak   = true;
-      screenShake = 10;
+      screenShake = 16;
       lifeLostTimer = 90;
       enemies.splice(i, 1);
       if (lives <= 0) {
@@ -1816,10 +1821,10 @@ function drawRightPanel() {
     } else {
       const next    = waveComposition(waveNumber + 1);
       const entries = [
-        { label: 'Draugr', count: next.draugr,  color: '#bb70ff', skip: next.draugr  === 0, boss: false, flying: false },
-        { label: 'Myling', count: next.mylings,  color: '#88bbff', skip: next.mylings === 0, boss: false, flying: true  },
+        { label: 'Draugr', count: next.draugr,  color: '#7090a8', skip: next.draugr  === 0, boss: false, flying: false },
+        { label: 'Myling', count: next.mylings,  color: '#88c860', skip: next.mylings === 0, boss: false, flying: true  },
         { label: 'Jötunn', count: next.jotunn,   color: '#d08820', skip: next.jotunn  === 0, boss: true,  flying: false },
-        { label: 'Mara',   count: next.maras,    color: '#00ddcc', skip: next.maras   === 0, boss: false, flying: false },
+        { label: 'Mara',   count: next.maras,    color: '#308888', skip: next.maras   === 0, boss: false, flying: false },
       ];
       let bossHeaderDrawn = false;
       ctx.font = '11px monospace';
@@ -1866,7 +1871,7 @@ function drawRightPanel() {
   const spY      = GRID_TOP + fullH - 54;  // fixed position regardless of wave state
   const spFill   = gameSpeed >= 4 ? 'rgba(210,60,20,0.97)'  : gameSpeed >= 2 ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
   const spStroke = gameSpeed >= 4 ? 'rgba(255,120,60,0.95)' : gameSpeed >= 2 ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
-  const spColor  = gameSpeed >= 2 ? '#fff' : 'rgba(200,160,80,0.6)';
+  const spColor  = gameSpeed >= 2 ? '#f0e8d0' : 'rgba(200,160,80,0.6)';
 
   ctx.beginPath(); ctx.arc(spX, spY, spR, 0, Math.PI * 2);
   ctx.fillStyle   = spFill; ctx.fill();
@@ -1888,7 +1893,7 @@ function drawRightPanel() {
     drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(140,18,18,0.97)', 0.92, 6);
     ctx.shadowBlur  = 0;
     ctx.textAlign   = 'center'; ctx.font = 'bold 11px monospace';
-    ctx.fillStyle   = '#ffffff'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
+    ctx.fillStyle   = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
     ctx.fillText('NEXT WAVE', btnX + btnW / 2, btnY + 17);
     const secs = waveState === 'countdown'
       ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
@@ -2100,7 +2105,7 @@ function drawBottomBuildBar() {
 
     const labelSz = btn.width < 60 ? 7 : 9;
     ctx.font      = `bold ${labelSz}px monospace`;
-    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#fff' : '#c0b090';
+    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#f0e8d0' : '#c0b090';
     ctx.textAlign = 'left';
     ctx.fillText(btn.label, btn.x + 4, infoY + 11);
 
@@ -2373,7 +2378,7 @@ function onBossPhase50(boss) {
 }
 
 function onBossKilled(boss) {
-  screenShake    = Math.max(screenShake, 20);
+  screenShake    = Math.max(screenShake, 28);
   hoardPulse     = 22;
   bossDefeatTimer = 210;
   bossDefeatText  = boss.bossName + ' DEFEATED';
@@ -2442,7 +2447,7 @@ function drawBossWarning() {
 
   ctx.textAlign   = 'center';
   ctx.font        = 'bold 11px monospace';
-  ctx.fillStyle   = '#fff';
+  ctx.fillStyle   = '#f0e8d0';
   ctx.shadowColor = 'rgba(255,50,20,0.95)';
   ctx.shadowBlur  = 14;
   ctx.fillText(`⚠  ${bossLabel}  ⚠`, cx, bannerY + 14);
@@ -2498,10 +2503,10 @@ function drawWaveAnnouncement() {
   if (waveState === 'break') {
     const next = waveComposition(waveNumber + 1);
     const parts = [];
-    if (next.draugr  > 0) parts.push({ label: `● ×${next.draugr}`,  color: '#bb70ff' });
-    if (next.mylings > 0) parts.push({ label: `◆ ×${next.mylings}`, color: '#88bbff' });
+    if (next.draugr  > 0) parts.push({ label: `● ×${next.draugr}`,  color: '#7090a8' });
+    if (next.mylings > 0) parts.push({ label: `◆ ×${next.mylings}`, color: '#88c860' });
     if (next.jotunn  > 0) parts.push({ label: `◉ ×${next.jotunn}`,  color: '#c07820' });
-    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#00ddcc' });
+    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#308888' });
 
     ctx.font = '10px monospace';
     const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 12, -12);
@@ -2532,7 +2537,7 @@ function draw() {
   ctx.beginPath();
   ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
   ctx.clip();
-  if (screenShake > 0) screenShake *= 0.82;
+  if (screenShake > 0) screenShake *= 0.86;
   const shakeX = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
   const shakeY = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
   ctx.translate(GRID_LEFT + gridPanX + shakeX, GRID_TOP + gridPanY + shakeY);
@@ -2610,14 +2615,11 @@ function draw() {
 
   // ── Catapult splash rings ───────────────────────────────────────────────────
   for (const sr of splashRings) {
-    const alpha = (sr.life / sr.maxLife) * 0.55;
+    const alpha = (1 - sr.life / sr.maxLife) * 0.75;
     ctx.save();
     ctx.strokeStyle = `rgba(220,130,40,${alpha})`;
-    ctx.lineWidth   = 1.4;
+    ctx.lineWidth   = 1.8;
     ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = `rgba(255,200,80,${alpha * 0.4})`;
-    ctx.lineWidth   = 2.5;
-    ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r * 0.65, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 
@@ -2883,7 +2885,7 @@ function drawDragGhost() {
 
   ctx.textAlign = 'center';
   ctx.font      = 'bold 10px monospace';
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#f0e8d0';
   ctx.fillText(dragItem.label, cx, gy + 31);
 
   ctx.font      = '10px monospace';

@@ -413,7 +413,7 @@ export class Enemy {
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 4);
     ctx.shadowColor = 'rgba(100,180,60,0.95)';
-    ctx.shadowBlur  = 18 * pulse;
+    ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = this.color;
     ctx.fillRect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
     ctx.shadowBlur  = 0;
