@@ -287,6 +287,13 @@ export class Tower {
         ctx.stroke();
       }
       ctx.shadowBlur = 0;
+      // EMP label — tells player why the tower is inactive
+      ctx.save();
+      ctx.font      = 'bold 7px monospace';
+      ctx.fillStyle = `rgba(255,140,80,${0.65 + Math.sin(t * 10) * 0.25})`;
+      ctx.textAlign = 'center';
+      ctx.fillText('EMP', this.x, this.y - this.radius - 4);
+      ctx.restore();
       ctx.restore();
     }
 

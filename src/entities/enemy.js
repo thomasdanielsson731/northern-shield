@@ -106,7 +106,7 @@ export class Enemy {
       if (this.slowTimer === 0) this.slowFactor = 1;
     }
     const effectiveSpeed = (this.slowTimer > 0 && !this.slowImmune)
-      ? Math.max(this.baseSpeed * this.slowFactor, this.baseSpeed * 0.15)
+      ? (this.slowFactor <= 0 ? 0 : Math.max(this.baseSpeed * this.slowFactor, this.baseSpeed * 0.15))
       : this.baseSpeed;
 
     const target = this.path[this.pathIndex + 1];

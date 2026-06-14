@@ -76,7 +76,8 @@ let gameSpeed  = 1;
 let speedBtn   = null;
 let _frameTick = 0;
 
-let dragItem  = null;  // { id, label, color, cost, mode } while dragging from build bar
+let dragItem    = null;  // { id, label, color, cost, mode } while dragging from build bar
+let pendingSell = null;  // { col, row, timer } — tower awaiting sell confirmation
 let dragX     = 0;
 let dragY     = 0;
 
@@ -102,6 +103,7 @@ let wallFrostDirty    = true;
 // Playtest UX
 let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
 let firstKillDone     = false;  // triggers enhanced coin arc on first kill
+let mylingWarningTimer = 0;     // frames remaining for first-Myling warning banner
 let chainKillDone     = false;  // one-shot CHAIN KILL! text (catapult 3+)
 let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
 let lifeLostTimer     = 0;      // frames for LIFE LOST text near hoard
@@ -183,6 +185,12 @@ function restartGame() {
 
   firstTowerPlaced  = false;
   firstKillDone     = false;
+  mylingWarningTimer = 0;
+  dragItem          = null;
+  pendingSell       = null;
+  gridZoom          = 1.0;
+  gridPanX          = 0;
+  gridPanY          = 0;
   chainKillDone     = false;
   chainKillDisplay  = null;
   lifeLostTimer     = 0;
@@ -407,7 +415,7 @@ function updateWave() {
   if (spawnQueue.length > 0) {
     waveActiveFrames++;
     spawnTimer++;
-    const spawnInterval = waveActiveFrames > 5400 ? Math.ceil(SPAWN_FRAMES * 0.5) : SPAWN_FRAMES;
+    const spawnInterval = waveActiveFrames > 5400 * gameSpeed ? Math.ceil(SPAWN_FRAMES * 0.5) : SPAWN_FRAMES;
     if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
       const next = spawnQueue.shift();
@@ -858,6 +866,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   const newEnemy = new Enemy(path, type, hpScale);
   newEnemy.baseSpeed *= waveSpeedScale;
   newEnemy.speed     *= waveSpeedScale;
+  if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
   enemies.push(newEnemy);
 }
 
@@ -891,9 +900,12 @@ function rerouteActiveEnemies() {
 
     const { col, row } = grid.pixelToCell(enemy.x, enemy.y);
     const enemyPath = grid.findPath(col, row, GOAL.col, GOAL.row);
-    if (!enemyPath || enemyPath.length < 2) continue;
-
-    enemy.setPath(enemyPath.map(({ col: c, row: r }) => grid.cellCenter(c, r)));
+    if (enemyPath && enemyPath.length >= 2) {
+      enemy.setPath(enemyPath.map(({ col: c, row: r }) => grid.cellCenter(c, r)));
+    } else if (currentPath) {
+      // Local BFS failed (enemy at boundary) — fall back to global path
+      enemy.setPath(currentPath.map(({ col: c, row: r }) => grid.cellCenter(c, r)));
+    }
   }
 }
 
@@ -1083,23 +1095,31 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // Right-click: remove wall or tower instantly
+  // Right-click: walls sell instantly; towers require a second right-click to confirm
   if (e.button === 2) {
-    if (cell === CELL.WALL || cell === CELL.TOWER) {
-      if (selectedTower && selectedTower.col === col && selectedTower.row === row) {
-        selectedTower = null;
-      }
-      if (cell === CELL.WALL) {
-        wallFrostDirty = true;
-        gold += Math.floor(WALL_COST * 0.5);
-      } else {
-        const t = towers.find(t => t.col === col && t.row === row);
-        if (t) gold += t.sellValue;
-      }
+    if (cell === CELL.WALL) {
+      wallFrostDirty = true;
+      gold += Math.floor(WALL_COST * 0.5);
       grid.setCell(col, row, CELL.EMPTY);
       towers      = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
       rerouteActiveEnemies();
+      pendingSell = null;
+    } else if (cell === CELL.TOWER) {
+      if (pendingSell && pendingSell.col === col && pendingSell.row === row) {
+        // Confirmed — sell the tower
+        if (selectedTower && selectedTower.col === col && selectedTower.row === row) selectedTower = null;
+        const t = towers.find(t => t.col === col && t.row === row);
+        if (t) gold += t.sellValue;
+        grid.setCell(col, row, CELL.EMPTY);
+        towers      = towers.filter(t => t.col !== col || t.row !== row);
+        currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+        rerouteActiveEnemies();
+        pendingSell = null;
+      } else {
+        // First right-click — request confirmation
+        pendingSell = { col, row, timer: 90 };
+      }
     }
     return;
   }
@@ -1173,6 +1193,12 @@ canvas.addEventListener('wheel', e => {
 function update() {
   if (gameOver) return;
 
+  if (pendingSell) {
+    pendingSell.timer--;
+    if (pendingSell.timer <= 0) pendingSell = null;
+  }
+  if (mylingWarningTimer > 0) mylingWarningTimer--;
+
   updateWave();
 
   for (const tower of towers) tower.update(enemies, bullets);
@@ -1194,7 +1220,7 @@ function update() {
           spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, 8);
           const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
           firstKillDone = true;
-          spawnGoldCoins(GRID_LEFT + b.target.x, GRID_TOP + b.target.y, reward, coinSpeed);
+          spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * b.target.x, GRID_TOP + gridPanY + gridZoom * b.target.y, reward, coinSpeed);
         }
       }
     }
@@ -1207,6 +1233,7 @@ function update() {
         let splashKills = 0;
         for (const enemy of enemies) {
           if (!enemy.alive || enemy.reached) continue;
+          if (enemy === b.target) continue;  // primary target already took direct damage
           const dx = enemy.x - ix;
           const dy = enemy.y - iy;
           if (dx * dx + dy * dy <= b.splashRadius * b.splashRadius) {
@@ -1223,7 +1250,7 @@ function update() {
                 onBossKilled(enemy);
               } else {
                 spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 6);
-                spawnGoldCoins(GRID_LEFT + enemy.x, GRID_TOP + enemy.y, enemy.reward);
+                spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * enemy.x, GRID_TOP + gridPanY + gridZoom * enemy.y, enemy.reward);
               }
             }
           }
@@ -1264,7 +1291,7 @@ function update() {
       const dx = tower.x - enemy.x;
       const dy = tower.y - enemy.y;
       if (dx * dx + dy * dy <= EMP_RANGE * EMP_RANGE) {
-        tower.disabledTimer = Math.max(tower.disabledTimer, EMP_DISABLE_FRAMES);
+        tower.disabledTimer = Math.max(tower.disabledTimer, EMP_DISABLE_FRAMES * gameSpeed);
         anyInRange = true;
       }
     }
@@ -1788,7 +1815,7 @@ function drawRightPanel() {
   // ── SPEED TOGGLE ───────────────────────────────────────────────────────────
   const spR      = 17;
   const spX      = px + pw / 2;
-  const spY      = GRID_TOP + fullH - (gameOver || waveState === 'active' ? 54 : 104);
+  const spY      = GRID_TOP + fullH - 54;  // fixed position regardless of wave state
   const spFill   = gameSpeed >= 4 ? 'rgba(210,60,20,0.97)'  : gameSpeed >= 2 ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
   const spStroke = gameSpeed >= 4 ? 'rgba(255,120,60,0.95)' : gameSpeed >= 2 ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
   const spColor  = gameSpeed >= 2 ? '#fff' : 'rgba(200,160,80,0.6)';
@@ -2196,9 +2223,10 @@ function drawTowerPanel(tower) {
   const panelH = 86;
   const { width, height } = getViewSize();
 
-  let px = GRID_LEFT + tower.x - panelW / 2;
-  let py = GRID_TOP  + tower.y  - panelH - CELL_SIZE - 4;
+  let px = GRID_LEFT + gridPanX + tower.x * gridZoom - panelW / 2;
+  let py = GRID_TOP  + gridPanY + tower.y * gridZoom - panelH - CELL_SIZE * gridZoom - 4;
   px = Math.max(SIDEBAR_W + 4, Math.min(px, width - RIGHT_PANEL_W - panelW - 4));
+  py = Math.max(GRID_TOP + 4, py);
   py = Math.max(8, Math.min(py, height - panelH - 8));
 
   drawFantasyPanel(px, py, panelW, panelH, 'rgba(4,2,12,0.97)', 0.88, 7);
@@ -2254,7 +2282,7 @@ function drawTowerPanel(tower) {
     ctx.fillText('Upgrade', upgX + upgW / 2, btnY + 12);
     ctx.font      = '10px monospace';
     ctx.fillStyle = canUpgrade ? '#e8c040' : '#2a2818';
-    ctx.fillText(`$${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
+    ctx.fillText(`◆${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
   }
 
   // Sell button
@@ -2264,7 +2292,7 @@ function drawTowerPanel(tower) {
   ctx.fillText('Sell', sellX + sellW / 2, btnY + 12);
   ctx.font      = '10px monospace';
   ctx.fillStyle = '#e8c040';
-  ctx.fillText(`$${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
+  ctx.fillText(`◆${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
 
   ctx.restore();
 
@@ -2382,38 +2410,43 @@ function drawWaveAnnouncement() {
   if (gameOver) return;
   if (waveState === 'active') return;
 
-  const { width } = getViewSize();
   const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
-  const cy = GRID_TOP  + (ROWS * CELL_SIZE) / 2;
+  // Render in the narrow strip above the grid (between top bar and grid) — not over the build area
+  const bannerY = GRID_TOP - 10;
 
   let line1, line2, glowColor;
   if (waveState === 'countdown') {
     const secs = Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60);
     line1 = 'PREPARE FOR BATTLE';
-    line2 = `Starting in ${secs}...`;
-    glowColor = 'rgba(200,160,40,0.7)';
+    line2 = `Starting in ${secs}s`;
+    glowColor = 'rgba(200,160,40,0.8)';
   } else {
     const secs = Math.ceil((BREAK_FRAMES - waveTimer) / 60);
     line1 = `WAVE ${waveNumber} COMPLETE`;
-    line2 = `Next wave in ${secs}...`;
-    glowColor = 'rgba(80,220,140,0.7)';
+    line2 = `Next in ${secs}s`;
+    glowColor = 'rgba(80,220,140,0.8)';
   }
 
   ctx.save();
   ctx.textAlign = 'center';
 
+  // Semi-transparent strip so text is legible over the top bar
+  ctx.fillStyle = 'rgba(10,5,2,0.55)';
+  ctx.fillRect(GRID_LEFT, GRID_TOP - 22, COLS * CELL_SIZE, 22);
+
   ctx.shadowColor = glowColor;
-  ctx.shadowBlur  = 22;
-  ctx.fillStyle   = '#f0e080';
-  ctx.font        = 'bold 28px monospace';
-  ctx.fillText(line1, cx, cy - 14);
-
   ctx.shadowBlur  = 10;
-  ctx.fillStyle   = 'rgba(200,230,200,0.85)';
-  ctx.font        = '15px monospace';
-  ctx.fillText(line2, cx, cy + 14);
+  ctx.fillStyle   = '#f0e080';
+  ctx.font        = 'bold 11px monospace';
+  ctx.fillText(line1, cx, bannerY - 3);
 
-  // Next wave composition (shown during break)
+  ctx.shadowBlur = 6;
+  ctx.fillStyle  = 'rgba(200,230,200,0.85)';
+  ctx.font       = '10px monospace';
+  ctx.fillText(line2, cx, bannerY + 9);
+  ctx.shadowBlur = 0;
+
+  // Next wave composition — small icons below the banner, inside the grid top edge
   if (waveState === 'break') {
     const next = waveComposition(waveNumber + 1);
     const parts = [];
@@ -2422,16 +2455,16 @@ function drawWaveAnnouncement() {
     if (next.jotunn  > 0) parts.push({ label: `◉ ×${next.jotunn}`,  color: '#c07820' });
     if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#00ddcc' });
 
-    ctx.font = '13px monospace';
-    const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 18, -18);
-    let px = cx - totalW / 2;
+    ctx.font = '10px monospace';
+    const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 12, -12);
+    let bx = cx - totalW / 2;
     for (const p of parts) {
       ctx.fillStyle   = p.color;
       ctx.shadowColor = p.color;
-      ctx.shadowBlur  = 6;
+      ctx.shadowBlur  = 5;
       ctx.textAlign   = 'left';
-      ctx.fillText(p.label, px, cy + 36);
-      px += ctx.measureText(p.label).width + 18;
+      ctx.fillText(p.label, bx, GRID_TOP + 12);
+      bx += ctx.measureText(p.label).width + 12;
     }
     ctx.shadowBlur = 0;
   }
@@ -2690,9 +2723,51 @@ function draw() {
   drawBossWarning();
   drawBossDefeat();
   drawWaveAnnouncement();
+  drawMylingWarning();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawDragGhost();
+  drawPendingSell();
   drawFrames();
+  ctx.restore();
+}
+
+function drawMylingWarning() {
+  if (mylingWarningTimer <= 0) return;
+  const alpha = Math.min(1, mylingWarningTimer / 30) * Math.min(1, (mylingWarningTimer) / 30);
+  const fadeAlpha = mylingWarningTimer < 60 ? mylingWarningTimer / 60 : 1;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const by = GRID_TOP + 22;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font      = 'bold 11px monospace';
+  ctx.fillStyle = `rgba(136,187,255,${fadeAlpha * 0.92})`;
+  ctx.shadowColor = `rgba(100,160,255,${fadeAlpha * 0.8})`;
+  ctx.shadowBlur  = 10;
+  ctx.fillText('◆ MYLING — FLIES OVER WALLS', cx, by);
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawPendingSell() {
+  if (!pendingSell) return;
+  const { col, row } = pendingSell;
+  const vx = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
+  const vy = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
+  const vs = CELL_SIZE * gridZoom;
+  const pulse = 0.55 + Math.sin(performance.now() * 0.012) * 0.35;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
+  ctx.clip();
+  ctx.fillStyle   = `rgba(220,50,30,${pulse * 0.30})`;
+  ctx.fillRect(vx, vy, vs, vs);
+  ctx.strokeStyle = `rgba(255,80,50,${pulse})`;
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(vx + 1, vy + 1, vs - 2, vs - 2);
+  ctx.font      = 'bold 9px monospace';
+  ctx.fillStyle = `rgba(255,200,180,${pulse})`;
+  ctx.textAlign = 'center';
+  ctx.fillText('SELL?', vx + vs / 2, vy + vs / 2 + 3);
   ctx.restore();
 }
 
