@@ -51,7 +51,7 @@ const BUILD_ITEMS = [
 ];
 
 const STARTING_GOLD  = 85;
-const STARTING_LIVES = 15;
+const STARTING_LIVES = 10;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
 grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
@@ -217,8 +217,8 @@ function restartGame() {
 
 // ── wave system ───────────────────────────────────────────────────────────────
 
-const COUNTDOWN_FRAMES  = 150;
-const BREAK_FRAMES      = 250;
+const COUNTDOWN_FRAMES  = 300;
+const BREAK_FRAMES      = 180;
 const SPAWN_FRAMES      = 30;
 const EMP_RANGE         = 50;
 const EMP_DISABLE_FRAMES = 150;
@@ -339,7 +339,7 @@ function drawGoldCoins() {
 function waveComposition(num) {
   const n = Math.min(num, MAX_WAVES);
   return {
-    draugr:  Math.min(8 + Math.floor(n * 2.2), 40),
+    draugr:  n <= 5 ? Math.min(3 + Math.floor(n * 1.5), 12) : Math.min(8 + Math.floor(n * 2.2), 40),
     mylings: n >= 6  ? Math.min(Math.floor((n - 5) * 1.4), 18) : 0,
     jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 0.7), 8) : 0,
     maras:   n >= 21 ? Math.min(Math.floor((n - 20) * 0.5), 8) : 0,
@@ -359,6 +359,19 @@ function buildWave(num) {
     }
     heralds.push({ __boss: true, waveNum: num });
     return heralds;
+  }
+
+  // Solo introductions — new enemy type appears alone so player can learn it
+  if (num === 6)  return [...Array(4).fill(ENEMY_TYPES.MYLING)];
+  if (num === 12) return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+  if (num === 22) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
+
+  // Rest waves — easier wave directly after a boss
+  if (num === 11 || num === 26 || num === 51) {
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(num - 5);
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    return rest;
   }
 
   const { draugr, mylings, jotunn, maras } = waveComposition(num);
@@ -391,7 +404,7 @@ function startNextWave() {
   waveSlainCount = 0;
   waveGoldStart  = goldEarned;
   if (waveNumber === 1) pathChevronsTimer = 240;
-  screenShake = Math.max(screenShake, waveNumber > 5 ? 5 : 2);
+  screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
 }
 
 function updateWave() {
@@ -440,7 +453,7 @@ function updateWave() {
       highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
     } else {
       // Wave-clear bonus
-      const clearBonus = 10 + (waveLeak ? 0 : 5);
+      const clearBonus = (20 + waveNumber * 3) + (waveLeak ? 0 : 5);
       gold       += clearBonus;
       goldEarned += clearBonus;
       if (!waveLeak) {
@@ -1363,8 +1376,8 @@ function update() {
     const adj = [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]];
     for (const [ac, ar] of adj) {
       if (grid.getCell(ac, ar) === CELL.WALL) {
-        enemy.slowTimer  = Math.max(enemy.slowTimer, 8);
-        enemy.slowFactor = Math.min(enemy.slowFactor, 0.65);
+        enemy.slowTimer  = Math.max(enemy.slowTimer, 20);
+        enemy.slowFactor = Math.min(enemy.slowFactor, 0.50);
         break;
       }
     }
@@ -1800,7 +1813,7 @@ function drawRightPanel() {
     ctx.fillStyle   = '#f0c840';
     ctx.shadowColor = 'rgba(220,170,30,0.7)';
     ctx.shadowBlur  = 6;
-    ctx.fillText('INCOMING', lx, ly); ly += 14;
+    ctx.fillText(waveState === 'countdown' ? 'PREPARING...' : 'INCOMING', lx, ly); ly += 14;
     ctx.shadowBlur  = 0;
 
     const nextIsBossWave = BOSS_WAVES.has(waveNumber + 1);
@@ -2334,7 +2347,7 @@ function drawTowerPanel(tower) {
     ctx.fillStyle = canUpgrade ? '#88ee66' : '#3a4030';
     ctx.fillText('Upgrade', upgX + upgW / 2, btnY + 12);
     ctx.font      = '10px monospace';
-    ctx.fillStyle = canUpgrade ? '#e8c040' : '#2a2818';
+    ctx.fillStyle = canUpgrade ? '#e8c040' : '#e84040';
     ctx.fillText(`◆${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
   }
 
@@ -2389,11 +2402,11 @@ function onBossKilled(boss) {
   spawnParticles(boss.x, boss.y, '#f5d030', 25);
   spawnParticles(boss.x, boss.y, boss.color, 20);
 
-  // Gold flood — many coins arc to hoard simultaneously
+  // Gold flood — coins respect pan/zoom so they arc from the correct screen position
   for (let i = 0; i < 10; i++) {
     spawnGoldCoins(
-      GRID_LEFT + boss.x + (Math.random() - 0.5) * boss.radius * 2,
-      GRID_TOP  + boss.y + (Math.random() - 0.5) * boss.radius * 2,
+      GRID_LEFT + gridPanX + gridZoom * (boss.x + (Math.random() - 0.5) * boss.radius * 2),
+      GRID_TOP  + gridPanY + gridZoom * (boss.y + (Math.random() - 0.5) * boss.radius * 2),
       20
     );
   }
@@ -2588,9 +2601,9 @@ function draw() {
     ctx.restore();
   }
 
-  drawPath();
   grid.draw(ctx, time);
-  towers.forEach(t => t.draw(ctx));
+  drawPath();
+  towers.forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
 
   // Selection ring on active tower
   if (selectedTower && !gameOver) {
@@ -2610,12 +2623,34 @@ function draw() {
   }
 
   enemies.forEach(e => e.draw(ctx));
+
+  // Priority marker — pulsing ring above lead enemy (closest to goal)
+  if (enemies.length > 0) {
+    const lead = enemies.reduce((best, e) => {
+      if (!e.alive || e.reached) return best;
+      if (!best) return e;
+      return e.pathIndex > best.pathIndex ? e : best;
+    }, null);
+    if (lead) {
+      const lp = 0.5 + Math.sin(performance.now() * 0.008) * 0.5;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,80,60,${0.55 + lp * 0.35})`;
+      ctx.lineWidth   = 1.2;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.arc(lead.x, lead.y - lead.radius - 5, 3.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
   bullets.forEach(b => b.draw(ctx));
   drawParticles();
 
   // ── Catapult splash rings ───────────────────────────────────────────────────
   for (const sr of splashRings) {
-    const alpha = (1 - sr.life / sr.maxLife) * 0.75;
+    const alpha = (sr.life / sr.maxLife) * 0.75;
     ctx.save();
     ctx.strokeStyle = `rgba(220,130,40,${alpha})`;
     ctx.lineWidth   = 1.8;

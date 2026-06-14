@@ -23,7 +23,7 @@ export const ENEMY_DEFS = {
     speed:          0.9,
     hp:             60,
     radius:         7,
-    reward:         4,
+    reward:         6,
     color:          '#506070',   // desaturated blue-grey — corrupted corpse
     highlightColor: '#8ab0d0',
     flying:         false
@@ -78,7 +78,8 @@ export class Enemy {
     this.phase50Done = false;
     this.stunTimer    = 0;    // frames frozen during summon stutter
     this.slowImmune   = false;
-    this.hitFlash     = 0;    // frames of white ring on hit
+    this.hitFlash     = 0;    // frames of hit ring remaining
+    this.hitFlashMax  = 0;    // max frames set when hit (for alpha normalization)
     this.empPulseTimer = 0;   // cooldown between EMP shockwave rings
 
     this.x = path[0].x;
@@ -161,7 +162,7 @@ export class Enemy {
 
     // Critical HP — rapid red pulse ring (0-25%)
     if (hpRatio < 0.25 && hpRatio > 0) {
-      const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
+      const pulse = 0.5 + Math.sin(performance.now() * 0.025) * 0.5;
       ctx.strokeStyle = `rgba(255,55,35,${0.22 + pulse * 0.32})`;
       ctx.lineWidth   = 1.5;
       ctx.beginPath();
@@ -171,7 +172,8 @@ export class Enemy {
 
     // Hit flash — white ring when damage lands
     if (this.hitFlash > 0) {
-      ctx.strokeStyle = `rgba(255,255,255,${(this.hitFlash / 4) * 0.78})`;
+      const hfAlpha = this.hitFlashMax > 0 ? (this.hitFlash / this.hitFlashMax) * 0.78 : 0;
+      ctx.strokeStyle = `rgba(220,235,255,${hfAlpha})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
@@ -722,7 +724,7 @@ export class Enemy {
     } else {
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = pct > 0.5 ? '#56e894' : pct > 0.25 ? '#e8c040' : '#e84040';
+      ctx.fillStyle = pct > 0.75 ? '#56e894' : pct > 0.50 ? '#a8e040' : pct > 0.25 ? '#e8c040' : '#e84040';
       ctx.fillRect(barX, barY, barW * pct, barH);
       ctx.strokeStyle = 'rgba(200,160,40,0.32)';
       ctx.lineWidth   = 0.5;

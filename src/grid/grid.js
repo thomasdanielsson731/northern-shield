@@ -122,18 +122,16 @@ export class Grid {
   draw(ctx, time = 0) {
     ctx.strokeStyle = 'rgba(0,0,0,0.18)';
     ctx.lineWidth = 0.5;
+    ctx.beginPath();
     for (let x = 0; x <= this.cols; x++) {
-      ctx.beginPath();
       ctx.moveTo(x * this.cellSize, 0);
       ctx.lineTo(x * this.cellSize, this.rows * this.cellSize);
-      ctx.stroke();
     }
     for (let y = 0; y <= this.rows; y++) {
-      ctx.beginPath();
       ctx.moveTo(0, y * this.cellSize);
       ctx.lineTo(this.cols * this.cellSize, y * this.cellSize);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {

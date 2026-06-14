@@ -92,8 +92,8 @@ export const TOWER_DEFS = {
     damage:       8,
     radius:       7,
     bulletSpeed:  5,
-    slowFactor:   0,
-    slowDuration: 90,
+    slowFactor:   0.40,
+    slowDuration: 60,
     bulletShape:  'stun'
   },
 };
@@ -131,6 +131,7 @@ export class Tower {
     this.levelFlash      = 0;   // frames of milestone glow on level 5 / 10
     this.synergyRingTimer = 0;  // frames of gold ring on Berserker-wall synergy
 
+    this.selected      = false;
     this._applyLevel();
   }
 
@@ -141,7 +142,7 @@ export class Tower {
     this.fireRate = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
   }
 
-  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.85); }
+  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.60); }
   get sellValue() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
@@ -223,8 +224,8 @@ export class Tower {
     ctx.fill();
     ctx.restore();
 
-    // Range ring (skip for berserk — melee tower)
-    if (this.type !== TOWER_TYPES.BERSERK) {
+    // Range ring — only when selected
+    if (this.type !== TOWER_TYPES.BERSERK && this.selected) {
       ctx.strokeStyle = this.rangeColor;
       ctx.lineWidth   = 1;
       ctx.setLineDash([3, 8]);
@@ -246,7 +247,7 @@ export class Tower {
       ctx.save();
       if (this.type === TOWER_TYPES.BERSERK) {
         // Axe sweep arc
-        ctx.shadowColor = '#ff4400';
+        ctx.shadowColor = 'rgba(200,80,20,0.85)';
         ctx.shadowBlur  = 20 * alpha;
         ctx.strokeStyle = `rgba(255,100,30,${alpha * 0.9})`;
         ctx.lineWidth   = 5 * alpha;
@@ -414,7 +415,7 @@ export class Tower {
     ctx.ellipse(x - 6, y - 5, 3.5, 2.5, -0.3, 0, Math.PI * 2);
     ctx.ellipse(x + 6, y - 5, 3.5, 2.5,  0.3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#eee8d0';
+    ctx.fillStyle = '#f0e8d0';
     for (const [sx, sy] of [[x - 6.5, y - 5.8], [x + 5.5, y - 5.8]]) {
       ctx.beginPath();
       ctx.arc(sx, sy, 1.6, 0, Math.PI * 2);
@@ -424,7 +425,7 @@ export class Tower {
       ctx.ellipse(sx - 0.5, sy, 0.5, 0.4, 0, 0, Math.PI * 2);
       ctx.ellipse(sx + 0.5, sy, 0.5, 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#eee8d0';
+      ctx.fillStyle = '#f0e8d0';
     }
 
     // Head
@@ -462,7 +463,7 @@ export class Tower {
     ctx.beginPath();
     ctx.arc(x, y - 12.5, 5, 0, Math.PI, true);
     ctx.fill();
-    ctx.fillStyle = '#aaaaaa';
+    ctx.fillStyle = '#a0a898';
     ctx.fillRect(x - 5, y - 12.5, 10, 2);
     // Horn left
     ctx.fillStyle = '#e8e0c0';
@@ -483,8 +484,8 @@ export class Tower {
     ctx.fillStyle = '#888880';
     ctx.fillRect(x - 1, y - 12, 2, 5);
 
-    // Warpaint stripes (red)
-    ctx.fillStyle = '#cc2200';
+    // Warpaint stripes (dark blood red)
+    ctx.fillStyle = '#a81c10';
     ctx.fillRect(x - 4, y - 10, 2.5, 1);
     ctx.fillRect(x + 1.5, y - 10, 2.5, 1);
 
@@ -492,7 +493,7 @@ export class Tower {
     ctx.save();
     ctx.translate(x + 7, y - 4);
     ctx.rotate(axeSpin);
-    ctx.shadowColor = '#ff4400';
+    ctx.shadowColor = 'rgba(200,80,20,0.85)';
     ctx.shadowBlur  = 8;
     // Handle
     ctx.strokeStyle = '#6a3810';
@@ -546,7 +547,7 @@ export class Tower {
     ctx.shadowColor = 'rgba(220,190,100,0.75)';
     ctx.shadowBlur  = 14 * glow;
     // Left wing
-    ctx.fillStyle = '#f0ece0';
+    ctx.fillStyle = '#f0e8d0';
     ctx.beginPath();
     ctx.moveTo(x - 3, y - 1);
     ctx.bezierCurveTo(x - 9 - wingFlap * 6, y - 9, x - 17 - wingFlap * 8, y - 5, x - 19 - wingFlap * 10, y + 2);
@@ -948,7 +949,7 @@ export class Tower {
     ctx.lineTo(x - 2.5, y - 2);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#f0ece0';
+    ctx.fillStyle = '#f0e8d0';
     ctx.beginPath();
     ctx.moveTo(x - 3.5, y + 5);
     ctx.lineTo(x - 1, y + 5);
