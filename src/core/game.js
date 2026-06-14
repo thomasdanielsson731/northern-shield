@@ -501,46 +501,96 @@ function initTerrain() {
     // ── Procedural fallback ───────────────────────────────────────────────
     terrainUsesSprite = false;
 
-    // Dark tundra base
-    tc.fillStyle = '#0e1407';
+    // Dark tundra base — slightly lighter for contrast headroom
+    tc.fillStyle = '#182a10';
     tc.fillRect(0, 0, W, H);
 
-    // Large coherent colour patches (not per-cell noise)
-    for (let i = 0; i < 45; i++) {
+    // Per-cell micro-variation — breaks up the flat base
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const v = rng();
+        if (v < 0.18) {
+          tc.fillStyle = `rgba(6,${Math.floor(30 + rng() * 18)},4,${0.25 + rng() * 0.2})`;
+          tc.fillRect(col * cs, row * cs, cs, cs);
+        } else if (v < 0.30) {
+          tc.fillStyle = `rgba(${Math.floor(22 + rng() * 14)},${Math.floor(12 + rng() * 8)},4,${0.18 + rng() * 0.16})`;
+          tc.fillRect(col * cs, row * cs, cs, cs);
+        }
+      }
+    }
+
+    // Large moss / earth patches — stronger colour, more visible
+    for (let i = 0; i < 40; i++) {
       const px = rng() * W, py = rng() * H;
-      const rx = cs * 2 + rng() * cs * 5;
-      const ry = rx * (0.4 + rng() * 0.55);
-      const g  = Math.floor(18 + rng() * 10);
-      tc.fillStyle = `rgba(8,${g},4,${0.22 + rng() * 0.22})`;
+      const rx = cs * 1.5 + rng() * cs * 5.5;
+      const ry = rx * (0.35 + rng() * 0.55);
+      const isMoss = rng() < 0.62;
+      const g = isMoss ? Math.floor(50 + rng() * 35) : Math.floor(28 + rng() * 20);
+      const r = isMoss ? Math.floor(g * 0.28) : Math.floor(g * 0.58);
+      const b = isMoss ? Math.floor(g * 0.22) : Math.floor(g * 0.20);
+      tc.fillStyle = `rgba(${r},${g},${b},${0.42 + rng() * 0.38})`;
       tc.beginPath();
       tc.ellipse(px, py, rx, ry, rng() * Math.PI, 0, Math.PI * 2);
       tc.fill();
     }
-    // Soil patches
-    for (let i = 0; i < 22; i++) {
+
+    // Soil patches — warm dark earth
+    for (let i = 0; i < 20; i++) {
       const px = rng() * W, py = rng() * H;
-      const rx = cs + rng() * cs * 3;
-      tc.fillStyle = `rgba(20,10,3,${0.28 + rng() * 0.28})`;
+      const rx = cs * 0.8 + rng() * cs * 2.8;
+      const br = Math.floor(30 + rng() * 22);
+      tc.fillStyle = `rgba(${br + 12},${Math.floor(br * 0.62)},${Math.floor(br * 0.28)},${0.48 + rng() * 0.36})`;
       tc.beginPath();
-      tc.ellipse(px, py, rx, rx * (0.4 + rng() * 0.55), rng() * Math.PI, 0, Math.PI * 2);
+      tc.ellipse(px, py, rx, rx * (0.38 + rng() * 0.55), rng() * Math.PI, 0, Math.PI * 2);
       tc.fill();
     }
-    // Sparse grass — in clusters, not per-cell
-    for (let ci = 0; ci < 32; ci++) {
+
+    // Dark water / mud puddles — adds contrast and Nordic mood
+    for (let i = 0, n = 5 + Math.floor(rng() * 6); i < n; i++) {
+      const px = rng() * W, py = rng() * H;
+      const rx = cs * 0.8 + rng() * cs * 2.4;
+      const ry = rx * (0.28 + rng() * 0.48);
+      tc.fillStyle = `rgba(8,14,22,${0.62 + rng() * 0.28})`;
+      tc.beginPath();
+      tc.ellipse(px, py, rx, ry, rng() * Math.PI, 0, Math.PI * 2);
+      tc.fill();
+      // Water surface shimmer
+      tc.fillStyle = `rgba(70,130,195,${0.07 + rng() * 0.07})`;
+      tc.beginPath();
+      tc.ellipse(px - rx * 0.12, py - ry * 0.22, rx * 0.52, ry * 0.38, rng() * Math.PI, 0, Math.PI * 2);
+      tc.fill();
+    }
+
+    // Grass clusters — thicker blades, taller, more contrast
+    tc.lineCap = 'round';
+    for (let ci = 0; ci < 58; ci++) {
       const gcx = rng() * W, gcy = rng() * H;
-      const count = 3 + Math.floor(rng() * 6);
-      const gr = Math.floor(52 + rng() * 28);
-      tc.strokeStyle = `rgb(12,${gr},7)`;
-      tc.lineWidth = 0.65;
+      const count = 4 + Math.floor(rng() * 9);
+      const gr = Math.floor(55 + rng() * 42);
       for (let b = 0; b < count; b++) {
-        const bx = gcx + (rng() - 0.5) * cs * 1.6;
-        const by = gcy + (rng() - 0.5) * cs;
+        const bx = gcx + (rng() - 0.5) * cs * 2.2;
+        const by = gcy + (rng() - 0.5) * cs * 1.4;
+        const h  = 3.5 + rng() * 4.5;
+        const lean = (rng() - 0.5) * 5.5;
+        tc.strokeStyle = `rgba(${Math.floor(gr * 0.32)},${gr},${Math.floor(gr * 0.14)},${0.72 + rng() * 0.28})`;
+        tc.lineWidth   = 0.9 + rng() * 0.75;
         tc.beginPath();
         tc.moveTo(bx, by);
-        tc.lineTo(bx + (rng() - 0.5) * 3.5, by - 2 - rng() * 2.5);
+        tc.lineTo(bx + lean, by - h);
         tc.stroke();
+        // Bright tip on some blades
+        if (rng() < 0.42) {
+          tc.strokeStyle = `rgba(${Math.min(255, gr + 85)},${Math.min(255, gr + 105)},${Math.floor(gr * 0.28)},0.5)`;
+          tc.lineWidth  *= 0.45;
+          tc.beginPath();
+          tc.moveTo(bx + lean * 0.58, by - h * 0.58);
+          tc.lineTo(bx + lean, by - h);
+          tc.stroke();
+          tc.lineWidth /= 0.45;
+        }
       }
     }
+    tc.lineCap = 'butt';
   }
 
   // ── Frost patches ─────────────────────────────────────────────────────────
@@ -550,21 +600,21 @@ function initTerrain() {
     const ry = rx * (0.28 + rng() * 0.45);
     const a  = rng() * Math.PI;
     const fg = tc.createRadialGradient(px, py, 0, px, py, rx);
-    fg.addColorStop(0,   `rgba(200,225,255,${0.13 + rng() * 0.09})`);
-    fg.addColorStop(0.55,`rgba(185,215,255,${0.05 + rng() * 0.04})`);
+    fg.addColorStop(0,   `rgba(200,225,255,${0.30 + rng() * 0.20})`);
+    fg.addColorStop(0.55,`rgba(185,215,255,${0.12 + rng() * 0.10})`);
     fg.addColorStop(1,   'rgba(170,205,250,0)');
     tc.fillStyle = fg;
     tc.beginPath(); tc.ellipse(px, py, rx, ry, a, 0, Math.PI * 2); tc.fill();
     // Crystal arms at the edge
-    tc.strokeStyle = `rgba(195,218,255,${0.30 + rng() * 0.22})`;
-    tc.lineWidth   = 0.45;
-    const nc = 4 + Math.floor(rng() * 5);
+    tc.strokeStyle = `rgba(210,230,255,${0.55 + rng() * 0.30})`;
+    tc.lineWidth   = 0.6;
+    const nc = 5 + Math.floor(rng() * 6);
     for (let c = 0; c < nc; c++) {
       const ca  = rng() * Math.PI * 2;
       const cr  = rx * (0.45 + rng() * 0.4);
       const ccx = px + Math.cos(ca) * cr;
       const ccy = py + Math.sin(ca) * cr * (ry / rx);
-      const cl  = 1 + rng() * 2;
+      const cl  = 1.5 + rng() * 3.5;
       for (let arm = 0; arm < 3; arm++) {
         const aa = ca + arm * Math.PI / 3;
         tc.beginPath();
@@ -576,18 +626,46 @@ function initTerrain() {
   }
 
   // ── Stones ────────────────────────────────────────────────────────────────
-  for (let i = 0, n = 28 + Math.floor(rng() * 22); i < n; i++) {
+  for (let i = 0, n = 42 + Math.floor(rng() * 28); i < n; i++) {
     const sx = rng() * W, sy = rng() * H;
-    const sr = 0.7 + rng() * 2.4;
+    const sr = 1.0 + rng() * 3.2;
     const fl = 0.45 + rng() * 0.5;
     const sa = rng() * Math.PI;
-    tc.fillStyle = 'rgba(0,0,0,0.38)';
+    tc.fillStyle = 'rgba(0,0,0,0.42)';
     tc.beginPath(); tc.ellipse(sx + sr * 0.28, sy + sr * 0.18, sr, sr * fl * 0.75, sa, 0, Math.PI * 2); tc.fill();
-    const sg = Math.floor(52 + rng() * 42);
-    tc.fillStyle = `rgb(${sg},${sg - 3},${sg + 5})`;
+    const sg = Math.floor(48 + rng() * 52);
+    tc.fillStyle = `rgb(${sg},${sg - 3},${sg + 6})`;
     tc.beginPath(); tc.ellipse(sx, sy, sr, sr * fl, sa, 0, Math.PI * 2); tc.fill();
-    tc.fillStyle = `rgba(${sg + 58},${sg + 54},${sg + 48},0.55)`;
+    tc.fillStyle = `rgba(${sg + 62},${sg + 58},${sg + 50},0.60)`;
     tc.beginPath(); tc.ellipse(sx - sr * 0.2, sy - sr * fl * 0.25, sr * 0.38, sr * fl * 0.26, sa, 0, Math.PI * 2); tc.fill();
+  }
+
+  // ── Mushroom clusters ─────────────────────────────────────────────────────
+  for (let i = 0, n = 8 + Math.floor(rng() * 9); i < n; i++) {
+    const mx = rng() * W, my = rng() * H;
+    const count = 2 + Math.floor(rng() * 4);
+    for (let m = 0; m < count; m++) {
+      const bx  = mx + (rng() - 0.5) * cs * 1.8;
+      const by  = my + (rng() - 0.5) * cs * 1.2;
+      const cap = 1.4 + rng() * 2.2;
+      // Stem
+      tc.fillStyle = `rgba(185,165,130,${0.55 + rng() * 0.30})`;
+      tc.fillRect(bx - 0.6, by - cap * 0.75, 1.2, cap * 0.75);
+      // Cap — red or brown
+      const isRed = rng() < 0.58;
+      const cr = isRed ? 150 + Math.floor(rng() * 80) : 90 + Math.floor(rng() * 50);
+      const cg = isRed ? Math.floor(rng() * 35)       : 55 + Math.floor(rng() * 30);
+      const cb = isRed ? Math.floor(rng() * 22)       : 18 + Math.floor(rng() * 20);
+      tc.fillStyle = `rgba(${cr},${cg},${cb},${0.70 + rng() * 0.28})`;
+      tc.beginPath();
+      tc.ellipse(bx, by - cap * 0.78, cap, cap * 0.52, 0, Math.PI, 0);
+      tc.fill();
+      // Spot on red caps
+      if (isRed && rng() < 0.6) {
+        tc.fillStyle = `rgba(255,245,240,${0.45 + rng() * 0.30})`;
+        tc.beginPath(); tc.arc(bx - cap * 0.25, by - cap, cap * 0.18, 0, Math.PI * 2); tc.fill();
+      }
+    }
   }
 
   // ── Dead roots ────────────────────────────────────────────────────────────
@@ -886,7 +964,7 @@ window.addEventListener('keydown', e => {
   }
 
   if (key === 'f') {
-    gameSpeed = gameSpeed >= 2 ? 1 : 2;
+    gameSpeed = gameSpeed >= 4 ? 1 : gameSpeed >= 2 ? 4 : 2;
     return;
   }
 
@@ -982,7 +1060,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 0 && speedBtn) {
     if (mouseX >= speedBtn.x && mouseX <= speedBtn.x + speedBtn.w &&
         mouseY >= speedBtn.y && mouseY <= speedBtn.y + speedBtn.h) {
-      gameSpeed = gameSpeed >= 2 ? 1 : 2;
+      gameSpeed = gameSpeed >= 4 ? 1 : gameSpeed >= 2 ? 4 : 2;
       return;
     }
   }
@@ -1711,15 +1789,17 @@ function drawRightPanel() {
   const spR      = 17;
   const spX      = px + pw / 2;
   const spY      = GRID_TOP + fullH - (gameOver || waveState === 'active' ? 54 : 104);
-  const spActive = gameSpeed >= 2;
+  const spFill   = gameSpeed >= 4 ? 'rgba(210,60,20,0.97)'  : gameSpeed >= 2 ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
+  const spStroke = gameSpeed >= 4 ? 'rgba(255,120,60,0.95)' : gameSpeed >= 2 ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
+  const spColor  = gameSpeed >= 2 ? '#fff' : 'rgba(200,160,80,0.6)';
 
   ctx.beginPath(); ctx.arc(spX, spY, spR, 0, Math.PI * 2);
-  ctx.fillStyle   = spActive ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)'; ctx.fill();
-  ctx.strokeStyle = spActive ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
+  ctx.fillStyle   = spFill; ctx.fill();
+  ctx.strokeStyle = spStroke;
   ctx.lineWidth   = 1.5; ctx.stroke();
   ctx.font        = 'bold 11px monospace';
-  ctx.fillStyle   = spActive ? '#fff' : 'rgba(200,160,80,0.6)';
-  ctx.textAlign   = 'center'; ctx.fillText('×2', spX, spY + 4); ctx.textAlign = 'left';
+  ctx.fillStyle   = spColor;
+  ctx.textAlign   = 'center'; ctx.fillText(`×${gameSpeed}`, spX, spY + 4); ctx.textAlign = 'left';
   speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
 
   // ── NEXT WAVE ──────────────────────────────────────────────────────────────
@@ -2695,8 +2775,9 @@ function gameLoop() {
     initTerrain();
   }
   _frameTick++;
-  // Normal speed = 30 logic ticks/sec (every other frame). Fast = 60/sec.
-  if (gameSpeed >= 2 || _frameTick % 2 === 1) update();
+  // 1x=30 ticks/s (alt frames), 2x=60 ticks/s (every frame), 4x=120 ticks/s (2 per frame)
+  const _ticks = gameSpeed >= 4 ? 2 : (gameSpeed >= 2 || _frameTick % 2 === 1) ? 1 : 0;
+  for (let _i = 0; _i < _ticks; _i++) update();
   draw();
   requestAnimationFrame(gameLoop);
 }
