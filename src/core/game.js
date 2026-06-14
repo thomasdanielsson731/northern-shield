@@ -32,9 +32,11 @@ let panY          = 0;
 let gridZoom      = 1.0;
 let gridPanX      = 0;
 let gridPanY      = 0;
-let isPanning     = false;
-let panStartX     = 0, panStartY     = 0;
-let panStartOffX  = 0, panStartOffY  = 0;
+let isPanning         = false;
+let panStartX         = 0, panStartY     = 0;
+let panStartOffX      = 0, panStartOffY  = 0;
+let rightClickDragged = false;
+let rightClickSaved   = null;
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Shield Wall', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
@@ -191,6 +193,9 @@ function restartGame() {
   gridZoom          = 1.0;
   gridPanX          = 0;
   gridPanY          = 0;
+  isPanning         = false;
+  rightClickDragged = false;
+  rightClickSaved   = null;
   chainKillDone     = false;
   chainKillDisplay  = null;
   lifeLostTimer     = 0;
@@ -963,6 +968,38 @@ function tryPlaceAt(col, row, mode, towerType) {
 
 // ── input ─────────────────────────────────────────────────────────────────────
 
+function handleRightClickAt(mouseX, mouseY) {
+  const { x: gx, y: gy } = outerToGridLocal(mouseX, mouseY);
+  const { col, row } = grid.pixelToCell(gx, gy);
+  const cell = grid.getCell(col, row);
+  if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
+    selectedTower = null;
+    return;
+  }
+  if (cell === CELL.WALL) {
+    wallFrostDirty = true;
+    gold += Math.floor(WALL_COST * 0.5);
+    grid.setCell(col, row, CELL.EMPTY);
+    towers      = towers.filter(t => t.col !== col || t.row !== row);
+    currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+    rerouteActiveEnemies();
+    pendingSell = null;
+  } else if (cell === CELL.TOWER) {
+    if (pendingSell && pendingSell.col === col && pendingSell.row === row) {
+      if (selectedTower && selectedTower.col === col && selectedTower.row === row) selectedTower = null;
+      const t = towers.find(t => t.col === col && t.row === row);
+      if (t) gold += t.sellValue;
+      grid.setCell(col, row, CELL.EMPTY);
+      towers      = towers.filter(t => t.col !== col || t.row !== row);
+      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+      rerouteActiveEnemies();
+      pendingSell = null;
+    } else {
+      pendingSell = { col, row, timer: 90 };
+    }
+  }
+}
+
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
@@ -986,6 +1023,13 @@ window.addEventListener('keydown', e => {
     gridPanY = 0;
     return;
   }
+
+  // Arrow keys: pan the grid view
+  const PAN_STEP = CELL_SIZE * 2;
+  if (key === 'arrowleft')  { e.preventDefault(); gridPanX += PAN_STEP; clampGridPan(); return; }
+  if (key === 'arrowright') { e.preventDefault(); gridPanX -= PAN_STEP; clampGridPan(); return; }
+  if (key === 'arrowup')    { e.preventDefault(); gridPanY += PAN_STEP; clampGridPan(); return; }
+  if (key === 'arrowdown')  { e.preventDefault(); gridPanY -= PAN_STEP; clampGridPan(); return; }
 
   for (const item of BUILD_ITEMS) {
     if (key === item.key.toLowerCase()) {
@@ -1086,41 +1130,23 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
+  // Right-click: start potential pan, defer sell action to mouseup
+  if (e.button === 2) {
+    panStartX         = e.clientX;
+    panStartY         = e.clientY;
+    panStartOffX      = gridPanX;
+    panStartOffY      = gridPanY;
+    rightClickDragged = false;
+    rightClickSaved   = { mouseX, mouseY };
+    return;
+  }
+
   const { x: gx, y: gy } = outerToGridLocal(mouseX, mouseY);
   const { col, row } = grid.pixelToCell(gx, gy);
   const cell = grid.getCell(col, row);
 
   if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
     selectedTower = null;
-    return;
-  }
-
-  // Right-click: walls sell instantly; towers require a second right-click to confirm
-  if (e.button === 2) {
-    if (cell === CELL.WALL) {
-      wallFrostDirty = true;
-      gold += Math.floor(WALL_COST * 0.5);
-      grid.setCell(col, row, CELL.EMPTY);
-      towers      = towers.filter(t => t.col !== col || t.row !== row);
-      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-      rerouteActiveEnemies();
-      pendingSell = null;
-    } else if (cell === CELL.TOWER) {
-      if (pendingSell && pendingSell.col === col && pendingSell.row === row) {
-        // Confirmed — sell the tower
-        if (selectedTower && selectedTower.col === col && selectedTower.row === row) selectedTower = null;
-        const t = towers.find(t => t.col === col && t.row === row);
-        if (t) gold += t.sellValue;
-        grid.setCell(col, row, CELL.EMPTY);
-        towers      = towers.filter(t => t.col !== col || t.row !== row);
-        currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-        rerouteActiveEnemies();
-        pendingSell = null;
-      } else {
-        // First right-click — request confirmation
-        pendingSell = { col, row, timer: 90 };
-      }
-    }
     return;
   }
 
@@ -1139,6 +1165,15 @@ canvas.addEventListener('mousedown', e => {
 
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
+  // Right-click drag: enter pan mode after 4px threshold
+  if ((e.buttons & 2) && rightClickSaved && !isPanning) {
+    const dx = e.clientX - panStartX;
+    const dy = e.clientY - panStartY;
+    if (dx * dx + dy * dy > 16) {
+      isPanning = true;
+      rightClickDragged = true;
+    }
+  }
   if (isPanning) {
     gridPanX = panStartOffX + (e.clientX - panStartX) / gameScale;
     gridPanY = panStartOffY + (e.clientY - panStartY) / gameScale;
@@ -1150,6 +1185,15 @@ canvas.addEventListener('mousemove', e => {
 
 canvas.addEventListener('mouseup', e => {
   if (e.button === 1) { isPanning = false; return; }
+  if (e.button === 2) {
+    isPanning = false;
+    const dragged = rightClickDragged;
+    rightClickDragged = false;
+    const saved = rightClickSaved;
+    rightClickSaved = null;
+    if (!dragged && saved && !gameOver) handleRightClickAt(saved.mouseX, saved.mouseY);
+    return;
+  }
   if (!dragItem || gameOver) { dragItem = null; return; }
   const rect   = canvas.getBoundingClientRect();
   const mouseX = (e.clientX - rect.left - panX) / gameScale;
@@ -1160,7 +1204,11 @@ canvas.addEventListener('mouseup', e => {
   dragItem = null;
 });
 
-canvas.addEventListener('mouseleave', () => { isPanning = false; });
+canvas.addEventListener('mouseleave', () => {
+  isPanning         = false;
+  rightClickDragged = false;
+  rightClickSaved   = null;
+});
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
