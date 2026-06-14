@@ -11,7 +11,7 @@ const CELL_SIZE = 14;
 const SIDEBAR_W     = 0;
 const RIGHT_PANEL_W = 188;
 const FRAME_THICK   = 32;   // must match thick inside drawFrames()
-const GRID_LEFT     = SIDEBAR_W;
+const GRID_LEFT     = FRAME_THICK;
 const GRID_TOP      = 64;
 const GRID_BOTTOM   = GRID_TOP + ROWS * CELL_SIZE;
 
@@ -23,7 +23,7 @@ const WALL_COST = 5;
 const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 
 // Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
-const BASE_W = SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
+const BASE_W = FRAME_THICK + COLS * CELL_SIZE + RIGHT_PANEL_W;
 const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
 let gameScale     = 1;
@@ -824,7 +824,7 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 function getBuildButtons() {
   const nBtn   = BUILD_ITEMS.length;
   const panelX = FRAME_THICK + 2;
-  const panelW = COLS * CELL_SIZE - (FRAME_THICK - SIDEBAR_W) - 4;   // grid width minus left frame
+  const panelW = GRID_LEFT + COLS * CELL_SIZE - panelX - 4;
   const padX   = 8;
   const gap    = 5;
   const cardW  = Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn);
@@ -1964,7 +1964,7 @@ function drawBottomBuildBar() {
 
   const buttons     = getBuildButtons();
   const buildPanelX = FRAME_THICK + 2;
-  const buildPanelW = COLS * CELL_SIZE - (FRAME_THICK - SIDEBAR_W) - 4;
+  const buildPanelW = GRID_LEFT + COLS * CELL_SIZE - buildPanelX - 4;
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
@@ -2225,7 +2225,7 @@ function drawTowerPanel(tower) {
 
   let px = GRID_LEFT + gridPanX + tower.x * gridZoom - panelW / 2;
   let py = GRID_TOP  + gridPanY + tower.y * gridZoom - panelH - CELL_SIZE * gridZoom - 4;
-  px = Math.max(SIDEBAR_W + 4, Math.min(px, width - RIGHT_PANEL_W - panelW - 4));
+  px = Math.max(GRID_LEFT + 4, Math.min(px, width - RIGHT_PANEL_W - panelW - 4));
   py = Math.max(GRID_TOP + 4, py);
   py = Math.max(8, Math.min(py, height - panelH - 8));
 
