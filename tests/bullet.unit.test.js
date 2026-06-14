@@ -17,13 +17,13 @@ describe('Bullet', () => {
     expect(target.alive).toBe(true);
   });
 
-  it('returns kill count when hit kills target', () => {
-    const target = { x: 12, y: 0, radius: 7, hp: 20, alive: true, reached: false };
+  it('returns gold reward when hit kills target', () => {
+    const target = { x: 12, y: 0, radius: 7, hp: 20, alive: true, reached: false, reward: 8 };
     const bullet = new Bullet(0, 0, target, 35, 20);
 
     const kills = bullet.update();
 
-    expect(kills).toBe(1);
+    expect(kills).toBe(8);
     expect(target.alive).toBe(false);
     expect(target.hp).toBe(0);
   });

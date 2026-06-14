@@ -86,28 +86,33 @@ export class Grid {
 
   // BFS pathfinding — returns array of {col,row} or null if no path exists
   findPath(startCol, startRow, goalCol, goalRow) {
-    const queue = [{ col: startCol, row: startRow, path: [] }];
-    const visited = new Set();
-    visited.add(`${startCol},${startRow}`);
+    const parent = new Map();
+    const startKey = `${startCol},${startRow}`;
+    parent.set(startKey, null);
+    const queue = [{ col: startCol, row: startRow }];
 
-    const dirs = [
-      { dc: 1, dr: 0 }, { dc: -1, dr: 0 },
-      { dc: 0, dr: 1 }, { dc: 0, dr: -1 }
-    ];
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
     while (queue.length > 0) {
-      const { col, row, path } = queue.shift();
-      const newPath = [...path, { col, row }];
+      const { col, row } = queue.shift();
 
-      if (col === goalCol && row === goalRow) return newPath;
+      if (col === goalCol && row === goalRow) {
+        const path = [];
+        let key = `${col},${row}`;
+        while (key !== null) {
+          const [c, r] = key.split(',').map(Number);
+          path.push({ col: c, row: r });
+          key = parent.get(key);
+        }
+        return path.reverse();
+      }
 
-      for (const { dc, dr } of dirs) {
-        const nc = col + dc;
-        const nr = row + dr;
+      for (const [dc, dr] of dirs) {
+        const nc = col + dc, nr = row + dr;
         const key = `${nc},${nr}`;
-        if (!visited.has(key) && this.isWalkable(nc, nr)) {
-          visited.add(key);
-          queue.push({ col: nc, row: nr, path: newPath });
+        if (!parent.has(key) && this.isWalkable(nc, nr)) {
+          parent.set(key, `${col},${row}`);
+          queue.push({ col: nc, row: nr });
         }
       }
     }

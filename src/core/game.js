@@ -8,10 +8,11 @@ const COLS = 36;
 const ROWS = 22;
 const CELL_SIZE = 14;
 
-const SIDEBAR_W     = 32;
+const SIDEBAR_W     = 0;
 const RIGHT_PANEL_W = 188;
+const FRAME_THICK   = 32;   // must match thick inside drawFrames()
 const GRID_LEFT     = SIDEBAR_W;
-const GRID_TOP      = 48;
+const GRID_TOP      = 64;
 const GRID_BOTTOM   = GRID_TOP + ROWS * CELL_SIZE;
 
 const SPAWN = { col: 0,        row: 11 };
@@ -25,7 +26,15 @@ const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
 const BASE_W = SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
 const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
-let gameScale = 1;
+let gameScale     = 1;
+let panX          = 0;
+let panY          = 0;
+let gridZoom      = 1.0;
+let gridPanX      = 0;
+let gridPanY      = 0;
+let isPanning     = false;
+let panStartX     = 0, panStartY     = 0;
+let panStartOffX  = 0, panStartOffY  = 0;
 
 const BUILD_ITEMS = [
   { id: 'wall', label: 'Shield Wall', key: '1', color: '#6644aa', cost: WALL_COST, mode: CELL.WALL },
@@ -63,7 +72,6 @@ let panelSellBtn    = null;
 let restartBtn      = null;
 let toplistBtn      = null;
 let nextWaveBtn     = null;
-let activeSidebarTab = 'towers';
 let gameSpeed  = 1;
 let speedBtn   = null;
 let _frameTick = 0;
@@ -664,24 +672,30 @@ function getViewSize() {
 }
 
 function computeScale() {
-  gameScale = Math.min(
-    (window.innerWidth)  / BASE_W,
-    (window.innerHeight) / BASE_H
-  );
+  gameScale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+  clampPan();
 }
 
-function drawRoundedPath(x, y, w, h, r = 8) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+function clampPan() {
+  const scaledW = BASE_W * gameScale;
+  const scaledH = BASE_H * gameScale;
+  const vw      = window.innerWidth;
+  const vh      = window.innerHeight;
+  panX = scaledW <= vw ? (vw - scaledW) / 2 : Math.max(vw - scaledW, Math.min(0, panX));
+  panY = scaledH <= vh ? (vh - scaledH) / 2 : Math.max(vh - scaledH, Math.min(0, panY));
+}
+
+function clampGridPan() {
+  gridPanX = Math.max(-(gridZoom - 1) * COLS * CELL_SIZE, Math.min(0, gridPanX));
+  gridPanY = Math.max(-(gridZoom - 1) * ROWS * CELL_SIZE, Math.min(0, gridPanY));
+}
+
+// Convert outer-game coords (post-gameScale) into grid-local coords (0-based; 0,0 = top-left of grid).
+function outerToGridLocal(ox, oy) {
+  return {
+    x: (ox - GRID_LEFT - gridPanX) / gridZoom,
+    y: (oy - GRID_TOP  - gridPanY) / gridZoom,
+  };
 }
 
 // Draws a fantasy panel: dark fill + gold border + inner line + corner gem diamonds.
@@ -692,19 +706,19 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
   ctx.shadowColor   = 'rgba(0,0,0,0.85)';
   ctx.shadowBlur    = 18;
   ctx.shadowOffsetY = 4;
-  drawRoundedPath(x, y, w, h, radius);
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, radius);
   ctx.fillStyle = fillStyle;
   ctx.fill();
   ctx.restore();
 
   // warm brown outer border (CoC style)
-  drawRoundedPath(x, y, w, h, radius);
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, radius);
   ctx.strokeStyle = `rgba(180,110,30,${borderAlpha})`;
   ctx.lineWidth   = 2;
   ctx.stroke();
 
   // highlight line (top edge — lit from above)
-  drawRoundedPath(x + 2, y + 2, w - 4, h - 4, Math.max(radius - 2, 2));
+  ctx.beginPath(); ctx.roundRect(x + 2, y + 2, w - 4, h - 4, Math.max(radius - 2, 2));
   ctx.strokeStyle = `rgba(255,200,80,${borderAlpha * 0.28})`;
   ctx.lineWidth   = 0.5;
   ctx.stroke();
@@ -723,8 +737,8 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 
 function getBuildButtons() {
   const nBtn   = BUILD_ITEMS.length;
-  const panelX = SIDEBAR_W + 2;
-  const panelW = COLS * CELL_SIZE - 4;   // grid width only, not full BASE_W
+  const panelX = FRAME_THICK + 2;
+  const panelW = COLS * CELL_SIZE - (FRAME_THICK - SIDEBAR_W) - 4;   // grid width minus left frame
   const padX   = 8;
   const gap    = 5;
   const cardW  = Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn);
@@ -862,7 +876,27 @@ function tryPlaceAt(col, row, mode, towerType) {
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
+  if (gameOver) return;
   const key = e.key.toLowerCase();
+
+  if ((e.key === ' ' || e.key === 'Enter') && (waveState === 'countdown' || waveState === 'break')) {
+    e.preventDefault();
+    startNextWave();
+    return;
+  }
+
+  if (key === 'f') {
+    gameSpeed = gameSpeed >= 2 ? 1 : 2;
+    return;
+  }
+
+  if (key === 'z') {
+    gridZoom = 1.0;
+    gridPanX = 0;
+    gridPanY = 0;
+    return;
+  }
+
   for (const item of BUILD_ITEMS) {
     if (key === item.key.toLowerCase()) {
       buildMode = item.mode;
@@ -873,9 +907,19 @@ window.addEventListener('keydown', e => {
 });
 
 canvas.addEventListener('mousedown', e => {
+  if (e.button === 1) {
+    e.preventDefault();
+    isPanning    = true;
+    panStartX    = e.clientX;
+    panStartY    = e.clientY;
+    panStartOffX = gridPanX;
+    panStartOffY = gridPanY;
+    return;
+  }
+
   const rect   = canvas.getBoundingClientRect();
-  const mouseX = (e.clientX - rect.left) / gameScale;
-  const mouseY = (e.clientY - rect.top)  / gameScale;
+  const mouseX = (e.clientX - rect.left - panX) / gameScale;
+  const mouseY = (e.clientY - rect.top  - panY) / gameScale;
 
   // Game over: only overlay buttons are interactive
   if (gameOver) {
@@ -952,7 +996,8 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  const { col, row } = grid.pixelToCell(mouseX - GRID_LEFT, mouseY - GRID_TOP);
+  const { x: gx, y: gy } = outerToGridLocal(mouseX, mouseY);
+  const { col, row } = grid.pixelToCell(gx, gy);
   const cell = grid.getCell(col, row);
 
   if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) {
@@ -966,7 +1011,13 @@ canvas.addEventListener('mousedown', e => {
       if (selectedTower && selectedTower.col === col && selectedTower.row === row) {
         selectedTower = null;
       }
-      if (cell === CELL.WALL) wallFrostDirty = true;
+      if (cell === CELL.WALL) {
+        wallFrostDirty = true;
+        gold += Math.floor(WALL_COST * 0.5);
+      } else {
+        const t = towers.find(t => t.col === col && t.row === row);
+        if (t) gold += t.sellValue;
+      }
       grid.setCell(col, row, CELL.EMPTY);
       towers      = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
@@ -990,19 +1041,54 @@ canvas.addEventListener('mousedown', e => {
 
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
-  dragX = (e.clientX - rect.left) / gameScale;
-  dragY = (e.clientY - rect.top)  / gameScale;
+  if (isPanning) {
+    gridPanX = panStartOffX + (e.clientX - panStartX) / gameScale;
+    gridPanY = panStartOffY + (e.clientY - panStartY) / gameScale;
+    clampGridPan();
+  }
+  dragX = (e.clientX - rect.left - panX) / gameScale;
+  dragY = (e.clientY - rect.top  - panY) / gameScale;
 });
 
 canvas.addEventListener('mouseup', e => {
+  if (e.button === 1) { isPanning = false; return; }
   if (!dragItem || gameOver) { dragItem = null; return; }
   const rect   = canvas.getBoundingClientRect();
-  const mouseX = (e.clientX - rect.left) / gameScale;
-  const mouseY = (e.clientY - rect.top)  / gameScale;
-  const { col, row } = grid.pixelToCell(mouseX - GRID_LEFT, mouseY - GRID_TOP);
+  const mouseX = (e.clientX - rect.left - panX) / gameScale;
+  const mouseY = (e.clientY - rect.top  - panY) / gameScale;
+  const { x: gridX, y: gridY } = outerToGridLocal(mouseX, mouseY);
+  const { col, row } = grid.pixelToCell(gridX, gridY);
   tryPlaceAt(col, row, dragItem.mode, dragItem.id);
   dragItem = null;
 });
+
+canvas.addEventListener('mouseleave', () => { isPanning = false; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect    = canvas.getBoundingClientRect();
+  const screenX = e.clientX - rect.left;
+  const screenY = e.clientY - rect.top;
+  const outerX  = (screenX - panX) / gameScale;
+  const outerY  = (screenY - panY) / gameScale;
+
+  // Only zoom when cursor is over the grid
+  const inGrid = outerX >= GRID_LEFT && outerX <= GRID_LEFT + COLS * CELL_SIZE &&
+                 outerY >= GRID_TOP  && outerY <= GRID_TOP  + ROWS * CELL_SIZE;
+  if (!inGrid) return;
+
+  const delta   = e.deltaY > 0 ? -0.15 : 0.15;
+  const newZoom = Math.max(1.0, Math.min(4.0, gridZoom + delta));
+  if (newZoom === gridZoom) return;
+
+  // Zoom centered on cursor position within grid
+  const localX = (outerX - GRID_LEFT - gridPanX) / gridZoom;
+  const localY = (outerY - GRID_TOP  - gridPanY) / gridZoom;
+  gridZoom = newZoom;
+  gridPanX = (outerX - GRID_LEFT) - localX * gridZoom;
+  gridPanY = (outerY - GRID_TOP)  - localY * gridZoom;
+  clampGridPan();
+}, { passive: false });
 
 // ── update ────────────────────────────────────────────────────────────────────
 
@@ -1042,7 +1128,7 @@ function update() {
         splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 12, maxLife: 12 });
         let splashKills = 0;
         for (const enemy of enemies) {
-          if (!enemy.alive || enemy.reached || enemy === b.target) continue;
+          if (!enemy.alive || enemy.reached) continue;
           const dx = enemy.x - ix;
           const dy = enemy.y - iy;
           if (dx * dx + dy * dy <= b.splashRadius * b.splashRadius) {
@@ -1174,7 +1260,6 @@ function update() {
   }
   if (hoardPulse > 0) hoardPulse--;
 
-  if (screenShake > 0) screenShake *= 0.82;
 }
 
 // ── draw ──────────────────────────────────────────────────────────────────────
@@ -1476,7 +1561,7 @@ function drawRightPanel() {
   }
 
   // ── WAVE PROGRESS ──────────────────────────────────────────────────────────
-  ctx.font      = 'bold 9px monospace';
+  ctx.font      = 'bold 11px monospace';
   ctx.fillStyle = '#c0a060';
   ctx.textAlign = 'left';
   ctx.fillText('WAVE', lx, ly);
@@ -1502,7 +1587,7 @@ function drawRightPanel() {
     const livesColor = lives <= 3 ? '#ff5050' : lives <= 7 ? '#ffaa50' : '#60ee80';
     const livesRatio = lives / STARTING_LIVES;
 
-    ctx.font      = 'bold 10px monospace';
+    ctx.font      = 'bold 11px monospace';
     ctx.fillStyle = '#c0a060';
     ctx.textAlign = 'left';
     ctx.fillText('DEFEND', lx, ly); ly += 14;
@@ -1520,14 +1605,14 @@ function drawRightPanel() {
     ctx.fillStyle = livesColor;
     ctx.textAlign = 'center';
     ctx.fillText(`${lives}`, px + pw / 2, ly); ly += 4;
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.6)';
-    ctx.fillText('lives remaining', px + pw / 2, ly); ly += 13;
+    ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.6)';
+    ctx.fillText('lives remaining', px + pw / 2, ly); ly += 14;
     ctx.textAlign = 'left';
 
     divider();
 
     // On-field count + slain
-    ctx.font = '10px monospace';
+    ctx.font = '11px monospace';
     const onFieldRows = [
       { label: '◈ On field', value: `${enemies.length} / ${waveTotal}`, color: '#e8a060' },
       { label: '★ Slain',    value: `${slain}`,                         color: '#f0e060' },
@@ -1553,7 +1638,7 @@ function drawRightPanel() {
     }
   } else {
     // ── BREAK / COUNTDOWN MODE: incoming + economy ───────────────────────────
-    ctx.font        = 'bold 10px monospace';
+    ctx.font        = 'bold 11px monospace';
     ctx.fillStyle   = '#f0c840';
     ctx.shadowColor = 'rgba(220,170,30,0.7)';
     ctx.shadowBlur  = 6;
@@ -1565,13 +1650,13 @@ function drawRightPanel() {
 
     if (nextIsBossWave && nextBossCfg) {
       const pulse = 0.6 + Math.sin(performance.now() * 0.004) * 0.4;
-      ctx.font        = `bold 9px monospace`;
+      ctx.font        = `bold 11px monospace`;
       ctx.fillStyle   = `rgba(255,${Math.round(80 + pulse * 60)},30,${0.7 + pulse * 0.3})`;
       ctx.shadowColor = 'rgba(255,80,20,0.8)';
       ctx.shadowBlur  = 6 + pulse * 6;
       ctx.textAlign   = 'left';
       ctx.fillText(nextBossCfg.name, lx, ly); ly += 14;
-      ctx.font      = '9px monospace';
+      ctx.font      = '11px monospace';
       ctx.fillStyle = 'rgba(200,140,80,0.75)';
       ctx.shadowBlur = 0;
       ctx.fillText('Herald squad + BOSS', lx, ly); ly += 14;
@@ -1584,13 +1669,13 @@ function drawRightPanel() {
         { label: 'Mara',   count: next.maras,    color: '#00ddcc', skip: next.maras   === 0, boss: false, flying: false },
       ];
       let bossHeaderDrawn = false;
-      ctx.font = '10px monospace';
+      ctx.font = '11px monospace';
       for (const e of entries) {
         if (e.skip) continue;
         if (e.boss && !bossHeaderDrawn) {
-          ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
-          ctx.fillText('— BOSS —', lx + 4, ly); ly += 12;
-          bossHeaderDrawn = true; ctx.font = '10px monospace';
+          ctx.font = 'bold 11px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
+          ctx.fillText('— BOSS —', lx + 4, ly); ly += 13;
+          bossHeaderDrawn = true; ctx.font = '11px monospace';
         }
         ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
         ctx.fillStyle = e.color; ctx.fill();
@@ -1606,9 +1691,9 @@ function drawRightPanel() {
     divider();
 
     // Economy section (break only)
-    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
-    ctx.fillText('ECONOMY', lx, ly); ly += 13;
-    ctx.font = '10px monospace';
+    ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
+    ctx.fillText('ECONOMY', lx, ly); ly += 14;
+    ctx.font = '11px monospace';
     const net = goldEarned - goldSpent;
     const econRows = [
       { label: '◆ Earned', value: `+${goldEarned}`,                   color: '#e8c040' },
@@ -1653,7 +1738,7 @@ function drawRightPanel() {
     const secs = waveState === 'countdown'
       ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
       : Math.ceil((BREAK_FRAMES    - waveTimer) / 60);
-    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(255,200,180,0.8)'; ctx.shadowBlur = 0;
+    ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(255,200,180,0.8)'; ctx.shadowBlur = 0;
     ctx.fillText(`auto ${secs}s`, btnX + btnW / 2, btnY + 32);
     nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
   } else {
@@ -1664,14 +1749,19 @@ function drawRightPanel() {
 }
 
 function drawTopBar() {
-  drawFantasyPanel(2, 2, BASE_W - 4, GRID_TOP - 4, 'rgba(42,22,6,0.97)');
+  // Draw panel only in the visible strip between the frame and the grid top
+  const FT  = FRAME_THICK;
+  const pw  = BASE_W - FT * 2;
+  const ph  = GRID_TOP - FT - 2;
+  if (ph < 4) return; // not enough space
+  drawFantasyPanel(FT, FT, pw, ph, 'rgba(42,22,6,0.97)');
 
-  const barH = GRID_TOP - 6;
-  const cy   = Math.round(barH / 2) + 8;
+  const barMid = FT + Math.round(ph / 2);
+  const cy     = barMid + 4;
   ctx.save();
 
   // ── LEFT: avatar circle + title ─────────────────────────────────────────────
-  const avX = 22, avY = Math.round(barH / 2) + 2, avR = 15;
+  const avX = FT + 16, avY = barMid, avR = 12;
   ctx.beginPath();
   ctx.arc(avX, avY, avR, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(80,42,10,0.95)';
@@ -1679,24 +1769,25 @@ function drawTopBar() {
   ctx.strokeStyle = 'rgba(210,148,35,0.8)';
   ctx.lineWidth   = 1.5;
   ctx.stroke();
-  ctx.font      = '14px monospace';
+  ctx.font      = '12px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f0c840';
-  ctx.fillText('⚔', avX, avY + 5);
+  ctx.fillText('⚔', avX, avY + 4);
 
-  ctx.font        = 'bold 12px monospace';
+  ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = '#f0c840';
   ctx.shadowColor = 'rgba(220,170,40,0.7)';
   ctx.shadowBlur  = 8;
   ctx.textAlign   = 'left';
-  ctx.fillText('NORTHERN SHIELD', avX + avR + 6, cy);
+  ctx.fillText('NORTHERN SHIELD', avX + avR + 5, cy);
   ctx.shadowBlur  = 0;
 
   // ── CENTER: wave label + timer ───────────────────────────────────────────────
   const midX = Math.round(BASE_W / 2);
-  const wLabel = `WAVE ${waveNumber} / ${MAX_WAVES}`;
+  const displayWave = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
+  const wLabel = `WAVE ${displayWave} / ${MAX_WAVES}`;
 
-  ctx.font        = 'bold 14px monospace';
+  ctx.font        = 'bold 13px monospace';
   ctx.fillStyle   = '#a8ecd0';
   ctx.shadowColor = 'rgba(100,220,160,0.45)';
   ctx.shadowBlur  = 6;
@@ -1710,40 +1801,41 @@ function drawTopBar() {
       : Math.ceil((BREAK_FRAMES   - waveTimer) / 60);
     const mm = String(Math.floor(tSecs / 60)).padStart(2, '0');
     const ss = String(tSecs % 60).padStart(2, '0');
-    ctx.font        = 'bold 13px monospace';
+    ctx.font        = 'bold 12px monospace';
     ctx.fillStyle   = 'rgba(245,215,105,0.95)';
     ctx.shadowColor = 'rgba(220,180,40,0.5)';
     ctx.shadowBlur  = 4;
-    ctx.fillText(`${mm}:${ss}`, midX + 42, cy);
+    ctx.fillText(`${mm}:${ss}`, midX + 40, cy);
     ctx.shadowBlur  = 0;
   } else {
     const rem = spawnQueue.length + enemies.length;
-    ctx.font      = '12px monospace';
+    ctx.font      = '11px monospace';
     ctx.fillStyle = rem > 0 ? '#e8a060' : '#60e880';
-    ctx.fillText(`◈ ${rem}/${waveTotal}`, midX + 38, cy);
+    ctx.fillText(`◈ ${rem}/${waveTotal}`, midX + 36, cy);
   }
 
   // ── RIGHT: resources ─────────────────────────────────────────────────────────
-  let rx = BASE_W - 14;
-  ctx.font      = 'bold 12px monospace';
+  let rx = BASE_W - FT - 8;
+  ctx.font      = 'bold 11px monospace';
   ctx.textAlign = 'right';
 
-  ctx.fillStyle   = '#ff9898';
-  ctx.shadowColor = 'rgba(255,80,80,0.4)';
-  ctx.shadowBlur  = 4;
+  const livesTopColor = lives <= 3 ? '#ff4040' : lives <= 7 ? '#ffaa50' : '#60ee80';
+  ctx.fillStyle   = livesTopColor;
+  ctx.shadowColor = lives <= 3 ? 'rgba(255,30,30,0.7)' : 'rgba(255,80,80,0.3)';
+  ctx.shadowBlur  = lives <= 3 ? 8 : 4;
   ctx.fillText(`♥ ${lives}`, rx, cy);
-  rx -= ctx.measureText(`♥ ${lives}`).width + 20;
+  rx -= ctx.measureText(`♥ ${lives}`).width + 18;
   ctx.shadowBlur  = 0;
 
   // ── Gold ────────────────────────────────────────────────────────────────────
   const goldStr = `◆ ${gold}`;
-  ctx.font        = 'bold 12px monospace';
+  ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = hoardPulse > 0 ? '#fff8a0' : '#e8c040';
   ctx.shadowColor = 'rgba(220,180,30,0.5)';
   ctx.shadowBlur  = hoardPulse > 0 ? 8 : 3;
   ctx.fillText(goldStr, rx, cy);
   ctx.shadowBlur  = 0;
-  rx -= ctx.measureText(goldStr).width + 20;
+  rx -= ctx.measureText(goldStr).width + 18;
 
   ctx.fillStyle = '#b0d0f0';
   ctx.fillText(`★ ${slain}`, rx, cy);
@@ -1764,8 +1856,8 @@ function drawBottomBuildBar() {
   };
 
   const buttons     = getBuildButtons();
-  const buildPanelX = SIDEBAR_W + 2;
-  const buildPanelW = COLS * CELL_SIZE - 4;  // grid width only, not full BASE_W
+  const buildPanelX = FRAME_THICK + 2;
+  const buildPanelW = COLS * CELL_SIZE - (FRAME_THICK - SIDEBAR_W) - 4;
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
@@ -1794,7 +1886,7 @@ function drawBottomBuildBar() {
       const scy = ppy + pph / 2;
       const shR = Math.min(pph * 0.40, ppw * 0.21);
       ctx.save();
-      if (!affordable) ctx.globalAlpha = 0.35;
+      if (!affordable) ctx.globalAlpha = 0.55;
       for (const ox of [-ppw * 0.21, ppw * 0.21]) {
         const sx = scx + ox, sy = scy;
         ctx.fillStyle = '#3a2410';
@@ -1822,7 +1914,7 @@ function drawBottomBuildBar() {
       ctx.restore();
     } else if (sp && sp.img && sp.img.complete && sp.img.naturalWidth > 0) {
       ctx.save();
-      if (!affordable) ctx.globalAlpha = 0.30;
+      if (!affordable) ctx.globalAlpha = 0.50;
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, ppx, ppy, ppw, pph);
       ctx.restore();
     } else {
@@ -1858,7 +1950,7 @@ function drawBottomBuildBar() {
     ctx.fillText(btn.label, btn.x + 4, infoY + 11);
 
     ctx.font      = `${labelSz}px monospace`;
-    ctx.fillStyle = !affordable ? '#302818' : isSelected ? '#e8c040' : '#907840';
+    ctx.fillStyle = !affordable ? '#e84040' : isSelected ? '#e8c040' : '#907840';
     ctx.textAlign = 'right';
     ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 11);
 
@@ -1923,7 +2015,8 @@ function drawHud() {
       ctx.fillStyle = medal;
       ctx.textAlign = 'left';
       ctx.fillText(`${i + 1}`, colX[0], row);
-      ctx.fillText(`${s.waves}`, colX[1], row);
+      const waveLabel = s.cleared ? `${s.waves} ⭐` : `${s.waves}`;
+      ctx.fillText(waveLabel, colX[1], row);
       ctx.fillText(`${s.slain}`, colX[2], row);
       ctx.textAlign = 'right';
       ctx.fillText(`+${s.goldEarned}`, colX[3], row);
@@ -2046,7 +2139,7 @@ function drawTowerPanel(tower) {
 
   // Stats
   ctx.textAlign = 'left';
-  ctx.font      = '10px monospace';
+  ctx.font      = '11px monospace';
   ctx.fillStyle = '#8aaccc';
   ctx.fillText(`DMG ${tower.damage}   RNG ${tower.range}   CD ${tower.fireRate}`, px + 10, py + 32);
 
@@ -2197,7 +2290,7 @@ function drawBossWarning() {
   ctx.shadowColor = 'rgba(255,50,20,0.95)';
   ctx.shadowBlur  = 14;
   ctx.fillText(`⚠  ${bossLabel}  ⚠`, cx, bannerY + 14);
-  ctx.font        = '9px monospace';
+  ctx.font        = '11px monospace';
   ctx.fillStyle   = 'rgba(255,180,140,0.85)';
   ctx.shadowBlur  = 6;
   ctx.fillText('BOSS APPROACHING', cx, bannerY + 27);
@@ -2266,51 +2359,23 @@ function drawWaveAnnouncement() {
   ctx.restore();
 }
 
-function drawLeftSidebar() {
-  const { height } = getViewSize();
-  drawFantasyPanel(0, GRID_TOP, SIDEBAR_W, height - GRID_TOP, 'rgba(46,24,6,0.97)');
-
-  const tabs = [
-    { id: 'towers',  symbol: '⚔',  label: 'TOWERS'  },
-    { id: 'troops',  symbol: '●',  label: 'TROOPS'  },
-    { id: 'defense', symbol: '🛡', label: 'DEFENSE' },
-    { id: 'deco',    symbol: '✦',  label: 'DECO'    },
-    { id: 'map',     symbol: '◉',  label: 'MAP'     },
-  ];
-
-  const tabH = 68, tabGap = 3;
-  tabs.forEach((tab, i) => {
-    const ty     = GRID_TOP + 10 + i * (tabH + tabGap);
-    const active = activeSidebarTab === tab.id;
-    drawFantasyPanel(4, ty, SIDEBAR_W - 8, tabH,
-      active ? 'rgba(80,42,8,0.97)' : 'rgba(22,12,3,0.88)',
-      active ? 0.88 : 0.25, 6);
-
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.font      = '18px monospace';
-    ctx.fillStyle = active ? '#f0c840' : 'rgba(160,120,50,0.55)';
-    if (active) { ctx.shadowColor = 'rgba(220,170,30,0.8)'; ctx.shadowBlur = 8; }
-    ctx.fillText(tab.symbol, SIDEBAR_W / 2, ty + 28);
-    ctx.shadowBlur = 0;
-    ctx.font      = '7px monospace';
-    ctx.fillStyle = active ? '#c0a030' : 'rgba(120,90,40,0.45)';
-    ctx.fillText(tab.label, SIDEBAR_W / 2, ty + 44);
-    ctx.restore();
-  });
-}
-
 function draw() {
   ctx.clearRect(0, 0, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
   ctx.save();
+  ctx.translate(panX, panY);
   ctx.scale(gameScale, gameScale);
   drawBackground();
 
-  // Game world — translated down by GRID_TOP so the top status bar doesn't cover the grid
+  // Game world — clipped to grid area, zoom applied here (not to frame/UI)
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
+  ctx.clip();
+  if (screenShake > 0) screenShake *= 0.82;
   const shakeX = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
   const shakeY = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
-  ctx.translate(GRID_LEFT + shakeX, GRID_TOP + shakeY);
+  ctx.translate(GRID_LEFT + gridPanX + shakeX, GRID_TOP + gridPanY + shakeY);
+  ctx.scale(gridZoom, gridZoom);
 
   const time = performance.now() * 0.001;
   grid.healthRatio = Math.max(0, lives / STARTING_LIVES);
@@ -2421,7 +2486,7 @@ function draw() {
     ctx.shadowColor = `rgba(200,160,20,${alpha * 0.9})`;
     ctx.shadowBlur  = 10;
     ctx.fillText('FORTRESS HELD', hgx, hgy);
-    ctx.font      = '9px monospace';
+    ctx.font      = '11px monospace';
     ctx.fillStyle = `rgba(200,210,255,${alpha * 0.75})`;
     ctx.shadowBlur = 4;
     ctx.fillText('FLAWLESS WAVE', hgx, hgy + 13);
@@ -2554,20 +2619,34 @@ function draw() {
 function drawDragGhost() {
   if (!dragItem) return;
 
-  const col    = Math.floor((dragX - GRID_LEFT) / CELL_SIZE);
-  const row    = Math.floor((dragY - GRID_TOP)  / CELL_SIZE);
+  // Convert outer-game cursor to grid-local coords for cell detection
+  const { x: glx, y: gly } = outerToGridLocal(dragX, dragY);
+  const col    = Math.floor(glx / CELL_SIZE);
+  const row    = Math.floor(gly / CELL_SIZE);
   const onGrid = col >= 0 && col < COLS && row >= 0 && row < ROWS;
 
   if (onGrid) {
     const cell     = grid.getCell(col, row);
-    const canPlace = cell === CELL.EMPTY && gold >= dragItem.cost && !hasEnemyInCell(col, row);
+    let canPlace   = cell === CELL.EMPTY && gold >= dragItem.cost && !hasEnemyInCell(col, row);
+    if (canPlace) {
+      grid.setCell(col, row, dragItem.mode);
+      const testPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+      grid.setCell(col, row, CELL.EMPTY);
+      if (!testPath) canPlace = false;
+    }
+    // Draw cell highlight in visual (zoomed) coordinates
+    const cellVX = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
+    const cellVY = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
+    const cellVS = CELL_SIZE * gridZoom;
     ctx.save();
-    ctx.translate(GRID_LEFT, GRID_TOP);
+    ctx.beginPath();
+    ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
+    ctx.clip();
     ctx.fillStyle   = canPlace ? 'rgba(80,220,80,0.28)' : 'rgba(220,60,60,0.28)';
-    ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    ctx.fillRect(cellVX, cellVY, cellVS, cellVS);
     ctx.strokeStyle = canPlace ? 'rgba(120,255,120,0.75)' : 'rgba(255,80,80,0.75)';
     ctx.lineWidth   = 1.5;
-    ctx.strokeRect(col * CELL_SIZE + 0.75, row * CELL_SIZE + 0.75, CELL_SIZE - 1.5, CELL_SIZE - 1.5);
+    ctx.strokeRect(cellVX + 0.75, cellVY + 0.75, cellVS - 1.5, cellVS - 1.5);
     ctx.restore();
   }
 
@@ -2600,11 +2679,11 @@ function drawDragGhost() {
   }
 
   ctx.textAlign = 'center';
-  ctx.font      = 'bold 8px monospace';
+  ctx.font      = 'bold 10px monospace';
   ctx.fillStyle = '#fff';
   ctx.fillText(dragItem.label, cx, gy + 31);
 
-  ctx.font      = '8px monospace';
+  ctx.font      = '10px monospace';
   ctx.fillStyle = gold >= dragItem.cost ? '#e8c040' : '#ff6060';
   ctx.fillText(`◆${dragItem.cost}`, cx, gy + gh - 3);
   ctx.restore();

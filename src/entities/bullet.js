@@ -37,7 +37,7 @@ export class Bullet {
 
     if (dist <= Math.max(this.speed, hitDistance)) {
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
-      this.target.hp -= this.damage;
+      this.target.hp = Math.max(0, this.target.hp - this.damage);
       if (this.source) this.source.damageDealt += actualDamage;
       this.target.hitFlash = 8;
 
@@ -78,7 +78,7 @@ export class Bullet {
     } else if (this.splashRadius > 0) {
       this._drawFireball(ctx);
     } else if (this.slowDuration > 0) {
-      this._drawCharm(ctx);
+      this._drawOrb(ctx);
     } else {
       this._drawOrb(ctx);
     }

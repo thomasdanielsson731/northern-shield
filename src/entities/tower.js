@@ -139,7 +139,12 @@ export class Tower {
   }
 
   get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.85); }
-  get sellValue()   { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * 0.5); }
+  get sellValue() {
+    const base = TOWER_DEFS[this.type]?.cost ?? 20;
+    let total = base;
+    for (let i = 1; i < this.level; i++) total += Math.floor(base * i * 0.85);
+    return Math.floor(total * 0.5);
+  }
   get maxed()       { return this.level >= MAX_LEVEL; }
 
   upgrade() {
