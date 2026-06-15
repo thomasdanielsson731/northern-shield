@@ -99,7 +99,7 @@ export class Grid {
       if (col === goalCol && row === goalRow) {
         const path = [];
         let key = `${col},${row}`;
-        while (key !== null) {
+        while (key != null) {
           const [c, r] = key.split(',').map(Number);
           path.push({ col: c, row: r });
           key = parent.get(key);
@@ -241,13 +241,14 @@ export class Grid {
       ctx.beginPath();
       ctx.arc(cx, cy, cs / 2 - 3, 0, Math.PI * 2);
       ctx.fill();
+      ctx.save();
       ctx.shadowColor = 'rgba(210,170,255,0.95)';
       ctx.shadowBlur  = 12 * pulse;
       ctx.fillStyle   = `rgba(245,225,255,${0.75 + pulse * 0.25})`;
       ctx.beginPath();
       ctx.arc(cx, cy, 1.8 + pulse * 0.9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.restore();
     }
   }
 
@@ -436,7 +437,7 @@ export class Grid {
   }
 
   _wallAdjacency(col, row) {
-    const w = (c, r) => this.getCell(c, r) === CELL.WALL;
+    const w = (c, r) => { const t = this.getCell(c, r); return t === CELL.WALL || t === CELL.TOWER; };
     return (w(col, row - 1) ? 1 : 0)   // N
          | (w(col + 1, row) ? 2 : 0)   // E
          | (w(col, row + 1) ? 4 : 0)   // S
@@ -519,8 +520,10 @@ export class Grid {
 
     ctx.restore();
 
+    ctx.save();
     ctx.strokeStyle = 'rgba(30,15,5,0.4)';
     ctx.lineWidth   = 0.5;
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
+    ctx.restore();
   }
 }

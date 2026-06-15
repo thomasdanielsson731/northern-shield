@@ -142,6 +142,7 @@ export class Enemy {
 
     // ── Damage state — desaturate sprite based on HP band ───────────────────
     const hpRatio = this.hp / this.maxHp;
+    ctx.save();
     if (hpRatio < 0.50) {
       ctx.filter = hpRatio < 0.25 ? 'grayscale(40%) brightness(0.72)' : 'grayscale(18%)';
     }
@@ -159,6 +160,7 @@ export class Enemy {
     }
 
     ctx.filter = 'none';
+    ctx.restore();
 
     // Critical HP — rapid red pulse ring (0-25%)
     if (hpRatio < 0.25 && hpRatio > 0) {
@@ -328,14 +330,18 @@ export class Enemy {
     ctx.moveTo(x + r * 0.55, y + r * 0.05);
     ctx.lineTo(x + r * 1.0, y - r * 0.18);
     ctx.stroke();
-    // Claw on right arm
-    for (const da of [-0.25, 0, 0.25]) {
+    // Rusted axe — gripped in right hand
+    ctx.save();
+    { const ahx = x + r * 0.98, ahy = y - r * 0.15;
+      ctx.strokeStyle = '#5a3818'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ahx, ahy); ctx.lineTo(ahx + r * 0.05, ahy - r * 0.60); ctx.stroke();
+      ctx.fillStyle = '#6a5840'; ctx.strokeStyle = '#483c2c'; ctx.lineWidth = 0.9;
       ctx.beginPath();
-      ctx.moveTo(x + r * 1.0, y - r * 0.18);
-      ctx.lineTo(x + r * 1.0 + Math.cos(-0.4 + da) * r * 0.28, y - r * 0.18 + Math.sin(-0.4 + da) * r * 0.28);
-      ctx.stroke();
-    }
-    ctx.lineCap = 'butt';
+      ctx.moveTo(ahx + r * 0.05, ahy - r * 0.55);
+      ctx.lineTo(ahx + r * 0.40, ahy - r * 0.72);
+      ctx.lineTo(ahx + r * 0.28, ahy - r * 0.35);
+      ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
 
     // Skull
     ctx.shadowColor = 'rgba(60,90,140,0.65)';
@@ -345,6 +351,12 @@ export class Enemy {
     ctx.arc(x, y - r * 0.52 + bob * 0.28, r * 0.56, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+    // Iron helm — dented conical cap over skull top
+    { const hY = y - r * 0.52 + bob * 0.28, hR = r * 0.58;
+      ctx.fillStyle = '#484440';
+      ctx.beginPath(); ctx.arc(x, hY, hR + 0.5, Math.PI, 0, true); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3a3634'; ctx.fillRect(x - hR, hY - 1.5, hR * 2, 2.8);
+      ctx.fillStyle = '#575250'; ctx.fillRect(x - 1.3, hY, 2.4, hR * 0.55); }
     // Jaw
     ctx.fillStyle = '#b8b0a4';
     ctx.beginPath();
@@ -362,18 +374,14 @@ export class Enemy {
     ctx.fill();
     // Eye sockets
     ctx.fillStyle = '#0a040a';
-    ctx.beginPath();
-    ctx.ellipse(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
     // Glowing pupils
     ctx.shadowColor = this.highlightColor;
     ctx.shadowBlur  = 8;
     ctx.fillStyle   = this.highlightColor;
-    ctx.beginPath();
-    ctx.arc(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2);
-    ctx.arc(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
   }
 
@@ -554,16 +562,28 @@ export class Enemy {
     ctx.shadowColor = 'rgba(140,210,255,0.95)';
     ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#80d8ff';
-    ctx.beginPath();
-    ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2);
-    ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#c8f0ff';
-    ctx.beginPath();
-    ctx.arc(x - eyeOff, eyeY, 1.2, 0, Math.PI * 2);
-    ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
+
+    // Frost crown — 3 ice crystal spikes
+    ctx.save();
+    ctx.shadowColor = 'rgba(180,240,255,0.90)';
+    ctx.shadowBlur  = 10 * pulse;
+    ctx.fillStyle   = 'rgba(210,245,255,0.68)';
+    ctx.strokeStyle = 'rgba(200,245,255,0.85)';
+    ctx.lineWidth   = 1.1;
+    for (let hi = -1; hi <= 1; hi++) {
+      const hbx = x + hi * r * 0.38, hby = y - r - 1;
+      const hLen = r * (hi === 0 ? 0.62 : 0.44);
+      ctx.beginPath();
+      ctx.moveTo(hbx - 2.5, hby); ctx.lineTo(hbx + hi * 1.5, hby - hLen); ctx.lineTo(hbx + 2.5, hby);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
 
     // Boss double-ring indicator — cold blue
     ctx.strokeStyle = 'rgba(100,180,255,0.50)';
@@ -592,6 +612,7 @@ export class Enemy {
     ctx.fill();
 
     // Rotating void aura rings — dark purple
+    ctx.save();
     for (let ring = 0; ring < 3; ring++) {
       const ringR = r * (1.5 + ring * 0.45);
       const alpha = (0.18 - ring * 0.045) * (0.55 + pulse * 0.45);
@@ -603,7 +624,7 @@ export class Enemy {
       ctx.arc(x, y, ringR, 0, Math.PI * 2);
       ctx.stroke();
     }
-    ctx.setLineDash([]);
+    ctx.restore();
 
     // Void tendrils — dim purple wisps
     for (let i = 0; i < 6; i++) {
@@ -661,6 +682,23 @@ export class Enemy {
     ctx.arc(x, y, r * 0.15, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // Nightmare crown — void spike crown at diamond apex
+    ctx.save();
+    ctx.shadowColor = '#9940ee';
+    ctx.shadowBlur  = 9 * pulse;
+    ctx.fillStyle   = 'rgba(100,20,160,0.65)';
+    ctx.strokeStyle = 'rgba(180,80,255,0.82)';
+    ctx.lineWidth   = 1.3;
+    { const crowY = y - r - 1;
+      for (let si = -2; si <= 2; si++) {
+        const sLen = r * (si % 2 === 0 ? 0.44 : 0.28);
+        const sxOff = si * r * 0.16;
+        ctx.beginPath();
+        ctx.moveTo(x + sxOff - 2, crowY); ctx.lineTo(x + sxOff * 0.5, crowY - sLen); ctx.lineTo(x + sxOff + 2, crowY);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      } }
+    ctx.restore();
 
     // Dream-rune badge — top-right of body (replaces EMP bolt)
     ctx.save();

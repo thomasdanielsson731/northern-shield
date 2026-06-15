@@ -8,22 +8,22 @@ const COLS = 36;
 const ROWS = 22;
 const CELL_SIZE = 14;
 
-const SIDEBAR_W     = 0;
-const RIGHT_PANEL_W = 188;
-const FRAME_THICK   = 32;   // must match thick inside drawFrames()
-const GRID_LEFT     = FRAME_THICK;
-const GRID_TOP      = 64;
-const GRID_BOTTOM   = GRID_TOP + ROWS * CELL_SIZE;
+const RIGHT_PANEL_W  = 188;
+const FRAME_THICK    = 32;   // must match thick inside drawFrames()
+const LEFT_SIDEBAR_W = 52;   // category tab sidebar between left frame and grid
+const GRID_LEFT      = FRAME_THICK + LEFT_SIDEBAR_W;
+const GRID_TOP       = 64;
+const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 
 const SPAWN = { col: 0,        row: 11 };
 const GOAL  = { col: COLS - 1, row: 11 };
 
 const WALL_COST = 5;
 
-const BUILD_BTN = { x: SIDEBAR_W + 8, w: 110, h: 76, gap: 6 };
+const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 76, gap: 6 };
 
 // Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
-const BASE_W = FRAME_THICK + COLS * CELL_SIZE + RIGHT_PANEL_W;
+const BASE_W = FRAME_THICK + LEFT_SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
 const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
 let gameScale     = 1;
@@ -32,6 +32,7 @@ let panY          = 0;
 let gridZoom      = 1.0;
 let gridPanX      = 0;
 let gridPanY      = 0;
+let sidebarCategory = 'warriors';  // 'walls' | 'warriors' | 'siege' | 'mystic'
 let isPanning         = false;
 let panStartX         = 0, panStartY     = 0;
 let panStartOffX      = 0, panStartOffY  = 0;
@@ -39,14 +40,18 @@ let rightClickDragged = false;
 let rightClickSaved   = null;
 
 const BUILD_ITEMS = [
-  { id: 'wall', label: 'Shield Wall', key: '1', color: '#b4d2f0', cost: WALL_COST, mode: CELL.WALL },
+  { id: 'wall', label: 'Shield Wall', key: '1', color: '#b4d2f0', cost: WALL_COST, mode: CELL.WALL, category: 'walls' },
   ...Object.values(TOWER_TYPES).map(type => ({
-    id:    type,
-    label: TOWER_DEFS[type].label,
-    key:   TOWER_DEFS[type].key,
-    color: TOWER_DEFS[type].color,
-    cost:  TOWER_DEFS[type].cost,
-    mode:  CELL.TOWER
+    id:       type,
+    label:    TOWER_DEFS[type].label,
+    key:      TOWER_DEFS[type].key,
+    color:    TOWER_DEFS[type].color,
+    cost:     TOWER_DEFS[type].cost,
+    mode:     CELL.TOWER,
+    category: (['berserk', 'valkyrie', 'military'].includes(type)) ? 'warriors'
+             : (['catapult', 'drakship', 'piltorn'].includes(type)) ? 'siege'
+             : (['blondie', 'hydda', 'isjatten'].includes(type))    ? 'mystic'
+             : 'warriors',
   }))
 ];
 
@@ -64,7 +69,7 @@ let bullets  = [];
 let gold     = STARTING_GOLD;
 let lives    = STARTING_LIVES;
 let slain    = 0;
-let buildMode         = CELL.WALL;
+let buildMode         = CELL.TOWER;
 let selectedTowerType = TOWER_TYPES.BERSERK;
 let gameOver = false;
 
@@ -98,6 +103,7 @@ let bossDefeatGold   = 0;   // gold earned from boss kill
 
 let splashRings       = [];  // catapult impact rings: { x, y, r, maxR, life, maxLife }
 let empRings          = [];  // Mara EMP rings: { x, y, r, life, maxLife }
+let novaRings         = [];  // Isjätte nova rings: { x, y, r, maxR, life, maxLife }
 let fortressHeldTimer = 0;   // countdown for FORTRESS HELD display (frames)
 let wallFrostCells    = [];  // cached cells adjacent to walls: [{ x, y, cs }]
 let wallFrostDirty    = true;
@@ -121,6 +127,10 @@ const ABILITY_LABELS = {
   military: 'RAPID',
   catapult: 'SPLASH',
   blondie:  'STUN',
+  piltorn:  'PIERCE',
+  hydda:    'HEAL',
+  isjatten: 'NOVA',
+  drakship: 'VOLLEY',
 };
 
 // ── high-score table ──────────────────────────────────────────────────────────
@@ -181,6 +191,7 @@ function restartGame() {
 
   splashRings       = [];
   empRings          = [];
+  novaRings         = [];
   fortressHeldTimer = 0;
   wallFrostCells    = [];
   wallFrostDirty    = true;
@@ -194,6 +205,7 @@ function restartGame() {
   gridPanX          = 0;
   gridPanY          = 0;
   isPanning         = false;
+  sidebarCategory   = 'warriors';
   rightClickDragged = false;
   rightClickSaved   = null;
   chainKillDone     = false;
@@ -844,14 +856,15 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
 function getBuildButtons() {
-  const nBtn   = BUILD_ITEMS.length;
-  const panelX = FRAME_THICK + 2;
-  const panelW = GRID_LEFT + COLS * CELL_SIZE - panelX - 4;
-  const padX   = 8;
-  const gap    = 5;
-  const cardW  = Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn);
-  const btnY   = GRID_BOTTOM + 9;
-  return BUILD_ITEMS.map((item, i) => ({
+  const filtered = BUILD_ITEMS.filter(item => item.category === sidebarCategory);
+  const nBtn     = filtered.length;
+  const panelX   = GRID_LEFT + 2;
+  const panelW   = COLS * CELL_SIZE - 4;
+  const padX     = 8;
+  const gap      = 5;
+  const cardW    = nBtn > 0 ? Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn) : 0;
+  const btnY     = GRID_BOTTOM + 9;
+  return filtered.map((item, i) => ({
     ...item,
     x:      panelX + padX + i * (cardW + gap),
     y:      btnY,
@@ -957,7 +970,7 @@ function tryPlaceAt(col, row, mode, towerType) {
   rerouteActiveEnemies();
   goldSpent += cost;
   gold      -= cost;
-  if (mode === CELL.WALL) wallFrostDirty = true;
+  wallFrostDirty = true;
 
   if (mode === CELL.WALL) {
     const adjTW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
@@ -1006,6 +1019,7 @@ function handleRightClickAt(mouseX, mouseY) {
       if (selectedTower && selectedTower.col === col && selectedTower.row === row) selectedTower = null;
       const t = towers.find(t => t.col === col && t.row === row);
       if (t) gold += t.sellValue;
+      wallFrostDirty = true;
       grid.setCell(col, row, CELL.EMPTY);
       towers      = towers.filter(t => t.col !== col || t.row !== row);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
@@ -1120,6 +1134,7 @@ canvas.addEventListener('mousedown', e => {
         mouseX >= panelSellBtn.x && mouseX <= panelSellBtn.x + panelSellBtn.w &&
         mouseY >= panelSellBtn.y && mouseY <= panelSellBtn.y + panelSellBtn.h) {
       gold += selectedTower.sellValue;
+      wallFrostDirty = true;
       grid.setCell(selectedTower.col, selectedTower.row, CELL.EMPTY);
       towers      = towers.filter(t => t !== selectedTower);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
@@ -1144,6 +1159,23 @@ canvas.addEventListener('mousedown', e => {
         mouseY >= nextWaveBtn.y && mouseY <= nextWaveBtn.y + nextWaveBtn.h) {
       if (waveState === 'countdown' || waveState === 'break') startNextWave();
       return;
+    }
+  }
+
+  // Left sidebar category tabs
+  if (e.button === 0) {
+    for (const tb of sidebarBtns) {
+      if (mouseX >= tb.x && mouseX <= tb.x + tb.w &&
+          mouseY >= tb.y && mouseY <= tb.y + tb.h) {
+        sidebarCategory = tb.id;
+        // Auto-select first affordable item in the new category
+        const first = BUILD_ITEMS.find(b => b.category === tb.id);
+        if (first) {
+          buildMode = first.mode;
+          if (first.mode === CELL.TOWER) selectedTowerType = first.id;
+        }
+        return;
+      }
     }
   }
 
@@ -1266,7 +1298,36 @@ function update() {
 
   updateWave();
 
-  for (const tower of towers) tower.update(enemies, bullets);
+  for (const tower of towers) {
+    const tr = tower.update(enemies, bullets);
+    if (!tr) continue;
+    if (tr.type === 'heal') {
+      if (lives < STARTING_LIVES) {
+        lives++;
+        spawnParticles(tower.x, tower.y, '#40e870', 10);
+      }
+    } else if (tr.type === 'nova') {
+      novaRings.push({ x: tr.x, y: tr.y, r: 0, maxR: tr.r, life: 26, maxLife: 26 });
+      if (tr.killed > 0) {
+        slain          += tr.killed;
+        waveSlainCount += tr.killed;
+        spawnParticles(tr.x, tr.y, '#80d8ff', tr.killed * 6);
+        for (const e of enemies) {
+          if (!e._killed) continue;
+          e._killed  = false;
+          gold       += e.reward;
+          goldEarned += e.reward;
+          if (e.isBoss) {
+            onBossKilled(e);
+          } else {
+            spawnParticles(e.x, e.y, e.highlightColor, 8);
+            spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * e.x,
+                           GRID_TOP  + gridPanY + gridZoom * e.y, e.reward);
+          }
+        }
+      }
+    }
+  }
 
 
 
@@ -1420,6 +1481,14 @@ function update() {
     if (er.life <= 0) empRings.splice(i, 1);
   }
 
+  // Update nova rings
+  for (let i = novaRings.length - 1; i >= 0; i--) {
+    const nr = novaRings[i];
+    nr.r    = nr.maxR * (1 - nr.life / nr.maxLife);
+    nr.life--;
+    if (nr.life <= 0) novaRings.splice(i, 1);
+  }
+
   updateParticles();
 
   for (let i = goldCoins.length - 1; i >= 0; i--) {
@@ -1523,20 +1592,22 @@ function drawPath() {
       const perp  = (Math.sin(seed * 6.28) * 0.5 + Math.sin(seed * 11.7) * 0.35) * cs * 0.24;
       const along = Math.sin(seed * 8.41) * cs * 0.10;
       const angle = Math.sin(seed * 4.52) * 0.28;
-      const sw    = cs * (0.20 + Math.abs(Math.sin(seed * 3.7)) * 0.10);
-      const sh    = cs * (0.11 + Math.abs(Math.sin(seed * 5.3)) * 0.05);
-      const bright = 0.46 + Math.sin(seed * 7.1) * 0.07;
+      const sw    = cs * (0.18 + Math.abs(Math.sin(seed * 3.7)) * 0.18);
+      const sh    = cs * (0.10 + Math.abs(Math.sin(seed * 5.3)) * 0.10);
+      const bright = 0.44 + Math.sin(seed * 7.1) * 0.08;
       const r = Math.round(bright * 108), g = Math.round(bright * 90), b = Math.round(bright * 62);
       const sx = bx + nx * perp + segDx * along;
       const sy = by + ny * perp + segDy * along;
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(Math.atan2(segDy, segDx) + angle);
-      ctx.fillStyle = `rgba(${r},${g},${b},0.52)`;
+      ctx.fillStyle = `rgba(${r},${g},${b},0.55)`;
       ctx.beginPath(); ctx.ellipse(0, 0, sw * 0.5, sh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = `rgba(140,115,80,${bright * 0.38})`;
-      ctx.lineWidth = 0.4;
-      ctx.beginPath(); ctx.moveTo(-sw * 0.4, -sh * 0.35); ctx.lineTo(sw * 0.4, -sh * 0.35); ctx.stroke();
+      ctx.strokeStyle = `rgba(0,0,0,${bright * 0.30})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.ellipse(0, 0, sw * 0.5, sh * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = `rgba(220,190,140,${bright * 0.28})`;
+      ctx.beginPath(); ctx.ellipse(-sw * 0.14, -sh * 0.20, sw * 0.24, sh * 0.20, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -1667,6 +1738,28 @@ function drawFrames() {
   ctx.strokeStyle = 'rgba(255,220,100,0.22)';
   ctx.lineWidth   = 0.8;
   ctx.strokeRect(thick + 1, thick + 1, W - 2 * thick - 2, H - 2 * thick - 2);
+
+  // ── Norse diamond knotwork along all four frame strips ────────────────────
+  { ctx.save();
+    const drawDiamond = (kx, ky, ks) => {
+      ctx.beginPath();
+      ctx.moveTo(kx, ky - ks); ctx.lineTo(kx + ks, ky);
+      ctx.lineTo(kx, ky + ks); ctx.lineTo(kx - ks, ky); ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(kx, ky, ks * 0.32, 0, Math.PI * 2); ctx.fill();
+    };
+    ctx.globalAlpha = 0.32;
+    ctx.strokeStyle = '#c8901a'; ctx.fillStyle = '#c8901a'; ctx.lineWidth = 0.9;
+    const kStep = 42, kSize = 5.5;
+    for (let kx = thick + kStep; kx < W - thick; kx += kStep) {
+      drawDiamond(kx, thick / 2, kSize);
+      drawDiamond(kx, H - thick / 2, kSize);
+    }
+    for (let ky = thick + kStep; ky < H - thick; ky += kStep) {
+      drawDiamond(thick / 2, ky, kSize);
+      drawDiamond(W - thick / 2, ky, kSize);
+    }
+    ctx.restore(); }
 
   // ── Corner ornament sprites ───────────────────────────────────────────────
   const spCorner = SPRITES['frameCorner'];
@@ -2029,8 +2122,8 @@ function drawBottomBuildBar() {
   };
 
   const buttons     = getBuildButtons();
-  const buildPanelX = FRAME_THICK + 2;
-  const buildPanelW = GRID_LEFT + COLS * CELL_SIZE - buildPanelX - 4;
+  const buildPanelX = GRID_LEFT + 2;
+  const buildPanelW = COLS * CELL_SIZE - 4;
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
@@ -2138,9 +2231,82 @@ function drawBottomBuildBar() {
   }
 }
 
+// ── Left category sidebar ─────────────────────────────────────────────────────
+
+const SIDEBAR_TABS = [
+  { id: 'walls',    label: 'WALLS',    icon: '🛡', color: '#b4d2f0' },
+  { id: 'warriors', label: 'WARRIORS', icon: '⚔', color: '#c87840' },
+  { id: 'siege',    label: 'SIEGE',    icon: '💣', color: '#a07030' },
+  { id: 'mystic',   label: 'MYSTIC',   icon: '✦', color: '#9050c8' },
+];
+
+let sidebarBtns = [];
+
+function drawLeftSidebar() {
+  const sx = FRAME_THICK;
+  const sw = LEFT_SIDEBAR_W;
+  const sy = GRID_TOP;
+  const sh = GRID_BOTTOM - GRID_TOP;
+  const tabH = Math.floor(sh / SIDEBAR_TABS.length);
+
+  sidebarBtns = [];
+
+  drawFantasyPanel(sx, sy, sw, sh, 'rgba(30,14,4,0.97)');
+
+  ctx.save();
+  SIDEBAR_TABS.forEach((tab, i) => {
+    const ty     = sy + i * tabH;
+    const active = sidebarCategory === tab.id;
+    const items  = BUILD_ITEMS.filter(b => b.category === tab.id);
+    const canAfford = items.some(b => gold >= b.cost);
+
+    sidebarBtns.push({ id: tab.id, x: sx, y: ty, w: sw, h: tabH });
+
+    // Tab background
+    ctx.fillStyle = active ? 'rgba(80,42,10,0.97)' : 'rgba(22,10,2,0.0)';
+    ctx.beginPath(); ctx.roundRect(sx + 2, ty + 2, sw - 4, tabH - 4, 5); ctx.fill();
+
+    // Active indicator — warm left edge bar
+    if (active) {
+      ctx.fillStyle = tab.color;
+      ctx.fillRect(sx + 2, ty + 4, 3, tabH - 8);
+    }
+
+    // Icon
+    ctx.font      = '14px monospace';
+    ctx.fillStyle = active ? tab.color : canAfford ? 'rgba(180,140,70,0.7)' : 'rgba(100,80,40,0.45)';
+    ctx.textAlign = 'center';
+    ctx.fillText(tab.icon, sx + sw / 2, ty + tabH * 0.42);
+
+    // Label (short)
+    const labelSz = sw < 56 ? 6 : 7;
+    ctx.font      = `bold ${labelSz}px monospace`;
+    ctx.fillStyle = active ? '#f0e8d0' : 'rgba(160,120,60,0.6)';
+    ctx.fillText(tab.label, sx + sw / 2, ty + tabH * 0.72);
+
+    // Item count badge
+    if (items.length > 0) {
+      ctx.font      = `${labelSz}px monospace`;
+      ctx.fillStyle = active ? 'rgba(220,180,80,0.7)' : 'rgba(130,90,40,0.4)';
+      ctx.fillText(`[${items.length}]`, sx + sw / 2, ty + tabH * 0.90);
+    }
+
+    // Divider between tabs
+    if (i < SIDEBAR_TABS.length - 1) {
+      ctx.strokeStyle = 'rgba(200,150,30,0.12)';
+      ctx.lineWidth   = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx + 6, ty + tabH); ctx.lineTo(sx + sw - 6, ty + tabH);
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
+}
+
 function drawHud() {
   drawTopBar();
   drawBottomBuildBar();
+  drawLeftSidebar();
 
   if (!gameOver) return;
 
@@ -2668,6 +2834,22 @@ function draw() {
     ctx.strokeStyle = `rgba(160,220,255,${alpha * 0.3})`;
     ctx.lineWidth   = 3;
     ctx.beginPath(); ctx.arc(er.x, er.y, er.r * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Isjätte nova rings ───────────────────────────────────────────────────────
+  for (const nr of novaRings) {
+    const alpha = (nr.life / nr.maxLife) * 0.80;
+    ctx.save();
+    ctx.shadowColor = `rgba(140,220,255,${alpha})`;
+    ctx.shadowBlur  = 6;
+    ctx.strokeStyle = `rgba(160,230,255,${alpha})`;
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.arc(nr.x, nr.y, nr.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(200,240,255,${alpha * 0.35})`;
+    ctx.lineWidth   = 5;
+    ctx.beginPath(); ctx.arc(nr.x, nr.y, nr.r * 0.6, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur  = 0;
     ctx.restore();
   }
 

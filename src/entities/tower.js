@@ -22,7 +22,11 @@ export const TOWER_TYPES = {
   VALKYRIE: 'valkyrie',
   MILITARY: 'military',
   CATAPULT: 'catapult',
-  BLONDIE:  'blondie'
+  BLONDIE:  'blondie',
+  PILTORN:  'piltorn',
+  HYDDA:    'hydda',
+  ISJATTEN: 'isjatten',
+  DRAKSHIP: 'drakship',
 };
 
 export const TOWER_DEFS = {
@@ -96,6 +100,65 @@ export const TOWER_DEFS = {
     slowDuration: 60,
     bulletShape:  'stun'
   },
+  [TOWER_TYPES.PILTORN]: {
+    label:        'Piltorn',
+    key:          '7',
+    color:        '#6890b8',
+    rangeColor:   'rgba(80,130,190,0.24)',
+    cost:         100,
+    range:        95,
+    fireRate:     6,
+    damage:       32,
+    radius:       7,
+    bulletSpeed:  15,
+    bulletShape:  'arrow',
+    fireFlashDuration: 8,
+  },
+  [TOWER_TYPES.HYDDA]: {
+    label:        'Hydda',
+    key:          '8',
+    color:        '#30b850',
+    rangeColor:   'rgba(40,180,80,0.12)',
+    cost:         125,
+    range:        0,
+    fireRate:     600,
+    damage:       0,
+    radius:       7,
+    bulletSpeed:  0,
+    fireFlashDuration: 6,
+  },
+  [TOWER_TYPES.ISJATTEN]: {
+    label:        'Isjätte',
+    key:          '9',
+    color:        '#60b8f0',
+    rangeColor:   'rgba(80,170,240,0.22)',
+    cost:         175,
+    range:        65,
+    fireRate:     120,
+    damage:       30,
+    radius:       9,
+    bulletSpeed:  0,
+    slowFactor:   0.30,
+    slowDuration: 60,
+    novaMode:     true,
+    fireFlashDuration: 20,
+  },
+  [TOWER_TYPES.DRAKSHIP]: {
+    label:        'Drakship',
+    key:          '0',
+    color:        '#b05820',
+    rangeColor:   'rgba(170,80,30,0.24)',
+    cost:         250,
+    range:        130,
+    fireRate:     78,
+    damage:       90,
+    radius:       9,
+    bulletSpeed:  3.5,
+    splashRadius: 55,
+    splashDamage: 40,
+    bulletShape:  'rock',
+    fireFlashDuration: 14,
+  },
 };
 
 const MAX_LEVEL = 10;
@@ -107,7 +170,7 @@ export class Tower {
     this.col = col;
     this.row = row;
     this.type = type;
-    this.fireCooldown  = 0;
+    this.fireCooldown  = def.fireRate ?? 0;
     this.level         = 1;
     this.damageDealt   = 0;
 
@@ -160,8 +223,40 @@ export class Tower {
   }
 
   update(enemies, bullets = null) {
-    if (this.disabledTimer > 0) { this.disabledTimer--; return 0; }
-    if (this.fireCooldown   > 0) { this.fireCooldown--;  return 0; }
+    if (this.disabledTimer > 0) { this.disabledTimer--; return null; }
+
+    // ── Hydda: passive healer — ticks down cooldown, signals heal to caller ──
+    if (this.type === TOWER_TYPES.HYDDA) {
+      if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
+      this.fireCooldown = this.fireRate;
+      this.fireFlash    = this.maxFireFlash;
+      return { type: 'heal' };
+    }
+
+    // ── Isjätte: AoE ice nova — damages & slows all enemies in range ─────────
+    if (this.type === TOWER_TYPES.ISJATTEN) {
+      if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
+      const rangeSq = this.range * this.range;
+      let killed = 0, hit = false;
+      for (const enemy of enemies) {
+        if (!enemy.alive || enemy.reached) continue;
+        const dx = enemy.x - this.x, dy = enemy.y - this.y;
+        if (dx * dx + dy * dy > rangeSq) continue;
+        hit = true;
+        enemy.hp -= this.damage;
+        if (!enemy.slowImmune) {
+          enemy.slowTimer  = this.slowDuration;
+          enemy.slowFactor = this.slowFactor;
+        }
+        if (enemy.hp <= 0) { enemy.hp = 0; enemy.alive = false; enemy._killed = true; killed++; }
+      }
+      if (!hit) { this.fireCooldown--; return null; }
+      this.fireCooldown = this.fireRate;
+      this.fireFlash    = this.maxFireFlash;
+      return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
+    }
+
+    if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
 
     let target = null, bestProgress = -1, bestDistSq = this.range * this.range;
     for (const enemy of enemies) {
@@ -175,7 +270,7 @@ export class Tower {
       }
     }
 
-    if (!target) return 0;
+    if (!target) return null;
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
@@ -224,8 +319,8 @@ export class Tower {
     ctx.fill();
     ctx.restore();
 
-    // Range ring — only when selected
-    if (this.type !== TOWER_TYPES.BERSERK && this.selected) {
+    // Range ring — only when selected and range is non-zero
+    if (this.type !== TOWER_TYPES.BERSERK && this.range > 0 && this.selected) {
       ctx.strokeStyle = this.rangeColor;
       ctx.lineWidth   = 1;
       ctx.setLineDash([3, 8]);
@@ -239,6 +334,10 @@ export class Tower {
     else if (this.type === TOWER_TYPES.VALKYRIE) this._drawValkyrie(ctx, t);
     else if (this.type === TOWER_TYPES.MILITARY) this._drawMilitary(ctx, t);
     else if (this.type === TOWER_TYPES.CATAPULT) this._drawCatapult(ctx, t);
+    else if (this.type === TOWER_TYPES.PILTORN)  this._drawPiltorn(ctx, t);
+    else if (this.type === TOWER_TYPES.HYDDA)    this._drawHydda(ctx, t);
+    else if (this.type === TOWER_TYPES.ISJATTEN) this._drawIsjatten(ctx, t);
+    else if (this.type === TOWER_TYPES.DRAKSHIP) this._drawDrakship(ctx, t);
     else                                         this._drawBlondie(ctx, t);
 
     // Attack flash
@@ -1030,5 +1129,421 @@ export class Tower {
     ctx.beginPath();
     ctx.arc(x - 1.2, hy - 0.8, 1.4, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // ── Piltorn: heavy stone watchtower with crossbow ─────────────────────────────
+  _drawPiltorn(ctx, t) {
+    const x = this.x, y = this.y;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Stone tower body
+    ctx.fillStyle = '#7a8a98';
+    ctx.fillRect(x - 7, y + 1, 14, 8);
+    ctx.fillStyle = 'rgba(200,220,240,0.18)';
+    ctx.fillRect(x - 7, y + 1, 14, 1.5);
+    // Mortar lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.20)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 7, y + 4.5); ctx.lineTo(x + 7, y + 4.5);
+    ctx.moveTo(x,     y + 1);   ctx.lineTo(x,     y + 4.5);
+    ctx.moveTo(x - 3.5, y + 4.5); ctx.lineTo(x - 3.5, y + 9);
+    ctx.moveTo(x + 3.5, y + 4.5); ctx.lineTo(x + 3.5, y + 9);
+    ctx.stroke();
+
+    // Crenellations
+    ctx.fillStyle = '#8898a8';
+    for (const mx of [-5.5, -2.0, 1.5, 4.8]) {
+      ctx.fillRect(x + mx, y - 2, 2.4, 3.5);
+    }
+    ctx.fillStyle = '#667888';
+    ctx.fillRect(x - 7, y + 1, 14, 1);
+
+    // Dark arrow slit in tower front
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x - 0.7, y + 2.5, 1.4, 4);
+
+    // Archer torso peeking from battlements
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(x - 3, y - 3.5, 6, 5.5);
+    ctx.fillStyle = 'rgba(180,150,80,0.3)';
+    ctx.fillRect(x - 3, y - 3.5, 6, 1.2);
+
+    // Head
+    ctx.fillStyle = '#c8885a';
+    ctx.beginPath();
+    ctx.arc(x, y - 7, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Iron coif
+    ctx.fillStyle = '#7888a0';
+    ctx.beginPath();
+    ctx.arc(x, y - 8.5, 3.8, 0, Math.PI, true);
+    ctx.fill();
+    ctx.fillRect(x - 3.8, y - 8.5, 7.6, 1.5);
+    ctx.fillStyle = '#687890';
+    ctx.fillRect(x - 0.7, y - 8.5, 1.4, 3.8);
+
+    // Heavy crossbow pointing toward aim
+    const perpA = this.aimAngle + Math.PI / 2;
+    const bx = x + Math.cos(this.aimAngle) * 3;
+    const by = y - 4 + Math.sin(this.aimAngle) * 3;
+    ctx.save();
+    ctx.shadowColor = 'rgba(120,160,210,0.55)';
+    ctx.shadowBlur  = 5;
+    // Stock
+    ctx.strokeStyle = '#4a2e0e';
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx - Math.cos(this.aimAngle) * 3, by - Math.sin(this.aimAngle) * 3);
+    ctx.lineTo(bx + Math.cos(this.aimAngle) * 10, by + Math.sin(this.aimAngle) * 10);
+    ctx.stroke();
+    // Prod (horizontal bow part)
+    ctx.strokeStyle = '#3a2808';
+    ctx.lineWidth   = 1.8;
+    const prodX = bx + Math.cos(this.aimAngle) * 9;
+    const prodY = by + Math.sin(this.aimAngle) * 9;
+    ctx.beginPath();
+    ctx.moveTo(prodX - Math.cos(perpA) * 6, prodY - Math.sin(perpA) * 6);
+    ctx.lineTo(prodX + Math.cos(perpA) * 6, prodY + Math.sin(perpA) * 6);
+    ctx.stroke();
+    // String
+    ctx.strokeStyle = 'rgba(210,190,150,0.75)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(prodX - Math.cos(perpA) * 6, prodY - Math.sin(perpA) * 6);
+    ctx.lineTo(bx + Math.cos(this.aimAngle) * 4, by + Math.sin(this.aimAngle) * 4);
+    ctx.lineTo(prodX + Math.cos(perpA) * 6, prodY + Math.sin(perpA) * 6);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineCap = 'butt';
+    ctx.restore();
+  }
+
+  // ── Hydda: healing hut with green rune cross ──────────────────────────────────
+  _drawHydda(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.5 + Math.sin(t * 2.2) * 0.5;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 9, 9, 2.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hut walls — weathered wood planks
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(x - 7, y + 0, 14, 9);
+    // Plank lines
+    ctx.strokeStyle = 'rgba(20,8,2,0.35)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    for (let i = 1; i < 4; i++) {
+      const yy = y + i * 2.5;
+      ctx.moveTo(x - 7, yy); ctx.lineTo(x + 7, yy);
+    }
+    ctx.stroke();
+    // Left highlight
+    ctx.fillStyle = 'rgba(200,150,80,0.18)';
+    ctx.fillRect(x - 7, y, 2, 9);
+
+    // Thatched roof (triangle shape)
+    ctx.fillStyle = '#9a8030';
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + 1);
+    ctx.lineTo(x,      y - 9);
+    ctx.lineTo(x + 10, y + 1);
+    ctx.closePath();
+    ctx.fill();
+    // Thatch lines
+    ctx.strokeStyle = 'rgba(60,40,10,0.35)';
+    ctx.lineWidth   = 0.6;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const f  = i / 5;
+      const yy = y + 1 - (y + 1 - (y - 9)) * f;
+      const hw = 10 * (1 - f);
+      ctx.moveTo(x - hw + 1, yy);
+      ctx.lineTo(x + hw - 1, yy);
+    }
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // Roof ridge
+    ctx.strokeStyle = '#7a6020';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + 1); ctx.lineTo(x + 10, y + 1);
+    ctx.stroke();
+
+    // Green rune cross on hut front — the healing symbol
+    const crossCx = x, crossCy = y + 4;
+    ctx.save();
+    ctx.shadowColor = `rgba(50,220,90,${0.55 + pulse * 0.45})`;
+    ctx.shadowBlur  = 6 + pulse * 8;
+    ctx.strokeStyle = `rgba(60,220,90,${0.75 + pulse * 0.25})`;
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.moveTo(crossCx, crossCy - 5); ctx.lineTo(crossCx, crossCy + 5);
+    ctx.moveTo(crossCx - 4, crossCy); ctx.lineTo(crossCx + 4, crossCy);
+    ctx.stroke();
+    // Rune notches on arms
+    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = `rgba(100,255,140,${0.5 + pulse * 0.4})`;
+    ctx.beginPath();
+    ctx.moveTo(crossCx - 1.5, crossCy - 3); ctx.lineTo(crossCx + 1.5, crossCy - 3);
+    ctx.moveTo(crossCx - 1.5, crossCy + 3); ctx.lineTo(crossCx + 1.5, crossCy + 3);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineCap = 'butt';
+    ctx.restore();
+
+    // Ambient healing aura when on cooldown reset
+    if (this.fireFlash > 0) {
+      const ff = this.fireFlash / this.maxFireFlash;
+      ctx.save();
+      ctx.strokeStyle = `rgba(50,220,90,${ff * 0.6})`;
+      ctx.shadowColor = 'rgba(40,200,80,0.8)';
+      ctx.shadowBlur  = 10;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, (1 - ff) * 18 + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+
+  // ── Isjätte: frost giant with AoE ice nova ────────────────────────────────────
+  _drawIsjatten(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.5 + Math.sin(t * 1.8) * 0.5;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ice crystal base pedestal
+    ctx.fillStyle = '#2a4058';
+    ctx.fillRect(x - 8, y + 5, 16, 5);
+    ctx.fillStyle = 'rgba(140,210,255,0.22)';
+    ctx.fillRect(x - 8, y + 5, 16, 1.5);
+    ctx.strokeStyle = 'rgba(100,180,240,0.30)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x - 8 + 0.5, y + 5.5, 15, 4);
+
+    // Giant icy body — large crystalline form
+    ctx.save();
+    ctx.shadowColor = `rgba(100,200,255,${0.5 + pulse * 0.5})`;
+    ctx.shadowBlur  = 8 + pulse * 6;
+
+    // Legs
+    ctx.fillStyle = '#3a6080';
+    ctx.fillRect(x - 5, y + 1, 4, 5);
+    ctx.fillRect(x + 1, y + 1, 4, 5);
+    // Ice shard knee guards
+    ctx.fillStyle = '#80c8f0';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + 2); ctx.lineTo(x - 1, y + 2); ctx.lineTo(x - 2.5, y); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + 5, y + 2); ctx.lineTo(x + 3.5, y); ctx.closePath(); ctx.fill();
+
+    // Torso — broad ice armour
+    ctx.fillStyle = '#3a6888';
+    ctx.beginPath();
+    ctx.moveTo(x - 7, y + 2);
+    ctx.lineTo(x + 7, y + 2);
+    ctx.lineTo(x + 6, y - 6);
+    ctx.lineTo(x - 6, y - 6);
+    ctx.closePath();
+    ctx.fill();
+    // Chest highlight
+    ctx.fillStyle = 'rgba(150,220,255,0.28)';
+    ctx.beginPath();
+    ctx.moveTo(x - 7, y + 2);
+    ctx.lineTo(x - 2, y + 2);
+    ctx.lineTo(x - 2, y - 6);
+    ctx.lineTo(x - 6, y - 6);
+    ctx.closePath();
+    ctx.fill();
+    // Ice shards on shoulders
+    for (const [ox, dir] of [[-6.5, -1], [6.5, 1]]) {
+      ctx.fillStyle = '#a0d8f8';
+      ctx.beginPath();
+      ctx.moveTo(x + ox, y - 5);
+      ctx.lineTo(x + ox + dir * 4, y - 9);
+      ctx.lineTo(x + ox + dir * 2, y - 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Head — angular icy helm
+    ctx.fillStyle = '#2a5070';
+    ctx.beginPath();
+    ctx.arc(x, y - 9, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Ice crown spikes
+    ctx.fillStyle = '#b0e8ff';
+    for (let i = 0; i < 3; i++) {
+      const a = -Math.PI / 2 + (i - 1) * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * 4, y - 9 + Math.sin(a) * 4);
+      ctx.lineTo(x + Math.cos(a) * 8.5, y - 9 + Math.sin(a) * 8.5);
+      ctx.lineTo(x + Math.cos(a + 0.22) * 5, y - 9 + Math.sin(a + 0.22) * 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Glowing eyes
+    ctx.fillStyle = `rgba(180,240,255,${0.7 + pulse * 0.3})`;
+    ctx.shadowColor = '#a0e8ff';
+    ctx.shadowBlur  = 8 * pulse;
+    ctx.beginPath();
+    ctx.ellipse(x - 2, y - 9.5, 1.4, 0.9, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 2, y - 9.5, 1.4, 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Orbiting ice shards (telegraphs the nova)
+    const readyRatio = 1 - this.fireCooldown / this.fireRate;
+    if (readyRatio > 0.5) {
+      const orbAlpha = (readyRatio - 0.5) * 2;
+      for (let i = 0; i < 4; i++) {
+        const a  = t * 3.5 + (i / 4) * Math.PI * 2;
+        const or = 12 + readyRatio * 8;
+        const sx = x + Math.cos(a) * or;
+        const sy = y - 2 + Math.sin(a) * or * 0.55;
+        ctx.save();
+        ctx.globalAlpha = orbAlpha * 0.8;
+        ctx.shadowColor = 'rgba(140,220,255,0.9)';
+        ctx.shadowBlur  = 6;
+        ctx.fillStyle   = '#c0ecff';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 3.5);
+        ctx.lineTo(sx + 1.5, sy);
+        ctx.lineTo(sx, sy + 3.5);
+        ctx.lineTo(sx - 1.5, sy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+  }
+
+  // ── Drakship: Norse longship with dragon-head prow ────────────────────────────
+  _drawDrakship(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.5 + Math.sin(t * 2.0) * 0.5;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 10, 12, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ship hull — rotates with aim direction
+    ctx.save();
+    ctx.translate(x, y - 1);
+    ctx.rotate(this.aimAngle + Math.PI / 2);
+
+    // Water below hull
+    ctx.fillStyle = 'rgba(30,60,120,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 10, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hull body
+    ctx.fillStyle = '#4a2808';
+    ctx.beginPath();
+    ctx.moveTo(-8, 8);
+    ctx.bezierCurveTo(-9, 4, -9, -4, -5, -12);
+    ctx.lineTo(5, -12);
+    ctx.bezierCurveTo(9, -4, 9, 4, 8, 8);
+    ctx.closePath();
+    ctx.fill();
+    // Hull planks highlight
+    ctx.fillStyle = 'rgba(180,120,50,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(-8, 8);
+    ctx.bezierCurveTo(-9, 4, -9, -4, -5, -12);
+    ctx.lineTo(-2, -12);
+    ctx.bezierCurveTo(-4, -4, -4.5, 4, -4.5, 8);
+    ctx.closePath();
+    ctx.fill();
+    // Inner deck
+    ctx.fillStyle = '#5a3012';
+    ctx.beginPath();
+    ctx.moveTo(-6, 7);
+    ctx.bezierCurveTo(-6.5, 3, -6.5, -3, -3.5, -11);
+    ctx.lineTo(3.5, -11);
+    ctx.bezierCurveTo(6.5, -3, 6.5, 3, 6, 7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dragon head prow
+    ctx.save();
+    ctx.translate(0, -13);
+    ctx.shadowColor = `rgba(220,80,20,${0.6 + pulse * 0.4})`;
+    ctx.shadowBlur  = 6 + pulse * 4;
+    // Neck
+    ctx.fillStyle = '#5a3018';
+    ctx.fillRect(-2, 0, 4, 5);
+    // Head body
+    ctx.fillStyle = '#7a3a10';
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.bezierCurveTo(-5, -3, -3, -6, 0, -7);
+    ctx.bezierCurveTo(3, -6, 5, -3, 4, 0);
+    ctx.closePath();
+    ctx.fill();
+    // Snout
+    ctx.fillStyle = '#903818';
+    ctx.beginPath();
+    ctx.moveTo(-3, -3);
+    ctx.lineTo(-7, -5);
+    ctx.lineTo(-7, -3);
+    ctx.lineTo(-3, -1.5);
+    ctx.closePath();
+    ctx.fill();
+    // Dragon eye
+    ctx.fillStyle = '#f0c030';
+    ctx.shadowColor = '#f0c030';
+    ctx.shadowBlur  = 5 * pulse;
+    ctx.beginPath();
+    ctx.ellipse(1.5, -4, 1.5, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1a0808';
+    ctx.beginPath();
+    ctx.arc(1.5, -4, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Shields along sides (3 per side)
+    for (let i = 0; i < 3; i++) {
+      const py = -6 + i * 5;
+      for (const sx of [-9, 9]) {
+        const shc = i % 2 === 0 ? '#c82020' : '#d8c060';
+        ctx.fillStyle = '#2a1408';
+        ctx.beginPath(); ctx.arc(sx, py, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = shc;
+        ctx.beginPath(); ctx.arc(sx, py, 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#888070';
+        ctx.beginPath(); ctx.arc(sx, py, 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // Sail (furled — darker roll)
+    ctx.fillStyle = '#7a5828';
+    ctx.fillRect(-3, -8, 6, 3);
+    ctx.fillStyle = '#c09040';
+    ctx.fillRect(-3, -8, 6, 1);
+
+    ctx.restore();
   }
 }
