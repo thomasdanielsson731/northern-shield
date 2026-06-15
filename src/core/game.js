@@ -55,8 +55,8 @@ const BUILD_ITEMS = [
   }))
 ];
 
-const STARTING_GOLD  = 85;
-const STARTING_LIVES = 10;
+const STARTING_GOLD  = 60;
+const STARTING_LIVES = 8;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
 grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
@@ -230,8 +230,8 @@ function restartGame() {
 // ── wave system ───────────────────────────────────────────────────────────────
 
 const COUNTDOWN_FRAMES  = 300;
-const BREAK_FRAMES      = 180;
-const SPAWN_FRAMES      = 30;
+const BREAK_FRAMES      = 150;
+const SPAWN_FRAMES      = 24;
 const EMP_RANGE         = 50;
 const EMP_DISABLE_FRAMES = 150;
 const MAX_WAVES          = 100;
@@ -256,12 +256,12 @@ let waveActiveFrames = 0;
 
 function getWaveBands(waveNum) {
   if (waveNum <= 5)   return { hp: 1.00, speed: 1.00 };
-  if (waveNum <= 10)  return { hp: 1.15, speed: 1.05 };
-  if (waveNum <= 20)  return { hp: 1.30, speed: 1.10 };
-  if (waveNum <= 35)  return { hp: 1.50, speed: 1.15 };
-  if (waveNum <= 50)  return { hp: 1.75, speed: 1.20 };
-  if (waveNum <= 75)  return { hp: 2.10, speed: 1.30 };
-  return                     { hp: 2.80, speed: 1.40 };
+  if (waveNum <= 10)  return { hp: 1.25, speed: 1.08 };
+  if (waveNum <= 20)  return { hp: 1.55, speed: 1.16 };
+  if (waveNum <= 35)  return { hp: 1.90, speed: 1.24 };
+  if (waveNum <= 50)  return { hp: 2.35, speed: 1.32 };
+  if (waveNum <= 75)  return { hp: 2.90, speed: 1.42 };
+  return                     { hp: 3.80, speed: 1.55 };
 }
 
 let particles     = [];
@@ -351,10 +351,10 @@ function drawGoldCoins() {
 function waveComposition(num) {
   const n = Math.min(num, MAX_WAVES);
   return {
-    draugr:  n <= 5 ? Math.min(3 + Math.floor(n * 1.5), 12) : Math.min(8 + Math.floor(n * 2.2), 40),
-    mylings: n >= 6  ? Math.min(Math.floor((n - 5) * 1.4), 18) : 0,
-    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 0.7), 8) : 0,
-    maras:   n >= 21 ? Math.min(Math.floor((n - 20) * 0.5), 8) : 0,
+    draugr:  n <= 5 ? Math.min(5 + Math.floor(n * 2.0), 16) : Math.min(10 + Math.floor(n * 2.8), 55),
+    mylings: n >= 6  ? Math.min(Math.floor((n - 5) * 1.8), 24) : 0,
+    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 0.9), 10) : 0,
+    maras:   n >= 21 ? Math.min(Math.floor((n - 20) * 0.7), 10) : 0,
   };
 }
 
@@ -465,7 +465,7 @@ function updateWave() {
       highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
     } else {
       // Wave-clear bonus
-      const clearBonus = (20 + waveNumber * 3) + (waveLeak ? 0 : 5);
+      const clearBonus = (10 + waveNumber * 2) + (waveLeak ? 0 : 4);
       gold       += clearBonus;
       goldEarned += clearBonus;
       if (!waveLeak) {
