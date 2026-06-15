@@ -14,8 +14,8 @@ export const ENEMY_DEFS = {
     hp:             90,
     radius:         7,
     reward:         14,
-    color:          '#5020a0',   // void purple — dream entity
-    highlightColor: '#c080ff',
+    color:          '#00ddff',   // cyan ghost — nightmare spirit
+    highlightColor: '#44eeff',
     flying:         false
   },
   draugr: {
@@ -24,8 +24,8 @@ export const ENEMY_DEFS = {
     hp:             60,
     radius:         7,
     reward:         6,
-    color:          '#506070',   // desaturated blue-grey — corrupted corpse
-    highlightColor: '#8ab0d0',
+    color:          '#6628a8',   // deep purple — undead spectral warrior
+    highlightColor: '#b070ff',
     flying:         false
   },
   myling: {
@@ -34,8 +34,8 @@ export const ENEMY_DEFS = {
     hp:             75,
     radius:         6,
     reward:         8,
-    color:          '#70c860',   // sickly yellow-green — diseased child spirit
-    highlightColor: '#c8f0a0',
+    color:          '#88bbff',   // ethereal blue — floating ghost child
+    highlightColor: '#aaddff',
     flying:         true
   },
   jotunn: {
@@ -44,8 +44,8 @@ export const ENEMY_DEFS = {
     hp:             500,
     radius:         13,
     reward:         20,
-    color:          '#2a4060',   // deep cold stone-blue — frost giant
-    highlightColor: '#c8e8ff',
+    color:          '#5c4030',   // dark stone brown — ancient Norse giant
+    highlightColor: '#ffaa30',   // molten amber core
     flying:         false
   }
 };
@@ -290,7 +290,7 @@ export class Enemy {
     ctx.fill();
 
     // Tattered robe
-    ctx.shadowColor = 'rgba(40,70,110,0.45)';
+    ctx.shadowColor = 'rgba(80,30,130,0.45)';
     ctx.shadowBlur  = 10;
     ctx.fillStyle   = '#220e22';
     ctx.beginPath();
@@ -344,7 +344,7 @@ export class Enemy {
     ctx.restore();
 
     // Skull
-    ctx.shadowColor = 'rgba(60,90,140,0.65)';
+    ctx.shadowColor = 'rgba(80,30,140,0.65)';
     ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#d0c8bc';
     ctx.beginPath();
@@ -393,11 +393,11 @@ export class Enemy {
     const rot   = t * 2.1;
     const pulse = 0.65 + Math.sin(t * 3.5) * 0.35;
 
-    // Outer glow haze — sickly green
+    // Outer glow haze — electric blue
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.8);
-    grad.addColorStop(0,   `rgba(100,200,70,${0.22 * pulse})`);
-    grad.addColorStop(0.5, `rgba(80,170,50,${0.1 * pulse})`);
-    grad.addColorStop(1,   'rgba(80,170,50,0)');
+    grad.addColorStop(0,   `rgba(80,160,255,${0.22 * pulse})`);
+    grad.addColorStop(0.5, `rgba(60,130,240,${0.1 * pulse})`);
+    grad.addColorStop(1,   'rgba(60,130,240,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(x, y, r * 2.8, 0, Math.PI * 2);
@@ -408,7 +408,7 @@ export class Enemy {
     ctx.translate(x, y);
     for (let ring = 0; ring < 2; ring++) {
       ctx.rotate(ring === 0 ? rot : -rot * 1.4);
-      ctx.strokeStyle = `rgba(${ring === 0 ? '120,200,80' : '160,220,100'},${(0.5 - ring * 0.15) * pulse})`;
+      ctx.strokeStyle = `rgba(${ring === 0 ? '120,190,255' : '160,215,255'},${(0.5 - ring * 0.15) * pulse})`;
       ctx.lineWidth   = 1.2 - ring * 0.2;
       ctx.setLineDash([3 + ring, 5 - ring]);
       ctx.beginPath();
@@ -422,7 +422,7 @@ export class Enemy {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(100,180,60,0.95)';
+    ctx.shadowColor = 'rgba(60,140,255,0.95)';
     ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = this.color;
     ctx.fillRect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
@@ -431,8 +431,8 @@ export class Enemy {
     ctx.fillRect(-r * 0.36, -r * 0.36, r * 0.72, r * 0.72);
     ctx.restore();
 
-    // Sickly pale core
-    ctx.fillStyle = '#e8f8d0';
+    // Bright ethereal core
+    ctx.fillStyle = '#e8f4ff';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.22, 0, Math.PI * 2);
     ctx.fill();
@@ -442,8 +442,8 @@ export class Enemy {
       const a  = rot * 2.5 + (i / 5) * Math.PI * 2;
       const sr = r * 1.45;
       const alpha = Math.max(0, 0.45 + Math.sin(rot * 4 + i * 1.3) * 0.35);
-      ctx.fillStyle   = `rgba(160,220,100,${alpha})`;
-      ctx.shadowColor = '#88cc40';
+      ctx.fillStyle   = `rgba(140,210,255,${alpha})`;
+      ctx.shadowColor = '#44aaff';
       ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr * 0.5, r * 0.14, 0, Math.PI * 2);
@@ -453,8 +453,8 @@ export class Enemy {
 
     // Flying badge: small upward triangle above body
     ctx.save();
-    ctx.fillStyle   = 'rgba(180,230,120,0.65)';
-    ctx.shadowColor = 'rgba(100,180,60,0.5)';
+    ctx.fillStyle   = 'rgba(160,210,255,0.65)';
+    ctx.shadowColor = 'rgba(80,160,255,0.5)';
     ctx.shadowBlur  = 5;
     const fty = y - r * 1.7;
     ctx.beginPath();
@@ -467,7 +467,7 @@ export class Enemy {
     ctx.restore();
   }
 
-  // ── Golem: frost giant — corrupted ancient stone with ice fractures ──────────
+  // ── Golem: stone giant — ancient granite with molten amber fractures ──────────
   _drawGolem(ctx) {
     const x = this.x, y = this.y;
     const r = this.radius;
@@ -480,22 +480,22 @@ export class Enemy {
     ctx.ellipse(x + 4, y + r * 0.72, r * 1.3, r * 0.38, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dark stone outer shell — cold blue-black
-    ctx.shadowColor = 'rgba(30,80,160,0.4)';
+    // Dark stone outer shell — warm brown shadow
+    ctx.shadowColor = 'rgba(80,50,20,0.4)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#06080e';
+    ctx.fillStyle   = '#0e0804';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Stone body — cold deep blue
+    // Stone body — dark warm brown
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(x, y, r - 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Stone texture bumps — dark cold tint
+    // Stone texture bumps — warm dark tint
     const bumps = [
       [-r * 0.5, -r * 0.45, r * 0.22],
       [ r * 0.48, -r * 0.38, r * 0.18],
@@ -503,28 +503,28 @@ export class Enemy {
       [ r * 0.42,  r * 0.45, r * 0.16],
       [ 0,        -r * 0.6,  r * 0.14]
     ];
-    ctx.fillStyle = 'rgba(8,12,30,0.55)';
+    ctx.fillStyle = 'rgba(20,10,4,0.55)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx, y + by, br, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = 'rgba(80,120,180,0.25)';
+    ctx.fillStyle = 'rgba(180,120,60,0.25)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx - br * 0.35, y + by - br * 0.35, br * 0.45, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Frost fracture lines — radiating ice cracks
+    // Magma fracture lines — radiating amber cracks
     ctx.save();
     for (let i = 0; i < 7; i++) {
       const angle = (i / 7) * Math.PI * 2 + 0.4;
       const len   = r * (0.48 + Math.sin(t * 1.8 + i * 1.2) * 0.14);
       const grad  = ctx.createLinearGradient(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
-      grad.addColorStop(0,   `rgba(180,230,255,${0.80 * pulse})`);
-      grad.addColorStop(0.6, `rgba(100,180,240,${0.45 * pulse})`);
-      grad.addColorStop(1,   'rgba(60,120,200,0)');
+      grad.addColorStop(0,   `rgba(255,180,60,${0.80 * pulse})`);
+      grad.addColorStop(0.6, `rgba(240,120,40,${0.45 * pulse})`);
+      grad.addColorStop(1,   'rgba(200,80,20,0)');
       ctx.strokeStyle = grad;
       ctx.lineWidth   = 1.4;
       ctx.beginPath();
@@ -536,45 +536,45 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Stone rim border — cold dark
-    ctx.strokeStyle = '#0c1020';
+    // Stone rim border — warm dark
+    ctx.strokeStyle = '#1a0e04';
     ctx.lineWidth   = 2.5;
     ctx.beginPath();
     ctx.arc(x, y, r - 1.5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Frozen core — ice blue glow
-    ctx.shadowColor = 'rgba(140,210,255,0.95)';
+    // Molten core — amber glow
+    ctx.shadowColor = 'rgba(255,160,40,0.95)';
     ctx.shadowBlur  = 20 * pulse;
     ctx.fillStyle   = this.highlightColor;
     ctx.beginPath();
     ctx.arc(x, y, r * 0.38, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#e8f4ff';
+    ctx.fillStyle = '#fff0c0';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.17, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Eyes — cold ice blue
+    // Eyes — molten amber
     const eyeY   = y - r * 0.3;
     const eyeOff = r * 0.32;
-    ctx.shadowColor = 'rgba(140,210,255,0.95)';
+    ctx.shadowColor = 'rgba(255,160,40,0.95)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#80d8ff';
+    ctx.fillStyle   = '#ffaa30';
     ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#c8f0ff';
+    ctx.fillStyle = '#ffdd88';
     ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Frost crown — 3 ice crystal spikes
+    // Amber rune crown — 3 horn/spike spires
     ctx.save();
-    ctx.shadowColor = 'rgba(180,240,255,0.90)';
+    ctx.shadowColor = 'rgba(255,180,60,0.90)';
     ctx.shadowBlur  = 10 * pulse;
-    ctx.fillStyle   = 'rgba(210,245,255,0.68)';
-    ctx.strokeStyle = 'rgba(200,245,255,0.85)';
+    ctx.fillStyle   = 'rgba(255,180,60,0.68)';
+    ctx.strokeStyle = 'rgba(255,220,100,0.85)';
     ctx.lineWidth   = 1.1;
     for (let hi = -1; hi <= 1; hi++) {
       const hbx = x + hi * r * 0.38, hby = y - r - 1;
@@ -585,38 +585,39 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Boss double-ring indicator — cold blue
-    ctx.strokeStyle = 'rgba(100,180,255,0.50)';
+    // Boss double-ring indicator — amber
+    ctx.strokeStyle = 'rgba(255,160,40,0.50)';
     ctx.lineWidth   = 1.2;
     ctx.beginPath();
     ctx.arc(x, y, r + 5, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(140,210,255,0.25)';
+    ctx.strokeStyle = 'rgba(255,200,80,0.25)';
     ctx.lineWidth   = 0.7;
     ctx.beginPath();
     ctx.arc(x, y, r + 9, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // ── Banshee: electric diamond ghost ──────────────────────────────────────────
+  // ── Banshee: oval ghost with screaming face — cyan spectre ───────────────────
   _drawBanshee(ctx) {
     const x = this.x, y = this.y;
     const r = this.radius;
     const t = performance.now() * 0.001;
     const pulse = 0.5 + Math.sin(t * 4.5) * 0.5;
+    const wail  = 0.5 + Math.sin(t * 8.0) * 0.5;
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    // Faint floating shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.20)';
     ctx.beginPath();
-    ctx.ellipse(x + 2, y + r * 0.78, r * 1.1, r * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 1, y + r * 0.9, r * 0.85, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Rotating void aura rings — dark purple
+    // Rotating cyan aura rings
     ctx.save();
     for (let ring = 0; ring < 3; ring++) {
       const ringR = r * (1.5 + ring * 0.45);
       const alpha = (0.18 - ring * 0.045) * (0.55 + pulse * 0.45);
-      ctx.strokeStyle = `rgba(140,60,220,${alpha})`;
+      ctx.strokeStyle = `rgba(0,220,255,${alpha})`;
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, ring + 3]);
       ctx.lineDashOffset = t * (ring % 2 === 0 ? 22 : -16);
@@ -626,93 +627,87 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Void tendrils — dim purple wisps
-    for (let i = 0; i < 6; i++) {
-      const a   = t * (3.5 + i * 0.6) + i * (Math.PI * 2 / 6);
-      const len = r * (0.75 + Math.sin(t * 14 + i * 2.5) * 0.45);
-      const alpha = Math.max(0, 0.22 + Math.sin(t * 16 + i) * 0.18);
-      ctx.strokeStyle = `rgba(180,80,255,${alpha})`;
-      ctx.lineWidth   = 0.9;
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(a) * r * 0.38, y + Math.sin(a) * r * 0.38);
-      const mx = x + Math.cos(a + 0.22) * len * 0.6;
-      const my = y + Math.sin(a + 0.22) * len * 0.6;
-      ctx.lineTo(mx, my);
-      ctx.lineTo(x + Math.cos(a + 0.1) * len, y + Math.sin(a + 0.1) * len);
-      ctx.stroke();
-    }
+    // Ghost body — oval head + wispy tail
+    const hy = y - r * 0.08;  // head centre
+    const bw = r * 0.80;      // half-width
+    const bh = r * 0.88;      // half-height (oval)
 
-    // Diamond body — void purple
-    ctx.shadowColor = '#8840dd';
-    ctx.shadowBlur  = 18 * pulse;
-    ctx.fillStyle   = this.color;
+    ctx.save();
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 14 * pulse;
+    // Path: upper arc + two bezier scallops for wispy tail
     ctx.beginPath();
-    ctx.moveTo(x,            y - r);
-    ctx.lineTo(x + r * 0.72, y);
-    ctx.lineTo(x,            y + r);
-    ctx.lineTo(x - r * 0.72, y);
+    ctx.arc(x, hy, bw, Math.PI, 0);                                          // top dome
+    ctx.bezierCurveTo(x + bw, hy + bh,    x + bw * 0.4, hy + bh * 1.05, x,             hy + bh * 0.75);
+    ctx.bezierCurveTo(x - bw * 0.4, hy + bh * 1.05, x - bw, hy + bh,    x - bw,        hy);
     ctx.closePath();
-    ctx.fill();
-
-    // Facet lines
-    ctx.strokeStyle = 'rgba(160,80,240,0.4)';
-    ctx.lineWidth   = 0.7;
-    ctx.beginPath();
-    ctx.moveTo(x, y - r);      ctx.lineTo(x + r * 0.72, y);
-    ctx.moveTo(x, y - r);      ctx.lineTo(x - r * 0.72, y);
-    ctx.moveTo(x, y + r * 0.1);ctx.lineTo(x + r * 0.38, y - r * 0.5);
-    ctx.moveTo(x, y + r * 0.1);ctx.lineTo(x - r * 0.38, y - r * 0.5);
-    ctx.stroke();
-
-    // Inner glow diamond
-    ctx.shadowBlur = 12 * pulse;
-    const hs = r * 0.45;
-    ctx.fillStyle = this.highlightColor;
-    ctx.beginPath();
-    ctx.moveTo(x,             y - hs);
-    ctx.lineTo(x + hs * 0.72, y);
-    ctx.lineTo(x,             y + hs);
-    ctx.lineTo(x - hs * 0.72, y);
-    ctx.closePath();
-    ctx.fill();
-
-    // Void core — pale purple, not white
-    ctx.fillStyle = '#e8d8f8';
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.15, 0, Math.PI * 2);
+    const bodyGrad = ctx.createRadialGradient(x, hy - bh * 0.2, 0, x, hy, bw * 1.5);
+    bodyGrad.addColorStop(0,   'rgba(120,250,255,0.88)');
+    bodyGrad.addColorStop(0.5, 'rgba(0,200,240,0.72)');
+    bodyGrad.addColorStop(1,   'rgba(0,150,210,0.40)');
+    ctx.fillStyle = bodyGrad;
     ctx.fill();
     ctx.shadowBlur = 0;
-
-    // Nightmare crown — void spike crown at diamond apex
-    ctx.save();
-    ctx.shadowColor = '#9940ee';
-    ctx.shadowBlur  = 9 * pulse;
-    ctx.fillStyle   = 'rgba(100,20,160,0.65)';
-    ctx.strokeStyle = 'rgba(180,80,255,0.82)';
-    ctx.lineWidth   = 1.3;
-    { const crowY = y - r - 1;
-      for (let si = -2; si <= 2; si++) {
-        const sLen = r * (si % 2 === 0 ? 0.44 : 0.28);
-        const sxOff = si * r * 0.16;
-        ctx.beginPath();
-        ctx.moveTo(x + sxOff - 2, crowY); ctx.lineTo(x + sxOff * 0.5, crowY - sLen); ctx.lineTo(x + sxOff + 2, crowY);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-      } }
     ctx.restore();
 
-    // Dream-rune badge — top-right of body (replaces EMP bolt)
-    ctx.save();
-    const bx = x + r * 0.78, by = y - r * 0.78, bs = 5.5;
-    ctx.shadowColor = '#9940ee';
-    ctx.shadowBlur  = 7;
-    ctx.fillStyle   = '#b060ff';
+    // Body outline
+    ctx.strokeStyle = `rgba(100,240,255,${0.55 + pulse * 0.25})`;
+    ctx.lineWidth   = 1.2;
     ctx.beginPath();
-    ctx.moveTo(bx + bs * 0.12,  by - bs * 0.52);
-    ctx.lineTo(bx - bs * 0.18,  by + bs * 0.05);
-    ctx.lineTo(bx + bs * 0.04,  by + bs * 0.05);
-    ctx.lineTo(bx - bs * 0.12,  by + bs * 0.52);
-    ctx.lineTo(bx + bs * 0.20,  by - bs * 0.05);
-    ctx.lineTo(bx - bs * 0.04,  by - bs * 0.05);
+    ctx.arc(x, hy, bw, Math.PI, 0);
+    ctx.bezierCurveTo(x + bw, hy + bh,    x + bw * 0.4, hy + bh * 1.05, x,             hy + bh * 0.75);
+    ctx.bezierCurveTo(x - bw * 0.4, hy + bh * 1.05, x - bw, hy + bh,    x - bw,        hy);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Screaming face
+    const faceY  = hy - r * 0.05;
+    const eyeOff = bw * 0.38;
+    const eyeW   = bw * 0.22, eyeH = bh * 0.20;
+
+    // Eye sockets — hollow dark
+    ctx.fillStyle = 'rgba(0,15,35,0.90)';
+    ctx.beginPath();
+    ctx.ellipse(x - eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye socket glow
+    ctx.strokeStyle = `rgba(0,230,255,${0.50 + pulse * 0.30})`;
+    ctx.lineWidth   = 0.8;
+    ctx.beginPath();
+    ctx.ellipse(x - eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(x + eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Screaming mouth — wide open ellipse
+    const mouthH = bh * (0.20 + wail * 0.10);
+    ctx.fillStyle = 'rgba(0,10,30,0.92)';
+    ctx.beginPath();
+    ctx.ellipse(x, faceY + bh * 0.20, bw * 0.46, mouthH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(0,200,255,${0.40 + wail * 0.35})`;
+    ctx.lineWidth   = 0.9;
+    ctx.beginPath();
+    ctx.ellipse(x, faceY + bh * 0.20, bw * 0.46, mouthH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Dream-rune badge — top-right
+    ctx.save();
+    const bdx = x + bw * 0.80, bdy = y - r * 0.75, bs = 5.5;
+    ctx.shadowColor = '#00eeff';
+    ctx.shadowBlur  = 7;
+    ctx.fillStyle   = '#44ddff';
+    ctx.beginPath();
+    ctx.moveTo(bdx + bs * 0.12,  bdy - bs * 0.52);
+    ctx.lineTo(bdx - bs * 0.18,  bdy + bs * 0.05);
+    ctx.lineTo(bdx + bs * 0.04,  bdy + bs * 0.05);
+    ctx.lineTo(bdx - bs * 0.12,  bdy + bs * 0.52);
+    ctx.lineTo(bdx + bs * 0.20,  bdy - bs * 0.05);
+    ctx.lineTo(bdx - bs * 0.04,  bdy - bs * 0.05);
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;

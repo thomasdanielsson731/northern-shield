@@ -1426,7 +1426,7 @@ function update() {
       enemy.empPulseTimer--;
     } else if (anyInRange) {
       empRings.push({ x: enemy.x, y: enemy.y, r: 0, life: 28, maxLife: 28 });
-      enemy.empPulseTimer = 50;
+      enemy.empPulseTimer = Math.round(50 * gameSpeed);
     }
   }
 
@@ -1705,7 +1705,7 @@ function drawPath() {
 function drawFrames() {
   const W = BASE_W, H = BASE_H;
 
-  const thick = 32;
+  const thick = FRAME_THICK;
 
   ctx.save();
 

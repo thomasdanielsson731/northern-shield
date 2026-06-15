@@ -105,7 +105,7 @@ export const TOWER_DEFS = {
     key:          '7',
     color:        '#6890b8',
     rangeColor:   'rgba(80,130,190,0.24)',
-    cost:         100,
+    cost:         40,
     range:        95,
     fireRate:     6,
     damage:       32,
@@ -119,7 +119,7 @@ export const TOWER_DEFS = {
     key:          '8',
     color:        '#30b850',
     rangeColor:   'rgba(40,180,80,0.12)',
-    cost:         125,
+    cost:         50,
     range:        0,
     fireRate:     600,
     damage:       0,
@@ -132,14 +132,14 @@ export const TOWER_DEFS = {
     key:          '9',
     color:        '#60b8f0',
     rangeColor:   'rgba(80,170,240,0.22)',
-    cost:         175,
+    cost:         70,
     range:        65,
     fireRate:     120,
     damage:       30,
     radius:       9,
     bulletSpeed:  0,
     slowFactor:   0.30,
-    slowDuration: 60,
+    slowDuration: 90,
     novaMode:     true,
     fireFlashDuration: 20,
   },
@@ -148,7 +148,7 @@ export const TOWER_DEFS = {
     key:          '0',
     color:        '#b05820',
     rangeColor:   'rgba(170,80,30,0.24)',
-    cost:         250,
+    cost:         95,
     range:        130,
     fireRate:     78,
     damage:       90,
@@ -170,7 +170,7 @@ export class Tower {
     this.col = col;
     this.row = row;
     this.type = type;
-    this.fireCooldown  = def.fireRate ?? 0;
+    this.fireCooldown  = 0;
     this.level         = 1;
     this.damageDealt   = 0;
 
@@ -196,6 +196,7 @@ export class Tower {
 
     this.selected      = false;
     this._applyLevel();
+    this.fireCooldown  = this.fireRate;  // start with full cooldown — no instant first shot
   }
 
   _applyLevel() {
@@ -250,7 +251,7 @@ export class Tower {
         }
         if (enemy.hp <= 0) { enemy.hp = 0; enemy.alive = false; enemy._killed = true; killed++; }
       }
-      if (!hit) { this.fireCooldown--; return null; }
+      if (!hit) return null;
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
       return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
@@ -1141,9 +1142,9 @@ export class Tower {
     ctx.fill();
 
     // Stone tower body
-    ctx.fillStyle = '#7a8a98';
+    ctx.fillStyle = '#4a3a2e';
     ctx.fillRect(x - 7, y + 1, 14, 8);
-    ctx.fillStyle = 'rgba(200,220,240,0.18)';
+    ctx.fillStyle = 'rgba(200,170,120,0.18)';
     ctx.fillRect(x - 7, y + 1, 14, 1.5);
     // Mortar lines
     ctx.strokeStyle = 'rgba(0,0,0,0.20)';
@@ -1156,11 +1157,11 @@ export class Tower {
     ctx.stroke();
 
     // Crenellations
-    ctx.fillStyle = '#8898a8';
+    ctx.fillStyle = '#5a4a3e';
     for (const mx of [-5.5, -2.0, 1.5, 4.8]) {
       ctx.fillRect(x + mx, y - 2, 2.4, 3.5);
     }
-    ctx.fillStyle = '#667888';
+    ctx.fillStyle = '#3a2a1e';
     ctx.fillRect(x - 7, y + 1, 14, 1);
 
     // Dark arrow slit in tower front
@@ -1192,7 +1193,7 @@ export class Tower {
     const bx = x + Math.cos(this.aimAngle) * 3;
     const by = y - 4 + Math.sin(this.aimAngle) * 3;
     ctx.save();
-    ctx.shadowColor = 'rgba(120,160,210,0.55)';
+    ctx.shadowColor = 'rgba(150,100,50,0.55)';
     ctx.shadowBlur  = 5;
     // Stock
     ctx.strokeStyle = '#4a2e0e';
@@ -1250,8 +1251,13 @@ export class Tower {
     ctx.fillStyle = 'rgba(200,150,80,0.18)';
     ctx.fillRect(x - 7, y, 2, 9);
 
+    // Hut wall outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth   = 0.8;
+    ctx.strokeRect(x - 7, y + 0, 14, 9);
+
     // Thatched roof (triangle shape)
-    ctx.fillStyle = '#9a8030';
+    ctx.fillStyle = '#7a5c20';
     ctx.beginPath();
     ctx.moveTo(x - 10, y + 1);
     ctx.lineTo(x,      y - 9);
@@ -1272,11 +1278,11 @@ export class Tower {
     }
     ctx.stroke();
     ctx.lineCap = 'butt';
-    // Roof ridge
-    ctx.strokeStyle = '#7a6020';
+    // Roof peak cap (ridge at apex)
+    ctx.strokeStyle = '#5a4010';
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
-    ctx.moveTo(x - 10, y + 1); ctx.lineTo(x + 10, y + 1);
+    ctx.moveTo(x - 2, y - 8.5); ctx.lineTo(x + 2, y - 8.5);
     ctx.stroke();
 
     // Green rune cross on hut front — the healing symbol
@@ -1328,14 +1334,23 @@ export class Tower {
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ice crystal base pedestal
-    ctx.fillStyle = '#2a4058';
+    // Stone base pedestal
+    ctx.fillStyle = '#3a2a1e';
     ctx.fillRect(x - 8, y + 5, 16, 5);
-    ctx.fillStyle = 'rgba(140,210,255,0.22)';
+    ctx.fillStyle = 'rgba(180,140,80,0.22)';
     ctx.fillRect(x - 8, y + 5, 16, 1.5);
-    ctx.strokeStyle = 'rgba(100,180,240,0.30)';
+    ctx.strokeStyle = 'rgba(160,120,60,0.30)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x - 8 + 0.5, y + 5.5, 15, 4);
+    // Amber rune carved into pedestal
+    ctx.save();
+    ctx.strokeStyle = `rgba(220,160,50,${0.55 + pulse * 0.35})`;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x - 2, y + 6); ctx.lineTo(x, y + 9); ctx.lineTo(x + 2, y + 6);
+    ctx.moveTo(x, y + 7); ctx.lineTo(x, y + 9);
+    ctx.stroke();
+    ctx.restore();
 
     // Giant icy body — large crystalline form
     ctx.save();
@@ -1467,7 +1482,7 @@ export class Tower {
     ctx.closePath();
     ctx.fill();
     // Hull planks highlight
-    ctx.fillStyle = 'rgba(180,120,50,0.22)';
+    ctx.fillStyle = 'rgba(180,120,50,0.40)';
     ctx.beginPath();
     ctx.moveTo(-8, 8);
     ctx.bezierCurveTo(-9, 4, -9, -4, -5, -12);
@@ -1528,7 +1543,7 @@ export class Tower {
     for (let i = 0; i < 3; i++) {
       const py = -6 + i * 5;
       for (const sx of [-9, 9]) {
-        const shc = i % 2 === 0 ? '#c82020' : '#d8c060';
+        const shc = i % 2 === 0 ? '#a06820' : '#d8c060';
         ctx.fillStyle = '#2a1408';
         ctx.beginPath(); ctx.arc(sx, py, 3, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = shc;
