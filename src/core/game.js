@@ -1216,14 +1216,17 @@ canvas.addEventListener('mousedown', e => {
   const mouseX = (e.clientX - rect.left - panX) / gameScale;
   const mouseY = (e.clientY - rect.top  - panY) / gameScale;
 
-  // Map select phase — handle map card clicks
+  // Map select phase — first click selects, second click on same starts game
   if (gamePhase === 'mapSelect') {
     if (e.button === 0) {
       for (const btn of mapSelectBtns) {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
-          selectedMapIdx = btn.idx;
-          initGame(PRESET_MAPS[btn.idx]);
+          if (selectedMapIdx === btn.idx) {
+            initGame(PRESET_MAPS[btn.idx]);
+          } else {
+            selectedMapIdx = btn.idx;
+          }
           return;
         }
       }
@@ -1463,7 +1466,7 @@ canvas.addEventListener('wheel', e => {
 // ── update ────────────────────────────────────────────────────────────────────
 
 function update() {
-  if (gameOver) return;
+  if (gameOver || gamePhase !== 'playing') return;
 
   if (pendingSell) {
     pendingSell.timer--;
@@ -2879,12 +2882,138 @@ function drawWaveAnnouncement() {
   ctx.restore();
 }
 
+function drawMapSelect() {
+  mapSelectBtns = [];
+  const W = BASE_W, H = BASE_H;
+  const cardW = 178, cardH = 240;
+  const gap   = 20;
+  const totalW = cardW * 3 + gap * 2;
+  const startX = Math.round((W - totalW) / 2);
+  const startY = 108;
+
+  // Title
+  ctx.textAlign  = 'center';
+  ctx.font       = 'bold 24px monospace';
+  ctx.fillStyle  = '#f0e8d0';
+  ctx.shadowColor = 'rgba(220,150,30,0.75)';
+  ctx.shadowBlur  = 16;
+  ctx.fillText('NORTHERN SHIELD', W / 2, 66);
+  ctx.shadowBlur = 0;
+  ctx.font       = '12px monospace';
+  ctx.fillStyle  = '#907050';
+  ctx.fillText('— SELECT YOUR MAP —', W / 2, 88);
+
+  PRESET_MAPS.forEach((map, idx) => {
+    const cx = startX + idx * (cardW + gap);
+    const cy = startY;
+    const selected = idx === selectedMapIdx;
+
+    drawFantasyPanel(cx, cy, cardW, cardH,
+      selected ? 'rgba(44,30,12,0.98)' : 'rgba(18,10,4,0.97)',
+      selected ? 1.0 : 0.5, 10);
+
+    if (selected) {
+      ctx.beginPath();
+      ctx.roundRect(cx, cy, cardW, cardH, 10);
+      ctx.strokeStyle = 'rgba(230,165,30,0.95)';
+      ctx.lineWidth   = 2.5;
+      ctx.stroke();
+    }
+
+    // Map name
+    ctx.textAlign  = 'center';
+    ctx.font       = 'bold 13px monospace';
+    ctx.fillStyle  = selected ? '#f5e8c0' : '#b09060';
+    ctx.shadowColor = selected ? 'rgba(230,160,30,0.6)' : 'none';
+    ctx.shadowBlur  = selected ? 8 : 0;
+    ctx.fillText(map.name, cx + cardW / 2, cy + 24);
+    ctx.shadowBlur = 0;
+
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = '#806040';
+    ctx.fillText(map.desc, cx + cardW / 2, cy + 40);
+
+    // Mini grid preview
+    const pvX = cx + 12, pvY = cy + 54, pvW = cardW - 24, pvH = 108;
+    const cw  = pvW / COLS, ch = pvH / ROWS;
+
+    ctx.fillStyle   = 'rgba(8,18,8,0.85)';
+    ctx.fillRect(pvX, pvY, pvW, pvH);
+    ctx.strokeStyle = 'rgba(50,70,40,0.6)';
+    ctx.lineWidth   = 0.5;
+    ctx.strokeRect(pvX, pvY, pvW, pvH);
+
+    // Faint grid lines
+    ctx.strokeStyle = 'rgba(40,55,30,0.4)';
+    ctx.lineWidth   = 0.3;
+    for (let c = 1; c < COLS; c += 4) {
+      const lx = pvX + c * cw;
+      ctx.beginPath(); ctx.moveTo(lx, pvY); ctx.lineTo(lx, pvY + pvH); ctx.stroke();
+    }
+    for (let r = 1; r < ROWS; r += 4) {
+      const ly = pvY + r * ch;
+      ctx.beginPath(); ctx.moveTo(pvX, ly); ctx.lineTo(pvX + pvW, ly); ctx.stroke();
+    }
+
+    // Path curve from spawn to goal
+    const spx = pvX + (map.spawn.col + 0.5) * cw;
+    const spy = pvY + (map.spawn.row + 0.5) * ch;
+    const gpx = pvX + (map.goal.col  + 0.5) * cw;
+    const gpy = pvY + (map.goal.row  + 0.5) * ch;
+    const cpx = (spx + gpx) / 2;
+    const cpy = (spy + gpy) / 2 + (spy < gpy ? -18 : 18);
+
+    ctx.beginPath();
+    ctx.moveTo(spx, spy);
+    ctx.quadraticCurveTo(cpx, cpy, gpx, gpy);
+    ctx.strokeStyle = 'rgba(100,180,70,0.55)';
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+
+    // Spawn dot
+    ctx.beginPath(); ctx.arc(spx, spy, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#50c830'; ctx.fill();
+    ctx.font = '7px monospace'; ctx.fillStyle = '#50c830'; ctx.textAlign = 'center';
+    ctx.fillText('S', spx, spy + 11);
+
+    // Goal dot
+    ctx.beginPath(); ctx.arc(gpx, gpy, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#f0c030'; ctx.fill();
+    ctx.fillStyle = '#f0c030';
+    ctx.fillText('G', gpx, gpy + 11);
+
+    // PLAY button
+    const btnX = cx + 24, btnY = cy + cardH - 46, btnW = cardW - 48, btnH = 28;
+    drawFantasyPanel(btnX, btnY, btnW, btnH,
+      selected ? 'rgba(160,100,10,0.95)' : 'rgba(40,26,6,0.95)',
+      selected ? 0.95 : 0.45, 5);
+    ctx.font      = `bold 11px monospace`;
+    ctx.fillStyle = selected ? '#fff5d0' : '#706040';
+    ctx.textAlign = 'center';
+    ctx.fillText(selected ? '▶  PLAY' : 'SELECT', btnX + btnW / 2, btnY + btnH / 2 + 4);
+
+    mapSelectBtns.push({ x: cx, y: cy, w: cardW, h: cardH, idx });
+  });
+
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = '#403828';
+  ctx.textAlign = 'center';
+  ctx.fillText('Click to select  ·  click again to play', W / 2, startY + cardH + 26);
+}
+
 function draw() {
   ctx.clearRect(0, 0, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
   ctx.save();
   ctx.translate(panX, panY);
   ctx.scale(gameScale, gameScale);
   drawBackground();
+
+  if (gamePhase === 'mapSelect') {
+    drawMapSelect();
+    drawFrames();
+    ctx.restore();
+    return;
+  }
 
   // Game world — clipped to grid area, zoom applied here (not to frame/UI)
   ctx.save();
