@@ -229,6 +229,21 @@ export class Enemy {
       ctx.restore();
     }
 
+    // Slow immunity indicator — gold diamond when boss is immune
+    if (this.slowImmune) {
+      ctx.save();
+      const ix = this.x, iy = this.y - this.radius - 9;
+      const s  = 4;
+      ctx.fillStyle   = 'rgba(255,200,60,0.85)';
+      ctx.shadowColor = '#ffcc00';
+      ctx.shadowBlur  = 5;
+      ctx.beginPath();
+      ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
+      ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
     this._drawHpBar(ctx);
   }
 

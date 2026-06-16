@@ -1,4 +1,7 @@
 let _ac = null;
+let _muted = false;
+
+export function setMuted(v) { _muted = v; }
 
 function ac() {
   if (!_ac) { try { _ac = new AudioContext(); } catch {} }
@@ -6,6 +9,7 @@ function ac() {
 }
 
 function tone(freq, dur = 0.08, vol = 0.12, type = 'sine', delay = 0) {
+  if (_muted) return;
   const a = ac();
   if (!a) return;
   try {
