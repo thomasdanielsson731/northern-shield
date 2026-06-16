@@ -1,4 +1,4 @@
-let _ac = null;
+﻿let _ac = null;
 let _muted = false;
 
 export function setMuted(v) { _muted = v; }
@@ -34,11 +34,12 @@ export function ensureAudio() {
 }
 
 export function sfxShoot(shape) {
-  if (shape === 'spear')  { tone(880, 0.04, 0.07, 'sawtooth'); return; }
-  if (shape === 'rock')   { tone(100, 0.07, 0.13, 'square');   return; }
-  if (shape === 'stun')   { tone(660, 0.05, 0.08, 'sine'); tone(880, 0.05, 0.05, 'sine', 0.025); return; }
-  if (shape === 'arrow')  { tone(440, 0.03, 0.06, 'sawtooth'); return; }
-  tone(600, 0.04, 0.07, 'sine');
+  const j = () => 0.95 + Math.random() * 0.10;
+  if (shape === 'spear')  { tone(880 * j(), 0.04, 0.07, 'sawtooth'); return; }
+  if (shape === 'rock')   { tone(100 * j(), 0.07, 0.13, 'square');   return; }
+  if (shape === 'stun')   { tone(660 * j(), 0.05, 0.08, 'sine'); tone(880 * j(), 0.05, 0.05, 'sine', 0.025); return; }
+  if (shape === 'arrow')  { tone(440 * j(), 0.03, 0.06, 'sawtooth'); return; }
+  tone(600 * j(), 0.04, 0.07, 'sine');
 }
 
 export function sfxNova() {
@@ -76,8 +77,17 @@ export function sfxHeal() {
   tone(880, 0.06, 0.05, 'sine', 0.05);
 }
 
-export function sfxUpgrade() {
-  [440, 550, 660].forEach((f, i) => tone(f, 0.07, 0.09, 'sine', i * 0.06));
+export function sfxUpgrade(towerType = '') {
+  if (towerType === 'berserk') {
+    [330, 440, 550].forEach((f, i) => tone(f, 0.07, 0.11, 'sawtooth', i * 0.06));
+  } else if (towerType === 'valkyrie') {
+    [523, 659, 784].forEach((f, i) => tone(f, 0.09, 0.09, 'sine', i * 0.07));
+  } else if (towerType === 'isjatten') {
+    [440, 523, 660].forEach((f, i) => tone(f, 0.08, 0.09, 'sine', i * 0.06));
+    tone(220, 0.12, 0.06, 'sine', 0.20);
+  } else {
+    [440, 550, 660].forEach((f, i) => tone(f, 0.07, 0.09, 'sine', i * 0.06));
+  }
 }
 
 export function sfxBossPhase() {
@@ -92,4 +102,22 @@ export function sfxRune() {
 export function sfxSell() {
   tone(330, 0.04, 0.09, 'sine');
   tone(220, 0.06, 0.07, 'sine', 0.03);
+}
+
+export function sfxGameOver() {
+  [440, 330, 220, 165, 110].forEach((f, i) => tone(f, 0.22, 0.14, 'sawtooth', i * 0.18));
+  tone(80, 0.4, 0.10, 'square', 0.6);
+}
+
+export function sfxWaveStart() {
+  tone(220, 0.12, 0.10, 'sine');
+  tone(330, 0.10, 0.08, 'sine', 0.08);
+  tone(440, 0.08, 0.07, 'sawtooth', 0.15);
+}
+
+export function sfxChainKill() {
+  tone(660, 0.06, 0.14, 'sine');
+  tone(880, 0.06, 0.12, 'sine', 0.05);
+  tone(1100, 0.08, 0.11, 'sine', 0.10);
+  tone(1320, 0.10, 0.10, 'sawtooth', 0.16);
 }
