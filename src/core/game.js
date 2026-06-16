@@ -82,6 +82,7 @@ let panelSellBtn    = null;
 let restartBtn      = null;
 let toplistBtn      = null;
 let nextWaveBtn     = null;
+let runeForgeBtn    = null;
 let gameSpeed  = 1;
 let speedBtn   = null;
 let _frameTick = 0;
@@ -1336,6 +1337,15 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
+  // Rune Forge button (right panel, break/countdown)
+  if (e.button === 0 && runeForgeBtn) {
+    if (mouseX >= runeForgeBtn.x && mouseX <= runeForgeBtn.x + runeForgeBtn.w &&
+        mouseY >= runeForgeBtn.y && mouseY <= runeForgeBtn.y + runeForgeBtn.h) {
+      showRuneMenu = !showRuneMenu;
+      return;
+    }
+  }
+
   // Right-click: start potential pan, defer sell action to mouseup
   if (e.button === 2) {
     panStartX         = e.clientX;
@@ -1455,19 +1465,60 @@ function update() {
 
   updateWave();
 
+  // ── Synergy detection ─────────────────────────────────────────────────────────
+  for (const t of towers) t._synergy = null;
+  const _SYN_DIST_SQ = (4 * CELL_SIZE) * (4 * CELL_SIZE);
+  for (let _si = 0; _si < towers.length; _si++) {
+    for (let _sj = _si + 1; _sj < towers.length; _sj++) {
+      const a = towers[_si], b = towers[_sj];
+      const _dx = a.x - b.x, _dy = a.y - b.y;
+      if (_dx * _dx + _dy * _dy > _SYN_DIST_SQ) continue;
+      const types = [a.type, b.type].sort().join('+');
+      if (types === 'military+valkyrie') { a._synergy = b._synergy = 'eagleEye'; }
+      else if (types === 'berserk+catapult') { a._synergy = b._synergy = 'siegeFury'; }
+      else if (types === 'blondie+isjatten') { a._synergy = b._synergy = 'winterGrip'; }
+    }
+  }
+
+  // ── Rune damage multiplier ────────────────────────────────────────────────────
+  Tower.dmgMult = getRuneMults().dmg;
+
+  // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
+    // Apply synergy stat boosts temporarily around update()
+    const _origRange  = tower.range;
+    const _origSplash = tower.splashDamage;
+    if (tower._synergy === 'eagleEye') tower.range = Math.round(tower.range * 1.20);
+    if (tower._synergy === 'siegeFury' && tower.splashDamage)
+      tower.splashDamage = Math.round(tower.splashDamage * 1.35);
+    tower._synergyDmgBoost = (tower._synergy === 'winterGrip') ? 1.20 : 1;
+
+    // Tag new bullets with this tower as source (for kill tracking)
+    const _prevBulletLen = bullets.length;
     const tr = tower.update(enemies, bullets);
+    for (let _bi = _prevBulletLen; _bi < bullets.length; _bi++) {
+      bullets[_bi].source = tower;
+    }
+    if (bullets.length > _prevBulletLen) sfxShoot(tower.bulletShape);
+
+    // Restore temporarily modified stats
+    tower.range        = _origRange;
+    tower.splashDamage = _origSplash;
+
     if (!tr) continue;
     if (tr.type === 'heal') {
       if (lives < STARTING_LIVES) {
         lives++;
+        sfxHeal();
         spawnParticles(tower.x, tower.y, '#40e870', 10);
       }
     } else if (tr.type === 'nova') {
+      sfxNova();
       novaRings.push({ x: tr.x, y: tr.y, r: 0, maxR: tr.r, life: 26, maxLife: 26 });
       if (tr.killed > 0) {
-        slain          += tr.killed;
-        waveSlainCount += tr.killed;
+        tower.killCount    += tr.killed;
+        slain              += tr.killed;
+        waveSlainCount     += tr.killed;
         spawnParticles(tr.x, tr.y, '#80d8ff', tr.killed * 6);
         for (const e of enemies) {
           if (!e._killed) continue;
@@ -1496,6 +1547,8 @@ function update() {
       waveSlainCount++;
       gold        += reward;
       goldEarned  += reward;
+      if (b.source) b.source.killCount++;
+      sfxDie(b.target?.isBoss ?? false);
       if (b.target) {
         if (b.target.isBoss) {
           onBossKilled(b.target);
@@ -1530,6 +1583,8 @@ function update() {
               splashKills++;
               gold       += enemy.reward;
               goldEarned += enemy.reward;
+              if (b.source) b.source.killCount++;
+              sfxDie(enemy.isBoss);
               if (enemy.isBoss) {
                 onBossKilled(enemy);
               } else {
@@ -1556,6 +1611,7 @@ function update() {
     }
     if (enemies[i].reached) {
       lives--;
+      sfxLifeLost();
       waveLeak   = true;
       screenShake = 16;
       lifeLostTimer = 90;
@@ -1959,6 +2015,7 @@ function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
   const pw = BASE_W - px - 36;  // 32px frame + 4px inner gap
   speedBtn = null;
+  runeForgeBtn = null;
   if (pw < 60) return;
 
   const fullH = BASE_H - GRID_TOP - 36;  // 32px frame + 4px inner gap
@@ -2145,6 +2202,26 @@ function drawRightPanel() {
   ctx.textAlign   = 'center'; ctx.fillText(`×${gameSpeed}`, spX, spY + 4); ctx.textAlign = 'left';
   speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
 
+  // ── RUNE FORGE button (break/countdown) ────────────────────────────────────
+  let runeForgeBtn = null;
+  if (!gameOver && waveState !== 'active' && stars > 0) {
+    const rfH = 32, rfY = GRID_TOP + fullH - 102, rfX = px + 6, rfW = pw - 12;
+    const rfActive = showRuneMenu;
+    drawFantasyPanel(rfX, rfY, rfW, rfH,
+      rfActive ? 'rgba(40,20,80,0.97)' : 'rgba(20,10,40,0.95)',
+      rfActive ? 0.9 : 0.45, 5);
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 10px monospace';
+    ctx.fillStyle   = rfActive ? '#c0a0ff' : '#806090';
+    ctx.shadowColor = 'rgba(160,100,255,0.55)';
+    ctx.shadowBlur  = rfActive ? 8 : 0;
+    ctx.fillText(`✦ RUNE FORGE  (${stars})`, rfX + rfW / 2, rfY + rfH / 2 + 4);
+    ctx.shadowBlur  = 0;
+    runeForgeBtn = { x: rfX, y: rfY, w: rfW, h: rfH };
+  } else {
+    runeForgeBtn = null;
+  }
+
   // ── NEXT WAVE ──────────────────────────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
     const btnH = 44;
@@ -2262,6 +2339,16 @@ function drawTopBar() {
 
   ctx.fillStyle = '#b0d0f0';
   ctx.fillText(`★ ${slain}`, rx, cy);
+  rx -= ctx.measureText(`★ ${slain}`).width + 18;
+
+  // Stars (rune currency)
+  if (stars > 0 || waveState !== 'active') {
+    ctx.fillStyle   = '#f0d040';
+    ctx.shadowColor = 'rgba(240,200,30,0.6)';
+    ctx.shadowBlur  = 6;
+    ctx.fillText(`✦ ${stars}`, rx, cy);
+    ctx.shadowBlur  = 0;
+  }
 
   ctx.restore();
 }
@@ -2384,6 +2471,20 @@ function drawBottomBuildBar() {
       ctx.textAlign = 'center';
       ctx.fillText(abilityLabel, btn.x + btn.width / 2, infoY + 22);
     }
+
+    // Star-gate lock overlay
+    const gate = TOWER_STAR_GATES[btn.id];
+    if (gate && stars < gate) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.58)';
+      ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 6); ctx.fill();
+      ctx.font      = `bold ${labelSz + 1}px monospace`;
+      ctx.fillStyle = '#f0d040';
+      ctx.textAlign = 'center';
+      ctx.fillText(`✦${gate}`, btn.x + btn.width / 2, btn.y + btn.height / 2 + 4);
+      ctx.restore();
+    }
+
     ctx.textAlign = 'left';
   }
 }
@@ -2497,10 +2598,17 @@ function drawHud() {
     ctx.font        = '14px monospace';
     ctx.fillText(`Enemies slain: ${slain}`, cx, cy + 2);
     ctx.fillText(`Waves: ${waveNumber}   Gold earned: ${goldEarned}`, cx, cy + 22);
+    if (stars > 0) {
+      ctx.font      = '12px monospace';
+      ctx.fillStyle = '#f0d040';
+      ctx.shadowColor = 'rgba(240,190,20,0.6)'; ctx.shadowBlur = 6;
+      ctx.fillText(`✦ ${stars} stars earned this run`, cx, cy + 40);
+      ctx.shadowBlur = 0;
+    }
     if (bestWave.wave > 0) {
       ctx.font      = '11px monospace';
       ctx.fillStyle = 'rgba(160,200,255,0.80)';
-      ctx.fillText(`Best wave: W${bestWave.wave} — ${bestWave.slain} slain, +${bestWave.gold}g`, cx, cy + 42);
+      ctx.fillText(`Best wave: W${bestWave.wave} — ${bestWave.slain} slain, +${bestWave.gold}g`, cx, stars > 0 ? cy + 56 : cy + 42);
     }
     ctx.restore();
 
@@ -2536,7 +2644,7 @@ function drawHud() {
 
 function drawTowerPanel(tower) {
   const panelW = 162;
-  const panelH = 86;
+  const panelH = 100;
   const { width, height } = getViewSize();
 
   let px = GRID_LEFT + gridPanX + tower.x * gridZoom - panelW / 2;
@@ -2567,15 +2675,30 @@ function drawTowerPanel(tower) {
   ctx.fillStyle = '#8aaccc';
   ctx.fillText(`DMG ${tower.damage}   RNG ${tower.range}   CD ${tower.fireRate}`, px + 10, py + 32);
 
+  // Kill stats
+  ctx.font      = '10px monospace';
+  ctx.fillStyle = '#80aa70';
+  ctx.fillText(`☠ ${tower.killCount ?? 0} kills`, px + 10, py + 45);
+
+  // Synergy indicator
+  if (tower._synergy) {
+    const synLabels = { eagleEye: 'Eagle Eye', siegeFury: 'Siege Fury', winterGrip: "Winter's Grip" };
+    const synColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0' };
+    ctx.fillStyle = synColors[tower._synergy];
+    ctx.textAlign = 'right';
+    ctx.fillText(`⬡ ${synLabels[tower._synergy]}`, px + panelW - 10, py + 45);
+    ctx.textAlign = 'left';
+  }
+
   // Divider
   ctx.strokeStyle = 'rgba(210,160,40,0.2)';
   ctx.lineWidth   = 0.5;
   ctx.beginPath();
-  ctx.moveTo(px + 8, py + 40); ctx.lineTo(px + panelW - 8, py + 40);
+  ctx.moveTo(px + 8, py + 53); ctx.lineTo(px + panelW - 8, py + 53);
   ctx.stroke();
 
   // Upgrade button
-  const btnY  = py + 47;
+  const btnY  = py + 60;
   const btnH  = 28;
   const upgW  = 94;
   const sellW = 52;
@@ -2617,17 +2740,25 @@ function drawTowerPanel(tower) {
 }
 
 function onBossPhase75(boss) {
+  sfxBossPhase();
   screenShake = Math.max(screenShake, 8);
   spawnParticles(boss.x, boss.y, boss.highlightColor, 22);
 
   if (boss.waveNum === 10) {
-    // Draugen-Jarl: stutter + summon 4 Draugr
     boss.stunTimer = 38;
     for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.DRAUGR, waveHpScale * 0.85);
+  } else if (boss.waveNum === 75) {
+    // Fenrir: howl stun + summon Mylings
+    boss.stunTimer = 50;
+    for (let i = 0; i < 3; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
+  } else if (boss.waveNum === 100) {
+    // Surtr: fire surge — summon 4 Jötunns
+    for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.JOTUNN, waveHpScale * 0.7);
   }
 }
 
 function onBossPhase50(boss) {
+  sfxBossPhase();
   // All bosses: speed surge + particles + screen event
   boss.baseSpeed   *= 1.28;
   boss.slowTimer    = 0;
@@ -2641,6 +2772,8 @@ function onBossPhase50(boss) {
 }
 
 function onBossKilled(boss) {
+  stars         += 3;
+  sfxDie(true);
   screenShake    = Math.max(screenShake, 28);
   hoardPulse     = 22;
   bossDefeatTimer = 210;
@@ -2786,6 +2919,86 @@ function drawWaveAnnouncement() {
   }
 
   ctx.restore();
+}
+
+function drawRuneMenu() {
+  runeMenuBtns = [];
+  const W = BASE_W, H = BASE_H;
+  const menuW = 380, menuH = 320;
+  const mx = Math.round((W - menuW) / 2);
+  const my = Math.round((H - menuH) / 2);
+
+  // Dim backdrop
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawFantasyPanel(mx, my, menuW, menuH, 'rgba(10,6,22,0.98)', 0.9, 12);
+
+  ctx.textAlign = 'center';
+  ctx.font      = 'bold 14px monospace';
+  ctx.fillStyle = '#f0d040';
+  ctx.shadowColor = 'rgba(240,190,30,0.6)'; ctx.shadowBlur = 10;
+  ctx.fillText('RUNE FORGE', mx + menuW / 2, my + 26);
+  ctx.shadowBlur = 0;
+  ctx.font       = '9px monospace';
+  ctx.fillStyle  = '#705030';
+  ctx.fillText(`✦ ${stars} stars available`, mx + menuW / 2, my + 40);
+
+  const rowH = 46, rowStart = my + 54;
+
+  RUNE_DEFS.forEach((def, i) => {
+    const ry    = rowStart + i * rowH;
+    const level = runesBought[def.id] ?? 0;
+    const maxed = level >= def.maxLevel;
+    const canBuy = !maxed && stars >= def.cost;
+
+    // Row background
+    if (i % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fillRect(mx + 8, ry, menuW - 16, rowH - 2);
+    }
+
+    // Color swatch
+    ctx.fillStyle = def.color;
+    ctx.beginPath(); ctx.arc(mx + 22, ry + rowH / 2 - 1, 7, 0, Math.PI * 2); ctx.fill();
+
+    // Rune name + desc
+    ctx.textAlign = 'left';
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = maxed ? '#706040' : '#e8d0a0';
+    ctx.fillText(def.label, mx + 36, ry + 15);
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = '#606050';
+    ctx.fillText(def.desc, mx + 36, ry + 27);
+
+    // Level pips
+    for (let p = 0; p < def.maxLevel; p++) {
+      ctx.beginPath();
+      ctx.arc(mx + 36 + p * 12, ry + 38, 4, 0, Math.PI * 2);
+      ctx.fillStyle = p < level ? def.color : 'rgba(80,60,30,0.5)';
+      ctx.fill();
+    }
+
+    // Buy button
+    const bw = 64, bh = 22;
+    const bx = mx + menuW - bw - 12;
+    const by = ry + (rowH - bh) / 2 - 1;
+    drawFantasyPanel(bx, by, bw, bh,
+      canBuy ? 'rgba(20,40,10,0.97)' : 'rgba(20,12,6,0.97)',
+      canBuy ? 0.75 : 0.2, 4);
+    ctx.textAlign = 'center';
+    ctx.font      = `bold 9px monospace`;
+    ctx.fillStyle = maxed ? '#504030' : canBuy ? '#88ee60' : '#504030';
+    ctx.fillText(maxed ? 'MAXED' : `✦${def.cost}`, bx + bw / 2, by + bh / 2 + 3.5);
+
+    if (!maxed) runeMenuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: i });
+  });
+
+  // Close hint
+  ctx.textAlign = 'center';
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = '#403828';
+  ctx.fillText('Click outside to close', mx + menuW / 2, my + menuH - 10);
 }
 
 function drawMapSelect() {
@@ -3204,6 +3417,30 @@ function draw() {
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawDragGhost();
   drawPendingSell();
+
+  // Endless mode banner
+  if (endlessBanner > 0) {
+    endlessBanner--;
+    const alpha = endlessBanner > 60 ? 1 : endlessBanner / 60;
+    const cy    = BASE_H / 2 - 20;
+    ctx.save();
+    ctx.textAlign   = 'center';
+    ctx.font        = 'bold 20px monospace';
+    ctx.fillStyle   = `rgba(240,200,60,${alpha})`;
+    ctx.shadowColor = `rgba(200,140,20,${alpha * 0.8})`;
+    ctx.shadowBlur  = 18;
+    ctx.fillText('∞ ENDLESS MODE UNLOCKED', BASE_W / 2, cy);
+    ctx.font      = '13px monospace';
+    ctx.fillStyle = `rgba(200,160,100,${alpha * 0.85})`;
+    ctx.shadowBlur = 6;
+    ctx.fillText('The realm stands. The siege does not end.', BASE_W / 2, cy + 24);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // Rune menu overlay (break/countdown only)
+  if (showRuneMenu && waveState !== 'active') drawRuneMenu();
+
   drawFrames();
   ctx.restore();
 }
@@ -3228,23 +3465,26 @@ function drawMylingWarning() {
 function drawPendingSell() {
   if (!pendingSell) return;
   const { col, row } = pendingSell;
-  const vx = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
-  const vy = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
-  const vs = CELL_SIZE * gridZoom;
+  const tower = getTowerAtCell(col, row);
+  const fp  = tower?.footprint ?? { w: 1, h: 1 };
+  const vx  = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
+  const vy  = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
+  const vsW = fp.w * CELL_SIZE * gridZoom;
+  const vsH = fp.h * CELL_SIZE * gridZoom;
   const pulse = 0.55 + Math.sin(performance.now() * 0.012) * 0.35;
   ctx.save();
   ctx.beginPath();
   ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
   ctx.clip();
   ctx.fillStyle   = `rgba(220,50,30,${pulse * 0.30})`;
-  ctx.fillRect(vx, vy, vs, vs);
+  ctx.fillRect(vx, vy, vsW, vsH);
   ctx.strokeStyle = `rgba(255,80,50,${pulse})`;
   ctx.lineWidth   = 2;
-  ctx.strokeRect(vx + 1, vy + 1, vs - 2, vs - 2);
+  ctx.strokeRect(vx + 1, vy + 1, vsW - 2, vsH - 2);
   ctx.font      = 'bold 9px monospace';
   ctx.fillStyle = `rgba(255,200,180,${pulse})`;
   ctx.textAlign = 'center';
-  ctx.fillText('SELL?', vx + vs / 2, vy + vs / 2 + 3);
+  ctx.fillText('SELL?', vx + vsW / 2, vy + vsH / 2 + 3);
   ctx.restore();
 }
 
@@ -3258,27 +3498,45 @@ function drawDragGhost() {
   const onGrid = col >= 0 && col < COLS && row >= 0 && row < ROWS;
 
   if (onGrid) {
-    const cell     = grid.getCell(col, row);
-    let canPlace   = cell === CELL.EMPTY && gold >= dragItem.cost && !hasEnemyInCell(col, row);
+    // Get footprint for multi-cell towers
+    const fp = (dragItem.mode === CELL.TOWER)
+      ? (TOWER_DEFS[dragItem.id]?.footprint ?? { w: 1, h: 1 })
+      : { w: 1, h: 1 };
+
+    // Check all footprint cells
+    let canPlace = gold >= dragItem.cost;
     if (canPlace) {
-      grid.setCell(col, row, dragItem.mode);
-      const testPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-      grid.setCell(col, row, CELL.EMPTY);
-      if (!testPath) canPlace = false;
+      for (let dc = 0; dc < fp.w && canPlace; dc++) {
+        for (let dr = 0; dr < fp.h && canPlace; dr++) {
+          const tc = col + dc, tr2 = row + dr;
+          if (tc >= COLS || tr2 >= ROWS || grid.getCell(tc, tr2) !== CELL.EMPTY || hasEnemyInCell(tc, tr2))
+            canPlace = false;
+        }
+      }
     }
-    // Draw cell highlight in visual (zoomed) coordinates
-    const cellVX = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
-    const cellVY = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
-    const cellVS = CELL_SIZE * gridZoom;
+    if (canPlace) {
+      for (let dc = 0; dc < fp.w; dc++)
+        for (let dr = 0; dr < fp.h; dr++)
+          grid.setCell(col + dc, row + dr, dragItem.mode);
+      if (!grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row)) canPlace = false;
+      for (let dc = 0; dc < fp.w; dc++)
+        for (let dr = 0; dr < fp.h; dr++)
+          grid.setCell(col + dc, row + dr, CELL.EMPTY);
+    }
+
+    const fpVX = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
+    const fpVY = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
+    const fpVW = fp.w * CELL_SIZE * gridZoom;
+    const fpVH = fp.h * CELL_SIZE * gridZoom;
     ctx.save();
     ctx.beginPath();
     ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
     ctx.clip();
     ctx.fillStyle   = canPlace ? 'rgba(80,220,80,0.28)' : 'rgba(220,60,60,0.28)';
-    ctx.fillRect(cellVX, cellVY, cellVS, cellVS);
+    ctx.fillRect(fpVX, fpVY, fpVW, fpVH);
     ctx.strokeStyle = canPlace ? 'rgba(120,255,120,0.75)' : 'rgba(255,80,80,0.75)';
     ctx.lineWidth   = 1.5;
-    ctx.strokeRect(cellVX + 0.75, cellVY + 0.75, cellVS - 1.5, cellVS - 1.5);
+    ctx.strokeRect(fpVX + 0.75, fpVY + 0.75, fpVW - 1.5, fpVH - 1.5);
     ctx.restore();
   }
 
