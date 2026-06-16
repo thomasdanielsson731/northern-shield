@@ -3,6 +3,11 @@ import { Grid, CELL } from '../grid/grid.js';
 import { Enemy, ENEMY_TYPES, ENEMY_DEFS } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
+import {
+  ensureAudio, sfxShoot, sfxNova, sfxDie, sfxWaveClear,
+  sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
+  sfxRune, sfxSell
+} from './sounds.js';
 
 const COLS = 36;
 const ROWS = 22;
@@ -56,7 +61,7 @@ const BUILD_ITEMS = [
 ];
 
 const STARTING_GOLD  = 60;
-const STARTING_LIVES = 8;
+let   STARTING_LIVES = 8;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
 grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
@@ -90,9 +95,9 @@ let dragY     = 0;
 
 let goldCoins  = [];   // flying coin particles: { sx, sy, t, speed }
 let hoardPulse = 0;    // frames of bounce animation when coin lands
-// Gold hoard target = trelleborg center (GOAL cell, in screen space — never moves)
-const hoardX   = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
-const hoardY   = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
+// Gold hoard target = trelleborg center (GOAL cell, in screen space — updated by initGame)
+let hoardX   = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+let hoardY   = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
 
 let bossWarnAlpha    = 0;   // 0-1 fade for boss warning banner
 let portalFlash      = 0;   // frames of portal flash on spawn
@@ -120,6 +125,21 @@ let bestWave          = { wave: 0, slain: 0, gold: 0 };  // best single-wave rec
 let waveSlainCount    = 0;      // enemies killed this wave (for best-wave tracking)
 let waveGoldStart     = 0;      // goldEarned at wave start (delta = wave earnings)
 
+// Stars & Rune system
+let stars           = 0;        // earned in current run (flawless waves + boss kills)
+let runesBought     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
+let showRuneMenu    = false;    // shown during break/countdown phase
+let runeMenuBtns    = [];       // hit areas for rune buy buttons
+
+// Endless mode
+let endlessMode     = false;    // true once wave 100 beaten — game continues past MAX_WAVES
+let endlessBanner   = 0;        // countdown for "ENDLESS MODE" banner (frames)
+
+// Map selection
+let gamePhase       = 'mapSelect';  // 'mapSelect' | 'playing'
+let selectedMapIdx  = 0;
+let mapSelectBtns   = [];       // hit areas for map cards
+
 const ABILITY_LABELS = {
   wall:     'SLOW',
   berserk:  'MELEE',
@@ -131,6 +151,26 @@ const ABILITY_LABELS = {
   hydda:    'HEAL',
   isjatten: 'NOVA',
   drakship: 'VOLLEY',
+};
+
+const PRESET_MAPS = [
+  { name: 'MIDGARD',        desc: 'Classic fortress',   spawn: {col:0,  row:11}, goal: {col:35, row:11} },
+  { name: 'BIFROST PASS',   desc: 'Off-center lanes',   spawn: {col:0,  row:5},  goal: {col:35, row:16} },
+  { name: "NIDHOGG'S RUN",  desc: 'Corner crossing',    spawn: {col:0,  row:1},  goal: {col:35, row:20} },
+];
+
+const RUNE_DEFS = [
+  { id: 'ironEdge',    label: 'IRON EDGE',    desc: '+12% dmg all towers',   cost: 3, maxLevel: 3, color: '#e85040' },
+  { id: 'swiftStrike', label: 'SWIFT STRIKE', desc: '-10% fire cooldown',    cost: 4, maxLevel: 2, color: '#88aaee' },
+  { id: 'frostRune',   label: 'FROST RUNE',   desc: 'Wall slow +20% strength',cost:2, maxLevel: 3, color: '#60c8f0' },
+  { id: 'battleHymn',  label: 'BATTLE HYMN',  desc: 'Berserker +40% range',  cost: 3, maxLevel: 1, color: '#c87840' },
+  { id: 'valhalla',    label: 'VALHALLA',      desc: '+2 max lives',          cost: 5, maxLevel: 2, color: '#f0c840' },
+];
+
+// Stars required to unlock tower (in current run)
+const TOWER_STAR_GATES = {
+  isjatten: 3,
+  drakship: 5,
 };
 
 // ── high-score table ──────────────────────────────────────────────────────────
@@ -216,6 +256,13 @@ function restartGame() {
   waveSlainCount    = 0;
   waveGoldStart     = goldEarned;
 
+  stars             = 0;
+  runesBought       = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
+  showRuneMenu      = false;
+  endlessMode       = false;
+  endlessBanner     = 0;
+  STARTING_LIVES    = 8;
+
   waveNumber       = 0;
   waveTotal        = 0;
   waveState        = 'countdown';
@@ -227,6 +274,50 @@ function restartGame() {
   waveActiveFrames = 0;
 }
 
+// Start game with chosen preset map (called from map select screen)
+function initGame(preset) {
+  SPAWN.col = preset.spawn.col;
+  SPAWN.row = preset.spawn.row;
+  GOAL.col  = preset.goal.col;
+  GOAL.row  = preset.goal.row;
+  hoardX    = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+  hoardY    = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
+  gamePhase = 'playing';
+  restartGame();
+}
+
+// Rune multipliers derived from current runesBought state
+function getRuneMults() {
+  return {
+    dmg:        1 + (runesBought.ironEdge    ?? 0) * 0.12,
+    cdMult:     1 - (runesBought.swiftStrike ?? 0) * 0.10,
+    wallSlow:   Math.max(0.20, 0.50 - (runesBought.frostRune ?? 0) * 0.10),
+    berserkRng: 1 + (runesBought.battleHymn  ?? 0) * 0.40,
+  };
+}
+
+// Find tower that owns a given grid cell (handles multi-cell footprint)
+function getTowerAtCell(col, row) {
+  return towers.find(t => {
+    const fp = t.footprint;
+    return col >= t.col && col < t.col + fp.w && row >= t.row && row < t.row + fp.h;
+  });
+}
+
+// Remove tower: clear all footprint cells, reroute, recalc path
+function removeTower(tower) {
+  const fp = tower.footprint;
+  for (let dc = 0; dc < fp.w; dc++) {
+    for (let dr = 0; dr < fp.h; dr++) {
+      grid.setCell(tower.col + dc, tower.row + dr, CELL.EMPTY);
+    }
+  }
+  towers      = towers.filter(t => t !== tower);
+  currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+  rerouteActiveEnemies();
+  wallFrostDirty = true;
+}
+
 // ── wave system ───────────────────────────────────────────────────────────────
 
 const COUNTDOWN_FRAMES  = 300;
@@ -236,12 +327,14 @@ const EMP_RANGE         = 50;
 const EMP_DISABLE_FRAMES = 150;
 const MAX_WAVES          = 100;
 
-const BOSS_WAVES = new Set([10, 25, 50]);
+const BOSS_WAVES = new Set([10, 25, 50, 75, 100]);
 
 const BOSS_CONFIGS = {
-  10: { name: 'DRAUGEN-JARL',      type: ENEMY_TYPES.JOTUNN, hp: 800,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true, phase50SlowImmune: true  },
-  25: { name: 'JÖTUNHELM WALKER',  type: ENEMY_TYPES.JOTUNN, hp: 2400, radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false },
-  50: { name: 'MARA-VOID',         type: ENEMY_TYPES.MARA,   hp: 6000, radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
+  10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 800,   radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true  },
+  25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 2400,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false },
+  50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 6000,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
+  75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 20000, radius: 26, speedMult: 1.35, reward: 500, phase75: true,  phase50SlowImmune: true  },
+  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 55000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: false },
 };
 
 let waveNumber      = 0;
@@ -261,7 +354,10 @@ function getWaveBands(waveNum) {
   if (waveNum <= 35)  return { hp: 1.90, speed: 1.24 };
   if (waveNum <= 50)  return { hp: 2.35, speed: 1.32 };
   if (waveNum <= 75)  return { hp: 2.90, speed: 1.42 };
-  return                     { hp: 3.80, speed: 1.55 };
+  if (waveNum <= 100) return { hp: 3.80, speed: 1.55 };
+  // Endless: accelerating beyond wave 100
+  const over = waveNum - 100;
+  return { hp: 3.80 * (1 + over * 0.06), speed: Math.min(1.55 + over * 0.01, 2.40) };
 }
 
 let particles     = [];
@@ -379,8 +475,8 @@ function buildWave(num) {
   if (num === 22) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
 
   // Rest waves — easier wave directly after a boss
-  if (num === 11 || num === 26 || num === 51) {
-    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(num - 5);
+  if (num === 11 || num === 26 || num === 51 || num === 76 || num === 101) {
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(Math.min(num - 5, MAX_WAVES));
     const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
@@ -459,37 +555,42 @@ function updateWave() {
       }
     }
   } else if (enemies.length === 0) {
-    if (waveNumber >= MAX_WAVES) {
-      victory  = true;
-      gameOver = true;
-      highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
+    // Wave-clear bonus
+    const clearBonus = (10 + waveNumber * 2) + (waveLeak ? 0 : 4);
+    gold       += clearBonus;
+    goldEarned += clearBonus;
+    if (!waveLeak) {
+      fortressHeldTimer = 200;
+      hoardPulse = 60;
+      stars++;   // 1 star for flawless wave
+      spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 16);
+      sfxWaveClear();
     } else {
-      // Wave-clear bonus
-      const clearBonus = (10 + waveNumber * 2) + (waveLeak ? 0 : 4);
-      gold       += clearBonus;
-      goldEarned += clearBonus;
-      if (!waveLeak) {
-        fortressHeldTimer = 200;
-        hoardPulse = 60;
-        spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 16);
-      } else {
-        hoardPulse = 18;
-      }
-      // Hoard interest (5% of gold, max 50g)
-      const interest = Math.min(Math.floor(gold * 0.05), 50);
-      if (interest > 0) {
-        gold       += interest;
-        goldEarned += interest;
-      }
-      // Track best wave
-      const waveGoldDelta = goldEarned - waveGoldStart;
-      if (waveSlainCount > bestWave.slain || (waveSlainCount === bestWave.slain && waveGoldDelta > bestWave.gold)) {
-        bestWave = { wave: waveNumber, slain: waveSlainCount, gold: waveGoldDelta };
-      }
-      waveLeak  = false;
-      waveTimer = 0;
-      waveState = 'break';
+      hoardPulse = 18;
     }
+    // Hoard interest (5% of gold, max 50g)
+    const interest = Math.min(Math.floor(gold * 0.05), 50);
+    if (interest > 0) {
+      gold       += interest;
+      goldEarned += interest;
+    }
+    // Track best wave
+    const waveGoldDelta = goldEarned - waveGoldStart;
+    if (waveSlainCount > bestWave.slain || (waveSlainCount === bestWave.slain && waveGoldDelta > bestWave.gold)) {
+      bestWave = { wave: waveNumber, slain: waveSlainCount, gold: waveGoldDelta };
+    }
+    waveLeak  = false;
+    waveTimer = 0;
+
+    if (waveNumber >= MAX_WAVES && !endlessMode) {
+      // First time clearing wave 100: enter endless mode, save score, show banner
+      endlessMode   = true;
+      endlessBanner = 360;
+      victory       = true;  // shows banner but game continues
+      highScores    = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
+      victory       = false; // don't stop the game
+    }
+    waveState = 'break';
   }
 }
 
@@ -954,17 +1055,41 @@ function hasEnemyInCell(col, row) {
 }
 
 function tryPlaceAt(col, row, mode, towerType) {
-  const cell = grid.getCell(col, row);
-  if (cell === null || cell === CELL.SPAWN || cell === CELL.GOAL) return false;
-  if (cell !== CELL.EMPTY) return false;
-  if (hasEnemyInCell(col, row)) return false;
+  // Check star gate for locked towers
+  const gate = TOWER_STAR_GATES[towerType];
+  if (mode === CELL.TOWER && gate && stars < gate) return false;
+
+  const fp = (mode === CELL.TOWER) ? (TOWER_DEFS[towerType]?.footprint ?? {w:1,h:1}) : {w:1,h:1};
+
+  // Check all footprint cells
+  for (let dc = 0; dc < fp.w; dc++) {
+    for (let dr = 0; dr < fp.h; dr++) {
+      const c = col + dc, r = row + dr;
+      const fc = grid.getCell(c, r);
+      if (fc === null || fc !== CELL.EMPTY) return false;
+      if (fc === CELL.SPAWN || fc === CELL.GOAL) return false;
+      if (hasEnemyInCell(c, r)) return false;
+    }
+  }
 
   const cost = mode === CELL.WALL ? WALL_COST : TOWER_DEFS[towerType].cost;
   if (gold < cost) return false;
 
-  grid.setCell(col, row, mode);
+  // Mark all footprint cells
+  for (let dc = 0; dc < fp.w; dc++) {
+    for (let dr = 0; dr < fp.h; dr++) {
+      grid.setCell(col + dc, row + dr, mode);
+    }
+  }
   const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  if (!newPath) { grid.setCell(col, row, CELL.EMPTY); return false; }
+  if (!newPath) {
+    for (let dc = 0; dc < fp.w; dc++) {
+      for (let dr = 0; dr < fp.h; dr++) {
+        grid.setCell(col + dc, row + dr, CELL.EMPTY);
+      }
+    }
+    return false;
+  }
 
   currentPath = newPath;
   rerouteActiveEnemies();
@@ -973,6 +1098,7 @@ function tryPlaceAt(col, row, mode, towerType) {
   wallFrostDirty = true;
 
   if (mode === CELL.WALL) {
+    sfxPlace(true);
     const adjTW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
     for (const [ac, ar] of adjTW) {
       const bt = towers.find(t => t.col === ac && t.row === ar && t.type === TOWER_TYPES.BERSERK);
@@ -981,8 +1107,11 @@ function tryPlaceAt(col, row, mode, towerType) {
   }
 
   if (mode === CELL.TOWER) {
-    const { x, y } = grid.cellCenter(col, row);
-    const t = new Tower(x, y, col, row, towerType);
+    sfxPlace(false);
+    // Center of footprint in world coords
+    const cx = (col + fp.w / 2) * CELL_SIZE;
+    const cy = (row + fp.h / 2) * CELL_SIZE;
+    const t = new Tower(cx, cy, col, row, towerType);
     towers.push(t);
     // Synergy ring: Berserker placed next to a wall
     if (towerType === TOWER_TYPES.BERSERK) {
@@ -1010,23 +1139,22 @@ function handleRightClickAt(mouseX, mouseY) {
     wallFrostDirty = true;
     gold += Math.floor(WALL_COST * 0.5);
     grid.setCell(col, row, CELL.EMPTY);
-    towers      = towers.filter(t => t.col !== col || t.row !== row);
     currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
     rerouteActiveEnemies();
+    sfxSell();
     pendingSell = null;
   } else if (cell === CELL.TOWER) {
-    if (pendingSell && pendingSell.col === col && pendingSell.row === row) {
-      if (selectedTower && selectedTower.col === col && selectedTower.row === row) selectedTower = null;
-      const t = towers.find(t => t.col === col && t.row === row);
-      if (t) gold += t.sellValue;
-      wallFrostDirty = true;
-      grid.setCell(col, row, CELL.EMPTY);
-      towers      = towers.filter(t => t.col !== col || t.row !== row);
-      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-      rerouteActiveEnemies();
+    const t = getTowerAtCell(col, row);
+    if (!t) return;
+    const anchorKey = `${t.col}_${t.row}`;
+    if (pendingSell && pendingSell.key === anchorKey) {
+      if (selectedTower === t) selectedTower = null;
+      gold += t.sellValue;
+      sfxSell();
+      removeTower(t);
       pendingSell = null;
     } else {
-      pendingSell = { col, row, timer: 90 };
+      pendingSell = { key: anchorKey, col: t.col, row: t.row, timer: 90 };
     }
   }
 }
@@ -1072,6 +1200,8 @@ window.addEventListener('keydown', e => {
 });
 
 canvas.addEventListener('mousedown', e => {
+  ensureAudio();
+
   if (e.button === 1) {
     e.preventDefault();
     isPanning    = true;
@@ -1086,6 +1216,21 @@ canvas.addEventListener('mousedown', e => {
   const mouseX = (e.clientX - rect.left - panX) / gameScale;
   const mouseY = (e.clientY - rect.top  - panY) / gameScale;
 
+  // Map select phase — handle map card clicks
+  if (gamePhase === 'mapSelect') {
+    if (e.button === 0) {
+      for (const btn of mapSelectBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          selectedMapIdx = btn.idx;
+          initGame(PRESET_MAPS[btn.idx]);
+          return;
+        }
+      }
+    }
+    return;
+  }
+
   // Game over: only overlay buttons are interactive
   if (gameOver) {
     if (e.button === 0) {
@@ -1093,7 +1238,7 @@ canvas.addEventListener('mousedown', e => {
           mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
           mouseY >= restartBtn.y && mouseY <= restartBtn.y + restartBtn.h) {
         if (restartBtn.action === 'back') { showTopList = false; }
-        else                             { restartGame(); }
+        else                             { gamePhase = 'mapSelect'; }
       }
       if (!showTopList && toplistBtn &&
           mouseX >= toplistBtn.x && mouseX <= toplistBtn.x + toplistBtn.w &&
@@ -1101,6 +1246,38 @@ canvas.addEventListener('mousedown', e => {
         showTopList = true;
       }
     }
+    return;
+  }
+
+  // Rune menu buy buttons (shown during break/countdown)
+  if (e.button === 0 && showRuneMenu) {
+    for (const rb of runeMenuBtns) {
+      if (mouseX >= rb.x && mouseX <= rb.x + rb.w &&
+          mouseY >= rb.y && mouseY <= rb.y + rb.h) {
+        const def  = RUNE_DEFS[rb.idx];
+        const curr = runesBought[def.id] ?? 0;
+        if (curr < def.maxLevel && stars >= def.cost) {
+          stars -= def.cost;
+          runesBought[def.id] = curr + 1;
+          sfxRune();
+          // Valhalla: immediately increase max lives + give bonus lives
+          if (def.id === 'valhalla') {
+            STARTING_LIVES += 2;
+            lives = Math.min(lives + 2, STARTING_LIVES);
+          }
+          // Battle Hymn: re-apply range to existing berserker towers
+          if (def.id === 'battleHymn') {
+            const rng = getRuneMults().berserkRng;
+            for (const t of towers) {
+              if (t.type === TOWER_TYPES.BERSERK) t.range = Math.round(t.baseRange * rng);
+            }
+          }
+        }
+        return;
+      }
+    }
+    // Click outside rune menu closes it
+    showRuneMenu = false;
     return;
   }
 
@@ -1127,6 +1304,7 @@ canvas.addEventListener('mousedown', e => {
         goldSpent += selectedTower.upgradeCost;
         gold      -= selectedTower.upgradeCost;
         selectedTower.upgrade();
+        sfxUpgrade();
       }
       return;
     }
@@ -1134,11 +1312,8 @@ canvas.addEventListener('mousedown', e => {
         mouseX >= panelSellBtn.x && mouseX <= panelSellBtn.x + panelSellBtn.w &&
         mouseY >= panelSellBtn.y && mouseY <= panelSellBtn.y + panelSellBtn.h) {
       gold += selectedTower.sellValue;
-      wallFrostDirty = true;
-      grid.setCell(selectedTower.col, selectedTower.row, CELL.EMPTY);
-      towers      = towers.filter(t => t !== selectedTower);
-      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-      rerouteActiveEnemies();
+      sfxSell();
+      removeTower(selectedTower);
       selectedTower = null;
       return;
     }
@@ -1203,7 +1378,7 @@ canvas.addEventListener('mousedown', e => {
 
   // Left-click on placed tower: select it
   if (cell === CELL.TOWER) {
-    selectedTower = towers.find(t => t.col === col && t.row === row) ?? null;
+    selectedTower = getTowerAtCell(col, row) ?? null;
     return;
   }
 

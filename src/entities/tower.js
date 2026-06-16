@@ -83,7 +83,8 @@ export const TOWER_DEFS = {
     splashRadius: 40,
     splashDamage: 35,
     bulletShape:  'rock',
-    fireFlashDuration: 12
+    fireFlashDuration: 12,
+    footprint:    { w: 2, h: 2 },
   },
   [TOWER_TYPES.BLONDIE]: {
     label:        'Blondie',
@@ -158,6 +159,7 @@ export const TOWER_DEFS = {
     splashDamage: 40,
     bulletShape:  'rock',
     fireFlashDuration: 14,
+    footprint:    { w: 3, h: 1 },
   },
 };
 
@@ -193,6 +195,10 @@ export class Tower {
     this.disabledTimer   = 0;
     this.levelFlash      = 0;   // frames of milestone glow on level 5 / 10
     this.synergyRingTimer = 0;  // frames of gold ring on Berserker-wall synergy
+    this.killCount       = 0;   // total enemy kills credited to this tower
+    this.footprint       = def.footprint ?? { w: 1, h: 1 };
+    this._synergy        = null;  // active synergy key ('eagleEye'|'siegeFury'|'winterGrip'|null)
+    this._synergyDmgBoost = 1;   // set by game.js before update() call
 
     this.selected      = false;
     this._applyLevel();
@@ -244,7 +250,7 @@ export class Tower {
         const dx = enemy.x - this.x, dy = enemy.y - this.y;
         if (dx * dx + dy * dy > rangeSq) continue;
         hit = true;
-        enemy.hp -= this.damage;
+        enemy.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1) * (this._synergyDmgBoost ?? 1));
         if (!enemy.slowImmune) {
           enemy.slowTimer  = this.slowDuration;
           enemy.slowFactor = this.slowFactor;
@@ -275,9 +281,11 @@ export class Tower {
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
+      const _dmg   = Math.round(this.damage       * (Tower.dmgMult ?? 1));
+      const _sdmg  = Math.round(this.splashDamage * (Tower.dmgMult ?? 1));
       const b = new Bullet(
-        this.x, this.y, target, this.damage, this.bulletSpeed,
-        this.splashRadius, this.splashDamage,
+        this.x, this.y, target, _dmg, this.bulletSpeed,
+        this.splashRadius, _sdmg,
         this.slowFactor, this.slowDuration,
         this.bulletShape
       );
@@ -288,7 +296,7 @@ export class Tower {
       return 0;
     }
 
-    target.hp -= this.damage;
+    target.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1));
     this.fireCooldown = this.fireRate;
     if (target.hp <= 0) { target.hp = 0; target.alive = false; return 1; }
     return 0;
@@ -298,27 +306,53 @@ export class Tower {
     const t   = performance.now() * 0.001;
     const def = TOWER_DEFS[this.type];
 
-    // Colored baseplate — drawn before everything else
+    // Colored baseplate — scaled to footprint
+    const fpW = this.footprint.w * 14;
+    const fpH = this.footprint.h * 14;
     ctx.save();
     ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.22;
     ctx.fillStyle   = def.color;
     ctx.beginPath();
-    ctx.roundRect(this.x - 7, this.y - 7, 14, 14, 2);
+    ctx.roundRect(this.x - fpW / 2, this.y - fpH / 2, fpW, fpH, 3);
     ctx.fill();
+    // Footprint border for multi-cell towers
+    if (this.footprint.w > 1 || this.footprint.h > 1) {
+      ctx.globalAlpha = 0.38;
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth   = 1;
+      ctx.stroke();
+    }
     ctx.restore();
 
     // Ground shadow — soft ellipse beneath the sprite
+    const shadowR = Math.max(fpW, fpH) / 2 + 2;
     ctx.save();
     ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.38;
-    const grad = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, 14);
+    const grad = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
     grad.addColorStop(0,   'rgba(0,0,0,0.85)');
     grad.addColorStop(0.5, 'rgba(0,0,0,0.45)');
     grad.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(this.x, this.y + 4, 14, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // Active synergy indicator — dashed ring around synergy pairs
+    if (this._synergy) {
+      const synergyColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0' };
+      const sc = synergyColors[this._synergy] ?? '#ffffff';
+      ctx.save();
+      ctx.strokeStyle = sc + '99';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.lineDashOffset = -(performance.now() * 0.012) % 5;
+      ctx.beginPath();
+      ctx.rect(this.x - fpW / 2 - 2, this.y - fpH / 2 - 2, fpW + 4, fpH + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
 
     // Range ring — only when selected and range is non-zero
     if (this.type !== TOWER_TYPES.BERSERK && this.range > 0 && this.selected) {
@@ -331,6 +365,14 @@ export class Tower {
       ctx.setLineDash([]);
     }
 
+    // Multi-cell towers draw scaled around their center
+    const fpScale = Math.sqrt(this.footprint.w * this.footprint.h);
+    if (fpScale > 1.01) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.scale(fpScale, fpScale);
+      ctx.translate(-this.x, -this.y);
+    }
     if      (this.type === TOWER_TYPES.BERSERK)  this._drawBerserk(ctx, t);
     else if (this.type === TOWER_TYPES.VALKYRIE) this._drawValkyrie(ctx, t);
     else if (this.type === TOWER_TYPES.MILITARY) this._drawMilitary(ctx, t);
@@ -340,6 +382,7 @@ export class Tower {
     else if (this.type === TOWER_TYPES.ISJATTEN) this._drawIsjatten(ctx, t);
     else if (this.type === TOWER_TYPES.DRAKSHIP) this._drawDrakship(ctx, t);
     else                                         this._drawBlondie(ctx, t);
+    if (fpScale > 1.01) ctx.restore();
 
     // Attack flash
     if (this.fireFlash > 0) {
@@ -1562,3 +1605,6 @@ export class Tower {
     ctx.restore();
   }
 }
+
+// Class-level rune multiplier — set by game.js each tick before update() calls
+Tower.dmgMult = 1;
