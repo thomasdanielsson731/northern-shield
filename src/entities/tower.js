@@ -1,16 +1,17 @@
-import { Bullet } from './bullet.js';
+﻿import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 
 // Draw one frame from a 4-frame (IDLE/WALK/ATTACK/DEATH) sprite strip.
 // frame: 0=idle, 2=attack. Flips sprite horizontally when aimAngle faces left.
-function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null) {
+function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null, level = 1) {
   const sp = SPRITES[spriteKey];
   if (!sp) return false;
   const dh = Math.round(dw * sp.frameH / sp.frameW);
+  const glowBlur = level >= 8 ? 20 : level >= 5 ? 17 : 14;
   ctx.save();
   ctx.translate(x, y);
   if (Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
-  if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = 14; }
+  if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = glowBlur; }
   ctx.drawImage(sp.img, frame * sp.frameW, 0, sp.frameW, sp.frameH,
     -dw / 2, -dh * 0.88, dw, dh);
   ctx.restore();
@@ -255,7 +256,7 @@ export class Tower {
           enemy.slowTimer  = this.slowDuration;
           enemy.slowFactor = this.slowFactor;
         }
-        if (enemy.hp <= 0) { enemy.hp = 0; enemy.alive = false; enemy._killed = true; killed++; }
+        if (enemy.hp <= 0) { enemy.hp = 0; enemy.kill(); enemy._killed = true; killed++; }
       }
       if (!hit) return null;
       this.fireCooldown = this.fireRate;
@@ -298,7 +299,7 @@ export class Tower {
 
     target.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1));
     this.fireCooldown = this.fireRate;
-    if (target.hp <= 0) { target.hp = 0; target.alive = false; return 1; }
+    if (target.hp <= 0) { target.hp = 0; target.kill(); return 1; }
     return 0;
   }
 
@@ -511,7 +512,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(220,70,10,0.85)')) return;
+    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(220,70,10,0.85)', this.level)) return;
 
     const axeSpin = t * 3.5;
 
@@ -662,6 +663,20 @@ export class Tower {
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.restore();
+
+    // Warm glow ring on attack
+    if (this.fireFlash > 0) {
+      const br = this.fireFlash / (this.maxFireFlash || 6);
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,120,40,${br * 0.7})`;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(255,100,20,0.9)';
+      ctx.shadowBlur = 12 * br;
+      ctx.beginPath();
+      ctx.arc(x, y, 12 * (1.3 - br * 0.3), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // ── Valkyrie: winged warrior with spear ───────────────────────────────────────
@@ -672,7 +687,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(220,180,60,0.9)')) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(220,180,60,0.9)', this.level)) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -832,7 +847,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 50, 'rgba(90,140,190,0.75)')) return;
+    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 50, 'rgba(90,140,190,0.75)', this.level)) return;
 
     // Stone base
     ctx.fillStyle = '#9aaa9a';
@@ -978,10 +993,11 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(200,130,30,0.85)')) return;
+    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(200,130,30,0.85)', this.level)) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
-    const armAng = this.aimAngle - Math.PI * 0.5;
+    const swingOffset = this.fireFlash > 0 ? (this.fireFlash / (this.maxFireFlash || 6)) * 0.25 : 0;
+    const armAng = this.aimAngle - Math.PI * 0.5 + swingOffset;
 
     // Wooden base platform
     ctx.fillStyle = '#5a3810';
@@ -1070,7 +1086,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 52, 'rgba(255,110,200,0.9)')) return;
+    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 52, 'rgba(255,110,200,0.9)', this.level)) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
@@ -1491,6 +1507,25 @@ export class Tower {
         ctx.shadowBlur = 0;
         ctx.restore();
       }
+    }
+
+    // Nova burst ice shards on fire
+    if (this.fireFlash > 0) {
+      const br = this.fireFlash / (this.maxFireFlash || 8);
+      ctx.save();
+      ctx.strokeStyle = `rgba(160,230,255,${br * 0.8})`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#80eeff';
+      ctx.shadowBlur = 8 * br;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const r1 = 8, r2 = 8 + (1 - br) * 22;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+        ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 
