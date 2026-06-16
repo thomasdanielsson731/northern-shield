@@ -1632,7 +1632,7 @@ function update() {
             enemy.hp -= b.splashDamage;
             if (enemy.hp <= 0) {
               enemy.hp    = 0;
-              enemy.alive = false;
+              enemy.kill();
               slain++;
               waveSlainCount++;
               splashKills++;
@@ -1662,7 +1662,10 @@ function update() {
   for (let i = enemies.length - 1; i >= 0; i--) {
     enemies[i].update();
     if (!enemies[i].alive) {
-      enemies.splice(i, 1);
+      // Keep in array while death fade is playing, remove when timer expires
+      if (enemies[i].deathTimer <= 0) {
+        enemies.splice(i, 1);
+      }
       continue;
     }
     if (enemies[i].reached) {

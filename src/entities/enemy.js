@@ -69,6 +69,8 @@ export class Enemy {
     this.flying         = def.flying;
     this.alive          = true;
     this.reached        = false;
+    this.deathTimer     = 0;    // frames remaining for death fade animation
+    this.isElite        = this.maxHp >= 300;  // auto-flagged for high-HP enemies
 
     // Boss fields — set externally by spawnBoss()
     this.isBoss      = false;
@@ -90,6 +92,12 @@ export class Enemy {
     if (!path || path.length === 0) return;
     this.path      = [{ x: this.x, y: this.y }, ...path];
     this.pathIndex = 0;
+  }
+
+  kill() {
+    if (!this.alive) return;
+    this.alive      = false;
+    this.deathTimer = 12;  // trigger death fade (12 frames ≈ 0.4s)
   }
 
   update() {
@@ -126,7 +134,21 @@ export class Enemy {
   }
 
   draw(ctx) {
-    if (!this.alive) return;
+    // Death fade animation — briefly show corpse fading out after death
+    if (!this.alive) {
+      if (this.deathTimer > 0) {
+        const t = this.deathTimer / 12;
+        this.deathTimer--;
+        ctx.save();
+        ctx.globalAlpha = t * 0.7;
+        ctx.translate(this.x, this.y);
+        ctx.scale(1 + (1 - t) * 0.4, 1 + (1 - t) * 0.4);
+        ctx.translate(-this.x, -this.y);
+        this._drawSprite(ctx);
+        ctx.restore();
+      }
+      return;
+    }
 
     // Myling flight shadow — offset ellipse below sprite shows it is airborne
     if (this.type === ENEMY_TYPES.MYLING) {
@@ -181,6 +203,19 @@ export class Enemy {
       ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
       ctx.stroke();
       this.hitFlash--;
+    }
+
+    // Expanding hit flash ring — grows outward as hitFlash decays
+    if (this.hitFlash > 0) {
+      const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
+      const expandR = this.radius + (1 - hRatio) * 14;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,220,${hRatio * 0.6})`;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, expandR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // Slow / stun overlay

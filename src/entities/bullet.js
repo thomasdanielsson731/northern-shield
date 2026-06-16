@@ -51,7 +51,7 @@ export class Bullet {
 
       if (this.target.hp <= 0) {
         this.target.hp    = 0;
-        this.target.alive = false;
+        if (typeof this.target.kill === 'function') this.target.kill(); else this.target.alive = false;
         return this.target.reward ?? 6;
       }
       return 0;

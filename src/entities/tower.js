@@ -1,4 +1,4 @@
-﻿import { Bullet } from './bullet.js';
+import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 
 // Draw one frame from a 4-frame (IDLE/WALK/ATTACK/DEATH) sprite strip.
