@@ -15,8 +15,7 @@ const CELL_SIZE = 14;
 
 const RIGHT_PANEL_W  = 188;
 const FRAME_THICK    = 32;   // must match thick inside drawFrames()
-const LEFT_SIDEBAR_W = 52;   // category tab sidebar between left frame and grid
-const GRID_LEFT      = FRAME_THICK + LEFT_SIDEBAR_W;
+const GRID_LEFT      = FRAME_THICK;
 const GRID_TOP       = 64;
 const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 
@@ -25,10 +24,10 @@ const GOAL  = { col: COLS - 1, row: 11 };
 
 const WALL_COST = 5;
 
-const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 76, gap: 6 };
+const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 62, gap: 4 };
 
 // Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
-const BASE_W = FRAME_THICK + LEFT_SIDEBAR_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
+const BASE_W = FRAME_THICK + COLS * CELL_SIZE + RIGHT_PANEL_W;
 const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
 let gameScale     = 1;
@@ -37,7 +36,6 @@ let panY          = 0;
 let gridZoom      = 1.0;
 let gridPanX      = 0;
 let gridPanY      = 0;
-let sidebarCategory = 'warriors';  // 'walls' | 'warriors' | 'siege' | 'mystic'
 let isPanning         = false;
 let panStartX         = 0, panStartY     = 0;
 let panStartOffX      = 0, panStartOffY  = 0;
@@ -245,7 +243,6 @@ function restartGame() {
   gridPanX          = 0;
   gridPanY          = 0;
   isPanning         = false;
-  sidebarCategory   = 'warriors';
   rightClickDragged = false;
   rightClickSaved   = null;
   chainKillDone     = false;
@@ -957,15 +954,14 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
 function getBuildButtons() {
-  const filtered = BUILD_ITEMS.filter(item => item.category === sidebarCategory);
-  const nBtn     = filtered.length;
-  const panelX   = GRID_LEFT + 2;
-  const panelW   = COLS * CELL_SIZE - 4;
-  const padX     = 8;
-  const gap      = 5;
-  const cardW    = nBtn > 0 ? Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn) : 0;
-  const btnY     = GRID_BOTTOM + 9;
-  return filtered.map((item, i) => ({
+  const nBtn   = BUILD_ITEMS.length;
+  const panelX = GRID_LEFT + 2;
+  const panelW = COLS * CELL_SIZE - 4;
+  const padX   = 4;
+  const gap    = 3;
+  const cardW  = nBtn > 0 ? Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn) : 0;
+  const btnY   = GRID_BOTTOM + 7;
+  return BUILD_ITEMS.map((item, i) => ({
     ...item,
     x:      panelX + padX + i * (cardW + gap),
     y:      btnY,
@@ -1337,23 +1333,6 @@ canvas.addEventListener('mousedown', e => {
         mouseY >= nextWaveBtn.y && mouseY <= nextWaveBtn.y + nextWaveBtn.h) {
       if (waveState === 'countdown' || waveState === 'break') startNextWave();
       return;
-    }
-  }
-
-  // Left sidebar category tabs
-  if (e.button === 0) {
-    for (const tb of sidebarBtns) {
-      if (mouseX >= tb.x && mouseX <= tb.x + tb.w &&
-          mouseY >= tb.y && mouseY <= tb.y + tb.h) {
-        sidebarCategory = tb.id;
-        // Auto-select first affordable item in the new category
-        const first = BUILD_ITEMS.find(b => b.category === tb.id);
-        if (first) {
-          buildMode = first.mode;
-          if (first.mode === CELL.TOWER) selectedTowerType = first.id;
-        }
-        return;
-      }
     }
   }
 
@@ -2288,8 +2267,8 @@ function drawTopBar() {
 }
 
 function drawBottomBuildBar() {
-  const PORTRAIT_H = BUILD_BTN.h - 26;  // 50px
-  const INFO_H     = 26;
+  const INFO_H     = 22;
+  const PORTRAIT_H = BUILD_BTN.h - INFO_H;
 
   const spriteKeys = {
     [TOWER_TYPES.BERSERK]:  'berserker',
@@ -2409,82 +2388,9 @@ function drawBottomBuildBar() {
   }
 }
 
-// ── Left category sidebar ─────────────────────────────────────────────────────
-
-const SIDEBAR_TABS = [
-  { id: 'walls',    label: 'WALLS',    icon: '🛡', color: '#b4d2f0' },
-  { id: 'warriors', label: 'WARRIORS', icon: '⚔', color: '#c87840' },
-  { id: 'siege',    label: 'SIEGE',    icon: '💣', color: '#a07030' },
-  { id: 'mystic',   label: 'MYSTIC',   icon: '✦', color: '#9050c8' },
-];
-
-let sidebarBtns = [];
-
-function drawLeftSidebar() {
-  const sx = FRAME_THICK;
-  const sw = LEFT_SIDEBAR_W;
-  const sy = GRID_TOP;
-  const sh = GRID_BOTTOM - GRID_TOP;
-  const tabH = Math.floor(sh / SIDEBAR_TABS.length);
-
-  sidebarBtns = [];
-
-  drawFantasyPanel(sx, sy, sw, sh, 'rgba(30,14,4,0.97)');
-
-  ctx.save();
-  SIDEBAR_TABS.forEach((tab, i) => {
-    const ty     = sy + i * tabH;
-    const active = sidebarCategory === tab.id;
-    const items  = BUILD_ITEMS.filter(b => b.category === tab.id);
-    const canAfford = items.some(b => gold >= b.cost);
-
-    sidebarBtns.push({ id: tab.id, x: sx, y: ty, w: sw, h: tabH });
-
-    // Tab background
-    ctx.fillStyle = active ? 'rgba(80,42,10,0.97)' : 'rgba(22,10,2,0.0)';
-    ctx.beginPath(); ctx.roundRect(sx + 2, ty + 2, sw - 4, tabH - 4, 5); ctx.fill();
-
-    // Active indicator — warm left edge bar
-    if (active) {
-      ctx.fillStyle = tab.color;
-      ctx.fillRect(sx + 2, ty + 4, 3, tabH - 8);
-    }
-
-    // Icon
-    ctx.font      = '14px monospace';
-    ctx.fillStyle = active ? tab.color : canAfford ? 'rgba(180,140,70,0.7)' : 'rgba(100,80,40,0.45)';
-    ctx.textAlign = 'center';
-    ctx.fillText(tab.icon, sx + sw / 2, ty + tabH * 0.42);
-
-    // Label (short)
-    const labelSz = sw < 56 ? 6 : 7;
-    ctx.font      = `bold ${labelSz}px monospace`;
-    ctx.fillStyle = active ? '#f0e8d0' : 'rgba(160,120,60,0.6)';
-    ctx.fillText(tab.label, sx + sw / 2, ty + tabH * 0.72);
-
-    // Item count badge
-    if (items.length > 0) {
-      ctx.font      = `${labelSz}px monospace`;
-      ctx.fillStyle = active ? 'rgba(220,180,80,0.7)' : 'rgba(130,90,40,0.4)';
-      ctx.fillText(`[${items.length}]`, sx + sw / 2, ty + tabH * 0.90);
-    }
-
-    // Divider between tabs
-    if (i < SIDEBAR_TABS.length - 1) {
-      ctx.strokeStyle = 'rgba(200,150,30,0.12)';
-      ctx.lineWidth   = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(sx + 6, ty + tabH); ctx.lineTo(sx + sw - 6, ty + tabH);
-      ctx.stroke();
-    }
-  });
-  ctx.restore();
-}
-
 function drawHud() {
   drawTopBar();
   drawBottomBuildBar();
-  drawLeftSidebar();
 
   if (!gameOver) return;
 
