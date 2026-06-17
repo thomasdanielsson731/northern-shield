@@ -21,9 +21,9 @@ export const ENEMY_DEFS = {
   draugr: {
     label:          'Draugr',
     speed:          1.0,
-    hp:             90,
+    hp:             130,
     radius:         7,
-    reward:         7,
+    reward:         9,
     color:          '#6628a8',   // deep purple — undead spectral warrior
     highlightColor: '#b070ff',
     flying:         false

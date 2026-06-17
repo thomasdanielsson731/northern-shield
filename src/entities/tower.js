@@ -62,7 +62,7 @@ export const TOWER_DEFS = {
     key:          '4',
     color:        '#6688aa',
     rangeColor:   'rgba(80,120,170,0.26)',
-    cost:         28,
+    cost:         35,
     range:        80,
     fireRate:     8,
     damage:       14,

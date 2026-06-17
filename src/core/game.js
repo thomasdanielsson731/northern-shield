@@ -395,16 +395,14 @@ let waveSpeedScale  = 1;
 let waveActiveFrames = 0;
 
 function getWaveBands(waveNum) {
-  if (waveNum <= 5)   return { hp: 1.00, speed: 1.00 };
-  if (waveNum <= 10)  return { hp: 1.40, speed: 1.10 };
-  if (waveNum <= 20)  return { hp: 1.80, speed: 1.22 };
-  if (waveNum <= 35)  return { hp: 2.40, speed: 1.34 };
-  if (waveNum <= 50)  return { hp: 3.10, speed: 1.46 };
-  if (waveNum <= 75)  return { hp: 4.00, speed: 1.58 };
-  if (waveNum <= 100) return { hp: 5.20, speed: 1.75 };
+  const n = Math.min(Math.max(waveNum, 1), 100);
+  const t = (n - 1) / 99;
+  const hp    = 1.0 + t * 4.5;           // 1.0 at wave 1 → 5.5 at wave 100
+  const speed = 1.0 + t * 0.75;          // 1.0 at wave 1 → 1.75 at wave 100
+  if (waveNum <= 100) return { hp, speed };
   // Endless: accelerating beyond wave 100
   const over = waveNum - 100;
-  return { hp: 5.20 * (1 + over * 0.06), speed: Math.min(1.75 + over * 0.01, 2.60) };
+  return { hp: 5.5 * (1 + over * 0.06), speed: Math.min(1.75 + over * 0.01, 2.60) };
 }
 
 let particles     = [];
@@ -610,7 +608,8 @@ function updateWave() {
   if (spawnQueue.length > 0) {
     waveActiveFrames++;
     spawnTimer++;
-    const spawnInterval = waveActiveFrames > 5400 * gameSpeed ? Math.ceil(SPAWN_FRAMES * 0.5) : SPAWN_FRAMES;
+    const baseSpawnGap  = waveNumber <= 10 ? 16 : SPAWN_FRAMES;
+    const spawnInterval = waveActiveFrames > 5400 * gameSpeed ? Math.ceil(baseSpawnGap * 0.5) : baseSpawnGap;
     if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
       const next = spawnQueue.shift();
@@ -1090,6 +1089,12 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   enemies.push(newEnemy);
 }
 
+function estimateWaveHp(waveNum) {
+  const comp  = waveComposition(Math.max(1, waveNum));
+  const scale = getWaveBands(waveNum).hp;
+  return Math.round((comp.draugr * 130 + comp.mylings * 110 + comp.jotunn * 700 + comp.maras * 130) * scale);
+}
+
 function spawnBoss(waveNum) {
   if (!currentPath || gameOver) return;
   const cfg  = BOSS_CONFIGS[waveNum];
@@ -1099,9 +1104,10 @@ function spawnBoss(waveNum) {
   portalFlash      = 32;
   portalFlashColor = 'red';
 
+  const dynamicHp   = Math.round(estimateWaveHp(waveNum - 1) * 1.5);
   const boss        = new Enemy(path, cfg.type, 1);
-  boss.hp           = cfg.hp;
-  boss.maxHp        = cfg.hp;
+  boss.hp           = Math.max(cfg.hp, dynamicHp);
+  boss.maxHp        = boss.hp;
   boss.radius       = cfg.radius;
   boss.speed        = ENEMY_DEFS[cfg.type].speed * cfg.speedMult;
   boss.baseSpeed    = boss.speed;
