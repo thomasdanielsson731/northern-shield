@@ -10,40 +10,40 @@ export const ENEMY_TYPES = {
 export const ENEMY_DEFS = {
   mara: {
     label:          'Mara',
-    speed:          0.65,
-    hp:             90,
+    speed:          0.70,
+    hp:             130,
     radius:         7,
-    reward:         14,
+    reward:         16,
     color:          '#00ddff',   // cyan ghost — nightmare spirit
     highlightColor: '#44eeff',
     flying:         false
   },
   draugr: {
     label:          'Draugr',
-    speed:          0.9,
-    hp:             60,
+    speed:          1.0,
+    hp:             90,
     radius:         7,
-    reward:         6,
+    reward:         7,
     color:          '#6628a8',   // deep purple — undead spectral warrior
     highlightColor: '#b070ff',
     flying:         false
   },
   myling: {
     label:          'Myling',
-    speed:          1.1,
-    hp:             75,
+    speed:          1.2,
+    hp:             110,
     radius:         6,
-    reward:         8,
+    reward:         10,
     color:          '#88bbff',   // ethereal blue — floating ghost child
     highlightColor: '#aaddff',
     flying:         true
   },
   jotunn: {
     label:          'Jötunn',
-    speed:          0.35,
-    hp:             500,
+    speed:          0.40,
+    hp:             700,
     radius:         13,
-    reward:         20,
+    reward:         22,
     color:          '#5c4030',   // dark stone brown — ancient Norse giant
     highlightColor: '#ffaa30',   // molten amber core
     flying:         false
@@ -83,6 +83,9 @@ export class Enemy {
     this.hitFlash     = 0;    // frames of hit ring remaining
     this.hitFlashMax  = 0;    // max frames set when hit (for alpha normalization)
     this.empPulseTimer = 0;   // cooldown between EMP shockwave rings
+    this.staggerVX     = 0;
+    this.staggerVY     = 0;
+    this.staggerTimer  = 0;
 
     this.x = path[0].x;
     this.y = path[0].y;
@@ -109,6 +112,14 @@ export class Enemy {
 
     // Boss summon stutter — frozen in place
     if (this.stunTimer > 0) { this.stunTimer--; return; }
+
+    // Heavy-hit stagger — brief backward nudge
+    if (this.staggerTimer > 0) {
+      this.staggerTimer--;
+      this.x += this.staggerVX;
+      this.y += this.staggerVY;
+      if (this.staggerTimer === 0) { this.staggerVX = 0; this.staggerVY = 0; }
+    }
 
     if (this.slowTimer > 0) {
       this.slowTimer--;
@@ -183,6 +194,16 @@ export class Enemy {
 
     ctx.filter = 'none';
     ctx.restore();
+
+    // Wounded shimmer — slow red outline (25-50% HP)
+    if (hpRatio >= 0.25 && hpRatio < 0.50) {
+      const shimmer = 0.5 + Math.sin(performance.now() * 0.007) * 0.5;
+      ctx.strokeStyle = `rgba(220,55,25,${0.10 + shimmer * 0.18})`;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Critical HP — rapid red pulse ring (0-25%)
     if (hpRatio < 0.25 && hpRatio > 0) {

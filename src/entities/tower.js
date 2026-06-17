@@ -36,10 +36,10 @@ export const TOWER_DEFS = {
     key:          '2',
     color:        '#8a4018',
     rangeColor:   'rgba(200,60,20,0.15)',
-    cost:         20,
+    cost:         28,
     range:        22,
-    fireRate:     18,
-    damage:       55,
+    fireRate:     22,
+    damage:       48,
     radius:       8,
     bulletSpeed:  40
   },
@@ -75,14 +75,14 @@ export const TOWER_DEFS = {
     key:          '5',
     color:        '#8a6030',
     rangeColor:   'rgba(130,90,30,0.26)',
-    cost:         50,
+    cost:         45,
     range:        120,
-    fireRate:     90,
-    damage:       65,
+    fireRate:     88,
+    damage:       80,
     radius:       9,
     bulletSpeed:  3.5,
-    splashRadius: 40,
-    splashDamage: 35,
+    splashRadius: 44,
+    splashDamage: 52,
     bulletShape:  'rock',
     fireFlashDuration: 12,
     footprint:    { w: 2, h: 2 },
@@ -107,10 +107,10 @@ export const TOWER_DEFS = {
     key:          '7',
     color:        '#6890b8',
     rangeColor:   'rgba(80,130,190,0.24)',
-    cost:         40,
-    range:        95,
-    fireRate:     6,
-    damage:       32,
+    cost:         52,
+    range:        100,
+    fireRate:     14,
+    damage:       34,
     radius:       7,
     bulletSpeed:  15,
     bulletShape:  'arrow',
@@ -200,6 +200,9 @@ export class Tower {
     this.footprint       = def.footprint ?? { w: 1, h: 1 };
     this._synergy        = null;  // active synergy key ('eagleEye'|'siegeFury'|'winterGrip'|null)
     this._synergyDmgBoost = 1;   // set by game.js before update() call
+    this.lastTargetX     = null;
+    this.lastTargetY     = null;
+    this.targetLineTimer = 0;
 
     this.selected      = false;
     this._applyLevel();
@@ -292,12 +295,14 @@ export class Tower {
       );
       b.source = this;
       bullets.push(b);
+      this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 12;
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
       return 0;
     }
 
     target.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1));
+    this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 12;
     this.fireCooldown = this.fireRate;
     if (target.hp <= 0) { target.hp = 0; target.kill(); return 1; }
     return 0;
@@ -514,7 +519,7 @@ export class Tower {
 
     if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(220,70,10,0.85)', this.level)) return;
 
-    const axeSpin = t * 3.5;
+    const axeSpin = t * (this.fireFlash > 0 ? 12 : 3.5);
 
     // Fur-lined boots
     ctx.fillStyle = '#5a3010';
