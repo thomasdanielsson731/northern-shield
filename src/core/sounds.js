@@ -49,10 +49,10 @@ export function sfxNova() {
 
 export function sfxDie(isBoss = false) {
   if (isBoss) {
-    tone(440, 0.10, 0.22, 'sawtooth');
-    tone(330, 0.14, 0.18, 'sawtooth', 0.06);
-    tone(220, 0.20, 0.16, 'square', 0.13);
-    tone(880, 0.07, 0.20, 'sine', 0);
+    tone(220, 0.12, 0.22, 'sawtooth');
+    tone(165, 0.16, 0.18, 'sawtooth', 0.06);
+    tone(110, 0.24, 0.16, 'square', 0.14);
+    tone(440, 0.08, 0.16, 'sine', 0);
   } else {
     tone(160, 0.06, 0.09, 'square');
   }
@@ -100,8 +100,14 @@ export function sfxRune() {
 }
 
 export function sfxSell() {
-  tone(330, 0.04, 0.09, 'sine');
-  tone(220, 0.06, 0.07, 'sine', 0.03);
+  tone(220, 0.04, 0.07, 'sine');
+  tone(330, 0.06, 0.09, 'sine', 0.03);
+}
+
+export function sfxSplash() {
+  tone(120, 0.09, 0.15, 'square');
+  tone(80,  0.14, 0.12, 'sine', 0.03);
+  tone(200, 0.06, 0.08, 'sawtooth', 0.06);
 }
 
 export function sfxGameOver() {
@@ -120,4 +126,10 @@ export function sfxChainKill() {
   tone(880, 0.06, 0.12, 'sine', 0.05);
   tone(1100, 0.08, 0.11, 'sine', 0.10);
   tone(1320, 0.10, 0.10, 'sawtooth', 0.16);
+}
+
+export function sfxEmp() {
+  tone(80,  0.25, 0.14, 'square');
+  tone(160, 0.18, 0.10, 'sawtooth', 0.05);
+  tone(55,  0.35, 0.08, 'sine',     0.12);
 }

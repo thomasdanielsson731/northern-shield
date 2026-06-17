@@ -19,6 +19,8 @@ npx vitest run tests/tower.unit.test.js   # run a single test file
 
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
 
+CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test` on every push/PR.
+
 ## Architecture
 
 ### Source layout
@@ -30,12 +32,19 @@ src/
   core/
     renderer.js        — canvas + ctx with DPR scaling; exports canvas and ctx
     game.js            — everything else (intentionally monolithic; do not split without reason)
+    sounds.js          — procedural audio via Web Audio API; tone() helper, setMuted(); lazy AudioContext init
   entities/
     tower.js           — Tower class, TOWER_DEFS, TOWER_TYPES; all tower sprites + drawing
     enemy.js           — Enemy class, ENEMY_DEFS, ENEMY_TYPES; all enemy sprites + drawing
     bullet.js          — Bullet class; homing projectiles (orb/spear/rock/stun/arrow shapes)
   grid/
     grid.js            — Grid class, CELL enum, BFS pathfinding, cell drawing
+assets/
+  towers/              — sprite PNGs: berserker, valkyrie, archer, catapult, blondie, ismaciker, vildeman
+  enemies/             — sprite PNGs: draugr, myling, jotunn, mara
+  ui/                  — portal_spawn_gate, goal_trelleborg_fort, frame tiles (corner, horiz, vert)
+  terrain/             — ground_tile.png, path_tile.png (both 1254×1254)
+  bosses/, effects/    — reference/concept art (not loaded in game)
 tests/
   tower.unit.test.js
   enemy.unit.test.js
