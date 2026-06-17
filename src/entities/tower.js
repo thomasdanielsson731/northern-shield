@@ -203,6 +203,7 @@ export class Tower {
     this.lastTargetX     = null;
     this.lastTargetY     = null;
     this.targetLineTimer = 0;
+    this.rune            = null;
 
     this.selected      = false;
     this._applyLevel();
@@ -210,10 +211,20 @@ export class Tower {
   }
 
   _applyLevel() {
-    const n = this.level - 1;
-    this.damage   = Math.round(this.baseDamage   * (1 + n * 0.25));
-    this.range    = Math.round(this.baseRange    * (1 + n * 0.08));
-    this.fireRate = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
+    const n   = this.level - 1;
+    const def = TOWER_DEFS[this.type];
+    this.damage       = Math.round(this.baseDamage   * (1 + n * 0.25));
+    this.range        = Math.round(this.baseRange    * (1 + n * 0.08));
+    this.fireRate     = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
+    this.slowFactor   = def.slowFactor   ?? 1;
+    this.slowDuration = def.slowDuration ?? 0;
+    if (this.rune === 'ironEdge')    this.damage   = Math.round(this.damage * 1.25);
+    if (this.rune === 'swiftStrike') this.fireRate = Math.max(4, Math.round(this.fireRate * 0.85));
+    if (this.rune === 'battleHymn')  this.range    = Math.round(this.range  * 1.30);
+    if (this.rune === 'frostRune') {
+      this.slowFactor   = Math.min(this.slowFactor,   0.50);
+      this.slowDuration = Math.max(this.slowDuration, 20);
+    }
   }
 
   get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.60); }
@@ -231,6 +242,16 @@ export class Tower {
     this._applyLevel();
     if (this.level === 5 || this.level === 10) this.levelFlash = 55;
     return true;
+  }
+
+  setRune(id) {
+    this.rune = id;
+    this._applyLevel();
+  }
+
+  clearRune() {
+    this.rune = null;
+    this._applyLevel();
   }
 
   update(enemies, bullets = null) {
@@ -503,6 +524,18 @@ export class Tower {
       ctx.fillRect(this.x - bw / 2, this.y + 6, bw, 8);
       ctx.fillStyle = this.maxed ? '#ff9040' : '#e8c040';
       ctx.fillText(badge, this.x, this.y + 13);
+      ctx.restore();
+    }
+
+    // Rune gem — small glowing dot top-right of tower when a rune is equipped
+    if (this.rune) {
+      const RUNE_COLORS = { ironEdge: '#e85040', swiftStrike: '#88aaee', frostRune: '#60c8f0', battleHymn: '#c87840', valhalla: '#f0c840' };
+      const rc = RUNE_COLORS[this.rune] ?? '#ffffff';
+      const pulse = 0.6 + Math.sin(performance.now() * 0.006 + this.x) * 0.4;
+      ctx.save();
+      ctx.shadowColor = rc; ctx.shadowBlur = 5 + pulse * 4;
+      ctx.fillStyle = rc; ctx.globalAlpha = 0.75 + pulse * 0.25;
+      ctx.beginPath(); ctx.arc(this.x + this.radius - 2, this.y - this.radius + 2, 2.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }

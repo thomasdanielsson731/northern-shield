@@ -128,9 +128,13 @@ let waveGoldStart     = 0;      // goldEarned at wave start (delta = wave earnin
 
 // Stars & Rune system
 let stars           = 0;        // earned in current run (flawless waves + boss kills)
-let runesBought     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
-let showRuneMenu    = false;    // shown during break/countdown phase
+let runeInventory   = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
+let showRuneMenu    = false;    // Rune Forge overlay (buy runes)
 let runeMenuBtns    = [];       // hit areas for rune buy buttons
+let showRunePicker  = false;    // per-tower rune equip overlay
+let runePickerTower = null;     // tower currently being outfitted
+let runePickerBtns  = [];       // hit areas in rune picker
+let panelRuneBtn    = null;     // hit area for equip-rune button in tower panel
 
 // Endless mode
 let endlessMode     = false;    // true once wave 100 beaten — game continues past MAX_WAVES
@@ -190,11 +194,11 @@ const PRESET_MAPS = [
 ];
 
 const RUNE_DEFS = [
-  { id: 'ironEdge',    label: 'IRON EDGE',    desc: '+12% dmg all towers',   cost: 3, maxLevel: 3, color: '#e85040' },
-  { id: 'swiftStrike', label: 'SWIFT STRIKE', desc: '-10% fire cooldown',    cost: 4, maxLevel: 2, color: '#88aaee' },
-  { id: 'frostRune',   label: 'FROST RUNE',   desc: 'Wall slow +20% strength',cost:2, maxLevel: 3, color: '#60c8f0' },
-  { id: 'battleHymn',  label: 'BATTLE HYMN',  desc: 'Berserker +40% range',  cost: 3, maxLevel: 1, color: '#c87840' },
-  { id: 'valhalla',    label: 'VALHALLA',      desc: '+2 max lives',          cost: 5, maxLevel: 2, color: '#f0c840' },
+  { id: 'ironEdge',    label: 'IRON EDGE',    symbol: '⚔', desc: '+25% dmg on 1 tower',    cost: 3, maxOwned: 3, color: '#e85040' },
+  { id: 'swiftStrike', label: 'SWIFT STRIKE', symbol: '⚡', desc: '−15% fire cooldown',     cost: 4, maxOwned: 2, color: '#88aaee' },
+  { id: 'frostRune',   label: 'FROST RUNE',   symbol: '❄', desc: 'Adds/boosts slow on hit', cost: 2, maxOwned: 3, color: '#60c8f0' },
+  { id: 'battleHymn',  label: 'BATTLE HYMN',  symbol: '◎', desc: '+30% range',              cost: 3, maxOwned: 1, color: '#c87840' },
+  { id: 'valhalla',    label: 'VALHALLA',      symbol: '♥', desc: '+50% kill gold',          cost: 5, maxOwned: 2, color: '#f0c840' },
 ];
 
 // Stars required to unlock tower (in current run)
@@ -286,7 +290,10 @@ function restartGame() {
   waveGoldStart     = goldEarned;
 
   stars             = 0;
-  runesBought       = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
+  runeInventory     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
+  showRuneMenu      = false;
+  showRunePicker    = false;
+  runePickerTower   = null;
   showRuneMenu      = false;
   endlessMode       = false;
   endlessBanner     = 0;
@@ -330,15 +337,9 @@ function initGame(preset) {
   restartGame();
 }
 
-// Rune multipliers derived from current runesBought state
-function getRuneMults() {
-  return {
-    dmg:        1 + (runesBought.ironEdge    ?? 0) * 0.12,
-    cdMult:     1 - (runesBought.swiftStrike ?? 0) * 0.10,
-    wallSlow:   Math.max(0.20, 0.50 - (runesBought.frostRune ?? 0) * 0.10),
-    berserkRng: 1 + (runesBought.battleHymn  ?? 0) * 0.40,
-  };
-}
+// Count how many of a given rune type are currently equipped on towers
+function runeEquippedCount(id)   { return towers.filter(t => t.rune === id).length; }
+function runeUnequippedCount(id) { return Math.max(0, (runeInventory[id] ?? 0) - runeEquippedCount(id)); }
 
 // Find tower that owns a given grid cell (handles multi-cell footprint)
 function getTowerAtCell(col, row) {
@@ -350,6 +351,7 @@ function getTowerAtCell(col, row) {
 
 // Remove tower: clear all footprint cells, reroute, recalc path
 function removeTower(tower) {
+  if (tower.rune) runeInventory[tower.rune] = (runeInventory[tower.rune] ?? 0) + 1;
   const fp = tower.footprint;
   for (let dc = 0; dc < fp.w; dc++) {
     for (let dr = 0; dr < fp.h; dr++) {
@@ -1258,8 +1260,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') {
-    if (showRuneMenu)      { showRuneMenu  = false; return; }
-    if (selectedTower)     { selectedTower = null;  return; }
+    if (showRunePicker) { showRunePicker = false; runePickerTower = null; return; }
+    if (showRuneMenu)   { showRuneMenu  = false; return; }
+    if (selectedTower)  { selectedTower = null;  return; }
     if (pendingSell)       { pendingSell   = null;  return; }
     return;
   }
@@ -1278,7 +1281,8 @@ window.addEventListener('keydown', e => {
   }
 
   if (key === 'r' && waveState !== 'active' && stars > 0) {
-    showRuneMenu = !showRuneMenu;
+    showRuneMenu   = !showRuneMenu;
+    showRunePicker = false; runePickerTower = null;
     return;
   }
 
@@ -1375,24 +1379,11 @@ canvas.addEventListener('mousedown', e => {
       if (mouseX >= rb.x && mouseX <= rb.x + rb.w &&
           mouseY >= rb.y && mouseY <= rb.y + rb.h) {
         const def  = RUNE_DEFS[rb.idx];
-        const curr = runesBought[def.id] ?? 0;
-        if (curr < def.maxLevel && stars >= def.cost) {
+        const owned = runeInventory[def.id] ?? 0;
+        if (owned < def.maxOwned && stars >= def.cost) {
           stars -= def.cost;
-          runesBought[def.id] = curr + 1;
+          runeInventory[def.id] = owned + 1;
           sfxRune();
-          // Valhalla: immediately increase max lives + give bonus lives
-          if (def.id === 'valhalla') {
-            STARTING_LIVES += 2;
-            lives = Math.min(lives + 2, STARTING_LIVES);
-            dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 24, val: '2 ♥', life: 100, maxLife: 100, color: '#f0c840', large: true, suffix: '' });
-          }
-          // Battle Hymn: re-apply range to existing berserker towers
-          if (def.id === 'battleHymn') {
-            const rng = getRuneMults().berserkRng;
-            for (const t of towers) {
-              if (t.type === TOWER_TYPES.BERSERK) t.range = Math.round(t.baseRange * rng);
-            }
-          }
         }
         return;
       }
@@ -1416,8 +1407,40 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
+  // Rune picker overlay clicks
+  if (e.button === 0 && showRunePicker && runePickerTower) {
+    for (const rb of runePickerBtns) {
+      if (mouseX >= rb.x && mouseX <= rb.x + rb.w && mouseY >= rb.y && mouseY <= rb.y + rb.h) {
+        const tower = runePickerTower;
+        if (rb.remove) {
+          runeInventory[tower.rune] = (runeInventory[tower.rune] ?? 1) + 1;
+          tower.clearRune();
+        } else if (rb.equip) {
+          if (tower.rune) runeInventory[tower.rune] = (runeInventory[tower.rune] ?? 1) + 1;
+          runeInventory[rb.def.id] = Math.max(0, (runeInventory[rb.def.id] ?? 0) - 1);
+          tower.setRune(rb.def.id);
+        }
+        showRunePicker = false; runePickerTower = null;
+        return;
+      }
+    }
+    showRunePicker = false; runePickerTower = null;
+    return;
+  }
+
   // Tower panel buttons (when a tower is selected)
   if (e.button === 0 && selectedTower) {
+    if (panelRuneBtn &&
+        mouseX >= panelRuneBtn.x && mouseX <= panelRuneBtn.x + panelRuneBtn.w &&
+        mouseY >= panelRuneBtn.y && mouseY <= panelRuneBtn.y + panelRuneBtn.h) {
+      if (showRunePicker && runePickerTower === selectedTower) {
+        showRunePicker = false; runePickerTower = null;
+      } else {
+        showRunePicker = true; runePickerTower = selectedTower;
+        showRuneMenu   = false;
+      }
+      return;
+    }
     if (panelUpgradeBtn &&
         mouseX >= panelUpgradeBtn.x && mouseX <= panelUpgradeBtn.x + panelUpgradeBtn.w &&
         mouseY >= panelUpgradeBtn.y && mouseY <= panelUpgradeBtn.y + panelUpgradeBtn.h) {
@@ -1619,9 +1642,6 @@ function update() {
     }
   }
 
-  // ── Rune damage multiplier ────────────────────────────────────────────────────
-  Tower.dmgMult = getRuneMults().dmg;
-
   // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
     // Apply synergy stat boosts temporarily around update()
@@ -1684,11 +1704,12 @@ function update() {
     if (reward > 0) {
       slain++;
       waveSlainCount++;
-      gold        += reward;
-      goldEarned  += reward;
+      const valBonus = (b.source?.rune === 'valhalla') ? Math.ceil(reward * 0.5) : 0;
+      gold        += reward + valBonus;
+      goldEarned  += reward + valBonus;
       if (b.source) b.source.killCount++;
       sfxDie(b.target?.isBoss ?? false);
-      if (b.target) dmgFloaters.push({ x: b.target.x, y: b.target.y - 8, val: reward, life: 52, maxLife: 52, color: '#f0e040' });
+      if (b.target) dmgFloaters.push({ x: b.target.x, y: b.target.y - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : '#f0e040' });
       if (b.target) {
         if (b.target.isBoss) {
           onBossKilled(b.target);
@@ -1722,11 +1743,12 @@ function update() {
               slain++;
               waveSlainCount++;
               splashKills++;
-              gold       += enemy.reward;
-              goldEarned += enemy.reward;
+              const _splashVal = (b.source?.rune === 'valhalla') ? Math.ceil(enemy.reward * 1.5) : enemy.reward;
+              gold       += _splashVal;
+              goldEarned += _splashVal;
               if (b.source) b.source.killCount++;
               sfxDie(enemy.isBoss);
-              dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: enemy.reward, life: 52, maxLife: 52, color: '#ff9040' });
+              dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: '#ff9040' });
               if (enemy.isBoss) {
                 onBossKilled(enemy);
               } else {
@@ -1843,7 +1865,7 @@ function update() {
     for (const [ac, ar] of adj) {
       if (grid.getCell(ac, ar) === CELL.WALL) {
         enemy.slowTimer  = Math.max(enemy.slowTimer, 20);
-        enemy.slowFactor = Math.min(enemy.slowFactor, getRuneMults().wallSlow);
+        enemy.slowFactor = Math.min(enemy.slowFactor, 0.50);
         break;
       }
     }
@@ -2436,19 +2458,20 @@ function drawRightPanel() {
   ctx.textAlign   = 'center'; ctx.fillText('[F]', spX, spY + 12); ctx.textAlign = 'left';
   speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
 
-  // ── Active rune bonuses summary ─────────────────────────────────────────────
-  const rMults = getRuneMults();
-  const runeLines = [];
-  if (runesBought.ironEdge    > 0) runeLines.push({ txt: `⚔ DMG +${Math.round((rMults.dmg - 1) * 100)}%`,       col: '#e85040' });
-  if (runesBought.swiftStrike > 0) runeLines.push({ txt: `⚡ CD  -${Math.round((1 - rMults.cdMult) * 100)}%`,  col: '#88aaee' });
-  if (runesBought.frostRune   > 0) runeLines.push({ txt: `❄ Slow ${Math.round(rMults.wallSlow * 100)}% spd`,  col: '#60c8f0' });
-  if (runesBought.battleHymn  > 0) runeLines.push({ txt: `⚔ Berserk +${Math.round((rMults.berserkRng - 1) * 100)}% rng`, col: '#c87840' });
-  if (runesBought.valhalla    > 0) runeLines.push({ txt: `♥ +${runesBought.valhalla * 2} max lives`,            col: '#f0c840' });
-  if (runeLines.length > 0) {
+  // ── Rune inventory summary ───────────────────────────────────────────────────
+  const totalOwned = Object.values(runeInventory).reduce((s, v) => s + v, 0);
+  if (totalOwned > 0) {
     ctx.font = '9px monospace';
-    for (const rl of runeLines) {
-      ctx.fillStyle = rl.col; ctx.textAlign = 'left';
-      ctx.fillText(rl.txt, lx, ly); ly += 11;
+    for (const def of RUNE_DEFS) {
+      const owned    = runeInventory[def.id] ?? 0;
+      if (owned === 0) continue;
+      const equipped = runeEquippedCount(def.id);
+      ctx.fillStyle  = def.color; ctx.textAlign = 'left';
+      ctx.fillText(`${def.symbol} ${def.label}`, lx, ly);
+      ctx.fillStyle = 'rgba(180,160,100,0.7)'; ctx.textAlign = 'right';
+      ctx.fillText(`${equipped}/${owned}`, rEdge, ly);
+      ctx.textAlign = 'left';
+      ly += 11;
     }
     ly += 2;
     divider();
@@ -2975,7 +2998,8 @@ function drawHud() {
 
 function drawTowerPanel(tower) {
   const panelW = 162;
-  const panelH = tower.maxed ? 100 : 114;
+  const panelH = tower.maxed ? 134 : 148;
+  panelRuneBtn = null;
   const { width, height } = getViewSize();
 
   let px = GRID_LEFT + gridPanX + tower.x * gridZoom - panelW / 2;
@@ -3075,6 +3099,39 @@ function drawTowerPanel(tower) {
   ctx.font      = '10px monospace';
   ctx.fillStyle = '#e8c040';
   ctx.fillText(`◆${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
+
+  // ── Rune slot ───────────────────────────────────────────────────────────────
+  const runeSecY = btnY + btnH + 4;
+  ctx.strokeStyle = 'rgba(180,140,60,0.18)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(px + 8, runeSecY); ctx.lineTo(px + panelW - 8, runeSecY); ctx.stroke();
+
+  const runeDef = tower.rune ? RUNE_DEFS.find(d => d.id === tower.rune) : null;
+  ctx.font      = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(130,110,70,0.7)';
+  ctx.fillText('RUNE', px + 10, runeSecY + 13);
+
+  if (runeDef) {
+    ctx.fillStyle = runeDef.color;
+    ctx.beginPath(); ctx.arc(px + 36, runeSecY + 9, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.font      = 'bold 9px monospace'; ctx.fillStyle = runeDef.color; ctx.textAlign = 'left';
+    ctx.fillText(runeDef.label, px + 44, runeSecY + 13);
+  } else {
+    ctx.fillStyle = 'rgba(100,80,50,0.6)'; ctx.textAlign = 'left';
+    ctx.fillText('— empty —', px + 36, runeSecY + 13);
+  }
+
+  if (waveState !== 'active') {
+    const hasFreeRune = RUNE_DEFS.some(d => runeUnequippedCount(d.id) > 0);
+    const rbtnW = 46, rbtnH = 20, rbtnX = px + panelW - 8 - rbtnW, rbtnY = runeSecY + 2;
+    const rbtnActive = showRunePicker && runePickerTower === tower;
+    drawFantasyPanel(rbtnX, rbtnY, rbtnW, rbtnH,
+      rbtnActive ? 'rgba(30,20,60,0.97)' : (hasFreeRune || runeDef) ? 'rgba(10,20,10,0.97)' : 'rgba(14,10,6,0.97)',
+      rbtnActive ? 0.9 : (hasFreeRune || runeDef) ? 0.55 : 0.18, 3);
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = rbtnActive ? '#c0a0ff' : (hasFreeRune || runeDef) ? '#88ee60' : '#504030';
+    ctx.fillText(runeDef ? 'CHANGE' : 'EQUIP', rbtnX + rbtnW / 2, rbtnY + rbtnH / 2 + 3);
+    panelRuneBtn = { x: rbtnX, y: rbtnY, w: rbtnW, h: rbtnH, tower };
+  }
 
   ctx.restore();
 
@@ -3375,6 +3432,78 @@ function drawPauseOverlay() {
   ctx.restore();
 }
 
+function drawRunePicker() {
+  runePickerBtns = [];
+  if (!showRunePicker || !runePickerTower) return;
+  const tower = runePickerTower;
+
+  // Position picker near the tower panel — anchored to left-center of screen
+  const pw = 190, ph = 24 + RUNE_DEFS.length * 34 + 28;
+  let ppx = GRID_LEFT + gridPanX + tower.x * gridZoom - pw / 2;
+  let ppy = GRID_TOP  + gridPanY + tower.y * gridZoom - ph - CELL_SIZE * gridZoom - 8;
+  ppx = Math.max(GRID_LEFT + 4, Math.min(ppx, BASE_W - RIGHT_PANEL_W - pw - 4));
+  ppy = Math.max(GRID_TOP + 4, Math.min(ppy, BASE_H - ph - 8));
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, BASE_W, BASE_H);
+  drawFantasyPanel(ppx, ppy, pw, ph, 'rgba(8,4,18,0.98)', 0.9, 8);
+
+  ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#c8a0ff'; ctx.shadowColor = 'rgba(180,100,255,0.5)'; ctx.shadowBlur = 8;
+  ctx.fillText('EQUIP RUNE', ppx + pw / 2, ppy + 17);
+  ctx.shadowBlur = 0;
+
+  let ry = ppy + 26;
+  const rowH = 34, bw = 48, bh = 22;
+
+  for (const def of RUNE_DEFS) {
+    const owned    = runeInventory[def.id] ?? 0;
+    const equipped = runeEquippedCount(def.id);
+    const isOnThis = tower.rune === def.id;
+    const free     = owned - equipped + (isOnThis ? 1 : 0); // available if we unequip this tower
+    const canEquip = free > 0;
+
+    if (owned === 0) { ry += rowH; continue; }
+
+    // Row bg for equipped-on-this-tower
+    if (isOnThis) {
+      ctx.fillStyle = 'rgba(160,120,255,0.08)';
+      ctx.fillRect(ppx + 4, ry, pw - 8, rowH - 2);
+    }
+
+    // Swatch
+    ctx.fillStyle = def.color;
+    ctx.beginPath(); ctx.arc(ppx + 16, ry + rowH / 2 - 1, 6, 0, Math.PI * 2); ctx.fill();
+
+    // Name
+    ctx.textAlign = 'left'; ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = isOnThis ? def.color : canEquip ? '#e0d0a0' : '#504030';
+    ctx.fillText(def.label, ppx + 28, ry + 13);
+    ctx.font = '8px monospace'; ctx.fillStyle = '#705040';
+    ctx.fillText(def.desc, ppx + 28, ry + 24);
+
+    const bx = ppx + pw - bw - 6, by = ry + (rowH - bh) / 2;
+    drawFantasyPanel(bx, by, bw, bh,
+      isOnThis ? 'rgba(50,20,80,0.97)' : canEquip ? 'rgba(10,30,10,0.97)' : 'rgba(14,10,6,0.97)',
+      isOnThis ? 0.85 : canEquip ? 0.65 : 0.15, 3);
+    ctx.textAlign = 'center'; ctx.font = 'bold 8px monospace';
+    ctx.fillStyle = isOnThis ? '#c090ff' : canEquip ? '#88ee60' : '#403020';
+    ctx.fillText(isOnThis ? 'ON' : 'EQUIP', bx + bw / 2, by + bh / 2 + 3);
+    if (canEquip && !isOnThis) runePickerBtns.push({ x: bx, y: by, w: bw, h: bh, def, equip: true });
+
+    ry += rowH;
+  }
+
+  // REMOVE button if tower has a rune
+  if (tower.rune) {
+    const rbx = ppx + pw / 2 - 36, rby = ppy + ph - 26, rbw = 72, rbh = 20;
+    drawFantasyPanel(rbx, rby, rbw, rbh, 'rgba(30,6,6,0.97)', 0.65, 3);
+    ctx.textAlign = 'center'; ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#ee6666';
+    ctx.fillText('REMOVE RUNE', rbx + rbw / 2, rby + rbh / 2 + 3);
+    runePickerBtns.push({ x: rbx, y: rby, w: rbw, h: rbh, remove: true });
+  }
+}
+
 function drawRuneMenu() {
   runeMenuBtns = [];
   const W = BASE_W, H = BASE_H;
@@ -3396,17 +3525,17 @@ function drawRuneMenu() {
   ctx.shadowBlur = 0;
   ctx.font       = '9px monospace';
   ctx.fillStyle  = '#705030';
-  ctx.fillText(`✦ ${stars} stars available`, mx + menuW / 2, my + 40);
+  ctx.fillText(`✦ ${stars} stars available  —  equip runes on towers`, mx + menuW / 2, my + 40);
 
   const rowH = 46, rowStart = my + 54;
 
   RUNE_DEFS.forEach((def, i) => {
-    const ry    = rowStart + i * rowH;
-    const level = runesBought[def.id] ?? 0;
-    const maxed = level >= def.maxLevel;
-    const canBuy = !maxed && stars >= def.cost;
+    const ry       = rowStart + i * rowH;
+    const owned    = runeInventory[def.id] ?? 0;
+    const equipped = runeEquippedCount(def.id);
+    const maxed    = owned >= def.maxOwned;
+    const canBuy   = !maxed && stars >= def.cost;
 
-    // Row background
     if (i % 2 === 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.03)';
       ctx.fillRect(mx + 8, ry, menuW - 16, rowH - 2);
@@ -3419,22 +3548,31 @@ function drawRuneMenu() {
     // Rune name + desc
     ctx.textAlign = 'left';
     ctx.font      = 'bold 10px monospace';
-    ctx.fillStyle = maxed ? '#706040' : '#e8d0a0';
+    ctx.fillStyle = '#e8d0a0';
     ctx.fillText(def.label, mx + 36, ry + 15);
     ctx.font      = '10px monospace';
     ctx.fillStyle = '#706860';
     ctx.fillText(def.desc, mx + 36, ry + 27);
 
-    // Level pips
-    for (let p = 0; p < def.maxLevel; p++) {
+    // Owned pips (filled = owned, half = equipped)
+    for (let p = 0; p < def.maxOwned; p++) {
       ctx.beginPath();
       ctx.arc(mx + 36 + p * 12, ry + 38, 4, 0, Math.PI * 2);
-      ctx.fillStyle = p < level ? def.color : 'rgba(80,60,30,0.5)';
+      ctx.fillStyle = p < owned ? def.color : 'rgba(80,60,30,0.5)';
       ctx.fill();
+      if (p < equipped) {
+        ctx.beginPath(); ctx.arc(mx + 36 + p * 12, ry + 38, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
+      }
+    }
+    // owned/equipped label
+    if (owned > 0) {
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,80,0.70)'; ctx.textAlign = 'left';
+      ctx.fillText(`own ${owned}  eq ${equipped}`, mx + 36 + def.maxOwned * 12 + 4, ry + 41);
     }
 
     // Buy button
-    const bw = 64, bh = 22;
+    const bw = 56, bh = 22;
     const bx = mx + menuW - bw - 12;
     const by = ry + (rowH - bh) / 2 - 1;
     drawFantasyPanel(bx, by, bw, bh,
@@ -3443,12 +3581,7 @@ function drawRuneMenu() {
     ctx.textAlign = 'center';
     ctx.font      = `bold 9px monospace`;
     ctx.fillStyle = maxed ? '#504030' : canBuy ? '#88ee60' : '#504030';
-    ctx.fillText(maxed ? 'MAXED' : `✦${def.cost}`, bx + bw / 2, by + bh / 2 + 3.5);
-    if (!maxed && level > 0) {
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = 'rgba(180,150,80,0.70)';
-      ctx.fillText(`Lv ${level}/${def.maxLevel}`, bx + bw / 2, by - 4);
-    }
+    ctx.fillText(maxed ? 'FULL' : `✦${def.cost}`, bx + bw / 2, by + bh / 2 + 3.5);
 
     if (!maxed) runeMenuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: i });
   });
@@ -4037,6 +4170,7 @@ function draw() {
 
   // Rune menu overlay (break/countdown only)
   if (showRuneMenu && waveState !== 'active') drawRuneMenu();
+  if (showRunePicker && runePickerTower) drawRunePicker();
 
   drawFrames();
   ctx.restore();
