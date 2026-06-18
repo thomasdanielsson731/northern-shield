@@ -13,7 +13,7 @@ export const ENEMY_DEFS = {
     speed:          0.70,
     hp:             130,
     radius:         7,
-    reward:         16,
+    reward:         12,
     color:          '#5020a0',   // void purple — nightmare spirit (style bible)
     highlightColor: '#8040c0',
     flying:         false
@@ -491,7 +491,7 @@ export class Enemy {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(60,140,255,0.95)';
+    ctx.shadowColor = 'rgba(80,180,50,0.90)';
     ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = this.color;
     ctx.fillRect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
@@ -511,8 +511,8 @@ export class Enemy {
       const a  = rot * 2.5 + (i / 5) * Math.PI * 2;
       const sr = r * 1.45;
       const alpha = Math.max(0, 0.45 + Math.sin(rot * 4 + i * 1.3) * 0.35);
-      ctx.fillStyle   = `rgba(140,210,255,${alpha})`;
-      ctx.shadowColor = '#44aaff';
+      ctx.fillStyle   = `rgba(100,220,80,${alpha})`;
+      ctx.shadowColor = '#50cc30';
       ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr * 0.5, r * 0.14, 0, Math.PI * 2);
@@ -742,8 +742,8 @@ export class Enemy {
     ctx.beginPath();
     ctx.ellipse(x + eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Eye socket glow
-    ctx.strokeStyle = `rgba(0,230,255,${0.50 + pulse * 0.30})`;
+    // Eye socket glow — dream-purple
+    ctx.strokeStyle = `rgba(180,80,240,${0.50 + pulse * 0.30})`;
     ctx.lineWidth   = 0.8;
     ctx.beginPath();
     ctx.ellipse(x - eyeOff, faceY - bh * 0.12, eyeW, eyeH, 0, 0, Math.PI * 2);
@@ -758,7 +758,7 @@ export class Enemy {
     ctx.beginPath();
     ctx.ellipse(x, faceY + bh * 0.20, bw * 0.46, mouthH, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = `rgba(0,200,255,${0.40 + wail * 0.35})`;
+    ctx.strokeStyle = `rgba(160,70,230,${0.40 + wail * 0.35})`;
     ctx.lineWidth   = 0.9;
     ctx.beginPath();
     ctx.ellipse(x, faceY + bh * 0.20, bw * 0.46, mouthH, 0, 0, Math.PI * 2);
@@ -767,9 +767,9 @@ export class Enemy {
     // Dream-rune badge — top-right
     ctx.save();
     const bdx = x + bw * 0.80, bdy = y - r * 0.75, bs = 5.5;
-    ctx.shadowColor = '#00eeff';
+    ctx.shadowColor = '#a060e0';
     ctx.shadowBlur  = 7;
-    ctx.fillStyle   = '#44ddff';
+    ctx.fillStyle   = '#a060e0';
     ctx.beginPath();
     ctx.moveTo(bdx + bs * 0.12,  bdy - bs * 0.52);
     ctx.lineTo(bdx - bs * 0.18,  bdy + bs * 0.05);

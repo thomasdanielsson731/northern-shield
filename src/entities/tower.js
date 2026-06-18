@@ -176,6 +176,8 @@ export class Tower {
     this.fireCooldown  = 0;
     this.level         = 1;
     this.damageDealt   = 0;
+    this._shadowGrad   = null;
+    this._shadowR      = -1;
 
     const def = TOWER_DEFS[this.type] || TOWER_DEFS[TOWER_TYPES.BERSERK];
     this.baseDamage    = def.damage;
@@ -351,15 +353,19 @@ export class Tower {
     }
     ctx.restore();
 
-    // Ground shadow — soft ellipse beneath the sprite
+    // Ground shadow — soft ellipse beneath the sprite; gradient cached by shadowR
     const shadowR = Math.max(fpW, fpH) / 2 + 2;
+    if (shadowR !== this._shadowR) {
+      this._shadowR    = shadowR;
+      const g = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
+      g.addColorStop(0,   'rgba(0,0,0,0.85)');
+      g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1,   'rgba(0,0,0,0)');
+      this._shadowGrad = g;
+    }
     ctx.save();
     ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.38;
-    const grad = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
-    grad.addColorStop(0,   'rgba(0,0,0,0.85)');
-    grad.addColorStop(0.5, 'rgba(0,0,0,0.45)');
-    grad.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
+    ctx.fillStyle = this._shadowGrad;
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
     ctx.fill();

@@ -510,9 +510,9 @@ function waveComposition(num) {
   const n = Math.min(num, MAX_WAVES);
   return {
     draugr:  n <= 5 ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), 55),
-    mylings: n >= 6  ? Math.min(Math.floor((n - 5) * 2.0), 28) : 0,
+    mylings: n >= 8  ? Math.min(Math.floor((n - 7) * 2.0), 28) : 0,
     jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), 12) : 0,
-    maras:   n >= 21 ? Math.min(Math.floor((n - 20) * 0.8), 12) : 0,
+    maras:   n >= 23 ? Math.min(Math.floor((n - 22) * 0.8), 12) : 0,
   };
 }
 
@@ -635,7 +635,7 @@ function updateWave() {
     }
   } else if (enemies.length === 0) {
     // Wave-clear bonus — capped at 110g for wave 30+ to prevent economy inflation
-    const rawBonus   = waveNumber >= 30 ? Math.min(8 + waveNumber * 2, 110) : 8 + waveNumber * 2;
+    const rawBonus   = Math.min(20 + waveNumber * 3, 110);
     const clearBonus = rawBonus + (waveLeak ? 0 : 4);
     gold       += clearBonus;
     goldEarned += clearBonus;
@@ -1242,13 +1242,18 @@ function handleRightClickAt(mouseX, mouseY) {
     return;
   }
   if (cell === CELL.WALL) {
-    wallFrostDirty = true;
-    gold += Math.floor(WALL_COST * 0.5);
-    grid.setCell(col, row, CELL.EMPTY);
-    currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-    rerouteActiveEnemies();
-    sfxSell();
-    pendingSell = null;
+    const wallKey = `w_${col}_${row}`;
+    if (pendingSell && pendingSell.key === wallKey) {
+      wallFrostDirty = true;
+      gold += Math.floor(WALL_COST * 0.5);
+      grid.setCell(col, row, CELL.EMPTY);
+      currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+      rerouteActiveEnemies();
+      sfxSell();
+      pendingSell = null;
+    } else {
+      pendingSell = { key: wallKey, col, row, timer: 90 };
+    }
   } else if (cell === CELL.TOWER) {
     const t = getTowerAtCell(col, row);
     if (!t) return;
@@ -3197,7 +3202,7 @@ function onBossPhase75(boss) {
   } else if (boss.waveNum === 75) {
     // Fenrir: howl stun + summon Mylings
     boss.stunTimer = 50;
-    for (let i = 0; i < 3; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
+    for (let i = 0; i < 6; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
   } else if (boss.waveNum === 100) {
     // Surtr: fire surge — summon 4 Jötunns
     for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.JOTUNN, waveHpScale * 0.7);
@@ -4354,6 +4359,10 @@ function drawPendingSell() {
     ctx.font      = '8px monospace';
     ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
     ctx.fillText(`Refund: ◆${tower.sellValue}`, vx + vsW / 2, vy + vsH / 2 + 9);
+  } else {
+    ctx.font      = '8px monospace';
+    ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
+    ctx.fillText(`Refund: ◆${Math.floor(WALL_COST * 0.5)}`, vx + vsW / 2, vy + vsH / 2 + 9);
   }
   ctx.restore();
 }
