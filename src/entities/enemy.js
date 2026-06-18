@@ -585,17 +585,15 @@ export class Enemy {
       ctx.fill();
     }
 
-    // Ice fracture lines — radiating cold blue cracks
+    // Ice fracture lines — radiating cold blue cracks (solid, no per-frame gradient)
     ctx.save();
+    ctx.lineWidth = 1.4;
     for (let i = 0; i < 7; i++) {
       const angle = (i / 7) * Math.PI * 2 + 0.4;
       const len   = r * (0.48 + Math.sin(t * 1.8 + i * 1.2) * 0.14);
-      const grad  = ctx.createLinearGradient(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
-      grad.addColorStop(0,   `rgba(140,200,255,${0.80 * pulse})`);
-      grad.addColorStop(0.6, `rgba(80,160,240,${0.45 * pulse})`);
-      grad.addColorStop(1,   'rgba(40,100,200,0)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth   = 1.4;
+      const frac  = i / 6;
+      const alpha = (0.55 + frac * 0.25) * pulse;
+      ctx.strokeStyle = `rgba(${Math.round(80 + frac * 60)},${Math.round(160 + frac * 40)},255,${alpha})`;
       ctx.beginPath();
       ctx.moveTo(x, y);
       const mx = x + Math.cos(angle + 0.2) * len * 0.5;
@@ -686,7 +684,7 @@ export class Enemy {
     for (let ring = 0; ring < 3; ring++) {
       const ringR = r * (1.5 + ring * 0.45);
       const alpha = (0.18 - ring * 0.045) * (0.55 + pulse * 0.45);
-      ctx.strokeStyle = `rgba(80,40,180,${alpha})`;
+      ctx.strokeStyle = `rgba(40,20,120,${alpha})`;
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, ring + 3]);
       ctx.lineDashOffset = t * (ring % 2 === 0 ? 22 : -16);

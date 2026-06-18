@@ -159,6 +159,9 @@ let preBossPortalTimer = 0;       // accumulates during countdown/break before b
 let bossRings          = [];      // { x, y, r, maxR, life, maxLife, color } boss phase rings
 let pathCanvas         = null;    // offscreen canvas caching the static stone road
 let pathDirty          = true;    // true when path changed — triggers re-bake
+let _pathPts           = [];      // cached world-space polyline (rebuilt when pathDirty)
+let _pathSegs          = [];      // cached segment data (rebuilt when pathDirty)
+let _pathTotalLen      = 0;
 let towerTargetLines   = [];      // { x0, y0, x1, y1, life, maxLife } targeting lines
 
 // Wave timing
@@ -181,7 +184,7 @@ const ABILITY_LABELS = {
   valkyrie: 'SNIPER',
   military: 'RAPID',
   catapult: 'SPLASH',
-  blondie:  'STUN',
+  blondie:  'SLOW',
   piltorn:  'PIERCE',
   hydda:    'HEAL',
   isjatten: 'NOVA',
@@ -518,11 +521,13 @@ function waveComposition(num) {
 
 function buildWave(num) {
   if (BOSS_WAVES.has(num)) {
-    // Boss wave: small herald squad, then the boss enters last
-    const heralds = [
-      ...Array(6).fill(ENEMY_TYPES.DRAUGR),
-      ...Array(2).fill(ENEMY_TYPES.MYLING),
-    ];
+    // Boss wave: herald squad themed per boss, then the boss enters last
+    let heralds;
+    if (num === 10)  heralds = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
+    else if (num === 25) heralds = [...Array(8).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+    else if (num === 50) heralds = [...Array(4).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MARA)];
+    else if (num === 75) heralds = [...Array(4).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+    else               heralds = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(3).fill(ENEMY_TYPES.MARA)];
     for (let i = heralds.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [heralds[i], heralds[j]] = [heralds[j], heralds[i]];
@@ -579,7 +584,7 @@ function startNextWave() {
   screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
 
   // Economy emergency valve — track poor waves (started with <15g)
-  if (gold < 15) poorWaveStreak++; else poorWaveStreak = 0;
+  if (gold < 40) poorWaveStreak++; else poorWaveStreak = 0;
 
   // Chapter milestone banners
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
@@ -659,7 +664,7 @@ function updateWave() {
       hoardPulse = 18;
     }
     // Hoard interest (2% of gold, max 20g)
-    const interest = Math.min(Math.floor(gold * 0.02), 20);
+    const interest = gold > 0 ? Math.min(Math.max(Math.floor(gold * 0.04), 8), 30) : 0;
     if (interest > 0) {
       gold       += interest;
       goldEarned += interest;
@@ -1697,11 +1702,12 @@ function update() {
 
     if (!tr) continue;
     if (tr.type === 'heal') {
-      if (lives < STARTING_LIVES) {
+      const healCount = tr.count ?? 1;
+      for (let h = 0; h < healCount && lives < STARTING_LIVES; h++) {
         lives++;
         sfxHeal();
-        spawnParticles(tower.x, tower.y, '#40e870', 10);
       }
+      if (healCount > 0) spawnParticles(tower.x, tower.y, '#40e870', 10 * healCount);
     } else if (tr.type === 'nova') {
       sfxNova();
       novaRings.push({ x: tr.x, y: tr.y, r: 0, maxR: tr.r, life: 26, maxLife: 26 });
@@ -2078,17 +2084,22 @@ function drawPath() {
   const t  = performance.now() * 0.001;
   const cs = CELL_SIZE;
 
-  // Build world-space polyline with cumulative distances
-  const pts = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
-  const segs = [];
-  let totalLen = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const dx = pts[i + 1].x - pts[i].x;
-    const dy = pts[i + 1].y - pts[i].y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    segs.push({ x0: pts[i].x, y0: pts[i].y, x1: pts[i + 1].x, y1: pts[i + 1].y, len, cum: totalLen });
-    totalLen += len;
+  // Build world-space polyline with cumulative distances — cached, rebuild only on path change
+  if (pathDirty || _pathPts.length === 0) {
+    _pathPts  = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+    _pathSegs = [];
+    _pathTotalLen = 0;
+    for (let i = 0; i < _pathPts.length - 1; i++) {
+      const dx = _pathPts[i + 1].x - _pathPts[i].x;
+      const dy = _pathPts[i + 1].y - _pathPts[i].y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      _pathSegs.push({ x0: _pathPts[i].x, y0: _pathPts[i].y, x1: _pathPts[i + 1].x, y1: _pathPts[i + 1].y, len, cum: _pathTotalLen });
+      _pathTotalLen += len;
+    }
   }
+  const pts = _pathPts;
+  const segs = _pathSegs;
+  const totalLen = _pathTotalLen;
 
   ctx.save();
 
@@ -2517,21 +2528,24 @@ function drawRightPanel() {
     divider();
   }
 
-  // ── RUNE FORGE button (break/countdown) ────────────────────────────────────
-  if (!gameOver && waveState !== 'active' && stars > 0) {
+  // ── RUNE FORGE button (break/countdown) — always visible, dimmed when no stars
+  if (!gameOver && waveState !== 'active') {
     const rfH = 32, rfY = GRID_TOP + fullH - 102, rfX = px + 6, rfW = pw - 12;
     const rfActive = showRuneMenu;
+    const hasStars = stars > 0;
+    ctx.globalAlpha = hasStars ? 1 : 0.35;
     drawFantasyPanel(rfX, rfY, rfW, rfH,
       rfActive ? 'rgba(40,20,80,0.97)' : 'rgba(20,10,40,0.95)',
       rfActive ? 0.9 : 0.45, 5);
     ctx.textAlign   = 'center';
     ctx.font        = 'bold 10px monospace';
-    ctx.fillStyle   = rfActive ? '#c0a0ff' : '#806090';
+    ctx.fillStyle   = rfActive ? '#c0a0ff' : (hasStars ? '#806090' : '#504060');
     ctx.shadowColor = 'rgba(160,100,255,0.55)';
     ctx.shadowBlur  = rfActive ? 8 : 0;
-    ctx.fillText(`✦ RUNE FORGE [R]  (${stars})`, rfX + rfW / 2, rfY + rfH / 2 + 4);
+    ctx.fillText(hasStars ? `✦ RUNE FORGE [R]  (${stars})` : '✦ RUNE FORGE — earn ★ stars', rfX + rfW / 2, rfY + rfH / 2 + 4);
     ctx.shadowBlur  = 0;
-    runeForgeBtn = { x: rfX, y: rfY, w: rfW, h: rfH };
+    ctx.globalAlpha = 1;
+    runeForgeBtn = hasStars ? { x: rfX, y: rfY, w: rfW, h: rfH } : null;
   } else {
     runeForgeBtn = null;
   }
@@ -3066,15 +3080,24 @@ function drawTowerPanel(tower) {
   ctx.textAlign = 'left';
   ctx.font      = '11px monospace';
   ctx.fillStyle = '#8aaccc';
-  const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
-  ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  DPS ~${dps}`, px + 10, py + 32);
+  if (tower.type === 'hydda') {
+    ctx.fillText(`HEALS ${tower.level >= 5 ? 2 : 1} life every ${Math.round(tower.fireRate / 30)}s`, px + 10, py + 32);
+  } else if (tower.type === 'isjatten') {
+    const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
+    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  AoE`, px + 10, py + 32);
+  } else {
+    const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
+    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  DPS ~${dps}`, px + 10, py + 32);
+  }
 
   if (!tower.maxed) {
-    const nextDmg = Math.round(tower.baseDamage * (1 + tower.level * 0.25));
-    const nextRng = Math.round(tower.baseRange  * (1 + tower.level * 0.08));
+    const n       = tower.level;
+    const nextDmg = Math.round(tower.baseDamage * (1 + n * 0.25));
+    const nextRng = Math.round(tower.baseRange  * (1 + n * 0.08));
+    const nextFR  = Math.max(4, Math.round(tower.baseFireRate * (1 - n * 0.05)));
     ctx.font      = '9px monospace';
     ctx.fillStyle = 'rgba(120,200,120,0.65)';
-    ctx.fillText(`▸ Lv${tower.level + 1}: DMG ${nextDmg}  RNG ${nextRng}`, px + 10, py + 43);
+    ctx.fillText(`▸ Lv${n + 1}: DMG ${nextDmg}  RNG ${nextRng}  SPD ${nextFR}`, px + 10, py + 43);
   }
 
   // Kill stats + damage dealt / synergy (right side)
@@ -3193,7 +3216,8 @@ function onBossPhase75(boss) {
     boss.stunTimer = 50;
     for (let i = 0; i < 6; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
   } else if (boss.waveNum === 100) {
-    // Surtr: fire surge — summon 4 Jötunns
+    // Surtr: fire surge — summon 4 Jötunns + dramatic freeze
+    boss.stunTimer = 60;
     for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.JOTUNN, waveHpScale * 0.7);
   }
 }
@@ -3380,17 +3404,21 @@ function drawDmgFloaters() {
   if (dmgFloaters.length === 0) return;
   ctx.save();
   ctx.textAlign = 'center';
-  for (const f of dmgFloaters) {
-    const t     = 1 - f.life / f.maxLife;
-    const alpha = f.life < 20 ? f.life / 20 : 1;
-    const fy    = GRID_TOP + gridPanY + (f.y - t * 18) * gridZoom;
-    const fx    = GRID_LEFT + gridPanX + f.x * gridZoom;
-    ctx.globalAlpha   = alpha;
-    ctx.font          = `bold ${f.large ? Math.round(13 + t * 4) : Math.round(9 + t * 3)}px monospace`;
-    ctx.fillStyle     = f.color;
-    ctx.shadowColor   = f.color;
-    ctx.shadowBlur    = f.large ? 10 : 6;
-    ctx.fillText(`+${f.val}${f.suffix ?? ''}`, fx, fy);
+  // Two passes: large floaters first (bottom z), then small; each pass sets state once
+  for (const large of [false, true]) {
+    ctx.shadowBlur = large ? 10 : 6;
+    for (const f of dmgFloaters) {
+      if (!!f.large !== large) continue;
+      const t   = 1 - f.life / f.maxLife;
+      const alpha = f.life < 20 ? f.life / 20 : 1;
+      const fy  = GRID_TOP + gridPanY + (f.y - t * 18) * gridZoom;
+      const fx  = GRID_LEFT + gridPanX + f.x * gridZoom;
+      ctx.globalAlpha = alpha;
+      ctx.font        = `bold ${large ? Math.round(13 + t * 4) : Math.round(9 + t * 3)}px monospace`;
+      ctx.fillStyle   = f.color;
+      ctx.shadowColor = f.color;
+      ctx.fillText(`+${f.val}${f.suffix ?? ''}`, fx, fy);
+    }
   }
   ctx.shadowBlur  = 0;
   ctx.globalAlpha = 1;
@@ -3993,12 +4021,7 @@ function draw() {
     ctx.restore();
   }
 
-  enemies.forEach(e => e.draw(ctx));
-
-  bullets.forEach(b => b.draw(ctx));
-  drawParticles();
-
-  // ── Catapult splash rings ───────────────────────────────────────────────────
+  // ── Catapult splash rings drawn BEFORE enemies so dying enemies render on top ─
   for (const sr of splashRings) {
     const alpha = (sr.life / sr.maxLife) * 0.75;
     ctx.save();
@@ -4007,6 +4030,11 @@ function draw() {
     ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
+
+  enemies.forEach(e => e.draw(ctx));
+
+  bullets.forEach(b => b.draw(ctx));
+  drawParticles();
 
   // ── Mara EMP shockwave rings ────────────────────────────────────────────────
   for (const er of empRings) {
@@ -4269,7 +4297,7 @@ function drawMylingWarning() {
   ctx.fillStyle   = `rgba(136,200,80,${fadeAlpha * 0.92})`;
   ctx.shadowColor = `rgba(100,160,40,${fadeAlpha * 0.8})`;
   ctx.shadowBlur  = 10;
-  ctx.fillText('◆ MYLING — FLIES OVER WALLS', cx, by);
+  ctx.fillText('◆ MYLING — AIRBORNE, BYPASSES ALL WALLS', cx, by);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }
@@ -4332,11 +4360,13 @@ function drawPendingSell() {
   ctx.beginPath();
   ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
   ctx.clip();
-  ctx.fillStyle   = `rgba(220,50,30,${pulse * 0.30})`;
+  ctx.fillStyle   = `rgba(220,140,20,${pulse * 0.28})`;
   ctx.fillRect(vx, vy, vsW, vsH);
-  ctx.strokeStyle = `rgba(255,80,50,${pulse})`;
-  ctx.lineWidth   = 2;
+  ctx.strokeStyle = `rgba(255,180,40,${pulse})`;
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([4, 3]);
   ctx.strokeRect(vx + 1, vy + 1, vsW - 2, vsH - 2);
+  ctx.setLineDash([]);
   ctx.font      = 'bold 9px monospace';
   ctx.fillStyle = `rgba(255,200,180,${pulse})`;
   ctx.textAlign = 'center';
@@ -4403,6 +4433,22 @@ function drawDragGhost() {
     ctx.strokeStyle = canPlace ? 'rgba(120,255,120,0.75)' : 'rgba(255,80,80,0.75)';
     ctx.lineWidth   = 1.5;
     ctx.strokeRect(fpVX + 0.75, fpVY + 0.75, fpVW - 1.5, fpVH - 1.5);
+
+    // Range ring preview for towers
+    if (dragItem.mode === CELL.TOWER) {
+      const tRange = TOWER_DEFS[dragItem.id]?.range ?? 0;
+      if (tRange > 0) {
+        const cx2 = fpVX + fpVW / 2;
+        const cy2 = fpVY + fpVH / 2;
+        ctx.strokeStyle = TOWER_DEFS[dragItem.id]?.rangeColor ?? 'rgba(200,200,200,0.3)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.arc(cx2, cy2, tRange * gridZoom, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
     ctx.restore();
   }
 

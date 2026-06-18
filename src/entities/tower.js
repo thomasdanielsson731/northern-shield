@@ -234,7 +234,7 @@ export class Tower {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
     for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
-    return Math.floor(total * 0.5);
+    return Math.floor(total * 0.6);
   }
   get maxed()       { return this.level >= MAX_LEVEL; }
 
@@ -264,7 +264,7 @@ export class Tower {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
-      return { type: 'heal' };
+      return { type: 'heal', count: this.level >= 5 ? 2 : 1 };
     }
 
     // ── Isjätte: AoE ice nova — damages & slows all enemies in range ─────────
@@ -474,7 +474,8 @@ export class Tower {
       ctx.font      = 'bold 7px monospace';
       ctx.fillStyle = `rgba(255,140,80,${0.65 + Math.sin(t * 10) * 0.25})`;
       ctx.textAlign = 'center';
-      ctx.fillText('EMP', this.x, this.y - this.radius - 4);
+      const empSec = Math.max(1, Math.ceil(this.disabledTimer / 60));
+      ctx.fillText(`EMP ${empSec}s`, this.x, this.y - this.radius - 4);
       ctx.restore();
       ctx.restore();
     }
@@ -1361,8 +1362,8 @@ export class Tower {
     ctx.lineWidth   = 0.8;
     ctx.strokeRect(x - 7, y + 0, 14, 9);
 
-    // Thatched roof (triangle shape)
-    ctx.fillStyle = '#7a5c20';
+    // Thatched roof (triangle shape) — cold dark thatch, Norse style
+    ctx.fillStyle = '#3a3028';
     ctx.beginPath();
     ctx.moveTo(x - 10, y + 1);
     ctx.lineTo(x,      y - 9);
