@@ -118,6 +118,7 @@ let wallFrostDirty    = true;
 let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
 let firstKillDone     = false;  // triggers enhanced coin arc on first kill
 let mylingWarningTimer = 0;     // frames remaining for first-Myling warning banner
+let maraEmpWarningTimer = 0;   // frames remaining for first-Mara EMP warning banner
 let chainKillDone     = false;  // one-shot CHAIN KILL! text (catapult 3+)
 let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
 let lifeLostTimer     = 0;      // frames for LIFE LOST text near hoard
@@ -272,8 +273,9 @@ function restartGame() {
 
   firstTowerPlaced  = false;
   firstKillDone     = false;
-  mylingWarningTimer = 0;
-  dragItem          = null;
+  mylingWarningTimer  = 0;
+  maraEmpWarningTimer = 0;
+  dragItem           = null;
   pendingSell       = null;
   gridZoom          = 1.0;
   gridPanX          = 0;
@@ -382,7 +384,7 @@ const BOSS_CONFIGS = {
   25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false },
   50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 9500,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
   75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 32000, radius: 26, speedMult: 1.35, reward: 500, phase75: true,  phase50SlowImmune: true  },
-  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: false },
+  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: true  },
 };
 
 let waveNumber      = 0;
@@ -414,6 +416,8 @@ let goldEarned    = 0;
 // Cached background gradients — rebuilt only when canvas size changes
 let _bgGradCache = null, _bgG1Cache = null, _bgG2Cache = null;
 let _bgCacheW    = 0,    _bgCacheH  = 0;
+let _hoardGradCache = null, _hoardGradR = -1;
+let _vigGradCache   = null, _vigCacheW  = 0, _vigCacheH = 0;
 
 // Path-blocked feedback flash: { col, row, timer }
 let pathBlockFlash = null;
@@ -1646,7 +1650,8 @@ function update() {
     pendingSell.timer--;
     if (pendingSell.timer <= 0) pendingSell = null;
   }
-  if (mylingWarningTimer > 0) mylingWarningTimer--;
+  if (mylingWarningTimer  > 0) mylingWarningTimer--;
+  if (maraEmpWarningTimer > 0) maraEmpWarningTimer--;
 
   updateWave();
 
@@ -1877,6 +1882,7 @@ function update() {
       empRings.push({ x: enemy.x, y: enemy.y, r: 0, life: 28, maxLife: 28 });
       sfxEmp();
       enemy.empPulseTimer = Math.round(50 * gameSpeed);
+      if (maraEmpWarningTimer === 0) maraEmpWarningTimer = 210;
     }
   }
 
@@ -2418,8 +2424,8 @@ function drawRightPanel() {
       const entries = [
         { label: 'Draugr', count: next.draugr,  color: '#7090a8', skip: next.draugr  === 0, boss: false, flying: false },
         { label: 'Myling', count: next.mylings,  color: '#88c860', skip: next.mylings === 0, boss: false, flying: true  },
-        { label: 'Jötunn', count: next.jotunn,   color: '#d08820', skip: next.jotunn  === 0, boss: true,  flying: false },
-        { label: 'Mara',   count: next.maras,    color: '#308888', skip: next.maras   === 0, boss: false, flying: false },
+        { label: 'Jötunn', count: next.jotunn,   color: '#40b0ff', skip: next.jotunn  === 0, boss: true,  flying: false },
+        { label: 'Mara',   count: next.maras,    color: '#7040c0', skip: next.maras   === 0, boss: false, flying: false },
       ];
       let bossHeaderDrawn = false;
       ctx.font = '11px monospace';
@@ -3211,7 +3217,7 @@ function onBossPhase50(boss) {
   const cfg = BOSS_CONFIGS[boss.waveNum];
   if (cfg?.phase50SlowImmune) boss.slowImmune = true;
 
-  bossDefeatTimer = 90;
+  bossDefeatTimer = 150;
   bossDefeatText  = `${boss.bossName} — ENRAGED!`;
   bossDefeatGold  = 0;
 }
@@ -3359,7 +3365,7 @@ function drawWaveAnnouncement() {
     if (next.draugr  > 0) parts.push({ label: `● ×${next.draugr}`,  color: '#7090a8' });
     if (next.mylings > 0) parts.push({ label: `◆ ×${next.mylings}`, color: '#88c860' });
     if (next.jotunn  > 0) parts.push({ label: `◉ ×${next.jotunn}`,  color: '#c07820' });
-    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#308888' });
+    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#7040c0' });
 
     ctx.font = '10px monospace';
     const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 12, -12);
@@ -3827,16 +3833,20 @@ function draw() {
 
   // ── Hoard ambient glow — warm amber light radiating from Trelleborg ────────
   {
-    const hgx = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
-    const hgy = GOAL.row * CELL_SIZE + CELL_SIZE / 2;
-    const pulse = hoardPulse > 0 ? 1 + (hoardPulse / 60) * 0.25 : 1;
-    const hg = ctx.createRadialGradient(hgx, hgy, 0, hgx, hgy, 65 * pulse);
-    hg.addColorStop(0,    'rgba(220,140,30,0.22)');
-    hg.addColorStop(0.35, 'rgba(200,110,20,0.12)');
-    hg.addColorStop(1,    'rgba(140,70,10,0)');
-    ctx.fillStyle = hg;
+    const hgx   = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+    const hgy   = GOAL.row * CELL_SIZE + CELL_SIZE / 2;
+    const pulse  = hoardPulse > 0 ? 1 + (hoardPulse / 60) * 0.25 : 1;
+    const targetR = Math.round(65 * pulse);
+    if (_hoardGradR !== targetR) {
+      _hoardGradCache = ctx.createRadialGradient(hgx, hgy, 0, hgx, hgy, targetR);
+      _hoardGradCache.addColorStop(0,    'rgba(220,140,30,0.22)');
+      _hoardGradCache.addColorStop(0.35, 'rgba(200,110,20,0.12)');
+      _hoardGradCache.addColorStop(1,    'rgba(140,70,10,0)');
+      _hoardGradR = targetR;
+    }
+    ctx.fillStyle = _hoardGradCache;
     ctx.beginPath();
-    ctx.arc(hgx, hgy, 65 * pulse, 0, Math.PI * 2);
+    ctx.arc(hgx, hgy, targetR, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -4174,15 +4184,19 @@ function draw() {
 
   ctx.restore();
 
-  // Critical health vignette (screen-space)
+  // Critical health vignette (screen-space) — gradient cached; alpha via globalAlpha
   if (!gameOver && lives <= 5) {
     const { width, height } = getViewSize();
-    const vigAlpha = Math.max(0, (5 - lives) / 5) * 0.38;
-    const grad = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.85);
-    grad.addColorStop(0, 'rgba(180,20,20,0)');
-    grad.addColorStop(1, `rgba(180,20,20,${vigAlpha})`);
-    ctx.fillStyle = grad;
+    if (!_vigGradCache || width !== _vigCacheW || height !== _vigCacheH) {
+      _vigGradCache = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.85);
+      _vigGradCache.addColorStop(0, 'rgba(180,20,20,0)');
+      _vigGradCache.addColorStop(1, 'rgba(180,20,20,1)');
+      _vigCacheW = width; _vigCacheH = height;
+    }
+    ctx.globalAlpha = Math.max(0, (5 - lives) / 5) * 0.38;
+    ctx.fillStyle   = _vigGradCache;
     ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
   }
 
   drawRightPanel();
@@ -4193,6 +4207,7 @@ function draw() {
   drawWaveAnnouncement();
   drawChapterBanner();
   drawMylingWarning();
+  drawMaraEmpWarning();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawPathBlockFlash();
   drawDragGhost();
@@ -4259,10 +4274,26 @@ function drawMylingWarning() {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.font      = 'bold 11px monospace';
-  ctx.fillStyle = `rgba(136,187,255,${fadeAlpha * 0.92})`;
-  ctx.shadowColor = `rgba(100,160,255,${fadeAlpha * 0.8})`;
+  ctx.fillStyle   = `rgba(136,200,80,${fadeAlpha * 0.92})`;
+  ctx.shadowColor = `rgba(100,160,40,${fadeAlpha * 0.8})`;
   ctx.shadowBlur  = 10;
   ctx.fillText('◆ MYLING — FLIES OVER WALLS', cx, by);
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawMaraEmpWarning() {
+  if (maraEmpWarningTimer <= 0) return;
+  const fadeAlpha = maraEmpWarningTimer < 60 ? maraEmpWarningTimer / 60 : 1;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const by = GRID_TOP + 36;
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 11px monospace';
+  ctx.fillStyle   = `rgba(180,100,255,${fadeAlpha * 0.92})`;
+  ctx.shadowColor = `rgba(140,60,220,${fadeAlpha * 0.8})`;
+  ctx.shadowBlur  = 10;
+  ctx.fillText('◆ MARA — EMP DISABLES NEARBY TOWERS', cx, by);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }

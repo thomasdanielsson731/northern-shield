@@ -33,9 +33,9 @@ export const ENEMY_DEFS = {
     speed:          1.2,
     hp:             110,
     radius:         6,
-    reward:         10,
-    color:          '#88bbff',   // ethereal blue — floating ghost child
-    highlightColor: '#aaddff',
+    reward:         6,
+    color:          '#50883a',   // sickly pale green — corrupted child spirit (style bible)
+    highlightColor: '#88bb50',
     flying:         true
   },
   jotunn: {
@@ -43,7 +43,7 @@ export const ENEMY_DEFS = {
     speed:          0.40,
     hp:             700,
     radius:         13,
-    reward:         58,
+    reward:         32,
     color:          '#2a3a4c',   // cold slate — Norse frost giant
     highlightColor: '#40b0ff',   // ice-blue core
     flying:         false
@@ -463,22 +463,21 @@ export class Enemy {
     const rot   = t * 2.1;
     const pulse = 0.65 + Math.sin(t * 3.5) * 0.35;
 
-    // Outer glow haze — electric blue
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.8);
-    grad.addColorStop(0,   `rgba(80,160,255,${0.22 * pulse})`);
-    grad.addColorStop(0.5, `rgba(60,130,240,${0.1 * pulse})`);
-    grad.addColorStop(1,   'rgba(60,130,240,0)');
-    ctx.fillStyle = grad;
+    // Outer glow haze — sickly pale green
+    ctx.shadowColor = `rgba(120,180,60,${0.30 * pulse})`;
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = `rgba(100,160,40,${0.18 * pulse})`;
     ctx.beginPath();
     ctx.arc(x, y, r * 2.8, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     // Rotating energy rings
     ctx.save();
     ctx.translate(x, y);
     for (let ring = 0; ring < 2; ring++) {
       ctx.rotate(ring === 0 ? rot : -rot * 1.4);
-      ctx.strokeStyle = `rgba(${ring === 0 ? '120,190,255' : '160,215,255'},${(0.5 - ring * 0.15) * pulse})`;
+      ctx.strokeStyle = `rgba(${ring === 0 ? '130,200,60' : '160,220,80'},${(0.5 - ring * 0.15) * pulse})`;
       ctx.lineWidth   = 1.2 - ring * 0.2;
       ctx.setLineDash([3 + ring, 5 - ring]);
       ctx.beginPath();

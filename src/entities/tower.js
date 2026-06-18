@@ -123,7 +123,7 @@ export const TOWER_DEFS = {
     rangeColor:   'rgba(40,180,80,0.12)',
     cost:         50,
     range:        0,
-    fireRate:     600,
+    fireRate:     180,
     damage:       0,
     radius:       7,
     bulletSpeed:  0,
