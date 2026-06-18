@@ -44,8 +44,8 @@ export const ENEMY_DEFS = {
     hp:             700,
     radius:         13,
     reward:         58,
-    color:          '#5c4030',   // dark stone brown — ancient Norse giant
-    highlightColor: '#ffaa30',   // molten amber core
+    color:          '#2a3a4c',   // cold slate — Norse frost giant
+    highlightColor: '#40b0ff',   // ice-blue core
     flying:         false
   }
 };
@@ -215,20 +215,17 @@ export class Enemy {
       ctx.stroke();
     }
 
-    // Hit flash — white ring when damage lands
+    // Hit flash — white ring + expanding ring when damage lands
     if (this.hitFlash > 0) {
-      const hfAlpha = this.hitFlashMax > 0 ? (this.hitFlash / this.hitFlashMax) * 0.78 : 0;
+      const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
+      const hfAlpha = hRatio * 0.78;
       ctx.strokeStyle = `rgba(220,235,255,${hfAlpha})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
       ctx.stroke();
-      this.hitFlash--;
-    }
 
-    // Expanding hit flash ring — grows outward as hitFlash decays
-    if (this.hitFlash > 0) {
-      const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
+      // Expanding ring — decrement happens after both draws use hRatio
       const expandR = this.radius + (1 - hRatio) * 14;
       ctx.save();
       ctx.strokeStyle = `rgba(255,255,220,${hRatio * 0.6})`;
@@ -237,6 +234,8 @@ export class Enemy {
       ctx.arc(this.x, this.y, expandR, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
+
+      this.hitFlash--;
     }
 
     // Slow / stun overlay
@@ -249,7 +248,7 @@ export class Enemy {
         const rot = t * 3.5;
         for (let i = 0; i < 3; i++) {
           const a  = rot + (i / 3) * Math.PI * 2;
-          const sr = this.radius + 5;
+          const sr = this.radius + 10;
           const sx = this.x + Math.cos(a) * sr;
           const sy = this.y + Math.sin(a) * sr;
           ctx.shadowColor = '#ffdd00';
@@ -551,10 +550,10 @@ export class Enemy {
     ctx.ellipse(x + 4, y + r * 0.72, r * 1.3, r * 0.38, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dark stone outer shell — warm brown shadow
-    ctx.shadowColor = 'rgba(80,50,20,0.4)';
+    // Dark stone outer shell — cold slate shadow
+    ctx.shadowColor = 'rgba(20,40,70,0.4)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#0e0804';
+    ctx.fillStyle   = '#060810';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -566,7 +565,7 @@ export class Enemy {
     ctx.arc(x, y, r - 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Stone texture bumps — warm dark tint
+    // Stone texture bumps — cold dark tint
     const bumps = [
       [-r * 0.5, -r * 0.45, r * 0.22],
       [ r * 0.48, -r * 0.38, r * 0.18],
@@ -574,28 +573,28 @@ export class Enemy {
       [ r * 0.42,  r * 0.45, r * 0.16],
       [ 0,        -r * 0.6,  r * 0.14]
     ];
-    ctx.fillStyle = 'rgba(20,10,4,0.55)';
+    ctx.fillStyle = 'rgba(4,8,16,0.55)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx, y + by, br, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = 'rgba(180,120,60,0.25)';
+    ctx.fillStyle = 'rgba(80,140,200,0.18)';
     for (const [bx, by, br] of bumps) {
       ctx.beginPath();
       ctx.arc(x + bx - br * 0.35, y + by - br * 0.35, br * 0.45, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Magma fracture lines — radiating amber cracks
+    // Ice fracture lines — radiating cold blue cracks
     ctx.save();
     for (let i = 0; i < 7; i++) {
       const angle = (i / 7) * Math.PI * 2 + 0.4;
       const len   = r * (0.48 + Math.sin(t * 1.8 + i * 1.2) * 0.14);
       const grad  = ctx.createLinearGradient(x, y, x + Math.cos(angle) * len, y + Math.sin(angle) * len);
-      grad.addColorStop(0,   `rgba(255,180,60,${0.80 * pulse})`);
-      grad.addColorStop(0.6, `rgba(240,120,40,${0.45 * pulse})`);
-      grad.addColorStop(1,   'rgba(200,80,20,0)');
+      grad.addColorStop(0,   `rgba(140,200,255,${0.80 * pulse})`);
+      grad.addColorStop(0.6, `rgba(80,160,240,${0.45 * pulse})`);
+      grad.addColorStop(1,   'rgba(40,100,200,0)');
       ctx.strokeStyle = grad;
       ctx.lineWidth   = 1.4;
       ctx.beginPath();
@@ -607,45 +606,45 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Stone rim border — warm dark
-    ctx.strokeStyle = '#1a0e04';
+    // Stone rim border — cold dark
+    ctx.strokeStyle = '#04080e';
     ctx.lineWidth   = 2.5;
     ctx.beginPath();
     ctx.arc(x, y, r - 1.5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Molten core — amber glow
-    ctx.shadowColor = 'rgba(255,160,40,0.95)';
+    // Ice core — cold blue glow
+    ctx.shadowColor = 'rgba(60,140,220,0.95)';
     ctx.shadowBlur  = 20 * pulse;
     ctx.fillStyle   = this.highlightColor;
     ctx.beginPath();
     ctx.arc(x, y, r * 0.38, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#fff0c0';
+    ctx.fillStyle = '#d0e8ff';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.17, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Eyes — molten amber
+    // Eyes — ice blue
     const eyeY   = y - r * 0.3;
     const eyeOff = r * 0.32;
-    ctx.shadowColor = 'rgba(255,160,40,0.95)';
+    ctx.shadowColor = 'rgba(80,180,255,0.95)';
     ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#ffaa30';
+    ctx.fillStyle   = '#40b0ff';
     ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffdd88';
+    ctx.fillStyle = '#c0e8ff';
     ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
 
     // Amber rune crown — 3 horn/spike spires
     ctx.save();
-    ctx.shadowColor = 'rgba(255,180,60,0.90)';
+    ctx.shadowColor = 'rgba(80,180,255,0.90)';
     ctx.shadowBlur  = 10 * pulse;
-    ctx.fillStyle   = 'rgba(255,180,60,0.68)';
-    ctx.strokeStyle = 'rgba(255,220,100,0.85)';
+    ctx.fillStyle   = 'rgba(80,180,255,0.60)';
+    ctx.strokeStyle = 'rgba(160,220,255,0.85)';
     ctx.lineWidth   = 1.1;
     for (let hi = -1; hi <= 1; hi++) {
       const hbx = x + hi * r * 0.38, hby = y - r - 1;
@@ -656,13 +655,13 @@ export class Enemy {
     }
     ctx.restore();
 
-    // Boss double-ring indicator — amber
-    ctx.strokeStyle = 'rgba(255,160,40,0.50)';
+    // Boss double-ring indicator — ice blue
+    ctx.strokeStyle = 'rgba(80,160,255,0.50)';
     ctx.lineWidth   = 1.2;
     ctx.beginPath();
     ctx.arc(x, y, r + 5, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,200,80,0.25)';
+    ctx.strokeStyle = 'rgba(140,200,255,0.25)';
     ctx.lineWidth   = 0.7;
     ctx.beginPath();
     ctx.arc(x, y, r + 9, 0, Math.PI * 2);

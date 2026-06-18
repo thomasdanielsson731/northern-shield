@@ -65,7 +65,7 @@ export const TOWER_DEFS = {
     cost:         35,
     range:        80,
     fireRate:     8,
-    damage:       14,
+    damage:       22,
     radius:       7,
     bulletSpeed:  11,
     bulletShape:  'arrow'
@@ -227,11 +227,11 @@ export class Tower {
     }
   }
 
-  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.60); }
+  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * Math.sqrt(this.level) * 0.90); }
   get sellValue() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
-    for (let i = 1; i < this.level; i++) total += Math.floor(base * i * 0.85);
+    for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
     return Math.floor(total * 0.5);
   }
   get maxed()       { return this.level >= MAX_LEVEL; }

@@ -655,8 +655,8 @@ function updateWave() {
     } else {
       hoardPulse = 18;
     }
-    // Hoard interest (5% of gold, max 50g)
-    const interest = Math.min(Math.floor(gold * 0.05), 50);
+    // Hoard interest (2% of gold, max 20g)
+    const interest = Math.min(Math.floor(gold * 0.02), 20);
     if (interest > 0) {
       gold       += interest;
       goldEarned += interest;
@@ -1476,10 +1476,16 @@ canvas.addEventListener('mousedown', e => {
     if (panelSellBtn &&
         mouseX >= panelSellBtn.x && mouseX <= panelSellBtn.x + panelSellBtn.w &&
         mouseY >= panelSellBtn.y && mouseY <= panelSellBtn.y + panelSellBtn.h) {
-      gold += selectedTower.sellValue;
-      sfxSell();
-      removeTower(selectedTower);
-      selectedTower = null;
+      const anchorKey = `${selectedTower.col}_${selectedTower.row}`;
+      if (pendingSell && pendingSell.key === anchorKey) {
+        gold += selectedTower.sellValue;
+        sfxSell();
+        removeTower(selectedTower);
+        selectedTower = null;
+        pendingSell   = null;
+      } else {
+        pendingSell = { key: anchorKey, col: selectedTower.col, row: selectedTower.row, timer: 90 };
+      }
       return;
     }
   }
@@ -2627,11 +2633,12 @@ function drawTopBar() {
   ctx.textAlign = 'right';
 
   const livesDangerPulse = lives <= 3 ? 0.65 + Math.sin(performance.now() * 0.007) * 0.35 : 1;
-  const livesTopColor = lives <= 3 ? '#ff4040' : lives <= 7 ? '#ffaa50' : '#60ee80';
+  const livesLostFlash   = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
+  const livesTopColor = livesLostFlash > 0 ? '#ff2020' : lives <= 3 ? '#ff4040' : lives <= 7 ? '#ffaa50' : '#60ee80';
   ctx.fillStyle   = livesTopColor;
-  ctx.shadowColor = lives <= 3 ? `rgba(255,30,30,${livesDangerPulse * 0.85})` : 'rgba(255,80,80,0.3)';
-  ctx.shadowBlur  = lives <= 3 ? 6 + livesDangerPulse * 10 : 4;
-  ctx.globalAlpha = lives <= 3 ? 0.65 + livesDangerPulse * 0.35 : 1;
+  ctx.shadowColor = livesLostFlash > 0 ? `rgba(255,0,0,${livesLostFlash * 0.95})` : lives <= 3 ? `rgba(255,30,30,${livesDangerPulse * 0.85})` : 'rgba(255,80,80,0.3)';
+  ctx.shadowBlur  = livesLostFlash > 0 ? 16 : lives <= 3 ? 6 + livesDangerPulse * 10 : 4;
+  ctx.globalAlpha = livesLostFlash > 0 ? 0.7 + livesLostFlash * 0.3 : lives <= 3 ? 0.65 + livesDangerPulse * 0.35 : 1;
   ctx.fillText(`♥ ${lives}`, rx, cy);
   ctx.globalAlpha = 1;
   rx -= ctx.measureText(`♥ ${lives}`).width + 18;
@@ -3121,11 +3128,12 @@ function drawTowerPanel(tower) {
     ctx.fillText(`◆${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
   }
 
-  // Sell button
-  drawFantasyPanel(sellX, btnY, sellW, btnH, 'rgba(22,6,6,0.97)', 0.55, 4);
+  // Sell button — first click shows CONFIRM?, second click sells
+  const isSellPending = pendingSell && pendingSell.key === `${tower.col}_${tower.row}`;
+  drawFantasyPanel(sellX, btnY, sellW, btnH, isSellPending ? 'rgba(40,6,6,0.97)' : 'rgba(22,6,6,0.97)', isSellPending ? 0.85 : 0.55, 4);
   ctx.font      = 'bold 10px monospace';
-  ctx.fillStyle = '#ee6666';
-  ctx.fillText('Sell', sellX + sellW / 2, btnY + 12);
+  ctx.fillStyle = isSellPending ? '#ff4040' : '#ee6666';
+  ctx.fillText(isSellPending ? 'CONFIRM?' : 'Sell', sellX + sellW / 2, btnY + 12);
   ctx.font      = '10px monospace';
   ctx.fillStyle = '#e8c040';
   ctx.fillText(`◆${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
@@ -3233,25 +3241,28 @@ function onBossKilled(boss) {
 
 function drawBossDefeat() {
   if (bossDefeatTimer <= 0) return;
-  const alpha = bossDefeatTimer > 30 ? 1 : bossDefeatTimer / 30;
-  const cy    = GRID_TOP + ROWS * CELL_SIZE * 0.38;
-  const cx    = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const alpha    = bossDefeatTimer > 30 ? 1 : bossDefeatTimer / 30;
+  const cy       = GRID_TOP + ROWS * CELL_SIZE * 0.38;
+  const cx       = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const isKill   = bossDefeatGold > 0;
 
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign   = 'center';
 
   ctx.font        = 'bold 22px monospace';
-  ctx.shadowColor = 'rgba(255,160,20,0.95)';
+  ctx.shadowColor = isKill ? 'rgba(40,220,80,0.95)' : 'rgba(255,160,20,0.95)';
   ctx.shadowBlur  = 20;
-  ctx.fillStyle   = '#ffe080';
+  ctx.fillStyle   = isKill ? '#60ee80' : '#ffe080';
   ctx.fillText(bossDefeatText, cx, cy);
 
-  ctx.font        = 'bold 13px monospace';
-  ctx.shadowColor = 'rgba(255,210,30,0.9)';
-  ctx.shadowBlur  = 12;
-  ctx.fillStyle   = '#f5d030';
-  ctx.fillText(`+${bossDefeatGold}g`, cx, cy + 20);
+  if (isKill) {
+    ctx.font        = 'bold 13px monospace';
+    ctx.shadowColor = 'rgba(255,210,30,0.9)';
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = '#f5d030';
+    ctx.fillText(`+${bossDefeatGold}g`, cx, cy + 20);
+  }
 
   ctx.shadowBlur  = 0;
   ctx.restore();
@@ -4102,8 +4113,8 @@ function draw() {
   // ── LIFE LOST flash near hoard ────────────────────────────────────────────────
   if (lifeLostTimer > 0) {
     const alpha = Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60);
-    const hx    = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
-    const hy    = GOAL.row * CELL_SIZE + CELL_SIZE / 2 - 42;
+    const hx    = GRID_LEFT + gridPanX + (GOAL.col + 0.5) * CELL_SIZE * gridZoom;
+    const hy    = GRID_TOP  + gridPanY + (GOAL.row + 0.5) * CELL_SIZE * gridZoom - 42;
     ctx.save();
     ctx.textAlign   = 'center';
     ctx.font        = 'bold 11px monospace';
