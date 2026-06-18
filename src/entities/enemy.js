@@ -24,8 +24,8 @@ export const ENEMY_DEFS = {
     hp:             130,
     radius:         7,
     reward:         9,
-    color:          '#6628a8',   // deep purple — undead spectral warrior
-    highlightColor: '#b070ff',
+    color:          '#4a5c70',   // desaturated slate-blue — undead corpse warrior (style bible)
+    highlightColor: '#80a8c0',
     flying:         false
   },
   myling: {

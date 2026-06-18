@@ -58,7 +58,7 @@ const BUILD_ITEMS = [
   }))
 ];
 
-const STARTING_GOLD  = 60;
+const STARTING_GOLD  = 80;
 let   STARTING_LIVES = 8;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
@@ -450,16 +450,17 @@ function spawnGoldCoins(screenX, screenY, reward, overrideSpeed) {
 }
 
 function updateParticles() {
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
+  let anyDead = false;
+  for (const p of particles) {
     p.x  += p.vx;
     p.y  += p.vy;
     p.vy += 0.06;
     p.vx *= 0.95;
     p.vy *= 0.95;
     p.life -= p.decay;
-    if (p.life <= 0) particles.splice(i, 1);
+    if (p.life <= 0) anyDead = true;
   }
+  if (anyDead) particles = particles.filter(p => p.life > 0);
 }
 
 function drawParticles() {
@@ -1887,7 +1888,7 @@ function update() {
     for (const [ac, ar] of adj) {
       if (grid.getCell(ac, ar) === CELL.WALL) {
         enemy.slowTimer  = Math.max(enemy.slowTimer, 20);
-        enemy.slowFactor = Math.min(enemy.slowFactor, 0.50);
+        if (0.65 < enemy.slowFactor) enemy.slowFactor = 0.65;  // don't override a stronger slow
         break;
       }
     }
@@ -2115,17 +2116,17 @@ function drawPath() {
       ctx.fillStyle = 'rgba(45,30,12,0.90)';
       ctx.fillRect(ox - 0.8, oy, 1.6, cs * 0.26);
 
-      // flame
+      // flame — solid tinted ellipse; avoids per-torch createRadialGradient each frame
       ctx.save();
       ctx.shadowColor = `rgba(255,120,20,${0.45 * flicker})`;
       ctx.shadowBlur  = 3 + flicker * 2;
-      const fg = ctx.createRadialGradient(ox, oy, 0, ox, oy, fh);
-      fg.addColorStop(0,    `rgba(255,230,100,${0.9 * flicker})`);
-      fg.addColorStop(0.45, `rgba(255,110,15,${0.6 * flicker})`);
-      fg.addColorStop(1,    'rgba(160,50,0,0)');
-      ctx.fillStyle = fg;
+      ctx.fillStyle   = `rgba(255,150,40,${0.75 * flicker})`;
       ctx.beginPath();
       ctx.ellipse(ox + Math.sin(t * 7 + c.idx) * 0.4, oy - fh * 0.4, fw, fh, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,230,100,${0.45 * flicker})`;
+      ctx.beginPath();
+      ctx.ellipse(ox, oy - fh * 0.15, fw * 0.45, fh * 0.38, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -2483,8 +2484,8 @@ function drawRightPanel() {
   ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = spColor;
   ctx.textAlign   = 'center'; ctx.fillText(`×${gameSpeed}`, spX, spY + 2); ctx.textAlign = 'left';
-  ctx.font        = '7px monospace';
-  ctx.fillStyle   = 'rgba(180,140,60,0.50)';
+  ctx.font        = '9px monospace';
+  ctx.fillStyle   = 'rgba(180,140,60,0.70)';
   ctx.textAlign   = 'center'; ctx.fillText('[F]', spX, spY + 12); ctx.textAlign = 'left';
   speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
 
@@ -2853,7 +2854,7 @@ function drawBottomBuildBar() {
 
   // Pulsing arrow hint above build bar on wave 1 before any tower placed
   if (!firstTowerPlaced && waveNumber <= 1 && !gameOver) {
-    const firstBtn = getBuildButtons()[0];
+    const firstBtn = getBuildButtons().find(b => b.mode !== CELL.WALL);
     if (firstBtn) {
       const pulse  = 0.55 + Math.sin(performance.now() * 0.006) * 0.45;
       const arrowX = firstBtn.x + firstBtn.width / 2;
@@ -3135,7 +3136,7 @@ function drawTowerPanel(tower) {
   ctx.fillStyle = isSellPending ? '#ff4040' : '#ee6666';
   ctx.fillText(isSellPending ? 'CONFIRM?' : 'Sell', sellX + sellW / 2, btnY + 12);
   ctx.font      = '10px monospace';
-  ctx.fillStyle = '#e8c040';
+  ctx.fillStyle = 'rgba(200,160,80,0.70)';  // muted vs upgrade cost's bright gold
   ctx.fillText(`◆${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
 
   // ── Rune slot ───────────────────────────────────────────────────────────────
@@ -3423,6 +3424,16 @@ function drawBossHpBar() {
     ctx.shadowColor = hpColor; ctx.shadowBlur = ratio < 0.25 ? 8 * pulse : 0;
     ctx.beginPath(); ctx.roundRect(barX, barY, barW * ratio, barH, 3); ctx.fill();
     ctx.shadowBlur = 0;
+  }
+
+  // Phase threshold markers
+  ctx.strokeStyle = 'rgba(240,190,30,0.70)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath(); ctx.moveTo(barX + barW * 0.5, barY - 2); ctx.lineTo(barX + barW * 0.5, barY + barH + 2); ctx.stroke();
+  if (cfg?.phase75) {
+    ctx.strokeStyle = 'rgba(200,140,20,0.50)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY); ctx.lineTo(barX + barW * 0.75, barY + barH); ctx.stroke();
   }
 
   // Boss name — blinks rapidly when ENRAGED (≤50% HP)
@@ -3999,10 +4010,10 @@ function draw() {
   for (const er of empRings) {
     const alpha = (er.life / er.maxLife) * 0.7;
     ctx.save();
-    ctx.strokeStyle = `rgba(80,180,255,${alpha})`;
+    ctx.strokeStyle = `rgba(130,60,220,${alpha})`;
     ctx.lineWidth   = 1.2;
     ctx.beginPath(); ctx.arc(er.x, er.y, er.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = `rgba(160,220,255,${alpha * 0.55})`;
+    ctx.strokeStyle = `rgba(180,100,255,${alpha * 0.55})`;
     ctx.lineWidth   = 3;
     ctx.beginPath(); ctx.arc(er.x, er.y, er.r * 0.7, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
