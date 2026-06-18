@@ -14,8 +14,8 @@ export const ENEMY_DEFS = {
     hp:             130,
     radius:         7,
     reward:         16,
-    color:          '#00ddff',   // cyan ghost — nightmare spirit
-    highlightColor: '#44eeff',
+    color:          '#5020a0',   // void purple — nightmare spirit (style bible)
+    highlightColor: '#8040c0',
     flying:         false
   },
   draugr: {
@@ -43,7 +43,7 @@ export const ENEMY_DEFS = {
     speed:          0.40,
     hp:             700,
     radius:         13,
-    reward:         22,
+    reward:         58,
     color:          '#5c4030',   // dark stone brown — ancient Norse giant
     highlightColor: '#ffaa30',   // molten amber core
     flying:         false
@@ -268,18 +268,18 @@ export class Enemy {
           ctx.shadowBlur = 0;
         }
       } else {
-        // Slow: icy blue ring
-        ctx.strokeStyle = `rgba(120,210,255,${alpha * 0.6})`;
-        ctx.lineWidth   = 2;
-        ctx.shadowColor = '#80ddff';
-        ctx.shadowBlur  = 8;
+        // Slow: spec-compliant icy body overlay rgba(100,160,255,0.35) + border ring
+        ctx.fillStyle = `rgba(100,160,255,${Math.min(0.35, alpha * 0.35)})`;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = `rgba(160,230,255,${alpha * 0.12})`;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = `rgba(100,160,255,${Math.min(0.65, alpha * 0.65)})`;
+        ctx.lineWidth   = 1.5;
+        ctx.shadowColor = 'rgba(100,160,255,0.5)';
+        ctx.shadowBlur  = 5;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.shadowBlur = 0;
       }
       ctx.restore();
@@ -683,12 +683,12 @@ export class Enemy {
     ctx.ellipse(x + 1, y + r * 0.9, r * 0.85, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Rotating cyan aura rings
+    // Rotating void-purple aura rings
     ctx.save();
     for (let ring = 0; ring < 3; ring++) {
       const ringR = r * (1.5 + ring * 0.45);
       const alpha = (0.18 - ring * 0.045) * (0.55 + pulse * 0.45);
-      ctx.strokeStyle = `rgba(0,220,255,${alpha})`;
+      ctx.strokeStyle = `rgba(80,40,180,${alpha})`;
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, ring + 3]);
       ctx.lineDashOffset = t * (ring % 2 === 0 ? 22 : -16);
@@ -713,16 +713,16 @@ export class Enemy {
     ctx.bezierCurveTo(x - bw * 0.4, hy + bh * 1.05, x - bw, hy + bh,    x - bw,        hy);
     ctx.closePath();
     const bodyGrad = ctx.createRadialGradient(x, hy - bh * 0.2, 0, x, hy, bw * 1.5);
-    bodyGrad.addColorStop(0,   'rgba(120,250,255,0.88)');
-    bodyGrad.addColorStop(0.5, 'rgba(0,200,240,0.72)');
-    bodyGrad.addColorStop(1,   'rgba(0,150,210,0.40)');
+    bodyGrad.addColorStop(0,   'rgba(130,80,200,0.88)');
+    bodyGrad.addColorStop(0.5, 'rgba(90,50,170,0.72)');
+    bodyGrad.addColorStop(1,   'rgba(60,30,140,0.40)');
     ctx.fillStyle = bodyGrad;
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.restore();
 
     // Body outline
-    ctx.strokeStyle = `rgba(100,240,255,${0.55 + pulse * 0.25})`;
+    ctx.strokeStyle = `rgba(160,100,240,${0.55 + pulse * 0.25})`;
     ctx.lineWidth   = 1.2;
     ctx.beginPath();
     ctx.arc(x, hy, bw, Math.PI, 0);
@@ -786,17 +786,18 @@ export class Enemy {
   }
 
   _drawHpBar(ctx) {
-    if (this.hp >= this.maxHp) return;
-
+    const pctFull = this.hp / this.maxHp;
+    // Always draw tray for bosses so their bar is always visible; skip entirely only for
+    // non-boss enemies at 100% HP (tray still drawn so position is spatially readable)
     const barW = this.radius * (this.isBoss ? 4.0 : 2.8);
     const barH = this.isBoss ? 7 : 3;
     const barX = this.x - barW / 2;
     const barY = this.y - this.radius - (this.isBoss ? 18 : 10);
 
-    const pct = this.hp / this.maxHp;
+    const pct = pctFull;
 
     if (this.isBoss) {
-      // Boss: dark border + gold trim + phase-tinted fill
+      // Boss: dark border + gold trim + phase-tinted fill — always visible
       ctx.fillStyle = 'rgba(4,2,8,0.95)';
       ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
       ctx.strokeStyle = 'rgba(200,150,30,0.6)';
@@ -826,13 +827,16 @@ export class Enemy {
       ctx.shadowBlur = 0;
       ctx.restore();
     } else {
+      // Always draw the tray so player can read enemy position before first hit
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = pct > 0.75 ? '#56e894' : pct > 0.50 ? '#a8e040' : pct > 0.25 ? '#e8c040' : '#e84040';
-      ctx.fillRect(barX, barY, barW * pct, barH);
-      ctx.strokeStyle = 'rgba(200,160,40,0.32)';
-      ctx.lineWidth   = 0.5;
-      ctx.strokeRect(barX, barY, barW, barH);
+      if (pct < 1.0) {
+        ctx.fillStyle = pct > 0.75 ? '#56e894' : pct > 0.50 ? '#a8e040' : pct > 0.25 ? '#e8c040' : '#e84040';
+        ctx.fillRect(barX, barY, barW * pct, barH);
+        ctx.strokeStyle = 'rgba(200,160,40,0.32)';
+        ctx.lineWidth   = 0.5;
+        ctx.strokeRect(barX, barY, barW, barH);
+      }
     }
   }
 }

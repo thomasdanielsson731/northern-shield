@@ -285,6 +285,7 @@ function restartGame() {
   chainKillDisplay  = null;
   lifeLostTimer     = 0;
   pathChevronsTimer = 0;
+  pathBlockFlash    = null;
   bestWave          = { wave: 0, slain: 0, gold: 0 };
   waveSlainCount    = 0;
   waveGoldStart     = goldEarned;
@@ -410,6 +411,13 @@ let screenShake   = 0;
 let goldSpent     = 0;
 let goldEarned    = 0;
 
+// Cached background gradients — rebuilt only when canvas size changes
+let _bgGradCache = null, _bgG1Cache = null, _bgG2Cache = null;
+let _bgCacheW    = 0,    _bgCacheH  = 0;
+
+// Path-blocked feedback flash: { col, row, timer }
+let pathBlockFlash = null;
+
 function spawnParticles(x, y, color, count = 10) {
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
@@ -455,16 +463,17 @@ function updateParticles() {
 }
 
 function drawParticles() {
+  if (particles.length === 0) return;
+  ctx.shadowBlur = 5;
   for (const p of particles) {
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle   = p.color;
     ctx.shadowColor = p.color;
-    ctx.shadowBlur  = 5;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.radius * p.life, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
   }
+  ctx.shadowBlur  = 0;
   ctx.globalAlpha = 1;
 }
 
@@ -1178,6 +1187,7 @@ function tryPlaceAt(col, row, mode, towerType) {
         grid.setCell(col + dc, row + dr, CELL.EMPTY);
       }
     }
+    pathBlockFlash = { col, row, timer: 70 };
     return false;
   }
 
@@ -1948,12 +1958,23 @@ function drawBackground() {
   const { width, height } = getViewSize();
   const time = performance.now() * 0.0004;
 
-  // Dark stone/earth — Nordic dungeon feel (matches concept art)
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0,   '#1a1008');
-  grad.addColorStop(0.5, '#130c05');
-  grad.addColorStop(1,   '#0d0803');
-  ctx.fillStyle = grad;
+  // Rebuild static gradients only when canvas dimensions change
+  if (!_bgGradCache || width !== _bgCacheW || height !== _bgCacheH) {
+    _bgGradCache = ctx.createLinearGradient(0, 0, 0, height);
+    _bgGradCache.addColorStop(0,   '#1a1008');
+    _bgGradCache.addColorStop(0.5, '#130c05');
+    _bgGradCache.addColorStop(1,   '#0d0803');
+    _bgG1Cache = ctx.createRadialGradient(width * 0.88, height * 0.08, 8, width * 0.88, height * 0.08, 320);
+    _bgG1Cache.addColorStop(0, 'rgba(255,140,30,0.14)');
+    _bgG1Cache.addColorStop(1, 'rgba(255,100,10,0)');
+    _bgG2Cache = ctx.createRadialGradient(width * 0.04, height * 0.5, 0, width * 0.04, height * 0.5, 260);
+    _bgG2Cache.addColorStop(0, 'rgba(40,60,120,0.09)');
+    _bgG2Cache.addColorStop(1, 'rgba(20,30,80,0)');
+    _bgCacheW = width; _bgCacheH = height;
+  }
+
+  // Dark stone/earth — Nordic dungeon feel
+  ctx.fillStyle = _bgGradCache;
   ctx.fillRect(0, 0, width, height);
 
   // Subtle stone texture (irregular dark blotches)
@@ -1966,19 +1987,15 @@ function drawBackground() {
     ctx.fill();
   }
 
-  // Warm torch-light glow top-right (distant fire)
+  // Warm torch-light glow top-right — drive brightness with globalAlpha to avoid per-frame gradient
   const p1 = 0.12 + Math.sin(time * 3.2) * 0.04;
-  const g1 = ctx.createRadialGradient(width * 0.88, height * 0.08, 8, width * 0.88, height * 0.08, 320);
-  g1.addColorStop(0, `rgba(255,140,30,${p1})`);
-  g1.addColorStop(1, 'rgba(255,100,10,0)');
-  ctx.fillStyle = g1;
+  ctx.globalAlpha = p1 / 0.14;
+  ctx.fillStyle   = _bgG1Cache;
   ctx.fillRect(0, 0, width, height);
+  ctx.globalAlpha = 1;
 
   // Faint left-side ambient (cool blue — moonlight)
-  const g2 = ctx.createRadialGradient(width * 0.04, height * 0.5, 0, width * 0.04, height * 0.5, 260);
-  g2.addColorStop(0, `rgba(40,60,120,0.09)`);
-  g2.addColorStop(1, 'rgba(20,30,80,0)');
-  ctx.fillStyle = g2;
+  ctx.fillStyle = _bgG2Cache;
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -2286,11 +2303,12 @@ function drawRightPanel() {
   ctx.fillText('WAVE', lx, ly);
   ctx.fillStyle = '#f0c840';
   ctx.textAlign = 'right';
-  ctx.fillText(`${waveNumber} / ${MAX_WAVES}`, rEdge, ly);
+  const displayWaveR = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
+  ctx.fillText(`${displayWaveR} / ${MAX_WAVES}`, rEdge, ly);
   ctx.textAlign = 'left';
   ly += 7;
 
-  const progress  = waveNumber / MAX_WAVES;
+  const progress  = displayWaveR / MAX_WAVES;
   const barColor  = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
   ctx.fillStyle   = 'rgba(60,30,8,0.8)';
   ctx.beginPath(); ctx.roundRect(lx, ly, barW, 6, 3); ctx.fill();
@@ -2518,8 +2536,14 @@ function drawRightPanel() {
     const secs = waveState === 'countdown'
       ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
       : Math.ceil((BREAK_FRAMES    - waveTimer) / 60);
-    ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(255,200,180,0.8)'; ctx.shadowBlur = 0;
-    ctx.fillText(`auto ${secs}s`, btnX + btnW / 2, btnY + 32);
+    ctx.font = '11px monospace'; ctx.shadowBlur = 0;
+    if (autoNextWave) {
+      ctx.fillStyle = '#60ee80';
+      ctx.fillText(`AUTO — ${secs}s`, btnX + btnW / 2, btnY + 32);
+    } else {
+      ctx.fillStyle = 'rgba(255,200,180,0.8)';
+      ctx.fillText(`[Space]  ${secs}s`, btnX + btnW / 2, btnY + 32);
+    }
     nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
   } else {
     nextWaveBtn = null;
@@ -3765,8 +3789,9 @@ function draw() {
   ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
   ctx.clip();
   if (screenShake > 0) screenShake *= 0.86;
-  const shakeX = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
-  const shakeY = screenShake > 0.3 ? (Math.random() - 0.5) * screenShake * 2 : 0;
+  const _shakeMag = Math.min(screenShake, 4);
+  const shakeX = _shakeMag > 0.3 ? (Math.random() - 0.5) * _shakeMag * 2 : 0;
+  const shakeY = _shakeMag > 0.3 ? (Math.random() - 0.5) * _shakeMag * 2 : 0;
   ctx.translate(GRID_LEFT + gridPanX + shakeX, GRID_TOP + gridPanY + shakeY);
   ctx.scale(gridZoom, gridZoom);
 
@@ -4147,6 +4172,7 @@ function draw() {
   drawChapterBanner();
   drawMylingWarning();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
+  drawPathBlockFlash();
   drawDragGhost();
   drawPendingSell();
   drawDmgFloaters();
@@ -4216,6 +4242,34 @@ function drawMylingWarning() {
   ctx.shadowBlur  = 10;
   ctx.fillText('◆ MYLING — FLIES OVER WALLS', cx, by);
   ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawPathBlockFlash() {
+  if (!pathBlockFlash) return;
+  pathBlockFlash.timer--;
+  if (pathBlockFlash.timer <= 0) { pathBlockFlash = null; return; }
+  const { col, row, timer } = pathBlockFlash;
+  const alpha = Math.min(1, timer / 20) * (timer % 8 < 4 ? 1 : 0.4); // strobe flash
+  const vx = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
+  const vy = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
+  const vs = CELL_SIZE * gridZoom;
+  ctx.save();
+  ctx.globalAlpha  = alpha * 0.55;
+  ctx.fillStyle    = '#e84040';
+  ctx.fillRect(vx, vy, vs, vs);
+  ctx.globalAlpha  = alpha * 0.9;
+  ctx.strokeStyle  = '#ff4040';
+  ctx.lineWidth    = 2;
+  ctx.strokeRect(vx + 1, vy + 1, vs - 2, vs - 2);
+  ctx.globalAlpha  = Math.min(1, timer / 20) * 0.92;
+  ctx.font         = 'bold 9px monospace';
+  ctx.fillStyle    = '#ff8080';
+  ctx.textAlign    = 'center';
+  ctx.shadowColor  = 'rgba(220,0,0,0.8)';
+  ctx.shadowBlur   = 8;
+  ctx.fillText('PATH BLOCKED', vx + vs / 2, vy - 4);
+  ctx.shadowBlur   = 0;
   ctx.restore();
 }
 
