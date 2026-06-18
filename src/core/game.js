@@ -608,13 +608,11 @@ function updateWave() {
 
   if (waveState === 'countdown') {
     waveTimer++;
-    if (waveTimer >= COUNTDOWN_FRAMES) { waveTimer = 0; startNextWave(); }
     return;
   }
 
   if (waveState === 'break') {
     waveTimer++;
-    if (waveTimer >= BREAK_FRAMES) { waveTimer = 0; startNextWave(); }
     return;
   }
 
@@ -2551,16 +2549,13 @@ function drawRightPanel() {
     ctx.textAlign   = 'center'; ctx.font = 'bold 11px monospace';
     ctx.fillStyle   = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
     ctx.fillText('NEXT WAVE', btnX + btnW / 2, btnY + 17);
-    const secs = waveState === 'countdown'
-      ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
-      : Math.ceil((BREAK_FRAMES    - waveTimer) / 60);
     ctx.font = '11px monospace'; ctx.shadowBlur = 0;
     if (autoNextWave) {
       ctx.fillStyle = '#60ee80';
-      ctx.fillText(`AUTO — ${secs}s`, btnX + btnW / 2, btnY + 32);
+      ctx.fillText('AUTO', btnX + btnW / 2, btnY + 32);
     } else {
       ctx.fillStyle = 'rgba(255,200,180,0.8)';
-      ctx.fillText(`[Space]  ${secs}s`, btnX + btnW / 2, btnY + 32);
+      ctx.fillText('[Space]', btnX + btnW / 2, btnY + 32);
     }
     nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
   } else {
@@ -2618,18 +2613,12 @@ function drawTopBar() {
   ctx.shadowBlur  = 0;
 
   if (waveState !== 'active') {
-    const tSecs = Math.max(1, waveState === 'countdown'
-      ? Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60)
-      : Math.ceil((BREAK_FRAMES   - waveTimer) / 60));
-    const mm = String(Math.floor(tSecs / 60)).padStart(2, '0');
-    const ss = String(tSecs % 60).padStart(2, '0');
-    const urgency = tSecs <= 3;
-    const urgPulse = urgency ? 0.6 + Math.sin(performance.now() * 0.018) * 0.4 : 1;
-    ctx.font        = urgency ? 'bold 13px monospace' : 'bold 12px monospace';
-    ctx.fillStyle   = urgency ? `rgba(255,${Math.floor(60 + urgPulse * 60)},60,${urgPulse})` : 'rgba(245,215,105,0.95)';
-    ctx.shadowColor = urgency ? `rgba(255,50,20,${urgPulse * 0.7})` : 'rgba(220,180,40,0.5)';
-    ctx.shadowBlur  = urgency ? 8 + urgPulse * 6 : 4;
-    ctx.fillText(`${mm}:${ss}`, midX + 40, cy);
+    const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
+    ctx.font        = 'bold 11px monospace';
+    ctx.fillStyle   = autoNextWave ? `rgba(80,220,140,${readyPulse})` : `rgba(245,215,105,${readyPulse})`;
+    ctx.shadowColor = autoNextWave ? 'rgba(50,200,100,0.6)' : 'rgba(220,180,40,0.5)';
+    ctx.shadowBlur  = 4;
+    ctx.fillText(autoNextWave ? 'AUTO' : 'READY', midX + 40, cy);
     ctx.shadowBlur  = 0;
   } else {
     const rem = spawnQueue.length + enemies.filter(e => e.alive).length;
@@ -3332,15 +3321,13 @@ function drawWaveAnnouncement() {
 
   let line1, line2, glowColor;
   if (waveState === 'countdown') {
-    const secs = Math.ceil((COUNTDOWN_FRAMES - waveTimer) / 60);
     line1 = `PREPARE — WAVE ${nextW}${threatSkulls ? '  ' + threatSkulls : ''}`;
-    line2 = autoNextWave ? 'AUTO' : `Starting in ${secs}s`;
+    line2 = autoNextWave ? 'AUTO' : 'Press SPACE to send wave';
     glowColor = `rgba(200,160,40,0.8)`;
   } else {
-    const secs = Math.ceil((BREAK_FRAMES - waveTimer) / 60);
     const flawlessTag = flawlessTimer > 0 ? '  ★ FLAWLESS' : '';
     line1 = `WAVE ${waveNumber} COMPLETE${lastWaveTimeSec > 0 ? `  ${lastWaveTimeSec}s` : ''}${flawlessTag}`;
-    line2 = autoNextWave ? 'AUTO' : `Next in ${secs}s`;
+    line2 = autoNextWave ? 'AUTO' : 'Press SPACE to send wave';
     glowColor = flawlessTimer > 0 ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
   }
 

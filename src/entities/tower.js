@@ -398,9 +398,11 @@ export class Tower {
       ctx.setLineDash([]);
     }
 
-    // Multi-cell towers draw scaled around their center
+    // Multi-cell towers (except Catapult, which handles its own scale) are drawn
+    // scaled up to fill their footprint.
     const fpScale = Math.sqrt(this.footprint.w * this.footprint.h);
-    if (fpScale > 1.01) {
+    const useFpScale = fpScale > 1.01 && this.type !== TOWER_TYPES.CATAPULT;
+    if (useFpScale) {
       ctx.save();
       ctx.translate(this.x, this.y);
       ctx.scale(fpScale, fpScale);
@@ -415,7 +417,7 @@ export class Tower {
     else if (this.type === TOWER_TYPES.ISJATTEN) this._drawIsjatten(ctx, t);
     else if (this.type === TOWER_TYPES.DRAKSHIP) this._drawDrakship(ctx, t);
     else                                         this._drawBlondie(ctx, t);
-    if (fpScale > 1.01) ctx.restore();
+    if (useFpScale) ctx.restore();
 
     // Attack flash
     if (this.fireFlash > 0) {
