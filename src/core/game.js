@@ -306,6 +306,20 @@ let highScores    = loadHighScores();
 let showTopList   = false;
 let _pendingScore = null;  // score awaiting player name entry
 
+// ── per-map best scores ────────────────────────────────────────────────────────
+const MAP_BEST_KEY = 'northern-shield-map-best';
+let _mapBests = {};
+try { _mapBests = JSON.parse(localStorage.getItem(MAP_BEST_KEY)) || {}; } catch {}
+let _currentMapName = '';
+
+function saveMapBest(mapName, waves, slain) {
+  const prev = _mapBests[mapName];
+  if (!prev || waves > prev.waves || (waves === prev.waves && slain > prev.slain)) {
+    _mapBests[mapName] = { waves, slain };
+    try { localStorage.setItem(MAP_BEST_KEY, JSON.stringify(_mapBests)); } catch {}
+  }
+}
+
 function promptNameAndSave(scoreData) {
   const overlay = document.getElementById('nameEntryOverlay');
   const input   = document.getElementById('nameEntryInput');
@@ -324,6 +338,7 @@ function promptNameAndSave(scoreData) {
       overlay.style.display = 'none';
       const name = input.value.trim().slice(0, 16) || 'Anonymous';
       highScores = saveHighScore({ ..._pendingScore, name });
+      if (_currentMapName && _pendingScore) saveMapBest(_currentMapName, _pendingScore.waves, _pendingScore.slain);
       _pendingScore = null;
     }
   };
@@ -439,6 +454,7 @@ function initGame(preset) {
   GOAL.row  = preset.goal.row;
   hoardX    = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
   hoardY    = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
+  _currentMapName = preset.name ?? '';
   gamePhase = 'playing';
   restartGame();
 }
@@ -3438,8 +3454,11 @@ function drawTowerPanel(tower) {
   ctx.fillStyle = '#8aaccc';
   if (tower.type === 'hydda') {
     ctx.fillText(`HEALS ${tower.level >= 5 ? 2 : 1} life every ${Math.round(tower.fireRate / 30)}s`, px + 10, py + 32);
+  } else if (tower.type === 'blondie') {
+    const slowPct = Math.round((1 - (def.slowFactor ?? 0.4)) * 100);
+    const durSec  = Math.round((def.slowDuration ?? 60) / 30);
+    ctx.fillText(`${slowPct}% SLOW · ${durSec}s · RNG ${tower.range}`, px + 10, py + 32);
   } else if (tower.type === 'isjatten') {
-    const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
     ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  AoE`, px + 10, py + 32);
   } else {
     const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
@@ -4248,6 +4267,20 @@ function drawMapSelect() {
     ctx.fillStyle = '#f0c030';
     ctx.fillText('G', gpx, gpy + 11);
 
+    // Per-map best score
+    const mapBest = _mapBests[map.name];
+    if (mapBest) {
+      ctx.font      = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = selected ? 'rgba(240,200,100,0.80)' : 'rgba(160,130,70,0.55)';
+      ctx.fillText(`Best: W${mapBest.waves} · ${mapBest.slain} slain`, cx + cardW / 2, cy + cardH - 56);
+    } else {
+      ctx.font      = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(100,90,70,0.4)';
+      ctx.fillText('No record yet', cx + cardW / 2, cy + cardH - 56);
+    }
+
     // PLAY button
     const btnX = cx + 24, btnY = cy + cardH - 46, btnW = cardW - 48, btnH = 28;
     drawFantasyPanel(btnX, btnY, btnW, btnH,
@@ -4690,7 +4723,7 @@ function draw() {
     ctx.restore();
   }
 
-  // Priority marker — chevron above the most advanced living enemy
+  // Priority marker — pulsing chevron above the most advanced living enemy
   {
     const leader = enemies.reduce((best, e) => {
       if (!e.alive || e.reached) return best;
@@ -4698,14 +4731,23 @@ function draw() {
       return best;
     }, null);
     if (leader) {
-      const cy = leader.y - leader.radius - 7;
-      ctx.fillStyle = 'rgba(255,55,35,0.82)';
+      const pulse = 0.65 + Math.sin(performance.now() * 0.009) * 0.35;
+      const lx = GRID_LEFT + gridPanX + leader.x * gridZoom;
+      const ly = GRID_TOP  + gridPanY + (leader.y - leader.radius - 7) * gridZoom;
+      const sz = (leader.isBoss ? 7 : 5) * gridZoom;
+      const col = leader.isBoss ? `rgba(255,120,30,${0.75 * pulse})` : `rgba(255,55,35,${0.75 * pulse})`;
+      ctx.save();
+      ctx.fillStyle   = col;
+      ctx.shadowColor = col;
+      ctx.shadowBlur  = leader.isBoss ? 10 : 6;
       ctx.beginPath();
-      ctx.moveTo(leader.x,     cy - 4);
-      ctx.lineTo(leader.x - 4, cy + 2);
-      ctx.lineTo(leader.x + 4, cy + 2);
+      ctx.moveTo(lx,       ly - sz);
+      ctx.lineTo(lx - sz,  ly + sz * 0.4);
+      ctx.lineTo(lx + sz,  ly + sz * 0.4);
       ctx.closePath();
       ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
   }
 
