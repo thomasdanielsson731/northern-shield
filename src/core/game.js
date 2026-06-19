@@ -147,6 +147,7 @@ let isPaused        = false;
 let isMuted         = false;
 let autoNextWave    = false;
 let showGrid        = true;     // G key toggles grid cell lines
+let showHelp        = false;    // ? / H key toggles shortcut cheatsheet
 
 // Floating kill-gold numbers
 let dmgFloaters     = [];       // { x, y, val, life, maxLife, color }
@@ -1520,6 +1521,11 @@ window.addEventListener('keydown', e => {
     return;
   }
 
+  if (key === '?' || key === 'h') {
+    showHelp = !showHelp;
+    return;
+  }
+
   // Arrow keys: pan the grid view
   const PAN_STEP = CELL_SIZE * 2;
   if (key === 'arrowleft')  { e.preventDefault(); gridPanX += PAN_STEP; clampGridPan(); return; }
@@ -2725,6 +2731,22 @@ function drawRightPanel() {
       ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
       ctx.textAlign = 'left'; ly += 13;
     }
+
+    // Path efficiency rating
+    if (currentPath && currentPath.length > 1) {
+      const pathSteps = currentPath.length - 1;
+      const minSteps  = Math.abs(GOAL.col - SPAWN.col) + Math.abs(GOAL.row - SPAWN.row);
+      const ratio     = pathSteps / Math.max(1, minSteps);
+      const stars     = ratio >= 3.5 ? '★★★' : ratio >= 2.5 ? '★★☆' : ratio >= 1.6 ? '★☆☆' : '☆☆☆';
+      const ratingColor = ratio >= 3.5 ? '#f0d040' : ratio >= 2.5 ? '#e8c040' : ratio >= 1.6 ? '#c0a040' : '#806040';
+      ly += 3;
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
+      ctx.fillText('MAZE', lx, ly);
+      ctx.fillStyle = ratingColor; ctx.textAlign = 'right';
+      ctx.fillText(`${stars}  ${pathSteps}c / ${ratio.toFixed(1)}×`, rEdge, ly);
+      ctx.textAlign = 'left'; ly += 11;
+    }
   }
 
   // ── SPEED CONTROL — three triangle buttons (×1 / ×2 / ×4), always fixed ──────
@@ -3041,6 +3063,12 @@ function drawTopBar() {
   }
   ctx.fillStyle = isMuted ? '#ff6060' : '#506050';
   ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx2, cy);
+
+  // Help hint — far right, muted (? key)
+  ctx.textAlign = 'right';
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = showHelp ? 'rgba(240,200,80,0.85)' : 'rgba(140,110,60,0.4)';
+  ctx.fillText('[?]', FT + pw - 6, cy);
 
   ctx.restore();
 }
@@ -3899,6 +3927,55 @@ function drawFlawlessNotif() {
   const streakText = flawlessStreak >= 3 ? `  ×${flawlessStreak} STREAK` : '';
   ctx.fillText(`+1 ✦  FLAWLESS!${streakText}`, BASE_W / 2, cy);
   ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawHelpOverlay() {
+  if (!showHelp) return;
+  const { width, height } = getViewSize();
+  const shortcuts = [
+    ['SPC',         'Launch next wave'],
+    ['P',           'Pause'],
+    ['M',           'Mute sound'],
+    ['R',           'Rune Forge (between waves)'],
+    ['F',           'Cycle speed ×1 → ×2 → ×4'],
+    ['A',           'Toggle auto next wave'],
+    ['G',           'Toggle grid lines'],
+    ['Z',           'Reset zoom'],
+    ['Scroll',      'Zoom in / out'],
+    ['Mid-drag',    'Pan grid'],
+    ['↑↓←→',       'Pan grid'],
+    ['1-9',         'Select tower / wall'],
+    ['Esc',         'Deselect / close'],
+    ['? / H',       'This cheatsheet'],
+  ];
+  const pw = 320, ph = 36 + shortcuts.length * 18 + 20;
+  const px = width / 2 - pw / 2, py = height / 2 - ph / 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, width, height);
+  drawFantasyPanel(px, py, pw, ph, 'rgba(6,3,16,0.98)', 0.9, 10);
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 14px monospace';
+  ctx.fillStyle   = '#f0c840';
+  ctx.shadowColor = 'rgba(220,170,30,0.7)'; ctx.shadowBlur = 10;
+  ctx.fillText('KEYBOARD SHORTCUTS', px + pw / 2, py + 22);
+  ctx.shadowBlur = 0;
+  let ky = py + 42;
+  for (const [key, desc] of shortcuts) {
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillStyle = '#c0a060';
+    ctx.textAlign = 'left';
+    ctx.fillText(key, px + 16, ky);
+    ctx.font      = '10px monospace';
+    ctx.fillStyle = '#e0d0b0';
+    ctx.fillText(desc, px + 90, ky);
+    ky += 18;
+  }
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = 'rgba(140,110,70,0.6)';
+  ctx.textAlign = 'center';
+  ctx.fillText('Press ? or H to close', px + pw / 2, py + ph - 8);
   ctx.restore();
 }
 
@@ -4816,6 +4893,7 @@ function draw() {
   // Rune menu overlay (break/countdown only)
   if (showRuneMenu && waveState !== 'active') drawRuneMenu();
   if (showRunePicker && runePickerTower) drawRunePicker();
+  drawHelpOverlay();
 
   drawFrames();
   ctx.restore();

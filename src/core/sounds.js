@@ -34,11 +34,20 @@ export function ensureAudio() {
 }
 
 export function sfxShoot(shape) {
-  const j = () => 0.95 + Math.random() * 0.10;
-  if (shape === 'spear')  { tone(880 * j(), 0.04, 0.07, 'sawtooth'); return; }
-  if (shape === 'rock')   { tone(100 * j(), 0.07, 0.13, 'square');   return; }
+  const j = () => 0.88 + Math.random() * 0.24;  // wider pitch spread (±12%)
+  if (shape === 'spear')  {
+    tone(880 * j(), 0.04, 0.07, 'sawtooth');
+    if (Math.random() < 0.3) tone(660 * j(), 0.03, 0.04, 'sine', 0.01); // occasional harmonic
+    return;
+  }
+  if (shape === 'rock')   { tone(100 * j(), 0.07, 0.13, 'square'); return; }
   if (shape === 'stun')   { tone(660 * j(), 0.05, 0.08, 'sine'); tone(880 * j(), 0.05, 0.05, 'sine', 0.025); return; }
-  if (shape === 'arrow')  { tone(440 * j(), 0.03, 0.06, 'sawtooth'); return; }
+  if (shape === 'arrow')  {
+    // Pitch from 380-520 Hz to sound like different arrows
+    const base = 380 + Math.random() * 140;
+    tone(base, 0.03, 0.055, 'sawtooth');
+    return;
+  }
   tone(600 * j(), 0.04, 0.07, 'sine');
 }
 
