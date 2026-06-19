@@ -316,7 +316,7 @@ export class Enemy {
     if (!sp || !sp.img.complete || sp.img.naturalWidth === 0) return false;
 
     const frame = Math.floor(performance.now() / 180) % 2;  // cycle IDLE/WALK frames only
-    const dh    = this.radius * 4.2;
+    const dh    = this.radius * 6.0;
     const dw    = dh * sp.frameW / sp.frameH;
 
     // Ground shadow

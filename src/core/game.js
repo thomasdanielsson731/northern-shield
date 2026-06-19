@@ -793,24 +793,8 @@ function initTerrain() {
     return (_s >>> 0) / 0xffffffff;
   };
 
-  // ── Base layer ────────────────────────────────────────────────────────────
-  const groundSp = SPRITES['ground'];
-  if (groundSp && groundSp.img.complete && groundSp.img.naturalWidth > 0) {
-    terrainUsesSprite = true;
-    const tileSize = cs * 7;
-    const tileCanvas = document.createElement('canvas');
-    tileCanvas.width = tileCanvas.height = tileSize;
-    const tileCtx = tileCanvas.getContext('2d');
-    tileCtx.drawImage(groundSp.img, 0, 0, groundSp.frameW, groundSp.frameH,
-      0, 0, tileSize, tileSize);
-    // Darken midtones so the palette reads as cold Nordic ground
-    tileCtx.fillStyle = 'rgba(0,0,0,0.48)';
-    tileCtx.fillRect(0, 0, tileSize, tileSize);
-    const pattern = tc.createPattern(tileCanvas, 'repeat');
-    tc.fillStyle = pattern;
-    tc.fillRect(0, 0, W, H);
-  } else {
-    // ── Procedural fallback ───────────────────────────────────────────────
+  // ── Base layer — always procedural (AI ground sprites keep generating characters) ──
+  {
     terrainUsesSprite = false;
 
     // Dark tundra base — slightly lighter for contrast headroom
@@ -2903,6 +2887,10 @@ function drawBottomBuildBar() {
     [TOWER_TYPES.MILITARY]: 'archer',
     [TOWER_TYPES.CATAPULT]: 'catapult',
     [TOWER_TYPES.BLONDIE]:  'blondie',
+    [TOWER_TYPES.PILTORN]:  'piltorn',
+    [TOWER_TYPES.HYDDA]:    'hydda',
+    [TOWER_TYPES.ISJATTEN]: 'isjatten',
+    [TOWER_TYPES.DRAKSHIP]: 'drakship',
   };
 
   const buttons     = getBuildButtons();
@@ -4859,10 +4847,7 @@ function drawDragGhost() {
 }
 
 function gameLoop() {
-  // Re-bake terrain once the ground sprite finishes loading
-  if (!terrainUsesSprite && SPRITES['ground']?.img.complete && SPRITES['ground'].img.naturalWidth > 0) {
-    initTerrain();
-  }
+  // Terrain is always procedural — no sprite rebake needed
   // Auto-launch countdown on map select screen
   if (gamePhase === 'mapSelect') {
     if (mapAutoTimerStart === 0) mapAutoTimerStart = performance.now();
