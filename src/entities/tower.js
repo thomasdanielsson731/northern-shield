@@ -1257,6 +1257,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (drawSpriteFrame(ctx, 'piltorn', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 62, 'rgba(100,140,190,0.8)', this.level)) return;
 
     // Stone tower body
     ctx.fillStyle = '#4a3a2e';
@@ -1351,6 +1352,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 9, 2.3, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (drawSpriteFrame(ctx, 'hydda', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(50,200,90,0.85)', this.level)) return;
 
     // Hut walls — weathered wood planks
     ctx.fillStyle = '#5a3818';
@@ -1450,6 +1452,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (drawSpriteFrame(ctx, 'isjatten', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 72, 'rgba(100,190,255,0.9)', this.level)) return;
 
     // Stone base pedestal
     ctx.fillStyle = '#3a2a1e';
@@ -1596,6 +1599,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 12, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (drawSpriteFrame(ctx, 'drakship', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 70, 'rgba(200,100,30,0.85)', this.level)) return;
 
     // Ship hull — rotates with aim direction
     ctx.save();

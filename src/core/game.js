@@ -84,7 +84,7 @@ let toplistBtn      = null;
 let nextWaveBtn     = null;
 let runeForgeBtn    = null;
 let gameSpeed  = 1;
-let speedBtn   = null;
+let speedBtns  = [];   // [{x,y,w,h,speed}, ...]
 let _frameTick = 0;
 
 let dragItem    = null;  // { id, label, color, cost, mode } while dragging from build bar
@@ -1534,11 +1534,11 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  // Speed toggle button
-  if (e.button === 0 && speedBtn) {
-    if (mouseX >= speedBtn.x && mouseX <= speedBtn.x + speedBtn.w &&
-        mouseY >= speedBtn.y && mouseY <= speedBtn.y + speedBtn.h) {
-      gameSpeed = gameSpeed >= 4 ? 1 : gameSpeed >= 2 ? 4 : 2;
+  // Speed toggle buttons (three discrete: ×1, ×2, ×4)
+  for (const sb of speedBtns) {
+    if (e.button === 0 && mouseX >= sb.x && mouseX <= sb.x + sb.w &&
+        mouseY >= sb.y && mouseY <= sb.y + sb.h) {
+      gameSpeed = sb.speed;
       return;
     }
   }
@@ -2338,7 +2338,7 @@ function drawFrames() {
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
   const pw = BASE_W - px - 36;  // 32px frame + 4px inner gap
-  speedBtn = null;
+  speedBtns = [];
   runeForgeBtn = null;
   if (pw < 60) return;
 
@@ -2528,25 +2528,94 @@ function drawRightPanel() {
     }
   }
 
-  // ── SPEED TOGGLE ───────────────────────────────────────────────────────────
-  const spR      = 17;
-  const spX      = px + pw / 2;
-  const spY      = GRID_TOP + fullH - (waveState !== 'active' ? 108 : 54); // move up when Next Wave button visible
-  const spFill   = gameSpeed >= 4 ? 'rgba(210,60,20,0.97)'  : gameSpeed >= 2 ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
-  const spStroke = gameSpeed >= 4 ? 'rgba(255,120,60,0.95)' : gameSpeed >= 2 ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
-  const spColor  = gameSpeed >= 2 ? '#f0e8d0' : 'rgba(200,160,80,0.6)';
+  // ── SPEED CONTROL — three triangle buttons (×1 / ×2 / ×4), always fixed ──────
+  {
+    const spBtnH  = 26;
+    const spBtnY  = GRID_TOP + fullH - 168;   // fixed: always above rune forge
+    const spBtnX  = px + 6;
+    const spBtnW  = pw - 12;
+    const bw      = Math.floor(spBtnW / 3);
+    const speeds  = [1, 2, 4];
+    speedBtns = [];
 
-  ctx.beginPath(); ctx.arc(spX, spY, spR, 0, Math.PI * 2);
-  ctx.fillStyle   = spFill; ctx.fill();
-  ctx.strokeStyle = spStroke;
-  ctx.lineWidth   = 1.5; ctx.stroke();
-  ctx.font        = 'bold 11px monospace';
-  ctx.fillStyle   = spColor;
-  ctx.textAlign   = 'center'; ctx.fillText(`×${gameSpeed}`, spX, spY + 2); ctx.textAlign = 'left';
-  ctx.font        = '9px monospace';
-  ctx.fillStyle   = 'rgba(180,140,60,0.70)';
-  ctx.textAlign   = 'center'; ctx.fillText('[F]', spX, spY + 12); ctx.textAlign = 'left';
-  speedBtn = { x: spX - spR, y: spY - spR, w: spR * 2, h: spR * 2 };
+    // Helper: draw N right-pointing triangles centered at (cx, cy)
+    function drawSpeedTriangles(cx, cy, n, color, size = 5) {
+      const gap   = 3.5;
+      const total = n * size + (n - 1) * gap;
+      let tx = cx - total / 2;
+      ctx.fillStyle = color;
+      for (let i = 0; i < n; i++) {
+        // For x4: arrange as 2×2 grid
+        let ox = tx, oy = cy;
+        if (n === 4) {
+          const col = i % 2, row = Math.floor(i / 2);
+          const g2 = 3;
+          const total2 = 2 * size + g2;
+          ox = cx - total2 / 2 + col * (size + g2);
+          oy = cy + (row === 0 ? -3.5 : 3.5);
+        }
+        ctx.beginPath();
+        ctx.moveTo(ox,          oy - size * 0.6);
+        ctx.lineTo(ox + size,   oy);
+        ctx.lineTo(ox,          oy + size * 0.6);
+        ctx.closePath();
+        ctx.fill();
+        if (n !== 4) tx += size + gap;
+      }
+    }
+
+    for (let i = 0; i < 3; i++) {
+      const sp  = speeds[i];
+      const bx  = spBtnX + i * bw;
+      const active = gameSpeed === sp;
+      const fill   = active
+        ? (sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)')
+        : 'rgba(22,14,6,0.85)';
+      const border = active
+        ? (sp >= 4 ? 0.95 : sp >= 2 ? 0.85 : 0.70)
+        : 0.22;
+      const bStroke = active
+        ? (sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.8)')
+        : 'rgba(160,110,40,0.25)';
+
+      // Panel
+      const rad = i === 0 ? [5,0,0,5] : i === 2 ? [0,5,5,0] : [0,0,0,0];
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(bx, spBtnY, bw, spBtnH, rad);
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = bStroke; ctx.lineWidth = active ? 1.5 : 0.8; ctx.stroke();
+      if (active) {
+        ctx.shadowColor = bStroke; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.roundRect(bx, spBtnY, bw, spBtnH, rad);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      // Triangles
+      const triColor = active
+        ? (sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080')
+        : 'rgba(160,120,60,0.45)';
+      const cy = spBtnY + spBtnH * 0.42;
+      drawSpeedTriangles(bx + bw / 2, cy, sp === 1 ? 1 : sp === 2 ? 2 : 4, triColor, 4.5);
+
+      // Speed label below triangles
+      ctx.font      = `${active ? 'bold ' : ''}8px monospace`;
+      ctx.fillStyle = active ? triColor : 'rgba(140,100,50,0.45)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`×${sp}`, bx + bw / 2, spBtnY + spBtnH - 4);
+      ctx.textAlign = 'left';
+
+      speedBtns.push({ x: bx, y: spBtnY, w: bw, h: spBtnH, speed: sp });
+    }
+
+    // [F] hint below the row
+    ctx.font      = '8px monospace';
+    ctx.fillStyle = 'rgba(120,90,40,0.4)';
+    ctx.textAlign = 'center';
+    ctx.fillText('[F] cycle speed', spBtnX + spBtnW / 2, spBtnY + spBtnH + 9);
+    ctx.textAlign = 'left';
+  }
 
   // ── Rune inventory summary ───────────────────────────────────────────────────
   const totalOwned = Object.values(runeInventory).reduce((s, v) => s + v, 0);
@@ -2567,22 +2636,54 @@ function drawRightPanel() {
     divider();
   }
 
-  // ── RUNE FORGE button (break/countdown) — always visible, dimmed when no stars
+  // ── RUNE FORGE button (break/countdown only) ─────────────────────────────────
   if (!gameOver && waveState !== 'active') {
-    const rfH = 32, rfY = GRID_TOP + fullH - 102, rfX = px + 6, rfW = pw - 12;
-    const rfActive = showRuneMenu;
-    const hasStars = stars > 0;
-    ctx.globalAlpha = hasStars ? 1 : 0.35;
-    drawFantasyPanel(rfX, rfY, rfW, rfH,
-      rfActive ? 'rgba(40,20,80,0.97)' : 'rgba(20,10,40,0.95)',
-      rfActive ? 0.9 : 0.45, 5);
-    ctx.textAlign   = 'center';
-    ctx.font        = 'bold 10px monospace';
-    ctx.fillStyle   = rfActive ? '#c0a0ff' : (hasStars ? '#806090' : '#504060');
-    ctx.shadowColor = 'rgba(160,100,255,0.55)';
-    ctx.shadowBlur  = rfActive ? 8 : 0;
-    ctx.fillText(hasStars ? `✦ RUNE FORGE [R]  (${stars})` : '✦ RUNE FORGE — earn ★ stars', rfX + rfW / 2, rfY + rfH / 2 + 4);
+    const rfH = 40, rfY = GRID_TOP + fullH - 112, rfX = px + 6, rfW = pw - 12;
+    const rfActive  = showRuneMenu;
+    const hasStars  = stars > 0;
+    const rfPulse   = hasStars ? 0.65 + Math.sin(performance.now() * 0.004) * 0.35 : 0;
+    ctx.globalAlpha = hasStars ? 1 : 0.38;
+
+    // Panel with warm amber-purple forge palette
+    const rfFill   = rfActive ? 'rgba(28,14,52,0.98)' : 'rgba(16,8,36,0.96)';
+    const rfBorder = rfActive ? 0.88 : (hasStars ? 0.55 : 0.2);
+    ctx.save();
+    if (hasStars && !rfActive) {
+      ctx.shadowColor = `rgba(180,120,255,${rfPulse * 0.6})`;
+      ctx.shadowBlur  = 12;
+    }
+    drawFantasyPanel(rfX, rfY, rfW, rfH, rfFill, rfBorder, 6);
+    ctx.shadowBlur = 0;
+
+    // Left anvil icon — two stacked rects evoking forge/anvil shape
+    const iconX = rfX + 14, iconY = rfY + rfH / 2;
+    ctx.fillStyle = rfActive ? '#c0a0ff' : (hasStars ? `rgba(160,120,220,${0.5 + rfPulse * 0.5})` : '#403050');
+    ctx.fillRect(iconX - 6, iconY - 4, 12, 4);
+    ctx.fillRect(iconX - 4, iconY,      8, 4);
+    // Hammer
+    ctx.save();
+    ctx.translate(iconX + 1, iconY - 8);
+    ctx.rotate(-0.5);
+    ctx.fillStyle = rfActive ? '#e0d0ff' : (hasStars ? `rgba(200,180,255,${0.4 + rfPulse * 0.5})` : '#503860');
+    ctx.fillRect(-1, 0, 2, 7);
+    ctx.fillRect(-3, -3, 6, 3);
+    ctx.restore();
+
+    // RUNE FORGE label
+    ctx.textAlign   = 'left';
+    ctx.font        = `bold 10px monospace`;
+    ctx.fillStyle   = rfActive ? '#d0b0ff' : (hasStars ? `rgba(180,140,255,${0.6 + rfPulse * 0.4})` : '#504060');
+    ctx.shadowColor = rfActive ? 'rgba(180,120,255,0.7)' : 'rgba(140,80,220,0.4)';
+    ctx.shadowBlur  = rfActive ? 10 : (hasStars ? rfPulse * 8 : 0);
+    ctx.fillText('RUNE FORGE', rfX + 28, rfY + 17);
     ctx.shadowBlur  = 0;
+
+    // Star count and keybind
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = hasStars ? '#f0d040' : 'rgba(160,130,60,0.4)';
+    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'earn ★ stars', rfX + 28, rfY + 30);
+
+    ctx.restore();
     ctx.globalAlpha = 1;
     runeForgeBtn = hasStars ? { x: rfX, y: rfY, w: rfW, h: rfH } : null;
   } else {
@@ -2733,8 +2834,11 @@ function drawTopBar() {
   }
   if (gameSpeed >= 2) {
     ctx.fillStyle = gameSpeed >= 4 ? '#ff8040' : '#f0c840';
-    ctx.fillText(`×${gameSpeed}`, lx2, cy);
-    lx2 += ctx.measureText(`×${gameSpeed}`).width + 10;
+    ctx.shadowColor = gameSpeed >= 4 ? 'rgba(255,100,20,0.6)' : 'rgba(240,180,20,0.4)';
+    ctx.shadowBlur  = 4;
+    ctx.fillText(gameSpeed >= 4 ? '▶▶▶▶' : '▶▶', lx2, cy);
+    ctx.shadowBlur = 0;
+    lx2 += ctx.measureText(gameSpeed >= 4 ? '▶▶▶▶' : '▶▶').width + 10;
   }
   ctx.fillStyle = isMuted ? '#ff6060' : '#506050';
   ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx2, cy);
@@ -3372,69 +3476,99 @@ function drawWaveAnnouncement() {
   if (gameOver) return;
   if (waveState === 'active') return;
 
-  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
-  // Render in the narrow strip above the grid (between top bar and grid) — not over the build area
-  const bannerY = GRID_TOP - 10;
+  const gridW  = COLS * CELL_SIZE;
+  const bannerX = GRID_LEFT;
+  const bannerY = GRID_TOP + 4;
+  const bannerW = gridW;
+  const bannerH = 36;
+  const cx      = bannerX + bannerW / 2;
 
   const nextW = (waveState === 'countdown' ? waveNumber : waveNumber + 1);
-  const threatRatio = nextW / MAX_WAVES;
-  const threatColor = BOSS_WAVES.has(nextW) ? '#ff4020'
-    : threatRatio > 0.8 ? '#ff7020'
-    : threatRatio > 0.5 ? '#e8c040'
-    : '#60ee80';
-  const threatSkulls = BOSS_WAVES.has(nextW) ? '☠☠☠' : threatRatio > 0.8 ? '☠☠' : threatRatio > 0.5 ? '☠' : '';
+  const threatRatio  = nextW / MAX_WAVES;
+  const isBoss       = BOSS_WAVES.has(nextW);
+  const threatColor  = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
+  const threatSkulls = isBoss ? '☠☠☠' : threatRatio > 0.8 ? '☠☠' : threatRatio > 0.5 ? '☠' : '';
+  const accentW      = 4;
 
-  let line1, line2, glowColor;
+  let titleText, glowColor, statusColor, isComplete;
   if (waveState === 'countdown') {
-    line1 = `PREPARE — WAVE ${nextW}${threatSkulls ? '  ' + threatSkulls : ''}`;
-    line2 = autoNextWave ? 'AUTO' : 'Press SPACE to send wave';
-    glowColor = `rgba(200,160,40,0.8)`;
+    titleText  = `PREPARE — WAVE ${nextW}${threatSkulls ? '  ' + threatSkulls : ''}`;
+    glowColor  = `rgba(220,170,40,0.85)`;
+    statusColor = threatColor;
+    isComplete = false;
   } else {
     const flawlessTag = flawlessTimer > 0 ? '  ★ FLAWLESS' : '';
-    line1 = `WAVE ${waveNumber} COMPLETE${lastWaveTimeSec > 0 ? `  ${lastWaveTimeSec}s` : ''}${flawlessTag}`;
-    line2 = autoNextWave ? 'AUTO' : 'Press SPACE to send wave';
-    glowColor = flawlessTimer > 0 ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
+    titleText  = `WAVE ${waveNumber} COMPLETE${lastWaveTimeSec > 0 ? `  ${lastWaveTimeSec}s` : ''}${flawlessTag}`;
+    glowColor  = flawlessTimer > 0 ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
+    statusColor = flawlessTimer > 0 ? '#f0e060' : '#60ee80';
+    isComplete = true;
   }
 
   ctx.save();
-  ctx.textAlign = 'center';
 
-  // Semi-transparent strip so text is legible over the top bar
-  ctx.fillStyle = 'rgba(10,5,2,0.30)';
-  ctx.fillRect(GRID_LEFT, GRID_TOP - 22, COLS * CELL_SIZE, 22);
+  // Banner background
+  ctx.beginPath(); ctx.roundRect(bannerX, bannerY, bannerW, bannerH, 4);
+  ctx.fillStyle = 'rgba(8,4,16,0.88)'; ctx.fill();
+  // Gold outer border
+  ctx.strokeStyle = 'rgba(180,130,40,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+  // Colored threat accent bar on the left edge
+  ctx.beginPath(); ctx.roundRect(bannerX, bannerY, accentW, bannerH, [4, 0, 0, 4]);
+  ctx.fillStyle = statusColor; ctx.fill();
 
-  ctx.shadowColor = glowColor;
-  ctx.shadowBlur  = 10;
-  ctx.fillStyle   = threatSkulls ? threatColor : '#f0e080';
+  // Title text (left-aligned, after accent)
+  ctx.shadowColor = glowColor; ctx.shadowBlur = 10;
+  ctx.fillStyle   = isBoss ? threatColor : (isComplete && flawlessTimer > 0 ? '#f0e060' : '#f0e8d0');
   ctx.font        = 'bold 11px monospace';
-  ctx.fillText(line1, cx, bannerY - 3);
+  ctx.textAlign   = 'left';
+  ctx.fillText(titleText, bannerX + accentW + 10, bannerY + 14);
+  ctx.shadowBlur  = 0;
 
-  ctx.shadowBlur = 6;
-  ctx.fillStyle  = 'rgba(200,230,200,0.85)';
-  ctx.font       = '10px monospace';
-  ctx.fillText(line2, cx, bannerY + 9);
-  ctx.shadowBlur = 0;
-
-  // Next wave composition — small icons below the banner, inside the grid top edge
+  // Enemy composition chips (small, below title)
   if (waveState === 'break') {
-    const next = waveComposition(waveNumber + 1);
-    const parts = [];
-    if (next.draugr  > 0) parts.push({ label: `● ×${next.draugr}`,  color: '#7090a8' });
-    if (next.mylings > 0) parts.push({ label: `◆ ×${next.mylings}`, color: '#88c860' });
-    if (next.jotunn  > 0) parts.push({ label: `◉ ×${next.jotunn}`,  color: '#c07820' });
-    if (next.maras   > 0) parts.push({ label: `✦ ×${next.maras}`,   color: '#7040c0' });
-
-    ctx.font = '10px monospace';
-    const totalW = parts.reduce((sum, p) => sum + ctx.measureText(p.label).width + 12, -12);
-    let bx = cx - totalW / 2;
-    for (const p of parts) {
-      ctx.fillStyle   = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur  = 5;
-      ctx.textAlign   = 'left';
-      ctx.fillText(p.label, bx, GRID_TOP + 12);
-      bx += ctx.measureText(p.label).width + 12;
+    const next  = waveComposition(waveNumber + 1);
+    const chips = [];
+    if (next.draugr  > 0) chips.push({ label: `×${next.draugr} Draugr`,  color: '#7090a8' });
+    if (next.mylings > 0) chips.push({ label: `×${next.mylings} Myling`, color: '#88c860' });
+    if (next.jotunn  > 0) chips.push({ label: `×${next.jotunn} Jötunn`,  color: '#e8a040' });
+    if (next.maras   > 0) chips.push({ label: `×${next.maras} Mara`,     color: '#a060e0' });
+    ctx.font = '8px monospace';
+    let bx = bannerX + accentW + 10;
+    for (const c of chips) {
+      const cw = ctx.measureText(c.label).width + 8;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath(); ctx.roundRect(bx - 2, bannerY + 21, cw, 11, 3); ctx.fill();
+      ctx.fillStyle = c.color; ctx.textAlign = 'left';
+      ctx.fillText(c.label, bx + 2, bannerY + 30);
+      bx += cw + 4;
     }
+  }
+
+  // SPACE keycap on the right side (only when not auto)
+  if (!autoNextWave) {
+    const kw = 58, kh = 22, kx = bannerX + bannerW - kw - 10, ky = bannerY + (bannerH - kh) / 2;
+    // Keycap shadow/body
+    ctx.fillStyle = 'rgba(60,40,10,0.9)';
+    ctx.beginPath(); ctx.roundRect(kx, ky + 2, kw, kh, 4); ctx.fill();
+    ctx.fillStyle = 'rgba(100,70,20,0.85)';
+    ctx.beginPath(); ctx.roundRect(kx, ky, kw, kh, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,150,50,0.6)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(kx, ky, kw, kh, 4); ctx.stroke();
+    // Keycap top highlight
+    ctx.fillStyle = 'rgba(255,200,80,0.12)';
+    ctx.beginPath(); ctx.roundRect(kx + 2, ky + 2, kw - 4, 6, 2); ctx.fill();
+    // SPACE label
+    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#f0d880'; ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(240,200,50,0.5)'; ctx.shadowBlur = 5;
+    ctx.fillText('SPACE', kx + kw / 2, ky + kh / 2 + 3);
+    ctx.shadowBlur = 0;
+  } else {
+    // AUTO badge
+    const pulse = 0.75 + Math.sin(performance.now() * 0.005) * 0.25;
+    ctx.font = 'bold 10px monospace';
+    ctx.fillStyle = `rgba(80,220,140,${pulse})`;
+    ctx.textAlign = 'right';
+    ctx.shadowColor = 'rgba(60,200,100,0.6)'; ctx.shadowBlur = 6;
+    ctx.fillText('AUTO', bannerX + bannerW - 12, bannerY + bannerH / 2 + 4);
     ctx.shadowBlur = 0;
   }
 
@@ -3626,27 +3760,78 @@ function drawRunePicker() {
 function drawRuneMenu() {
   runeMenuBtns = [];
   const W = BASE_W, H = BASE_H;
-  const menuW = 380, menuH = 320;
+  const menuW = 400, menuH = 340;
   const mx = Math.round((W - menuW) / 2);
   const my = Math.round((H - menuH) / 2);
 
-  // Dim backdrop
-  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  // Dim backdrop with subtle vignette
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
   ctx.fillRect(0, 0, W, H);
 
-  drawFantasyPanel(mx, my, menuW, menuH, 'rgba(10,6,22,0.98)', 0.9, 12);
+  // Main panel
+  drawFantasyPanel(mx, my, menuW, menuH, 'rgba(8,4,20,0.99)', 0.88, 10);
 
-  ctx.textAlign = 'center';
-  ctx.font      = 'bold 14px monospace';
-  ctx.fillStyle = '#f0d040';
-  ctx.shadowColor = 'rgba(240,190,30,0.6)'; ctx.shadowBlur = 10;
-  ctx.fillText('RUNE FORGE', mx + menuW / 2, my + 26);
+  // Decorative header band
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(mx, my, menuW, 48, [10, 10, 0, 0]);
+  ctx.fillStyle = 'rgba(28,14,52,0.98)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(160,100,240,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+  // Horizontal rule below header
+  ctx.strokeStyle = 'rgba(180,120,255,0.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(mx + 8, my + 48); ctx.lineTo(mx + menuW - 8, my + 48); ctx.stroke();
+  ctx.restore();
+
+  // Forge icon — anvil + hammer (drawn, center-left of header)
+  const hicX = mx + 26, hicY = my + 24;
+  const forgePulse = 0.6 + Math.sin(performance.now() * 0.005) * 0.4;
+  ctx.save();
+  ctx.shadowColor = `rgba(180,120,255,${forgePulse * 0.7})`; ctx.shadowBlur = 10;
+  ctx.fillStyle   = `rgba(180,140,255,${0.5 + forgePulse * 0.4})`;
+  // Anvil body
+  ctx.fillRect(hicX - 9, hicY - 2, 18, 6);
+  ctx.fillRect(hicX - 6, hicY + 4,  12, 4);
+  // Hammer
+  ctx.save();
+  ctx.translate(hicX + 4, hicY - 8); ctx.rotate(-0.45);
+  ctx.fillRect(-1.5, 0, 3, 10);
+  ctx.fillRect(-4, -4, 8, 4);
+  ctx.restore();
   ctx.shadowBlur = 0;
-  ctx.font       = '9px monospace';
-  ctx.fillStyle  = '#705030';
-  ctx.fillText(`✦ ${stars} stars available  —  equip runes on towers`, mx + menuW / 2, my + 40);
+  ctx.restore();
 
-  const rowH = 46, rowStart = my + 54;
+  // Header title
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 15px monospace';
+  ctx.fillStyle   = '#e0c8ff';
+  ctx.shadowColor = 'rgba(200,140,255,0.7)'; ctx.shadowBlur = 14;
+  ctx.fillText('RUNE FORGE', mx + menuW / 2, my + 30);
+  ctx.shadowBlur  = 0;
+  ctx.font        = '9px monospace';
+  ctx.fillStyle   = '#705070';
+  ctx.fillText(`Spend ✦ stars to forge permanent power runes`, mx + menuW / 2, my + 42);
+
+  // Star count badge (top-right of header)
+  const sbW = 52, sbH = 20, sbX = mx + menuW - sbW - 10, sbY = my + 14;
+  ctx.save();
+  ctx.fillStyle = 'rgba(240,200,30,0.12)';
+  ctx.beginPath(); ctx.roundRect(sbX, sbY, sbW, sbH, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(240,190,30,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0d040'; ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(240,200,30,0.6)'; ctx.shadowBlur = 6;
+  ctx.fillText(`✦ ${stars}`, sbX + sbW / 2, sbY + sbH / 2 + 4);
+  ctx.shadowBlur = 0; ctx.restore();
+
+  // Close button [×]
+  const clW = 20, clH = 20, clX = mx + menuW - clW - 6, clY = my + 6;
+  ctx.save();
+  ctx.fillStyle = 'rgba(80,40,40,0.6)';
+  ctx.beginPath(); ctx.roundRect(clX, clY, clW, clH, 4); ctx.fill();
+  ctx.font = 'bold 12px monospace'; ctx.fillStyle = 'rgba(200,120,100,0.7)'; ctx.textAlign = 'center';
+  ctx.fillText('×', clX + clW / 2, clY + clH / 2 + 4);
+  ctx.restore();
+
+  // ── Rune rows ──────────────────────────────────────────────────────────────
+  const rowH = 52, rowStart = my + 56;
 
   RUNE_DEFS.forEach((def, i) => {
     const ry       = rowStart + i * rowH;
@@ -3655,61 +3840,98 @@ function drawRuneMenu() {
     const maxed    = owned >= def.maxOwned;
     const canBuy   = !maxed && stars >= def.cost;
 
+    // Row background (alternating)
     if (i % 2 === 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.03)';
-      ctx.fillRect(mx + 8, ry, menuW - 16, rowH - 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.025)';
+      ctx.beginPath(); ctx.roundRect(mx + 8, ry + 2, menuW - 16, rowH - 4, 4); ctx.fill();
     }
 
-    // Color swatch
-    ctx.fillStyle = def.color;
-    ctx.beginPath(); ctx.arc(mx + 22, ry + rowH / 2 - 1, 7, 0, Math.PI * 2); ctx.fill();
+    // Rune icon sprite (if loaded) or colored circle fallback
+    const ICON_KEYS = { ironEdge: 'runeIronEdge', swiftStrike: 'runeSwiftStrike', frostRune: 'runeFrost', battleHymn: 'runeBattleHymn', valhalla: 'runeValhalla' };
+    const iconKey = ICON_KEYS[def.id];
+    const sp      = SPRITES[iconKey];
+    const iconX   = mx + 22, iconY = ry + rowH / 2 - 1;
+    if (sp) {
+      ctx.save();
+      ctx.shadowColor = def.color; ctx.shadowBlur = owned > 0 ? 8 : 2;
+      ctx.globalAlpha = owned > 0 ? 1 : 0.35;
+      ctx.drawImage(sp.img, iconX - 12, iconY - 12, 24, 24);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.shadowColor = def.color; ctx.shadowBlur = 6;
+      ctx.fillStyle   = owned > 0 ? def.color : 'rgba(80,60,30,0.4)';
+      ctx.beginPath(); ctx.arc(iconX, iconY, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.textAlign = 'center';
+      ctx.fillText(def.symbol, iconX, iconY + 4);
+      ctx.shadowBlur = 0; ctx.restore();
+    }
 
-    // Rune name + desc
+    // Rune name
     ctx.textAlign = 'left';
-    ctx.font      = 'bold 10px monospace';
-    ctx.fillStyle = '#e8d0a0';
-    ctx.fillText(def.label, mx + 36, ry + 15);
-    ctx.font      = '10px monospace';
-    ctx.fillStyle = '#706860';
-    ctx.fillText(def.desc, mx + 36, ry + 27);
+    ctx.font      = `bold 10px monospace`;
+    ctx.fillStyle = owned > 0 ? '#e8d0a0' : 'rgba(180,140,80,0.5)';
+    ctx.fillText(def.label, mx + 40, ry + 16);
 
-    // Owned pips (filled = owned, half = equipped)
+    // Description
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = owned > 0 ? '#807868' : 'rgba(100,80,50,0.5)';
+    ctx.fillText(def.desc, mx + 40, ry + 27);
+
+    // Owned pip track
+    const pipStartX = mx + 40;
     for (let p = 0; p < def.maxOwned; p++) {
-      ctx.beginPath();
-      ctx.arc(mx + 36 + p * 12, ry + 38, 4, 0, Math.PI * 2);
-      ctx.fillStyle = p < owned ? def.color : 'rgba(80,60,30,0.5)';
+      const px2 = pipStartX + p * 14;
+      const owned_pip = p < owned;
+      const equipped_pip = p < equipped;
+      ctx.beginPath(); ctx.arc(px2, ry + 40, 5, 0, Math.PI * 2);
+      ctx.fillStyle = owned_pip ? def.color : 'rgba(60,40,20,0.6)';
       ctx.fill();
-      if (p < equipped) {
-        ctx.beginPath(); ctx.arc(mx + 36 + p * 12, ry + 38, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
+      if (equipped_pip) {
+        ctx.beginPath(); ctx.arc(px2, ry + 40, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
+      }
+      if (owned_pip && !equipped_pip) {
+        // unequipped owned — subtle ring to signal it's free
+        ctx.beginPath(); ctx.arc(px2, ry + 40, 5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 0.8; ctx.stroke();
       }
     }
-    // owned/equipped label
     if (owned > 0) {
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,80,0.70)'; ctx.textAlign = 'left';
-      ctx.fillText(`own ${owned}  eq ${equipped}`, mx + 36 + def.maxOwned * 12 + 4, ry + 41);
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
+      ctx.fillText(`${equipped} equipped / ${owned} owned`, pipStartX + def.maxOwned * 14 + 6, ry + 43);
     }
 
     // Buy button
-    const bw = 56, bh = 22;
+    const bw = 60, bh = 26;
     const bx = mx + menuW - bw - 12;
-    const by = ry + (rowH - bh) / 2 - 1;
-    drawFantasyPanel(bx, by, bw, bh,
-      canBuy ? 'rgba(20,40,10,0.97)' : 'rgba(20,12,6,0.97)',
-      canBuy ? 0.75 : 0.2, 4);
-    ctx.textAlign = 'center';
-    ctx.font      = `bold 9px monospace`;
-    ctx.fillStyle = maxed ? '#504030' : canBuy ? '#88ee60' : '#504030';
-    ctx.fillText(maxed ? 'FULL' : `✦${def.cost}`, bx + bw / 2, by + bh / 2 + 3.5);
+    const by = ry + (rowH - bh) / 2;
+    const btnFill = maxed ? 'rgba(30,20,10,0.9)'
+                  : canBuy ? 'rgba(14,36,8,0.97)' : 'rgba(18,10,30,0.9)';
+    const btnBorder = maxed ? 0.15 : canBuy ? 0.75 : 0.22;
+    ctx.save();
+    if (canBuy) {
+      ctx.shadowColor = 'rgba(80,220,60,0.4)'; ctx.shadowBlur = 8;
+    }
+    drawFantasyPanel(bx, by, bw, bh, btnFill, btnBorder, 5);
+    ctx.shadowBlur = 0;
+    ctx.textAlign  = 'center';
+    ctx.font       = 'bold 10px monospace';
+    ctx.fillStyle  = maxed ? '#403828' : canBuy ? '#88ee60' : 'rgba(160,110,200,0.45)';
+    if (!maxed) {
+      ctx.shadowColor = canBuy ? 'rgba(80,220,60,0.5)' : 'none'; ctx.shadowBlur = canBuy ? 6 : 0;
+    }
+    ctx.fillText(maxed ? 'FULL' : `✦ ${def.cost}`, bx + bw / 2, by + bh / 2 + 4);
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
     if (!maxed) runeMenuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: i });
   });
 
-  // Close hint
-  ctx.textAlign = 'center';
-  ctx.font      = '9px monospace';
-  ctx.fillStyle = '#403828';
-  ctx.fillText('Click outside or press Esc / R to close', mx + menuW / 2, my + menuH - 10);
+  // Footer hint
+  ctx.textAlign = 'center'; ctx.font = '9px monospace';
+  ctx.fillStyle = 'rgba(90,65,40,0.6)';
+  ctx.fillText('Equip runes on towers by selecting a tower  •  Esc / R to close', mx + menuW / 2, my + menuH - 10);
 }
 
 function drawMapSelect() {

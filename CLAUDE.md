@@ -40,7 +40,7 @@ src/
   grid/
     grid.js            — Grid class, CELL enum, BFS pathfinding, cell drawing
 assets/
-  towers/              — sprite PNGs: berserker, valkyrie, archer, catapult, blondie, ismaciker, vildeman
+  towers/              — sprite PNGs for all 9 tower types
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
   ui/                  — portal_spawn_gate, goal_trelleborg_fort, frame tiles (corner, horiz, vert)
   terrain/             — ground_tile.png, path_tile.png (both 1254×1254)
@@ -58,17 +58,17 @@ tests/
 
 The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other frame); the ×2 speed button makes it tick every frame instead.
 
-### Canvas layout (BASE_W=692, BASE_H=488)
+### Canvas layout
 
 | Region | Position |
 |---|---|
-| Top HUD bar | y=0, h=GRID_TOP=48 |
-| Grid | GRID_LEFT=32, GRID_TOP=48, 36×22 cells at CELL_SIZE=14 → 504×308 px |
+| Top HUD bar | y=0, h=GRID_TOP=64 |
+| Grid | GRID_LEFT=32 (`FRAME_THICK`), GRID_TOP=64, 36×22 cells at CELL_SIZE=14 → 504×308 px |
 | Right panel | x=right of grid, w=188 |
-| Bottom build bar | below grid, ~98 px tall |
+| Bottom build bar | below grid, h=62 (`BUILD_BTN.h`) |
 | Ornamental frame | 32 px thick (`FRAME_THICK`), drawn last (on top of everything) |
 
-Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=85`, `STARTING_LIVES=15`, `WALL_COST=5`, `MAX_WAVES=100`.
+Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=80`, `STARTING_LIVES=8`, `WALL_COST=8`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
 
 ### Render order (each frame)
 
@@ -108,9 +108,51 @@ To activate directional mode for a sprite, set `rows: 4` in its manifest entry i
 
 `assets.js` exports `SPRITES` (a shared object). Each key maps to an `Image` that loads asynchronously. Code checks `img.complete` before drawing; falls back to procedural canvas drawing if sprites haven't loaded.
 
+### Tower types and categories
+
+9 towers in three build-bar categories:
+
+| Category | Types | Notes |
+|---|---|---|
+| Warriors | berserk, valkyrie, military | berserk=close range brawler, valkyrie=long-range spear, military=fast arrow |
+| Siege | catapult, drakship, piltorn | catapult=2×2 splash, drakship=3×1 heavy splash (cost 95), piltorn=fast arrow |
+| Mystic | blondie, hydda, isjatten | blondie=slow field, hydda=healer (range/damage=0), isjatten=nova AoE slow |
+
+`footprint` property: catapult is 2×2, drakship is 3×1, all others are 1×1. Multi-cell towers occupy all cells in their footprint.
+
+Two towers are gated behind stars earned in the current run: `isjatten` requires 3 stars, `drakship` requires 5.
+
 ### Tower upgrades and economy
 
 Towers upgrade to level 10: +25% damage, +8% range, −5% cooldown per level. Sell = 50% of base cost. High scores persist to `localStorage` under key `northern-shield-hs` (max 8 entries).
+
+### Rune system
+
+Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars persist for the run and reset on restart. Press `R` between waves to open the Rune Forge overlay (`showRuneMenu`).
+
+Five rune types defined in `RUNE_DEFS`:
+
+| Rune | Cost | Effect | Max |
+|---|---|---|---|
+| Iron Edge | 3 stars | +25% damage on one tower | 3 |
+| Swift Strike | 4 stars | −15% fire cooldown | 2 |
+| Frost Rune | 2 stars | Adds/boosts slow on hit | 3 |
+| Battle Hymn | 3 stars | +30% range | 1 |
+| Valhalla | 5 stars | +50% kill gold | 2 |
+
+Runes are purchased into `runeInventory`, then equipped to individual towers via the tower panel equip button (opens `showRunePicker`). Each tower holds at most one rune (`tower.rune`). Unequipping returns the rune to inventory.
+
+### Synergy system
+
+Pairs of adjacent towers activate automatic stat boosts (detected each tick, applied temporarily around `update()`):
+
+| Pair | Synergy key | Effect |
+|---|---|---|
+| military + valkyrie | `eagleEye` | +15% range on both |
+| berserk + catapult | `siegeFury` | +20% splash damage on both |
+| blondie + isjatten | `winterGrip` | +15% damage on both |
+
+Active synergies are shown in the tower detail panel and rendered as a colored glow ring. `tower._synergy` is null or one of the three keys; `tower._synergyDmgBoost` is set to 1.15 (or 1) by game.js before each tower's `update()` call.
 
 ### Core game rule: path-validity enforcement
 
