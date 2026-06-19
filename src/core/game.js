@@ -2794,6 +2794,20 @@ function drawRightPanel() {
       ctx.fillText(`${stars}  ${pathSteps}c / ${ratio.toFixed(1)}×`, rEdge, ly);
       ctx.textAlign = 'left'; ly += 11;
     }
+
+    // Total DPS of all towers
+    if (towers.length > 0) {
+      const totalDps = towers.reduce((sum, t) => {
+        if (t.fireRate <= 0) return sum;
+        return sum + Math.round(t.damage * 30 / t.fireRate);
+      }, 0);
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
+      ctx.fillText('DPS', lx, ly);
+      ctx.fillStyle = '#e8a060'; ctx.textAlign = 'right';
+      ctx.fillText(`~${totalDps}`, rEdge, ly);
+      ctx.textAlign = 'left'; ly += 11;
+    }
   }
 
   // ── SPEED CONTROL — three triangle buttons (×1 / ×2 / ×4), always fixed ──────
@@ -4724,6 +4738,38 @@ function draw() {
   }
 
   enemies.forEach(e => e.draw(ctx));
+
+  // Enemy hover tooltip — name, HP, and type hint when cursor is near an enemy
+  if (!gameOver && !dragItem) {
+    const { x: hgx, y: hgy } = outerToGridLocal(dragX, dragY);
+    const inGrid = hgx >= 0 && hgx <= COLS * CELL_SIZE && hgy >= 0 && hgy <= ROWS * CELL_SIZE;
+    if (inGrid) {
+      const closest = enemies.reduce((best, e) => {
+        if (!e.alive) return best;
+        const d2 = (e.x - hgx) ** 2 + (e.y - hgy) ** 2;
+        return d2 < best.d2 ? { e, d2 } : best;
+      }, { e: null, d2: (10 / gridZoom) ** 2 });
+      if (closest.e) {
+        const def   = ENEMY_DEFS[closest.e.type];
+        const label = closest.e.bossName ?? def.label;
+        const hpPct = Math.round((closest.e.hp / closest.e.maxHp) * 100);
+        const tx    = GRID_LEFT + gridPanX + closest.e.x * gridZoom;
+        const ty    = GRID_TOP  + gridPanY + (closest.e.y - closest.e.radius - 12) * gridZoom;
+        ctx.save();
+        ctx.font      = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        const tw = ctx.measureText(label).width + 6;
+        ctx.fillRect(tx - tw / 2, ty - 11, tw, 12);
+        ctx.fillStyle = closest.e.isBoss ? '#ff9040' : def.color ?? '#e8d0a0';
+        ctx.fillText(label, tx, ty - 1);
+        ctx.font      = '8px monospace';
+        ctx.fillStyle = 'rgba(200,200,200,0.75)';
+        ctx.fillText(`${hpPct}% HP`, tx, ty + 8);
+        ctx.restore();
+      }
+    }
+  }
 
   bullets.forEach(b => b.draw(ctx));
   drawParticles();
