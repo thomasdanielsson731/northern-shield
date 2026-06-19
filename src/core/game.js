@@ -242,7 +242,8 @@ const ACH_DEFS = {
 let _earnedAch = new Set();
 try { _earnedAch = new Set(JSON.parse(localStorage.getItem(ACH_KEY)) || []); } catch {}
 let _achToasts  = [];  // { id, timer } — queue of toasts to display
-let flawlessCount = 0; // flawless waves earned this run (reset on restart)
+let flawlessCount  = 0;  // total flawless waves this run (for achievement)
+let flawlessStreak = 0;  // consecutive flawless waves (resets on any leak)
 
 function unlockAchievement(id) {
   if (_earnedAch.has(id)) return;
@@ -410,6 +411,7 @@ function restartGame() {
 
   stars             = 0;
   flawlessCount     = 0;
+  flawlessStreak    = 0;
   runeInventory     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
   showRuneMenu      = false;
   showRunePicker    = false;
@@ -849,13 +851,16 @@ function updateWave() {
       hoardPulse = 60;
       stars++;   // 1 star for flawless wave
       flawlessCount++;
+      flawlessStreak++;
       if (flawlessCount >= 5) unlockAchievement('flawless5');
       screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
       spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#a07830', 10);
       sfxWaveClear();
-      dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 30, val: '1 ★', life: 100, maxLife: 100, color: '#f0d040', large: true, suffix: '' });
+      const streakSuffix = flawlessStreak >= 3 ? ` ×${flawlessStreak}` : '';
+      dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 30, val: `1 ★${streakSuffix}`, life: 100, maxLife: 100, color: '#f0d040', large: true, suffix: '' });
     } else {
+      flawlessStreak = 0;
       hoardPulse = 18;
     }
     // Hoard interest — flat 10g (avoids rich-get-richer feedback from percentage scaling)
@@ -3891,7 +3896,8 @@ function drawFlawlessNotif() {
   ctx.fillStyle   = `rgba(240,210,30,${alpha})`;
   ctx.shadowColor = `rgba(240,180,20,${alpha * 0.8})`;
   ctx.shadowBlur  = 12;
-  ctx.fillText('+1 ✦  FLAWLESS!', BASE_W / 2, cy);
+  const streakText = flawlessStreak >= 3 ? `  ×${flawlessStreak} STREAK` : '';
+  ctx.fillText(`+1 ✦  FLAWLESS!${streakText}`, BASE_W / 2, cy);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }

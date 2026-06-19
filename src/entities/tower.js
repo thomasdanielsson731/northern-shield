@@ -250,7 +250,7 @@ export class Tower {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
     for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
-    return Math.floor(total * 0.5);
+    return Math.floor(total * 0.60);
   }
   get maxed()       { return this.level >= MAX_LEVEL; }
 
