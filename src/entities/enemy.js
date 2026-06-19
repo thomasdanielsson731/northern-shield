@@ -20,7 +20,7 @@ export const ENEMY_DEFS = {
   mara: {
     label:          'Mara',
     speed:          0.70,
-    hp:             130,
+    hp:             180,
     radius:         7,
     reward:         12,
     color:          '#5020a0',   // void purple — nightmare spirit (style bible)
@@ -228,7 +228,7 @@ export class Enemy {
     if (this.hitFlash > 0) {
       const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
       const hfAlpha = hRatio * 0.78;
-      ctx.strokeStyle = `rgba(220,235,255,${hfAlpha})`;
+      ctx.strokeStyle = `rgba(255,240,200,${hfAlpha})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);

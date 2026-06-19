@@ -119,7 +119,7 @@ export const TOWER_DEFS = {
     key:          '7',
     color:        '#6890b8',
     rangeColor:   'rgba(80,130,190,0.24)',
-    cost:         52,
+    cost:         40,
     range:        100,
     fireRate:     14,
     damage:       34,
@@ -241,12 +241,15 @@ export class Tower {
     }
   }
 
-  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.75); }
+  get upgradeCost() {
+    const base = TOWER_DEFS[this.type]?.cost ?? 20;
+    return Math.min(Math.floor(base * this.level * 0.75), base * 3);
+  }
   get sellValue() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
     for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
-    return Math.floor(total * 0.6);
+    return Math.floor(total * 0.5);
   }
   get maxed()       { return this.level >= MAX_LEVEL; }
 
@@ -282,6 +285,7 @@ export class Tower {
     // ── Isjätte: AoE ice nova — damages & slows all enemies in range ─────────
     if (this.type === TOWER_TYPES.ISJATTEN) {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
+      this.fireCooldown = this.fireRate;  // always reset so cadence is predictable
       const rangeSq = this.range * this.range;
       let killed = 0, hit = false;
       for (const enemy of enemies) {
@@ -290,6 +294,8 @@ export class Tower {
         if (dx * dx + dy * dy > rangeSq) continue;
         hit = true;
         enemy.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1) * (this._synergyDmgBoost ?? 1));
+        enemy.hitFlash    = this.damage > 20 ? 6 : 4;
+        enemy.hitFlashMax = enemy.hitFlash;
         if (!enemy.slowImmune) {
           enemy.slowTimer  = this.slowDuration;
           enemy.slowFactor = this.slowFactor;
@@ -297,20 +303,20 @@ export class Tower {
         if (enemy.hp <= 0) { enemy.hp = 0; enemy.kill(); enemy._killed = true; killed++; }
       }
       if (!hit) return null;
-      this.fireCooldown = this.fireRate;
-      this.fireFlash    = this.maxFireFlash;
+      this.fireFlash = this.maxFireFlash;
       return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
     }
 
     if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
 
-    let target = null, bestProgress = -1, bestDistSq = this.range * this.range;
+    const rangeSq = this.range * this.range;
+    let target = null, bestProgress = -1, bestDistSq = rangeSq;
     for (const enemy of enemies) {
       if (!enemy.alive || enemy.reached) continue;
       const dx = enemy.x - this.x, dy = enemy.y - this.y;
       const distSq   = dx * dx + dy * dy;
       const progress = enemy.pathIndex ?? 0;
-      if (distSq > this.range * this.range) continue;
+      if (distSq > rangeSq) continue;
       if (progress > bestProgress || (progress === bestProgress && distSq < bestDistSq)) {
         bestProgress = progress; bestDistSq = distSq; target = enemy;
       }

@@ -162,6 +162,7 @@ let pathCanvas         = null;    // offscreen canvas caching the static stone r
 let pathDirty          = true;    // true when path changed — triggers re-bake
 let _pathPts           = [];      // cached world-space polyline (rebuilt when pathDirty)
 let _pathSegs          = [];      // cached segment data (rebuilt when pathDirty)
+let _pathCorners       = [];      // cached corner data for torches (rebuilt when pathDirty)
 let _pathTotalLen      = 0;
 let towerTargetLines   = [];      // { x0, y0, x1, y1, life, maxLife } targeting lines
 
@@ -180,12 +181,12 @@ let mapAutoTimerStart = 0;       // performance.now() when auto-start countdown 
 const MAP_AUTO_DELAY  = 10000;   // ms before auto-launching selected map
 
 const ABILITY_LABELS = {
-  wall:     'SLOW',
+  wall:     'ADJ SLOW',
   berserk:  'MELEE',
   valkyrie: 'SNIPER',
   military: 'RAPID',
   catapult: 'SPLASH',
-  blondie:  'SLOW',
+  blondie:  'STUN',
   piltorn:  'PIERCE',
   hydda:    'HEAL',
   isjatten: 'NOVA',
@@ -208,8 +209,8 @@ const RUNE_DEFS = [
 
 // Stars required to unlock tower (in current run)
 const TOWER_STAR_GATES = {
-  isjatten: 3,
-  drakship: 5,
+  isjatten: 5,
+  drakship: 3,
 };
 
 // ── high-score table ──────────────────────────────────────────────────────────
@@ -562,7 +563,7 @@ function waveComposition(num) {
   const eliteCap  = n >= 75 ? 20 : 12;
   return {
     draugr:  n <= 5 ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), draugrCap),
-    mylings: n >= 8  ? Math.min(Math.floor((n - 7) * 2.0), 32) : 0,
+    mylings: n >= 9  ? Math.min(Math.floor((n - 8) * 2.0), 32) : 0,
     jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), eliteCap) : 0,
     maras:   n >= 22 ? Math.min(Math.floor((n - 21) * 0.8), eliteCap) : 0,
   };
@@ -586,7 +587,7 @@ function buildWave(num) {
   }
 
   // Solo introductions — new enemy type appears alone so player can learn it
-  if (num === 6)  return [...Array(4).fill(ENEMY_TYPES.MYLING)];
+  if (num === 8)  return [...Array(2).fill(ENEMY_TYPES.MYLING)];
   if (num === 12) return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
   if (num === 21) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
 
@@ -1287,7 +1288,7 @@ function tryPlaceAt(col, row, mode, towerType) {
       }
     }
   }
-  firstTowerPlaced = true;
+  if (mode === CELL.TOWER) firstTowerPlaced = true;
   return true;
 }
 
@@ -1830,6 +1831,7 @@ function update() {
         spawnParticles(ix, iy, '#ff6622', 14);
         sfxSplash();
         splashRings.push({ x: ix, y: iy, r: 0, maxR: b.splashRadius, life: 22, maxLife: 22 });
+        screenShake = Math.max(screenShake, b.splashRadius > 50 ? 8 : 5);
         let splashKills = 0;
         for (const enemy of enemies) {
           if (!enemy.alive || enemy.reached) continue;
@@ -1838,6 +1840,8 @@ function update() {
           const dy = enemy.y - iy;
           if (dx * dx + dy * dy <= b.splashRadius * b.splashRadius) {
             enemy.hp -= b.splashDamage;
+            enemy.hitFlash    = b.splashDamage > 40 ? 7 : 4;
+            enemy.hitFlashMax = enemy.hitFlash;
             if (enemy.hp <= 0) {
               enemy.hp    = 0;
               enemy.kill();
@@ -2168,6 +2172,15 @@ function drawPath() {
       _pathSegs.push({ x0: _pathPts[i].x, y0: _pathPts[i].y, x1: _pathPts[i + 1].x, y1: _pathPts[i + 1].y, len, cum: _pathTotalLen });
       _pathTotalLen += len;
     }
+    _pathCorners = [];
+    for (let i = 1; i < _pathPts.length - 1; i++) {
+      const ax = _pathPts[i].x - _pathPts[i - 1].x, ay = _pathPts[i].y - _pathPts[i - 1].y;
+      const bx = _pathPts[i + 1].x - _pathPts[i].x, by = _pathPts[i + 1].y - _pathPts[i].y;
+      const la = Math.sqrt(ax * ax + ay * ay), lb = Math.sqrt(bx * bx + by * by);
+      if (la < 0.01 || lb < 0.01) continue;
+      if ((ax * bx + ay * by) / (la * lb) > 0.97) continue;
+      _pathCorners.push({ x: _pathPts[i].x, y: _pathPts[i].y, nx: -ay / la, ny: ax / la, idx: i });
+    }
   }
   const pts = _pathPts;
   const segs = _pathSegs;
@@ -2183,18 +2196,7 @@ function drawPath() {
   ctx.drawImage(pathCanvas, 0, 0);
 
   // ── Small torches at path corners ────────────────────────────────────────
-  // Collect corner points where the path changes direction
-  const corners = [];
-  for (let i = 1; i < pts.length - 1; i++) {
-    const ax = pts[i].x - pts[i - 1].x, ay = pts[i].y - pts[i - 1].y;
-    const bx = pts[i + 1].x - pts[i].x, by = pts[i + 1].y - pts[i].y;
-    const la = Math.sqrt(ax * ax + ay * ay);
-    const lb = Math.sqrt(bx * bx + by * by);
-    if (la < 0.01 || lb < 0.01) continue;
-    const cos = (ax * bx + ay * by) / (la * lb);
-    if (cos > 0.97) continue;  // nearly straight — no torch
-    corners.push({ x: pts[i].x, y: pts[i].y, nx: -ay / la, ny: ax / la, idx: i });
-  }
+  const corners = _pathCorners;  // cached — rebuilt only when pathDirty
 
   for (const c of corners) {
     for (const side of [-1, 1]) {
@@ -2509,7 +2511,7 @@ function drawRightPanel() {
       const next    = waveComposition(waveNumber + 1);
       const entries = [
         { label: 'Draugr', count: next.draugr,  color: '#7090a8', skip: next.draugr  === 0, boss: false, flying: false },
-        { label: 'Myling', count: next.mylings,  color: '#88c860', skip: next.mylings === 0, boss: false, flying: true  },
+        { label: 'Myling', count: next.mylings,  color: '#60a840', skip: next.mylings === 0, boss: false, flying: true  },
         { label: 'Jötunn', count: next.jotunn,   color: '#40b0ff', skip: next.jotunn  === 0, boss: true,  flying: false },
         { label: 'Mara',   count: next.maras,    color: '#7040c0', skip: next.maras   === 0, boss: false, flying: false },
       ];
@@ -2714,7 +2716,7 @@ function drawRightPanel() {
     // Star count and keybind
     ctx.font      = '9px monospace';
     ctx.fillStyle = hasStars ? '#f0d040' : 'rgba(160,130,60,0.4)';
-    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'earn ★ stars', rfX + 28, rfY + 30);
+    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'flawless waves earn ✦', rfX + 28, rfY + 30);
 
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -2869,9 +2871,9 @@ function drawTopBar() {
     ctx.fillStyle = gameSpeed >= 4 ? '#ff8040' : '#f0c840';
     ctx.shadowColor = gameSpeed >= 4 ? 'rgba(255,100,20,0.6)' : 'rgba(240,180,20,0.4)';
     ctx.shadowBlur  = 4;
-    ctx.fillText(gameSpeed >= 4 ? '▶▶▶▶' : '▶▶', lx2, cy);
+    ctx.fillText(`×${gameSpeed}`, lx2, cy);
     ctx.shadowBlur = 0;
-    lx2 += ctx.measureText(gameSpeed >= 4 ? '▶▶▶▶' : '▶▶').width + 10;
+    lx2 += ctx.measureText(`×${gameSpeed}`).width + 10;
   }
   ctx.fillStyle = isMuted ? '#ff6060' : '#506050';
   ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx2, cy);
@@ -3567,7 +3569,7 @@ function drawWaveAnnouncement() {
     const next  = waveComposition(waveNumber + 1);
     const chips = [];
     if (next.draugr  > 0) chips.push({ label: `×${next.draugr} Draugr`,  color: '#7090a8' });
-    if (next.mylings > 0) chips.push({ label: `×${next.mylings} Myling`, color: '#88c860' });
+    if (next.mylings > 0) chips.push({ label: `×${next.mylings} Myling`, color: '#60a840' });
     if (next.jotunn  > 0) chips.push({ label: `×${next.jotunn} Jötunn`,  color: '#e8a040' });
     if (next.maras   > 0) chips.push({ label: `×${next.maras} Mara`,     color: '#a060e0' });
     ctx.font = '8px monospace';
@@ -4459,8 +4461,8 @@ function draw() {
   }
 
   // ── Path direction chevrons (wave 1 tutorial, first 4s) ──────────────────────
-  if (pathChevronsTimer > 0 && currentPath && currentPath.length >= 2) {
-    const pts2  = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+  if (pathChevronsTimer > 0 && _pathPts.length >= 2) {
+    const pts2  = _pathPts;
     const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.45;
     const alpha = Math.min(1, pathChevronsTimer / 30) * pulse;
     const chevSize = 4;
