@@ -42,7 +42,7 @@ export const ENEMY_DEFS = {
     speed:          1.2,
     hp:             110,
     radius:         6,
-    reward:         6,
+    reward:         8,
     color:          '#50883a',   // sickly pale green — corrupted child spirit (style bible)
     highlightColor: '#88bb50',
     flying:         true
@@ -833,17 +833,14 @@ export class Enemy {
       ctx.fillText(this.bossName ?? 'BOSS', this.x, barY - 3);
       ctx.shadowBlur = 0;
       ctx.restore();
-    } else {
-      // Always draw the tray so player can read enemy position before first hit
+    } else if (pct < 1.0) {
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      if (pct < 1.0) {
-        ctx.fillStyle = pct > 0.75 ? '#56e894' : pct > 0.50 ? '#a8e040' : pct > 0.25 ? '#e8c040' : '#e84040';
-        ctx.fillRect(barX, barY, barW * pct, barH);
-        ctx.strokeStyle = 'rgba(200,160,40,0.32)';
-        ctx.lineWidth   = 0.5;
-        ctx.strokeRect(barX, barY, barW, barH);
-      }
+      ctx.fillStyle = pct > 0.60 ? '#60c840' : pct > 0.35 ? '#e8c040' : '#e84040';
+      ctx.fillRect(barX, barY, barW * pct, barH);
+      ctx.strokeStyle = 'rgba(200,160,40,0.32)';
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(barX, barY, barW, barH);
     }
   }
 }

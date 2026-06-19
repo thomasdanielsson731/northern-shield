@@ -39,7 +39,7 @@ export class Bullet {
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
       this.target.hp = Math.max(0, this.target.hp - this.damage);
       if (this.source) this.source.damageDealt += actualDamage;
-      this.target.hitFlash    = this.damage > 60 ? 10 : this.damage > 20 ? 6 : 3;
+      this.target.hitFlash    = this.damage > 80 ? 14 : this.damage > 40 ? 9 : this.damage > 15 ? 5 : 3;
       this.target.hitFlashMax = this.target.hitFlash;
 
       if (this.slowDuration > 0) {
@@ -158,13 +158,15 @@ export class Bullet {
       const tdx = this.target.x - this.x;
       const tdy = this.target.y - this.y;
       const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
-      if (tdist < 68) {
-        const progress = 1 - tdist / 68;
-        ctx.strokeStyle = `rgba(255,120,25,${0.10 + progress * 0.30})`;
-        ctx.lineWidth   = 1.2;
+      if (tdist < 90) {
+        const progress = 1 - tdist / 90;
+        ctx.strokeStyle = `rgba(255,120,25,${0.18 + progress * 0.52})`;
+        ctx.lineWidth   = 1.8;
+        ctx.setLineDash([4, 3]);
         ctx.beginPath();
-        ctx.arc(this.target.x, this.target.y, this.splashRadius * (0.55 + progress * 0.45), 0, Math.PI * 2);
+        ctx.arc(this.target.x, this.target.y, this.splashRadius, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
 

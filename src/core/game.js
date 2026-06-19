@@ -290,7 +290,7 @@ function restartGame() {
   chainKillDone     = false;
   chainKillDisplay  = null;
   lifeLostTimer     = 0;
-  pathChevronsTimer = 0;
+  pathChevronsTimer = 300;
   pathBlockFlash    = null;
   bestWave          = { wave: 0, slain: 0, gold: 0 };
   waveSlainCount    = 0;
@@ -403,13 +403,27 @@ let waveActiveFrames = 0;
 
 function getWaveBands(waveNum) {
   const n = Math.min(Math.max(waveNum, 1), 100);
-  const t = (n - 1) / 99;
-  const hp    = 1.0 + t * 4.5;           // 1.0 at wave 1 → 5.5 at wave 100
-  const speed = 1.0 + t * 0.75;          // 1.0 at wave 1 → 1.75 at wave 100
+  let hp, speed;
+  if (n <= 25) {
+    const t = (n - 1) / 24;
+    hp    = 1.0 + t * 1.2;   // 1.0 → 2.2  (ch1: gentle learning)
+    speed = 1.0 + t * 0.15;  // 1.0 → 1.15
+  } else if (n <= 50) {
+    const t = (n - 25) / 25;
+    hp    = 2.2 + t * 1.3;   // 2.2 → 3.5  (ch2: pressure, adaptation)
+    speed = 1.15 + t * 0.20; // 1.15 → 1.35
+  } else if (n <= 75) {
+    const t = (n - 50) / 25;
+    hp    = 3.5 + t * 1.0;   // 3.5 → 4.5  (ch3: mastery tax)
+    speed = 1.35 + t * 0.20; // 1.35 → 1.55
+  } else {
+    const t = (n - 75) / 25;
+    hp    = 4.5 + t * 1.5;   // 4.5 → 6.0  (ch4: endgame cliff)
+    speed = 1.55 + t * 0.30; // 1.55 → 1.85
+  }
   if (waveNum <= 100) return { hp, speed };
-  // Endless: accelerating beyond wave 100
   const over = waveNum - 100;
-  return { hp: 5.5 * (1 + over * 0.06), speed: Math.min(1.75 + over * 0.01, 2.60) };
+  return { hp: 6.0 * (1 + over * 0.06), speed: Math.min(1.85 + over * 0.01, 2.60) };
 }
 
 let particles     = [];
@@ -542,11 +556,15 @@ function drawGoldCoins() {
 
 function waveComposition(num) {
   const n = Math.min(num, MAX_WAVES);
+  // Draugr cap declines after wave 50 as elites take over in ch3-4
+  const draugrCap = n <= 50 ? 55 : Math.max(55 - Math.floor((n - 50) * 0.7), 20);
+  // Jötunn and Mara caps rise to 20 in ch4 (wave 75+) for elite-heavy endgame
+  const eliteCap  = n >= 75 ? 20 : 12;
   return {
-    draugr:  n <= 5 ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), 55),
-    mylings: n >= 8  ? Math.min(Math.floor((n - 7) * 2.0), 28) : 0,
-    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), 12) : 0,
-    maras:   n >= 23 ? Math.min(Math.floor((n - 22) * 0.8), 12) : 0,
+    draugr:  n <= 5 ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), draugrCap),
+    mylings: n >= 8  ? Math.min(Math.floor((n - 7) * 2.0), 32) : 0,
+    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), eliteCap) : 0,
+    maras:   n >= 22 ? Math.min(Math.floor((n - 21) * 0.8), eliteCap) : 0,
   };
 }
 
@@ -570,11 +588,17 @@ function buildWave(num) {
   // Solo introductions — new enemy type appears alone so player can learn it
   if (num === 6)  return [...Array(4).fill(ENEMY_TYPES.MYLING)];
   if (num === 12) return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-  if (num === 22) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
+  if (num === 21) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
 
-  // Rest waves — easier wave directly after a boss
+  // Rest waves — 2 easier waves after each boss (1st = very light, 2nd = moderate)
   if (num === 11 || num === 26 || num === 51 || num === 76 || num === 101) {
     const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(Math.min(num - 5, MAX_WAVES));
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    return rest;
+  }
+  if (num === 27 || num === 52 || num === 77) {
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(Math.min(num - 3, MAX_WAVES));
     const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
@@ -611,11 +635,11 @@ function startNextWave() {
   waveSlainCount = 0;
   waveGoldStart  = goldEarned;
   waveStartTick  = performance.now();
-  if (waveNumber === 1) pathChevronsTimer = 240;
+  if (waveNumber === 1) pathChevronsTimer = Math.max(pathChevronsTimer, 480);
   screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
 
-  // Economy emergency valve — track poor waves (started with <15g)
-  if (gold < 40) poorWaveStreak++; else poorWaveStreak = 0;
+  // Economy emergency valve — track poor waves (started with <55g = can't buy even cheap tower)
+  if (gold < 55) poorWaveStreak++; else poorWaveStreak = 0;
 
   // Chapter milestone banners
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
@@ -623,7 +647,7 @@ function startNextWave() {
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
 
   sfxWaveStart();
-  spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#cc80ff', 12);
+  spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#80a8d0', 12);
 }
 
 function updateWave() {
@@ -674,9 +698,9 @@ function updateWave() {
     gold       += clearBonus;
     goldEarned += clearBonus;
 
-    // Economy emergency valve: 3+ consecutive poor-start waves → +50% bonus
-    if (poorWaveStreak >= 3) {
-      const emergency = Math.ceil(clearBonus * 0.5);
+    // Economy emergency valve: 2+ consecutive poor-start waves → +75% bonus
+    if (poorWaveStreak >= 2) {
+      const emergency = Math.ceil(clearBonus * 0.75);
       gold       += emergency;
       goldEarned += emergency;
       poorWaveStreak = 0;
@@ -688,14 +712,16 @@ function updateWave() {
       flawlessTimer     = 180;
       hoardPulse = 60;
       stars++;   // 1 star for flawless wave
-      spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 16);
+      screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
+      spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
+      spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#8090b0', 10);
       sfxWaveClear();
       dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 30, val: '1 ★', life: 100, maxLife: 100, color: '#f0d040', large: true, suffix: '' });
     } else {
       hoardPulse = 18;
     }
-    // Hoard interest (2% of gold, max 20g)
-    const interest = gold > 0 ? Math.min(Math.max(Math.floor(gold * 0.04), 8), 30) : 0;
+    // Hoard interest — flat 10g (avoids rich-get-richer feedback from percentage scaling)
+    const interest = gold > 0 ? 10 : 0;
     if (interest > 0) {
       gold       += interest;
       goldEarned += interest;
@@ -1679,7 +1705,7 @@ function update() {
   if (gameOver || gamePhase !== 'playing' || isPaused) return;
 
   // Auto-next-wave: skip break after a short pause so wave-clear animations breathe
-  if (autoNextWave && waveTimer > 30 && (waveState === 'break' || waveState === 'countdown')) {
+  if (autoNextWave && waveTimer > 60 && (waveState === 'break' || waveState === 'countdown')) {
     startNextWave();
   }
 
@@ -1696,12 +1722,19 @@ function update() {
 
   // ── Synergy detection ─────────────────────────────────────────────────────────
   for (const t of towers) t._synergy = null;
-  const _SYN_DIST_SQ = (4 * CELL_SIZE) * (4 * CELL_SIZE);
+  function _towersAdjacent(a, b) {
+    const afp = a.footprint ?? { w: 1, h: 1 }, bfp = b.footprint ?? { w: 1, h: 1 };
+    for (let ac = a.col; ac < a.col + afp.w; ac++)
+      for (let ar = a.row; ar < a.row + afp.h; ar++)
+        for (let bc = b.col; bc < b.col + bfp.w; bc++)
+          for (let br = b.row; br < b.row + bfp.h; br++)
+            if (Math.abs(ac - bc) <= 1 && Math.abs(ar - br) <= 1) return true;
+    return false;
+  }
   for (let _si = 0; _si < towers.length; _si++) {
     for (let _sj = _si + 1; _sj < towers.length; _sj++) {
       const a = towers[_si], b = towers[_sj];
-      const _dx = a.x - b.x, _dy = a.y - b.y;
-      if (_dx * _dx + _dy * _dy > _SYN_DIST_SQ) continue;
+      if (!_towersAdjacent(a, b)) continue;
       const types = [a.type, b.type].sort().join('+');
       if (types === 'military+valkyrie') { a._synergy = b._synergy = 'eagleEye'; }
       else if (types === 'berserk+catapult') { a._synergy = b._synergy = 'siegeFury'; }
@@ -2793,7 +2826,7 @@ function drawTopBar() {
   ctx.fillStyle   = livesTopColor;
   ctx.shadowColor = livesLostFlash > 0 ? `rgba(255,0,0,${livesLostFlash * 0.95})` : lives <= 3 ? `rgba(255,30,30,${livesDangerPulse * 0.85})` : 'rgba(255,80,80,0.3)';
   ctx.shadowBlur  = livesLostFlash > 0 ? 16 : lives <= 3 ? 6 + livesDangerPulse * 10 : 4;
-  ctx.globalAlpha = livesLostFlash > 0 ? 0.7 + livesLostFlash * 0.3 : lives <= 3 ? 0.65 + livesDangerPulse * 0.35 : 1;
+  ctx.globalAlpha = livesLostFlash > 0 ? 0.7 + livesLostFlash * 0.3 : lives <= 3 ? 0.85 + livesDangerPulse * 0.15 : 1;
   ctx.fillText(`♥ ${lives}`, rx, cy);
   ctx.globalAlpha = 1;
   rx -= ctx.measureText(`♥ ${lives}`).width + 18;
@@ -3352,6 +3385,12 @@ function onBossPhase75(boss) {
   spawnParticles(boss.x, boss.y, boss.highlightColor, 22);
   // Expanding flash ring — telegraphs the summon event
   bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 5.5, life: 34, maxLife: 34, color: boss.highlightColor });
+  // Portal-side ring: shows WHERE the minions will spawn
+  const spawnPx = GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2;
+  const spawnPy = GRID_TOP  + SPAWN.row * CELL_SIZE + CELL_SIZE / 2;
+  bossRings.push({ x: spawnPx, y: spawnPy, r: 6, maxR: 38, life: 44, maxLife: 44, color: '#ff4020' });
+  portalFlash = 28;
+  portalFlashColor = 'red';
 
   if (boss.waveNum === 10) {
     boss.stunTimer = 38;
@@ -3524,7 +3563,7 @@ function drawWaveAnnouncement() {
   ctx.shadowBlur  = 0;
 
   // Enemy composition chips (small, below title)
-  if (waveState === 'break') {
+  if (waveState === 'break' || waveState === 'countdown') {
     const next  = waveComposition(waveNumber + 1);
     const chips = [];
     if (next.draugr  > 0) chips.push({ label: `×${next.draugr} Draugr`,  color: '#7090a8' });

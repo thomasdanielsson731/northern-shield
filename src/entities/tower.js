@@ -52,7 +52,8 @@ export const TOWER_DEFS = {
     fireRate:     22,
     damage:       48,
     radius:       8,
-    bulletSpeed:  40
+    bulletSpeed:  40,
+    fireFlashDuration: 20,
   },
   [TOWER_TYPES.VALKYRIE]: {
     label:        'Valkyrie',
@@ -60,8 +61,8 @@ export const TOWER_DEFS = {
     color:        '#88aaee',
     rangeColor:   'rgba(100,140,220,0.28)',
     cost:         35,
-    range:        180,
-    fireRate:     58,
+    range:        110,
+    fireRate:     72,
     damage:       88,
     radius:       8,
     bulletSpeed:  13,
@@ -95,7 +96,7 @@ export const TOWER_DEFS = {
     splashRadius: 44,
     splashDamage: 52,
     bulletShape:  'rock',
-    fireFlashDuration: 12,
+    fireFlashDuration: 22,
     footprint:    { w: 2, h: 2 },
   },
   [TOWER_TYPES.BLONDIE]: {
@@ -130,8 +131,8 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.HYDDA]: {
     label:        'Hydda',
     key:          '8',
-    color:        '#30b850',
-    rangeColor:   'rgba(40,180,80,0.12)',
+    color:        '#8a6030',
+    rangeColor:   'rgba(140,100,30,0.18)',
     cost:         50,
     range:        0,
     fireRate:     180,
@@ -240,7 +241,7 @@ export class Tower {
     }
   }
 
-  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * Math.sqrt(this.level) * 0.90); }
+  get upgradeCost() { return Math.floor((TOWER_DEFS[this.type]?.cost ?? 20) * this.level * 0.75); }
   get sellValue() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
