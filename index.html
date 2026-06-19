@@ -8,6 +8,12 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <div id="nameEntryOverlay" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(6,2,14,0.97);border:1px solid rgba(200,150,40,0.6);border-radius:8px;padding:18px 24px;text-align:center;z-index:100;font-family:monospace;color:#e8c040;">
+      <div style="font-size:13px;margin-bottom:8px;color:#c0a060;">ENTER YOUR NAME</div>
+      <input id="nameEntryInput" maxlength="16" autocomplete="off" spellcheck="false"
+        style="background:#0a0616;border:1px solid rgba(200,150,40,0.5);border-radius:4px;color:#f0e0c0;font-family:monospace;font-size:14px;padding:6px 10px;width:160px;outline:none;text-align:center;">
+      <div style="margin-top:10px;font-size:10px;color:rgba(160,130,80,0.65);">Press Enter to save</div>
+    </div>
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>

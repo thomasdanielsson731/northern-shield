@@ -838,6 +838,13 @@ export class Enemy {
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
       ctx.fillStyle = pct > 0.50 ? '#60c840' : pct > 0.25 ? '#e8c040' : '#e84040';
       ctx.fillRect(barX, barY, barW * pct, barH);
+      // Colorblind-safe: tick marks at 25 / 50 / 75 %
+      ctx.strokeStyle = 'rgba(0,0,0,0.50)';
+      ctx.lineWidth   = 0.8;
+      for (const t of [0.25, 0.5, 0.75]) {
+        const tx = barX + barW * t;
+        ctx.beginPath(); ctx.moveTo(tx, barY); ctx.lineTo(tx, barY + barH); ctx.stroke();
+      }
       ctx.strokeStyle = 'rgba(200,160,40,0.32)';
       ctx.lineWidth   = 0.5;
       ctx.strokeRect(barX, barY, barW, barH);

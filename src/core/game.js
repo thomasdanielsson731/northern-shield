@@ -187,7 +187,7 @@ const ABILITY_LABELS = {
   valkyrie: 'SNIPER',
   military: 'RAPID',
   catapult: 'SPLASH',
-  blondie:  'STUN',
+  blondie:  '60% SLOW',
   piltorn:  'PIERCE',
   hydda:    'HEAL LIFE',
   isjatten: 'NOVA',
@@ -229,6 +229,61 @@ const WAVE_EVENTS = {
   90: { id: 'ragnarok',     label: '⚔ FÖRSPELET',     desc: '+50% HP, +40% speed',        hpMult: 1.50, speedMult: 1.40 },
 };
 
+// ── achievements ──────────────────────────────────────────────────────────────
+
+const ACH_KEY = 'northern-shield-ach';
+const ACH_DEFS = {
+  firstBoss:  { icon: '☠', title: 'CHIEFTAIN',    desc: 'First boss slain' },
+  wave25:     { icon: '⚔', title: 'IRON WALL',    desc: 'Survived to wave 25' },
+  wave50:     { icon: '🛡', title: 'BULWARK',      desc: 'Survived to wave 50' },
+  wave100:    { icon: '⭐', title: 'SHIELD ETERNAL', desc: 'Cleared all 100 waves' },
+  flawless5:  { icon: '★', title: 'GHOST WALKER', desc: '5 flawless waves in one run' },
+};
+let _earnedAch = new Set();
+try { _earnedAch = new Set(JSON.parse(localStorage.getItem(ACH_KEY)) || []); } catch {}
+let _achToasts  = [];  // { id, timer } — queue of toasts to display
+let flawlessCount = 0; // flawless waves earned this run (reset on restart)
+
+function unlockAchievement(id) {
+  if (_earnedAch.has(id)) return;
+  _earnedAch.add(id);
+  try { localStorage.setItem(ACH_KEY, JSON.stringify([..._earnedAch])); } catch {}
+  _achToasts.push({ id, timer: 200 });
+}
+
+function drawAchievementToasts() {
+  if (_achToasts.length === 0) return;
+  const toast = _achToasts[0];
+  toast.timer--;
+  if (toast.timer <= 0) { _achToasts.shift(); return; }
+  const def   = ACH_DEFS[toast.id];
+  if (!def) return;
+  const alpha = toast.timer > 30 ? Math.min(1, (200 - toast.timer) / 20) : toast.timer / 30;
+  const tw = 200, th = 44;
+  const tx = BASE_W / 2 - tw / 2;
+  const ty = GRID_TOP + 55;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle   = 'rgba(4,12,4,0.97)';
+  ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, 6); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,200,80,0.70)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, 6); ctx.stroke();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 10px monospace';
+  ctx.fillStyle   = '#60ee80';
+  ctx.shadowColor = 'rgba(80,220,80,0.8)'; ctx.shadowBlur = 8;
+  ctx.fillText(`${def.icon} ACHIEVEMENT UNLOCKED`, tx + tw / 2, ty + 14);
+  ctx.shadowBlur = 0;
+  ctx.font        = 'bold 13px monospace';
+  ctx.fillStyle   = '#f0e8c0';
+  ctx.fillText(def.title, tx + tw / 2, ty + 30);
+  ctx.font        = '9px monospace';
+  ctx.fillStyle   = 'rgba(180,160,110,0.75)';
+  ctx.fillText(def.desc, tx + tw / 2, ty + 42);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 // ── high-score table ──────────────────────────────────────────────────────────
 
 const HS_KEY    = 'northern-shield-hs';
@@ -249,6 +304,31 @@ function saveHighScore(score) {
 
 let highScores    = loadHighScores();
 let showTopList   = false;
+let _pendingScore = null;  // score awaiting player name entry
+
+function promptNameAndSave(scoreData) {
+  const overlay = document.getElementById('nameEntryOverlay');
+  const input   = document.getElementById('nameEntryInput');
+  if (!overlay || !input) {
+    highScores = saveHighScore({ ...scoreData, name: 'Anonymous' });
+    return;
+  }
+  _pendingScore = scoreData;
+  input.value = '';
+  overlay.style.display = 'block';
+  setTimeout(() => input.focus(), 50);
+  const onKey = (e) => {
+    if (e.key === 'Enter') {
+      e.stopPropagation();
+      input.removeEventListener('keydown', onKey);
+      overlay.style.display = 'none';
+      const name = input.value.trim().slice(0, 16) || 'Anonymous';
+      highScores = saveHighScore({ ..._pendingScore, name });
+      _pendingScore = null;
+    }
+  };
+  input.addEventListener('keydown', onKey);
+}
 
 // ── restart ───────────────────────────────────────────────────────────────────
 
@@ -314,6 +394,7 @@ function restartGame() {
   waveGoldStart     = goldEarned;
 
   stars             = 0;
+  flawlessCount     = 0;
   runeInventory     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
   showRuneMenu      = false;
   showRunePicker    = false;
@@ -751,6 +832,8 @@ function updateWave() {
       flawlessTimer     = 180;
       hoardPulse = 60;
       stars++;   // 1 star for flawless wave
+      flawlessCount++;
+      if (flawlessCount >= 5) unlockAchievement('flawless5');
       screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
       spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#a07830', 10);
@@ -779,7 +862,11 @@ function updateWave() {
     waveLeak  = false;
     waveTimer = 0;
 
+    // Wave milestone achievements
+    if (waveNumber === 25)  unlockAchievement('wave25');
+    if (waveNumber === 50)  unlockAchievement('wave50');
     if (waveNumber >= MAX_WAVES && !endlessMode) {
+      unlockAchievement('wave100');
       // First time clearing wave 100: enter endless mode, save score, show banner
       endlessMode   = true;
       endlessBanner = 360;
@@ -1466,6 +1553,7 @@ canvas.addEventListener('mousedown', e => {
 
   // Game over: only overlay buttons are interactive
   if (gameOver) {
+    if (_pendingScore) return;  // name entry overlay is open — ignore canvas clicks
     if (e.button === 0) {
       if (restartBtn &&
           mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
@@ -1973,7 +2061,7 @@ function update() {
       if (lives <= 0) {
         gameOver   = true;
         sfxGameOver();
-        highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
+        promptNameAndSave({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
       }
     }
   }
@@ -3167,15 +3255,16 @@ function drawHud() {
     ctx.shadowBlur  = 0;
 
     ctx.textAlign = 'left';
-    const colX = [px + 20, px + 80, cx, px + pw - 20];
+    const colX = [px + 16, px + 42, px + 160, cx + 30, px + pw - 16];
     let   row   = py + 60;
     ctx.font      = 'bold 10px monospace';
     ctx.fillStyle = 'rgba(200,160,40,0.6)';
     ctx.fillText('#', colX[0], row);
-    ctx.fillText('Wave', colX[1], row);
-    ctx.fillText('Slain', colX[2], row);
+    ctx.fillText('Name', colX[1], row);
+    ctx.fillText('Wave', colX[2], row);
+    ctx.fillText('Slain', colX[3], row);
     ctx.textAlign = 'right';
-    ctx.fillText('Gold', colX[3], row);
+    ctx.fillText('Gold', colX[4], row);
     row += 18;
     ctx.strokeStyle = 'rgba(200,160,40,0.2)';
     ctx.lineWidth   = 0.5;
@@ -3189,15 +3278,18 @@ function drawHud() {
       ctx.fillStyle = medal;
       ctx.textAlign = 'left';
       ctx.fillText(`${i + 1}`, colX[0], row);
+      ctx.fillStyle = i < 3 ? medal : 'rgba(200,170,110,0.8)';
+      ctx.fillText((s.name ?? 'Anonymous').slice(0, 12), colX[1], row);
       const waveLabel = s.cleared ? `${s.waves} ⭐` : `${s.waves}`;
-      ctx.fillText(waveLabel, colX[1], row);
-      ctx.fillText(`${s.slain}`, colX[2], row);
+      ctx.fillStyle = medal;
+      ctx.fillText(waveLabel, colX[2], row);
+      ctx.fillText(`${s.slain}`, colX[3], row);
       ctx.textAlign = 'right';
-      ctx.fillText(`+${s.goldEarned}`, colX[3], row);
+      ctx.fillText(`+${s.goldEarned}`, colX[4], row);
       if (s.date) {
         ctx.font      = '8px monospace';
         ctx.fillStyle = 'rgba(160,130,80,0.45)';
-        ctx.fillText(s.date, colX[3], row + 11);
+        ctx.fillText(s.date, colX[4], row + 11);
       }
       row += 30;
     });
@@ -3265,6 +3357,20 @@ function drawHud() {
       ctx.font      = '11px monospace';
       ctx.fillStyle = 'rgba(160,200,255,0.80)';
       ctx.fillText(`Best wave: W${bestWave.wave} — ${bestWave.slain} slain, +${bestWave.gold}g`, cx, stars > 0 ? cy + 70 : cy + 54);
+    }
+    // Next run motivation — show locked tower goals
+    {
+      const goalY = (stars > 0 || bestWave.wave > 0) ? cy + 86 : cy + 54;
+      const nextGoal = stars < TOWER_STAR_GATES.isjatten
+        ? `→ Earn ${TOWER_STAR_GATES.isjatten} ★ to unlock Isjatten`
+        : stars < TOWER_STAR_GATES.drakship
+          ? `→ Earn ${TOWER_STAR_GATES.drakship} ★ to unlock Drakship`
+          : null;
+      if (nextGoal) {
+        ctx.font      = '10px monospace';
+        ctx.fillStyle = 'rgba(200,200,255,0.55)';
+        ctx.fillText(nextGoal, cx, goalY);
+      }
     }
     ctx.restore();
 
@@ -3517,6 +3623,7 @@ function onBossPhase50(boss) {
 
 function onBossKilled(boss) {
   stars         += 3;
+  unlockAchievement('firstBoss');
   sfxDie(true);
   screenShake    = Math.max(screenShake, 28);
   hoardPulse     = 80;   // mega pulse on boss kill
@@ -3615,13 +3722,15 @@ function drawWaveAnnouncement() {
 
   const nextW       = waveState === 'countdown' ? waveNumber : waveNumber + 1;
   const isBoss      = BOSS_WAVES.has(nextW);
+  const nextEvent   = WAVE_EVENTS[nextW];
   const threatRatio = nextW / MAX_WAVES;
   const threatColor = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
+  const threatIcon  = isBoss ? ' ☠' : nextEvent ? ` ${nextEvent.label.split(' ')[0]}` : threatRatio > 0.8 ? ' ⚡' : threatRatio > 0.5 ? ' ⚔' : '';
 
   let line1, line2, glowColor, statusColor, isComplete;
   if (waveState === 'countdown') {
-    line1       = 'PREPARE';
-    line2       = `WAVE ${nextW}${isBoss ? '  ☠' : ''}`;
+    line1       = nextEvent ? nextEvent.desc : 'PREPARE';
+    line2       = `WAVE ${nextW}${threatIcon}`;
     glowColor   = 'rgba(220,170,40,0.85)';
     statusColor = threatColor;
     isComplete  = false;
@@ -4633,6 +4742,7 @@ function draw() {
   drawDmgFloaters();
   drawBossHpBar();
   drawFlawlessNotif();
+  drawAchievementToasts();
   if (isPaused) drawPauseOverlay();
 
   // Endless mode banner
