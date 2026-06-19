@@ -3534,99 +3534,70 @@ function drawWaveAnnouncement() {
   if (gameOver) return;
   if (waveState === 'active') return;
 
-  const gridW  = COLS * CELL_SIZE;
-  const bannerX = GRID_LEFT;
-  const bannerY = GRID_TOP + 4;
-  const bannerW = gridW;
-  const bannerH = 36;
-  const cx      = bannerX + bannerW / 2;
+  // Render inside the right panel — never overlaps the grid
+  const bannerX = GRID_LEFT + COLS * CELL_SIZE + 4;
+  const bannerW = BASE_W - bannerX - 36;
+  const bannerY = GRID_TOP + 2;
+  const bannerH = 40;
+  const accentW = 4;
 
-  const nextW = (waveState === 'countdown' ? waveNumber : waveNumber + 1);
-  const threatRatio  = nextW / MAX_WAVES;
-  const isBoss       = BOSS_WAVES.has(nextW);
-  const threatColor  = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
-  const threatSkulls = isBoss ? '☠☠☠' : threatRatio > 0.8 ? '☠☠' : threatRatio > 0.5 ? '☠' : '';
-  const accentW      = 4;
+  const nextW       = waveState === 'countdown' ? waveNumber : waveNumber + 1;
+  const isBoss      = BOSS_WAVES.has(nextW);
+  const threatRatio = nextW / MAX_WAVES;
+  const threatColor = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
 
-  let titleText, glowColor, statusColor, isComplete;
+  let line1, line2, glowColor, statusColor, isComplete;
   if (waveState === 'countdown') {
-    titleText  = `PREPARE — WAVE ${nextW}${threatSkulls ? '  ' + threatSkulls : ''}`;
-    glowColor  = `rgba(220,170,40,0.85)`;
+    line1       = 'PREPARE';
+    line2       = `WAVE ${nextW}${isBoss ? '  ☠' : ''}`;
+    glowColor   = 'rgba(220,170,40,0.85)';
     statusColor = threatColor;
-    isComplete = false;
+    isComplete  = false;
   } else {
-    const flawlessTag = flawlessTimer > 0 ? '  ★ FLAWLESS' : '';
-    titleText  = `WAVE ${waveNumber} COMPLETE${lastWaveTimeSec > 0 ? `  ${lastWaveTimeSec}s` : ''}${flawlessTag}`;
-    glowColor  = flawlessTimer > 0 ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
-    statusColor = flawlessTimer > 0 ? '#f0e060' : '#60ee80';
-    isComplete = true;
+    const flawless = flawlessTimer > 0;
+    line1       = `WAVE ${waveNumber} DONE`;
+    line2       = flawless ? '★ FLAWLESS' : (lastWaveTimeSec > 0 ? `${lastWaveTimeSec}s` : '');
+    glowColor   = flawless ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
+    statusColor = flawless ? '#f0e060' : '#60ee80';
+    isComplete  = true;
   }
 
   ctx.save();
 
-  // Banner background
+  // Panel background
   ctx.beginPath(); ctx.roundRect(bannerX, bannerY, bannerW, bannerH, 4);
-  ctx.fillStyle = 'rgba(8,4,16,0.88)'; ctx.fill();
-  // Gold outer border
+  ctx.fillStyle = isComplete ? 'rgba(6,20,10,0.95)' : 'rgba(8,4,16,0.93)'; ctx.fill();
   ctx.strokeStyle = 'rgba(180,130,40,0.55)'; ctx.lineWidth = 1; ctx.stroke();
-  // Colored threat accent bar on the left edge
+  // Left accent bar
   ctx.beginPath(); ctx.roundRect(bannerX, bannerY, accentW, bannerH, [4, 0, 0, 4]);
   ctx.fillStyle = statusColor; ctx.fill();
 
-  // Title text (left-aligned, after accent)
-  ctx.shadowColor = glowColor; ctx.shadowBlur = 10;
-  ctx.fillStyle   = isBoss ? threatColor : (isComplete && flawlessTimer > 0 ? '#f0e060' : '#f0e8d0');
-  ctx.font        = 'bold 11px monospace';
-  ctx.textAlign   = 'left';
-  ctx.fillText(titleText, bannerX + accentW + 10, bannerY + 14);
-  ctx.shadowBlur  = 0;
+  const tx = bannerX + accentW + 8;
 
-  // Enemy composition chips (small, below title)
-  if (waveState === 'break' || waveState === 'countdown') {
-    const next  = waveComposition(waveNumber + 1);
-    const chips = [];
-    if (next.draugr  > 0) chips.push({ label: `×${next.draugr} Draugr`,  color: '#7090a8' });
-    if (next.mylings > 0) chips.push({ label: `×${next.mylings} Myling`, color: '#60a840' });
-    if (next.jotunn  > 0) chips.push({ label: `×${next.jotunn} Jötunn`,  color: '#e8a040' });
-    if (next.maras   > 0) chips.push({ label: `×${next.maras} Mara`,     color: '#a060e0' });
-    ctx.font = '8px monospace';
-    let bx = bannerX + accentW + 10;
-    for (const c of chips) {
-      const cw = ctx.measureText(c.label).width + 8;
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.beginPath(); ctx.roundRect(bx - 2, bannerY + 21, cw, 11, 3); ctx.fill();
-      ctx.fillStyle = c.color; ctx.textAlign = 'left';
-      ctx.fillText(c.label, bx + 2, bannerY + 30);
-      bx += cw + 4;
-    }
+  // Line 1 — label (smaller, muted)
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = 'rgba(180,150,90,0.75)';
+  ctx.textAlign = 'left';
+  ctx.fillText(line1, tx, bannerY + 14);
+
+  // Line 2 — main text with glow
+  if (line2) {
+    const flawless = isComplete && flawlessTimer > 0;
+    ctx.shadowColor = glowColor; ctx.shadowBlur = 10;
+    ctx.fillStyle   = flawless ? '#f0e060' : (isComplete ? '#60ee80' : threatColor);
+    ctx.font        = 'bold 11px monospace';
+    ctx.fillText(line2, tx, bannerY + 30);
+    ctx.shadowBlur  = 0;
   }
 
-  // SPACE keycap on the right side (only when not auto)
-  if (!autoNextWave) {
-    const kw = 58, kh = 22, kx = bannerX + bannerW - kw - 10, ky = bannerY + (bannerH - kh) / 2;
-    // Keycap shadow/body
-    ctx.fillStyle = 'rgba(60,40,10,0.9)';
-    ctx.beginPath(); ctx.roundRect(kx, ky + 2, kw, kh, 4); ctx.fill();
-    ctx.fillStyle = 'rgba(100,70,20,0.85)';
-    ctx.beginPath(); ctx.roundRect(kx, ky, kw, kh, 4); ctx.fill();
-    ctx.strokeStyle = 'rgba(200,150,50,0.6)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(kx, ky, kw, kh, 4); ctx.stroke();
-    // Keycap top highlight
-    ctx.fillStyle = 'rgba(255,200,80,0.12)';
-    ctx.beginPath(); ctx.roundRect(kx + 2, ky + 2, kw - 4, 6, 2); ctx.fill();
-    // SPACE label
-    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#f0d880'; ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(240,200,50,0.5)'; ctx.shadowBlur = 5;
-    ctx.fillText('SPACE', kx + kw / 2, ky + kh / 2 + 3);
-    ctx.shadowBlur = 0;
-  } else {
-    // AUTO badge
+  // AUTO badge (top-right corner)
+  if (autoNextWave) {
     const pulse = 0.75 + Math.sin(performance.now() * 0.005) * 0.25;
-    ctx.font = 'bold 10px monospace';
+    ctx.font      = 'bold 8px monospace';
     ctx.fillStyle = `rgba(80,220,140,${pulse})`;
     ctx.textAlign = 'right';
-    ctx.shadowColor = 'rgba(60,200,100,0.6)'; ctx.shadowBlur = 6;
-    ctx.fillText('AUTO', bannerX + bannerW - 12, bannerY + bannerH / 2 + 4);
+    ctx.shadowColor = 'rgba(60,200,100,0.6)'; ctx.shadowBlur = 5;
+    ctx.fillText('AUTO', bannerX + bannerW - 6, bannerY + 13);
     ctx.shadowBlur = 0;
   }
 
