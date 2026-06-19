@@ -155,6 +155,7 @@ let dmgFloaters     = [];       // { x, y, val, life, maxLife, color }
 let poorWaveStreak     = 0;       // consecutive waves player started with <15g
 let chapterBannerTimer = 0;       // frames to show chapter milestone banner
 let chapterBannerText  = '';      // text to display in chapter banner
+let currentWaveEvent   = null;    // wave event applied this wave (from WAVE_EVENTS)
 let affordFlashTimer   = 0;       // frames of build-bar flash when can't afford anything
 let preBossPortalTimer = 0;       // accumulates during countdown/break before boss wave
 let bossRings          = [];      // { x, y, r, maxR, life, maxLife, color } boss phase rings
@@ -213,6 +214,21 @@ const TOWER_STAR_GATES = {
   drakship: 3,
 };
 
+// Special wave modifiers shown in advance and applied on wave start
+const WAVE_EVENTS = {
+  15: { id: 'frostWind',    label: '❄ FROST WIND',    desc: 'All enemies 25% slower',     speedMult: 0.75 },
+  18: { id: 'undeadMarch',  label: '☠ UNDEAD MARCH',  desc: '+12 Draugr to wave',         bonus: { type: 'draugr', count: 12 } },
+  22: { id: 'nightRaid',    label: '🌑 NIGHT RAID',    desc: '+20% enemy HP',               hpMult: 1.20 },
+  30: { id: 'berserkerRage',label: '⚔ BERSERKER RAGE',desc: '+30% enemy speed',           speedMult: 1.30 },
+  35: { id: 'swarmWave',    label: '⚡ SWARM',          desc: '+10 Myling to wave',         bonus: { type: 'myling', count: 10 } },
+  40: { id: 'ironHide',     label: '⚔ IRON HIDE',     desc: '+30% HP, −15% speed',        hpMult: 1.30, speedMult: 0.85 },
+  48: { id: 'wraithHunt',   label: '👁 WRAITH HUNT',   desc: 'Extra Myling pack +8',       bonus: { type: 'myling', count: 8 } },
+  60: { id: 'frostStorm',   label: '❄ FROST STORM',   desc: '+30% HP, 20% slower',        hpMult: 1.30, speedMult: 0.80 },
+  65: { id: 'blitz',        label: '⚡ BLITZ',          desc: '+40% speed',                 speedMult: 1.40 },
+  80: { id: 'darkHarvest',  label: '☠ DARK HARVEST',  desc: '+40% HP, +4 Jötunn',         hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
+  90: { id: 'ragnarok',     label: '⚔ FÖRSPELET',     desc: '+50% HP, +40% speed',        hpMult: 1.50, speedMult: 1.40 },
+};
+
 // ── high-score table ──────────────────────────────────────────────────────────
 
 const HS_KEY    = 'northern-shield-hs';
@@ -227,7 +243,7 @@ function saveHighScore(score) {
   list.push(score);
   list.sort((a, b) => b.waves - a.waves || b.slain - a.slain);
   const trimmed = list.slice(0, HS_MAX);
-  localStorage.setItem(HS_KEY, JSON.stringify(trimmed));
+  try { localStorage.setItem(HS_KEY, JSON.stringify(trimmed)); } catch {}
   return trimmed;
 }
 
@@ -314,6 +330,7 @@ function restartGame() {
   poorWaveStreak     = 0;
   chapterBannerTimer = 0;
   chapterBannerText  = '';
+  currentWaveEvent   = null;
   affordFlashTimer   = 0;
   preBossPortalTimer = 0;
   bossRings          = [];
@@ -621,6 +638,12 @@ function buildWave(num) {
     ...Array(jotunn).fill(ENEMY_TYPES.JOTUNN),
     ...Array(maras).fill(ENEMY_TYPES.MARA),
   ];
+  // Inject wave-event bonus enemies
+  const ev = WAVE_EVENTS[num];
+  if (ev?.bonus) {
+    const bonusType = ENEMY_TYPES[ev.bonus.type.toUpperCase()] ?? ev.bonus.type;
+    for (let i = 0; i < ev.bonus.count; i++) queue.push(bonusType);
+  }
   for (let i = queue.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [queue[i], queue[j]] = [queue[j], queue[i]];
@@ -636,6 +659,11 @@ function startNextWave() {
   const _bands   = getWaveBands(waveNumber);
   waveHpScale    = _bands.hp;
   waveSpeedScale = _bands.speed;
+  currentWaveEvent = WAVE_EVENTS[waveNumber] ?? null;
+  if (currentWaveEvent) {
+    if (currentWaveEvent.hpMult)    waveHpScale    = Math.round(waveHpScale    * currentWaveEvent.hpMult    * 100) / 100;
+    if (currentWaveEvent.speedMult) waveSpeedScale = Math.round(waveSpeedScale * currentWaveEvent.speedMult * 100) / 100;
+  }
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
@@ -1796,7 +1824,7 @@ function update() {
 
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
-    const reward = b.update();
+    const reward = b.update(enemies);
     if (reward > 0) {
       slain++;
       waveSlainCount++;
@@ -1804,19 +1832,24 @@ function update() {
       gold        += reward + valBonus;
       goldEarned  += reward + valBonus;
       if (b.source) b.source.killCount++;
-      sfxDie(b.target?.isBoss ?? false);
-      if (b.target) dmgFloaters.push({ x: b.target.x, y: b.target.y - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : '#f0e040' });
-      if (b.target) {
-        if (b.target.isBoss) {
-          onBossKilled(b.target);
-        } else {
-          const _pc = b.target.type === ENEMY_TYPES.JOTUNN ? 20 : b.target.type === ENEMY_TYPES.MARA ? 18 : b.target.type === ENEMY_TYPES.MYLING ? 12 : 10;
-          spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, _pc);
-          screenShake = Math.max(screenShake, b.target.type === ENEMY_TYPES.JOTUNN ? 4 : b.target.type === ENEMY_TYPES.MARA ? 2 : 1);
-          const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
-          firstKillDone = true;
-          spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * b.target.x, GRID_TOP + gridPanY + gridZoom * b.target.y, reward, coinSpeed);
-        }
+      // For pierce bullets that stay alive, use stored kill position instead of current target
+      const killX    = (b.canPierce && b.alive) ? b.lastKillX : (b.target?.x ?? b.x);
+      const killY    = (b.canPierce && b.alive) ? b.lastKillY : (b.target?.y ?? b.y);
+      const killBoss = (b.canPierce && b.alive) ? b.lastKillIsBoss : (b.target?.isBoss ?? false);
+      sfxDie(killBoss);
+      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : '#f0e040' });
+      if (killBoss) {
+        if (b.target && b.canPierce && b.alive) { /* boss killed mid-pierce — handled at deathTimer */ }
+        else if (b.target?.isBoss) onBossKilled(b.target);
+      } else {
+        const _killType = (b.canPierce && b.alive) ? null : b.target?.type;
+        const _killColor = (b.canPierce && b.alive) ? '#c0a060' : (b.target?.highlightColor ?? b.target?.color ?? '#c0a060');
+        const _pc = _killType === ENEMY_TYPES.JOTUNN ? 20 : _killType === ENEMY_TYPES.MARA ? 18 : _killType === ENEMY_TYPES.MYLING ? 12 : 10;
+        spawnParticles(killX, killY, _killColor, _pc);
+        screenShake = Math.max(screenShake, _killType === ENEMY_TYPES.JOTUNN ? 4 : _killType === ENEMY_TYPES.MARA ? 2 : 1);
+        const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
+        firstKillDone = true;
+        spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * killX, GRID_TOP + gridPanY + gridZoom * killY, reward, coinSpeed);
       }
     }
     if (!b.alive) {
@@ -2424,7 +2457,16 @@ function drawRightPanel() {
     ctx.font      = 'bold 11px monospace';
     ctx.fillStyle = '#c0a060';
     ctx.textAlign = 'left';
-    ctx.fillText('DEFEND', lx, ly); ly += 14;
+    ctx.fillText('DEFEND', lx, ly);
+    // Active wave event badge (right-aligned, same line)
+    if (currentWaveEvent) {
+      ctx.font      = 'bold 8px monospace';
+      ctx.fillStyle = 'rgba(255,200,60,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText(currentWaveEvent.label, rEdge, ly);
+      ctx.textAlign = 'left';
+    }
+    ly += 14;
 
     // Big lives bar
     ctx.fillStyle = 'rgba(60,30,8,0.8)';
@@ -2528,6 +2570,23 @@ function drawRightPanel() {
         ctx.fillText(`×${e.count}`, rEdge, ly);
         ctx.textAlign = 'left'; ly += 15;
       }
+    }
+
+    // Wave event indicator for next wave
+    const nextEv = WAVE_EVENTS[waveNumber + 1];
+    if (nextEv) {
+      ly += 2;
+      const evPulse = 0.70 + Math.sin(performance.now() * 0.004) * 0.30;
+      ctx.font        = 'bold 9px monospace';
+      ctx.fillStyle   = `rgba(255,200,60,${evPulse})`;
+      ctx.shadowColor = `rgba(240,160,20,${evPulse * 0.6})`;
+      ctx.shadowBlur  = 5;
+      ctx.textAlign   = 'left';
+      ctx.fillText(nextEv.label, lx, ly); ly += 12;
+      ctx.shadowBlur  = 0;
+      ctx.font        = '9px monospace';
+      ctx.fillStyle   = 'rgba(210,170,90,0.75)';
+      ctx.fillText(nextEv.desc, lx, ly); ly += 10;
     }
 
     ly += 2;
@@ -3020,12 +3079,25 @@ function drawBottomBuildBar() {
     const gate = TOWER_STAR_GATES[btn.id];
     if (gate && stars < gate) {
       ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.58)';
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
       ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 6); ctx.fill();
-      ctx.font      = `bold ${labelSz + 1}px monospace`;
-      ctx.fillStyle = '#f0d040';
+      const cy = btn.y + btn.height / 2;
       ctx.textAlign = 'center';
-      ctx.fillText(`✦${gate}`, btn.x + btn.width / 2, btn.y + btn.height / 2 + 4);
+      const cx2 = btn.x + btn.width / 2;
+      // Lock icon
+      ctx.font = `${labelSz + 4}px monospace`; ctx.fillStyle = '#f0d040';
+      ctx.shadowColor = 'rgba(240,190,20,0.7)'; ctx.shadowBlur = 8;
+      ctx.fillText('🔒', cx2, cy - 2);
+      ctx.shadowBlur = 0;
+      // Stars needed
+      ctx.font = `bold ${labelSz}px monospace`;
+      ctx.fillStyle = '#f0d040';
+      ctx.fillText(`✦ ${gate} ★`, cx2, cy + 13);
+      // How many more
+      const need = gate - stars;
+      ctx.font = `${labelSz - 1}px monospace`;
+      ctx.fillStyle = 'rgba(220,180,80,0.65)';
+      ctx.fillText(`need ${need} more`, cx2, cy + 24);
       ctx.restore();
     }
 

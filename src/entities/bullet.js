@@ -19,9 +19,14 @@ export class Bullet {
     this.maxTrailPoints = shape === 'spear' ? 8 : splashRadius > 0 ? 4 : 6;
     this.angle        = 0;
     this.source       = null;
+    this.canPierce    = false;
+    this.pierced      = null;     // Set of already-hit enemies (lazy init)
+    this.lastKillX    = 0;
+    this.lastKillY    = 0;
+    this.lastKillIsBoss = false;
   }
 
-  update() {
+  update(enemies = null) {
     if (!this.alive) return 0;
     if (!this.target || !this.target.alive || this.target.reached) {
       this.alive = false;
@@ -47,14 +52,36 @@ export class Bullet {
         this.target.slowFactor = Math.min(this.target.slowFactor ?? 1, this.slowFactor);
       }
 
-      this.alive = false;
-
-      if (this.target.hp <= 0) {
-        this.target.hp    = 0;
+      const killed = this.target.hp <= 0;
+      let reward = 0;
+      if (killed) {
+        this.target.hp = 0;
+        this.lastKillX = this.target.x;
+        this.lastKillY = this.target.y;
+        this.lastKillIsBoss = this.target.isBoss ?? false;
         if (typeof this.target.kill === 'function') this.target.kill(); else this.target.alive = false;
-        return this.target.reward ?? 6;
+        reward = this.target.reward ?? 6;
       }
-      return 0;
+
+      // Pierce: find next target within 80px and continue
+      if (this.canPierce && enemies) {
+        if (!this.pierced) this.pierced = new Set();
+        this.pierced.add(this.target);
+        let nextTarget = null, bestDist = 80;
+        for (const e of enemies) {
+          if (!e.alive || e.reached || this.pierced.has(e)) continue;
+          const ex = e.x - this.x, ey = e.y - this.y;
+          const ed = Math.sqrt(ex * ex + ey * ey);
+          if (ed < bestDist) { bestDist = ed; nextTarget = e; }
+        }
+        if (nextTarget) {
+          this.target = nextTarget;
+          return reward;   // stay alive, pierce continues
+        }
+      }
+
+      this.alive = false;
+      return reward;
     }
 
     this.x += (dx / dist) * this.speed;

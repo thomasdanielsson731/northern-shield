@@ -131,8 +131,8 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.HYDDA]: {
     label:        'Hydda',
     key:          '8',
-    color:        '#8a6030',
-    rangeColor:   'rgba(140,100,30,0.18)',
+    color:        '#2e9a50',
+    rangeColor:   'rgba(40,160,80,0.22)',
     cost:         50,
     range:        0,
     fireRate:     180,
@@ -336,6 +336,7 @@ export class Tower {
         this.bulletShape
       );
       b.source = this;
+      if (this.type === TOWER_TYPES.PILTORN) b.canPierce = true;
       bullets.push(b);
       this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 12;
       this.fireCooldown = this.fireRate;
