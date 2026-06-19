@@ -782,6 +782,7 @@ function startNextWave() {
   if (gold < 25) poorWaveStreak++; else poorWaveStreak = 0;
 
   // Chapter milestone banners
+  if (waveNumber ===  1) { chapterBannerTimer = 180; chapterBannerText = 'CHAPTER 1: THE NORTHERN MARCH'; }
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
   if (waveNumber === 51) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 3: THE IRON WINTER'; }
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
@@ -1535,6 +1536,31 @@ window.addEventListener('keydown', e => {
   if (key === 'arrowright') { e.preventDefault(); gridPanX -= PAN_STEP; clampGridPan(); return; }
   if (key === 'arrowup')    { e.preventDefault(); gridPanY += PAN_STEP; clampGridPan(); return; }
   if (key === 'arrowdown')  { e.preventDefault(); gridPanY -= PAN_STEP; clampGridPan(); return; }
+
+  // Keyboard upgrade / sell for selected tower
+  if (key === 'u' && selectedTower) {
+    if (!selectedTower.maxed && gold >= selectedTower.upgradeCost) {
+      goldSpent += selectedTower.upgradeCost;
+      gold      -= selectedTower.upgradeCost;
+      selectedTower.upgrade();
+      sfxUpgrade(selectedTower.type);
+      if (selectedTower.maxed) spawnParticles(selectedTower.x, selectedTower.y, selectedTower.color, 28);
+    }
+    return;
+  }
+  if (key === 'x' && selectedTower) {
+    const anchorKey = `${selectedTower.col}_${selectedTower.row}`;
+    if (pendingSell && pendingSell.key === anchorKey) {
+      gold += selectedTower.sellValue;
+      sfxSell();
+      removeTower(selectedTower);
+      selectedTower = null;
+      pendingSell   = null;
+    } else {
+      pendingSell = { key: anchorKey, col: selectedTower.col, row: selectedTower.row, timer: 90 };
+    }
+    return;
+  }
 
   for (const item of BUILD_ITEMS) {
     if (key === item.key.toLowerCase()) {
@@ -2656,8 +2682,17 @@ function drawRightPanel() {
     ctx.fillText(waveState === 'countdown' ? 'PREPARE ▶SPC' : restWave ? 'REST WAVE' : 'INCOMING ▶SPC', lx, ly); ly += 14;
     ctx.shadowBlur  = 0;
 
-    const nextIsBossWave = BOSS_WAVES.has(waveNumber + 1);
-    const nextBossCfg    = nextIsBossWave ? BOSS_CONFIGS[waveNumber + 1] : null;
+    const nextIsBossWave  = BOSS_WAVES.has(waveNumber + 1);
+    const in2IsBossWave   = !nextIsBossWave && BOSS_WAVES.has(waveNumber + 2);
+    const nextBossCfg     = nextIsBossWave ? BOSS_CONFIGS[waveNumber + 1] : null;
+    const in2BossCfg      = in2IsBossWave  ? BOSS_CONFIGS[waveNumber + 2] : null;
+
+    if (in2IsBossWave && in2BossCfg) {
+      ctx.font        = '9px monospace';
+      ctx.fillStyle   = 'rgba(255,140,60,0.60)';
+      ctx.textAlign   = 'left';
+      ctx.fillText(`⚠ ${in2BossCfg.name} in 2 waves`, lx, ly); ly += 12;
+    }
 
     if (nextIsBossWave && nextBossCfg) {
       const pulse = 0.6 + Math.sin(performance.now() * 0.004) * 0.4;
@@ -2736,7 +2771,8 @@ function drawRightPanel() {
       { label: '◆ Spent',     value: `-${goldSpent}`,                    color: 'rgba(200,140,60,0.75)' },
       { label: '◆ Net',       value: `${net >= 0 ? '+' : ''}${net}`,     color: net >= 0 ? '#a0e880' : '#ff9090' },
       { label: '◆ Last wave', value: `+${lastWaveGold}g`,                color: 'rgba(220,190,80,0.65)' },
-    ];
+      flawlessStreak > 0 && { label: '★ Flawless',  value: `${flawlessStreak} streak`, color: '#80d8ff' },
+    ].filter(Boolean);
     for (const r of econRows) {
       ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
       ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
@@ -3957,6 +3993,8 @@ function drawHelpOverlay() {
     ['A',           'Toggle auto next wave'],
     ['G',           'Toggle grid lines'],
     ['Z',           'Reset zoom'],
+    ['U',           'Upgrade selected tower'],
+    ['X',           'Sell tower (press twice)'],
     ['Scroll',      'Zoom in / out'],
     ['Mid-drag',    'Pan grid'],
     ['↑↓←→',       'Pan grid'],
@@ -4515,6 +4553,23 @@ function draw() {
   }
 
   towers.forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
+
+  // Hover range ring — faint range circle on tower under cursor (without selecting)
+  if (!selectedTower && !dragItem) {
+    const hoverT = getTowerAtCell(hoverCol, hoverRow);
+    if (hoverT && hoverT.type !== TOWER_TYPES.BERSERK && hoverT.range > 0) {
+      ctx.save();
+      ctx.strokeStyle = hoverT.rangeColor ?? 'rgba(200,200,200,0.15)';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([2, 6]);
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.arc(hoverT.x, hoverT.y, hoverT.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
 
   // Rune badges — glowing indicator above each tower with an equipped rune
   {
