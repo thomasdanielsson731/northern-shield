@@ -1,5 +1,14 @@
 import { SPRITES } from '../assets.js';
 
+// Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
+function angleToRow(angle) {
+  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 0;
+  if (a < 3 * Math.PI / 4) return 1;
+  if (a < 5 * Math.PI / 4) return 2;
+  return 3;
+}
+
 export const ENEMY_TYPES = {
   DRAUGR: 'draugr',
   MYLING: 'myling',
@@ -320,12 +329,14 @@ export class Enemy {
 
     ctx.save();
     ctx.translate(this.x, this.y);
-    // Flip to face movement direction
-    const dx = this.path && this.pathIndex + 1 < this.path.length
-      ? this.path[this.pathIndex + 1].x - this.x : 1;
-    if (dx < 0) ctx.scale(-1, 1);
+    const nextPt = this.path && this.pathIndex + 1 < this.path.length
+      ? this.path[this.pathIndex + 1] : null;
+    const dx = nextPt ? nextPt.x - this.x : 1;
+    const dy = nextPt ? nextPt.y - this.y : 0;
+    const row = sp.rows >= 4 ? angleToRow(Math.atan2(dy, dx)) : 0;
+    if (sp.rows < 4 && dx < 0) ctx.scale(-1, 1);
     ctx.drawImage(sp.img,
-      frame * sp.frameW, 0, sp.frameW, sp.frameH,
+      frame * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
       -dw / 2, -dh * 0.88, dw, dh);
     ctx.restore();
 

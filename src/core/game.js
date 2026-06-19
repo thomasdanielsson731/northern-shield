@@ -109,6 +109,7 @@ let bossDefeatGold   = 0;   // gold earned from boss kill
 
 let splashRings       = [];  // catapult impact rings: { x, y, r, maxR, life, maxLife }
 let empRings          = [];  // Mara EMP rings: { x, y, r, life, maxLife }
+let impactFlashes     = [];  // hit impact bursts: { x, y, maxR, life, color }
 let novaRings         = [];  // Isjätte nova rings: { x, y, r, maxR, life, maxLife }
 let fortressHeldTimer = 0;   // countdown for FORTRESS HELD display (frames)
 let wallFrostCells    = [];  // cached cells adjacent to walls: [{ x, y, cs }]
@@ -483,6 +484,36 @@ function drawParticles() {
   }
   ctx.shadowBlur  = 0;
   ctx.globalAlpha = 1;
+}
+
+function drawImpactFlashes() {
+  if (impactFlashes.length === 0) return;
+  for (const f of impactFlashes) {
+    const progress = 1 - f.life;
+    const alpha    = f.life * f.life;
+    ctx.shadowColor = f.color;
+    ctx.shadowBlur  = 10;
+    // Expanding ring
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.strokeStyle = f.color;
+    ctx.lineWidth   = 2.5 * f.life;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.maxR * progress, 0, Math.PI * 2);
+    ctx.stroke();
+    // Bright core flash (first half of life only)
+    if (f.life > 0.5) {
+      ctx.globalAlpha = (f.life - 0.5) * 2 * 0.7;
+      ctx.fillStyle   = f.color;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.maxR * 0.35 * f.life, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    f.life -= 0.15;
+  }
+  impactFlashes = impactFlashes.filter(f => f.life > 0);
+  ctx.shadowBlur  = 0;
+  ctx.globalAlpha = 1;
+  ctx.lineWidth   = 1;
 }
 
 function drawGoldCoins() {
@@ -1819,6 +1850,14 @@ function update() {
           }
         }
       }
+      // Impact flash for direct-hit bullets (splash already has splashRings)
+      if (b.splashRadius === 0) {
+        const flashColor = b.shape === 'spear' ? '#aaddff'
+                         : b.shape === 'arrow' ? '#e8c870'
+                         : b.shape === 'stun'  ? '#ffe840'
+                         : '#ffd86b';
+        impactFlashes.push({ x: b.x, y: b.y, maxR: Math.max(7, b.damage * 0.2), life: 1, color: flashColor });
+      }
       bullets.splice(i, 1);
     }
   }
@@ -2492,7 +2531,7 @@ function drawRightPanel() {
   // ── SPEED TOGGLE ───────────────────────────────────────────────────────────
   const spR      = 17;
   const spX      = px + pw / 2;
-  const spY      = GRID_TOP + fullH - 54;  // fixed position regardless of wave state
+  const spY      = GRID_TOP + fullH - (waveState !== 'active' ? 108 : 54); // move up when Next Wave button visible
   const spFill   = gameSpeed >= 4 ? 'rgba(210,60,20,0.97)'  : gameSpeed >= 2 ? 'rgba(200,130,20,0.95)' : 'rgba(40,22,8,0.90)';
   const spStroke = gameSpeed >= 4 ? 'rgba(255,120,60,0.95)' : gameSpeed >= 2 ? 'rgba(255,190,60,0.9)' : 'rgba(160,110,40,0.4)';
   const spColor  = gameSpeed >= 2 ? '#f0e8d0' : 'rgba(200,160,80,0.6)';
@@ -3177,6 +3216,8 @@ function drawTowerPanel(tower) {
     ctx.beginPath(); ctx.arc(px + 36, runeSecY + 9, 4, 0, Math.PI * 2); ctx.fill();
     ctx.font      = 'bold 9px monospace'; ctx.fillStyle = runeDef.color; ctx.textAlign = 'left';
     ctx.fillText(runeDef.label, px + 44, runeSecY + 13);
+    ctx.font      = '8px monospace'; ctx.fillStyle = 'rgba(180,160,100,0.65)';
+    ctx.fillText(runeDef.desc, px + 44, runeSecY + 24);
   } else {
     ctx.fillStyle = 'rgba(100,80,50,0.6)'; ctx.textAlign = 'left';
     ctx.fillText('— empty —', px + 36, runeSecY + 13);
@@ -3912,6 +3953,39 @@ function draw() {
 
   towers.forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
 
+  // Rune badges — glowing indicator above each tower with an equipped rune
+  {
+    const now = performance.now();
+    ctx.save();
+    for (const t of towers) {
+      if (!t.rune) continue;
+      const def = RUNE_DEFS.find(d => d.id === t.rune);
+      if (!def) continue;
+      const pulse = 0.75 + Math.sin(now * 0.003 + t.col * 1.3) * 0.25;
+      const bx = t.x + CELL_SIZE * 0.52;
+      const by = t.y - CELL_SIZE * 1.15;
+      const br = 4.5;
+      ctx.shadowColor  = def.color;
+      ctx.shadowBlur   = 9 * pulse;
+      ctx.fillStyle    = 'rgba(4,2,12,0.90)';
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle  = def.color;
+      ctx.lineWidth    = 1.3;
+      ctx.globalAlpha  = 0.6 + pulse * 0.4;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha  = 1;
+      ctx.fillStyle    = def.color;
+      ctx.font         = '6px sans-serif';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.symbol, bx, by);
+    }
+    ctx.shadowBlur   = 0;
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign    = 'left';
+    ctx.restore();
+  }
+
   // Active synergy glow rings
   {
     const synColors = { eagleEye: 'rgba(120,160,240,0.32)', siegeFury: 'rgba(230,110,40,0.32)', winterGrip: 'rgba(80,200,240,0.32)' };
@@ -4035,6 +4109,7 @@ function draw() {
 
   bullets.forEach(b => b.draw(ctx));
   drawParticles();
+  drawImpactFlashes();
 
   // ── Mara EMP shockwave rings ────────────────────────────────────────────────
   for (const er of empRings) {

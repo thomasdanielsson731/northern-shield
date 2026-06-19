@@ -1,18 +1,29 @@
 import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 
-// Draw one frame from a 4-frame (IDLE/WALK/ATTACK/DEATH) sprite strip.
-// frame: 0=idle, 2=attack. Flips sprite horizontally when aimAngle faces left.
+// Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
+function angleToRow(angle) {
+  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 0;
+  if (a < 3 * Math.PI / 4) return 1;
+  if (a < 5 * Math.PI / 4) return 2;
+  return 3;
+}
+
+// Draw one frame from a sprite sheet.
+// Supports 4-col×1-row (single direction, flips for left) and
+// 4-col×4-row (directional: rows 0=right,1=down,2=left,3=up) layouts.
 function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null, level = 1) {
   const sp = SPRITES[spriteKey];
   if (!sp) return false;
   const dh = Math.round(dw * sp.frameH / sp.frameW);
   const glowBlur = level >= 8 ? 20 : level >= 5 ? 17 : 14;
+  const row = sp.rows >= 4 ? angleToRow(aimAngle) : 0;
   ctx.save();
   ctx.translate(x, y);
-  if (Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
+  if (sp.rows < 4 && Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
   if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = glowBlur; }
-  ctx.drawImage(sp.img, frame * sp.frameW, 0, sp.frameW, sp.frameH,
+  ctx.drawImage(sp.img, frame * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
     -dw / 2, -dh * 0.88, dw, dh);
   ctx.restore();
   return true;
@@ -559,7 +570,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(220,70,10,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 68, 'rgba(220,70,10,0.85)', this.level)) return;
 
     const axeSpin = t * (this.fireFlash > 0 ? 12 : 3.5);
 
@@ -734,7 +745,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 58, 'rgba(220,180,60,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 72, 'rgba(220,180,60,0.9)', this.level)) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -894,7 +905,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 50, 'rgba(90,140,190,0.75)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 62, 'rgba(90,140,190,0.75)', this.level)) return;
 
     // Stone base
     ctx.fillStyle = '#9aaa9a';
@@ -1040,7 +1051,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 54, 'rgba(200,130,30,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 68, 'rgba(200,130,30,0.85)', this.level)) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const swingOffset = this.fireFlash > 0 ? (this.fireFlash / (this.maxFireFlash || 6)) * 0.25 : 0;
@@ -1133,7 +1144,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 52, 'rgba(255,110,200,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : 0, x, y, this.aimAngle, 64, 'rgba(255,110,200,0.9)', this.level)) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;

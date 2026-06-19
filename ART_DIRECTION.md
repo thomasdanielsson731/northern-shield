@@ -60,18 +60,31 @@ Stylized Viking dark fantasy. NOT realistic. NOT pixel art.
 
 ## 4. SCALE RULES
 
-| Asset type       | Per-frame size | Sprite sheet format    | Total sheet size |
-|------------------|----------------|------------------------|-----------------|
-| Tower (standard) | 128 × 128 px   | 4 frames horizontal    | 512 × 128 px    |
-| Enemy (standard) | 96 × 96 px     | 4 frames horizontal    | 384 × 96 px     |
-| Boss (Golem)     | 192 × 192 px   | 4 frames horizontal    | 768 × 192 px    |
-| UI icon          | 64 × 64 px     | single image           | 64 × 64 px      |
-| Tower card       | 256 × 384 px   | single image           | 256 × 384 px    |
-| Portal/Goal      | 128 × 128 px   | single or 4-frame anim | 512 × 128 px    |
-| Grid tile        | 14 × 14 px     | repeating tile         | 14 × 14 px      |
-| Background       | 1920 × 1080 px | single image           | 1920 × 1080 px  |
+| Asset type          | Per-frame size | Sprite sheet format         | Total sheet size |
+|---------------------|----------------|-----------------------------|-----------------|
+| Tower (directional) | 128 × 128 px   | 4 cols × 4 rows             | 512 × 512 px    |
+| Enemy (standard)    | 96 × 96 px     | 4 frames horizontal         | 384 × 96 px     |
+| Boss (Jötunn)       | 192 × 192 px   | 4 frames horizontal         | 768 × 192 px    |
+| UI icon             | 64 × 64 px     | single image                | 64 × 64 px      |
+| Tower card          | 256 × 384 px   | single image                | 256 × 384 px    |
+| Portal/Goal         | 128 × 128 px   | single or 4-frame anim      | 512 × 128 px    |
+| Grid tile           | 14 × 14 px     | repeating tile              | 14 × 14 px      |
+| Background          | 1920 × 1080 px | single image                | 1920 × 1080 px  |
 
-**Frame order (all sprite sheets):** `IDLE | WALK | ATTACK | DEATH`
+**Tower directional sheet layout (4×4 grid):**
+```
+         IDLE  WALK  ATTACK  DEATH
+RIGHT  [  0,0   1,0    2,0    3,0  ]  row 0
+DOWN   [  0,1   1,1    2,1    3,1  ]  row 1
+LEFT   [  0,2   1,2    2,2    3,2  ]  row 2  ← auto-mirrored from RIGHT
+UP     [  0,3   1,3    2,3    3,3  ]  row 3
+```
+- Set `rows: 4` in `assets.js` to activate directional mode.
+- RIGHT/LEFT: standard 3/4 profile view, character facing right.
+- DOWN: character faces toward camera — show top of helmet, front of armor, weapon pointing down.
+- UP: character faces away — show back of helmet, armor, cloak/fur, weapon at side.
+
+**Enemy frame order:** `IDLE | WALK | ATTACK | DEATH`
 
 ---
 

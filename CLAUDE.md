@@ -87,10 +87,24 @@ BFS in `grid.js`. Enemies follow a pixel path (`currentPath`) computed from `SPA
 
 ### Sprite system
 
-All sprites are 4-frame horizontal strips: `IDLE | WALK | ATTACK | DEATH`.
+Two sprite sheet layouts are supported — the drawing code detects which to use via `sp.rows`:
 
+**Single-direction (rows: 1)** — 4-frame horizontal strip, flips horizontally for left-facing:
 - Towers: 512×128 px (128×128 per frame)
 - Enemies: 384×96 px (96×96 per frame); Jötunn boss: 768×192 px (192×192)
+
+**Directional (rows: 4)** — 4×4 grid, no horizontal flip; row encodes facing direction:
+```
+         IDLE  WALK  ATTACK  DEATH
+RIGHT  [  0,0   1,0    2,0    3,0  ]
+DOWN   [  0,1   1,1    2,1    3,1  ]
+LEFT   [  0,2   1,2    2,2    3,2  ]
+UP     [  0,3   1,3    2,3    3,3  ]
+```
+- Towers (directional): 512×512 px (128×128 per frame)
+- Enemies (directional): 384×384 px (96×96 per frame)
+
+To activate directional mode for a sprite, set `rows: 4` in its manifest entry in `assets.js`. Towers pick the row from `aimAngle`; enemies pick from their path movement angle.
 
 `assets.js` exports `SPRITES` (a shared object). Each key maps to an `Image` that loads asynchronously. Code checks `img.complete` before drawing; falls back to procedural canvas drawing if sprites haven't loaded.
 
