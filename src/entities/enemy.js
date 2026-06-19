@@ -201,7 +201,7 @@ export class Enemy {
       }
     }
 
-    ctx.filter = 'none';
+    if (hpRatio < 0.50) ctx.filter = 'none';  // only reset when filter was applied
     ctx.restore();
 
     // Wounded shimmer — slow red outline (25-50% HP)
@@ -836,7 +836,7 @@ export class Enemy {
     } else if (pct < 1.0) {
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = pct > 0.60 ? '#60c840' : pct > 0.35 ? '#e8c040' : '#e84040';
+      ctx.fillStyle = pct > 0.50 ? '#60c840' : pct > 0.25 ? '#e8c040' : '#e84040';
       ctx.fillRect(barX, barY, barW * pct, barH);
       ctx.strokeStyle = 'rgba(200,160,40,0.32)';
       ctx.lineWidth   = 0.5;

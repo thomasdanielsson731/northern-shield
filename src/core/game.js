@@ -188,7 +188,7 @@ const ABILITY_LABELS = {
   catapult: 'SPLASH',
   blondie:  'STUN',
   piltorn:  'PIERCE',
-  hydda:    'HEAL',
+  hydda:    'HEAL LIFE',
   isjatten: 'NOVA',
   drakship: 'VOLLEY',
 };
@@ -415,7 +415,7 @@ function getWaveBands(waveNum) {
     speed = 1.15 + t * 0.20; // 1.15 → 1.35
   } else if (n <= 75) {
     const t = (n - 50) / 25;
-    hp    = 3.5 + t * 1.0;   // 3.5 → 4.5  (ch3: mastery tax)
+    hp    = 3.5 + t * 1.5;   // 3.5 → 5.0  (ch3: mastery tax — steeper wall)
     speed = 1.35 + t * 0.20; // 1.35 → 1.55
   } else {
     const t = (n - 75) / 25;
@@ -473,17 +473,20 @@ function spawnGoldCoins(screenX, screenY, reward, overrideSpeed) {
 }
 
 function updateParticles() {
-  let anyDead = false;
-  for (const p of particles) {
+  let i = particles.length;
+  while (i--) {
+    const p = particles[i];
     p.x  += p.vx;
     p.y  += p.vy;
     p.vy += 0.06;
     p.vx *= 0.95;
     p.vy *= 0.95;
     p.life -= p.decay;
-    if (p.life <= 0) anyDead = true;
+    if (p.life <= 0) {
+      particles[i] = particles[particles.length - 1];
+      particles.length--;
+    }
   }
-  if (anyDead) particles = particles.filter(p => p.life > 0);
 }
 
 function drawParticles() {
@@ -525,7 +528,13 @@ function drawImpactFlashes() {
     }
     f.life -= 0.15;
   }
-  impactFlashes = impactFlashes.filter(f => f.life > 0);
+  let _ifi = impactFlashes.length;
+  while (_ifi--) {
+    if (impactFlashes[_ifi].life <= 0) {
+      impactFlashes[_ifi] = impactFlashes[impactFlashes.length - 1];
+      impactFlashes.length--;
+    }
+  }
   ctx.shadowBlur  = 0;
   ctx.globalAlpha = 1;
   ctx.lineWidth   = 1;
@@ -575,7 +584,7 @@ function buildWave(num) {
     let heralds;
     if (num === 10)  heralds = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
     else if (num === 25) heralds = [...Array(8).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-    else if (num === 50) heralds = [...Array(4).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MARA)];
+    else if (num === 50) heralds = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING)];
     else if (num === 75) heralds = [...Array(4).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
     else               heralds = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(3).fill(ENEMY_TYPES.MARA)];
     for (let i = heralds.length - 1; i > 0; i--) {
@@ -639,8 +648,8 @@ function startNextWave() {
   if (waveNumber === 1) pathChevronsTimer = Math.max(pathChevronsTimer, 480);
   screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
 
-  // Economy emergency valve — track poor waves (started with <55g = can't buy even cheap tower)
-  if (gold < 55) poorWaveStreak++; else poorWaveStreak = 0;
+  // Economy emergency valve — track poor waves (started with <25g = can't buy even a wall)
+  if (gold < 25) poorWaveStreak++; else poorWaveStreak = 0;
 
   // Chapter milestone banners
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
@@ -648,7 +657,7 @@ function startNextWave() {
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
 
   sfxWaveStart();
-  spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#80a8d0', 12);
+  spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#c89040', 12);
 }
 
 function updateWave() {
@@ -694,14 +703,15 @@ function updateWave() {
     }
   } else if (enemies.length === 0) {
     // Wave-clear bonus — capped at 110g for wave 30+ to prevent economy inflation
-    const rawBonus   = Math.min(20 + waveNumber * 3, 110);
-    const clearBonus = rawBonus + (waveLeak ? 0 : 4);
+    const rawBonus     = Math.min(20 + waveNumber * 3, 110);
+    const flawlessBonus = waveLeak ? 0 : Math.min(4 + Math.floor(waveNumber * 0.8), 30);
+    const clearBonus   = rawBonus + flawlessBonus;
     gold       += clearBonus;
     goldEarned += clearBonus;
 
-    // Economy emergency valve: 2+ consecutive poor-start waves → +75% bonus
+    // Economy emergency valve: 2+ consecutive poor-start waves → +40% capped at 50g
     if (poorWaveStreak >= 2) {
-      const emergency = Math.ceil(clearBonus * 0.75);
+      const emergency = Math.min(50, Math.ceil(clearBonus * 0.40));
       gold       += emergency;
       goldEarned += emergency;
       poorWaveStreak = 0;
@@ -715,7 +725,7 @@ function updateWave() {
       stars++;   // 1 star for flawless wave
       screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
-      spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#8090b0', 10);
+      spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#a07830', 10);
       sfxWaveClear();
       dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 30, val: '1 ★', life: 100, maxLife: 100, color: '#f0d040', large: true, suffix: '' });
     } else {
@@ -1288,7 +1298,7 @@ function tryPlaceAt(col, row, mode, towerType) {
       }
     }
   }
-  if (mode === CELL.TOWER) firstTowerPlaced = true;
+  if (mode === CELL.TOWER) { firstTowerPlaced = true; pathChevronsTimer = 0; }
   return true;
 }
 
@@ -1772,7 +1782,7 @@ function update() {
         lives++;
         sfxHeal();
       }
-      if (healCount > 0) spawnParticles(tower.x, tower.y, '#40e870', 10 * healCount);
+      if (healCount > 0) spawnParticles(tower.x, tower.y, '#60d8a0', 10 * healCount);
     } else if (tr.type === 'nova') {
       sfxNova();
       novaRings.push({ x: tr.x, y: tr.y, r: 0, maxR: tr.r, life: 26, maxLife: 26 });
@@ -1818,6 +1828,7 @@ function update() {
         } else {
           const _pc = b.target.type === ENEMY_TYPES.JOTUNN ? 20 : b.target.type === ENEMY_TYPES.MARA ? 18 : b.target.type === ENEMY_TYPES.MYLING ? 12 : 10;
           spawnParticles(b.target.x, b.target.y, b.target.highlightColor ?? b.target.color, _pc);
+          screenShake = Math.max(screenShake, b.target.type === ENEMY_TYPES.JOTUNN ? 4 : b.target.type === ENEMY_TYPES.MARA ? 2 : 1);
           const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
           firstKillDone = true;
           spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * b.target.x, GRID_TOP + gridPanY + gridZoom * b.target.y, reward, coinSpeed);
@@ -1852,7 +1863,8 @@ function update() {
               gold       += _splashVal;
               goldEarned += _splashVal;
               if (b.source) b.source.killCount++;
-              sfxDie(enemy.isBoss);
+              if (splashKills === 1) sfxDie(enemy.isBoss);  // only play once per splash cluster
+              if (b.source) b.source.damageDealt += b.splashDamage;
               dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: '#ff9040' });
               if (enemy.isBoss) {
                 onBossKilled(enemy);
@@ -2489,7 +2501,7 @@ function drawRightPanel() {
       ctx.shadowColor = 'rgba(220,170,30,0.7)';
     }
     ctx.shadowBlur  = 6;
-    ctx.fillText(waveState === 'countdown' ? 'PREPARING...' : restWave ? 'REST WAVE' : 'INCOMING', lx, ly); ly += 14;
+    ctx.fillText(waveState === 'countdown' ? 'PREPARE ▶SPC' : restWave ? 'REST WAVE' : 'INCOMING ▶SPC', lx, ly); ly += 14;
     ctx.shadowBlur  = 0;
 
     const nextIsBossWave = BOSS_WAVES.has(waveNumber + 1);
@@ -3420,6 +3432,23 @@ function onBossPhase50(boss) {
 
   const cfg = BOSS_CONFIGS[boss.waveNum];
   if (cfg?.phase50SlowImmune) boss.slowImmune = true;
+
+  if (boss.waveNum === 25) {
+    // Jötunhelm Walker: EMP disables 2 random towers briefly
+    const eligible = towers.filter(t => t.disabledTimer <= 0);
+    const chosen   = eligible.sort(() => Math.random() - 0.5).slice(0, 2);
+    for (const t of chosen) {
+      t.disabledTimer = 90;
+      empRings.push({ x: GRID_LEFT + t.x, y: GRID_TOP + t.y, r: 0, life: 28, maxLife: 28 });
+    }
+    boss.stunTimer = 30;
+  } else if (boss.waveNum === 50) {
+    // Mara-Void: summons 6 Mylings + stun pause
+    boss.slowImmune = true;
+    boss.stunTimer  = 45;
+    for (let i = 0; i < 6; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.80);
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 7, life: 40, maxLife: 40, color: '#9040e0' });
+  }
 
   bossDefeatTimer = 150;
   bossDefeatText  = `${boss.bossName} — ENRAGED!`;

@@ -102,7 +102,7 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.BLONDIE]: {
     label:        'Blondie',
     key:          '6',
-    color:        '#9050c8',
+    color:        '#c050a0',
     rangeColor:   'rgba(255,100,190,0.28)',
     cost:         30,
     range:        90,
@@ -232,6 +232,7 @@ export class Tower {
     this.fireRate     = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
     this.slowFactor   = def.slowFactor   ?? 1;
     this.slowDuration = def.slowDuration ?? 0;
+    if (this.slowDuration > 0) this.slowDuration = Math.round(this.slowDuration * (1 + (this.level - 1) * 0.10));
     if (this.rune === 'ironEdge')    this.damage   = Math.round(this.damage * 1.25);
     if (this.rune === 'swiftStrike') this.fireRate = Math.max(4, Math.round(this.fireRate * 0.85));
     if (this.rune === 'battleHymn')  this.range    = Math.round(this.range  * 1.30);
@@ -326,8 +327,8 @@ export class Tower {
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
-      const _dmg   = Math.round(this.damage       * (Tower.dmgMult ?? 1));
-      const _sdmg  = Math.round(this.splashDamage * (Tower.dmgMult ?? 1));
+      const _dmg   = Math.round(this.damage       * (Tower.dmgMult ?? 1) * (this._synergyDmgBoost ?? 1));
+      const _sdmg  = Math.round(this.splashDamage * (Tower.dmgMult ?? 1) * (this._synergyDmgBoost ?? 1));
       const b = new Bullet(
         this.x, this.y, target, _dmg, this.bulletSpeed,
         this.splashRadius, _sdmg,
