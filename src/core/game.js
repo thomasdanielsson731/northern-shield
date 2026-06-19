@@ -118,8 +118,9 @@ let wallFrostDirty    = true;
 // Playtest UX
 let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
 let firstKillDone     = false;  // triggers enhanced coin arc on first kill
-let mylingWarningTimer = 0;     // frames remaining for first-Myling warning banner
+let mylingWarningTimer  = 0;    // frames remaining for first-Myling warning banner
 let maraEmpWarningTimer = 0;   // frames remaining for first-Mara EMP warning banner
+let jotunnWarningTimer  = 0;   // frames remaining for first-Jötunn warning banner
 let chainKillDone     = false;  // one-shot CHAIN KILL! text (catapult 3+)
 let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
 let lifeLostTimer     = 0;      // frames for LIFE LOST text near hoard
@@ -393,6 +394,7 @@ function restartGame() {
   firstKillDone     = false;
   mylingWarningTimer  = 0;
   maraEmpWarningTimer = 0;
+  jotunnWarningTimer  = 0;
   dragItem           = null;
   pendingSell       = null;
   gridZoom          = 1.0;
@@ -1292,6 +1294,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   newEnemy.baseSpeed *= waveSpeedScale;
   newEnemy.speed     *= waveSpeedScale;
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
+  if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
   enemies.push(newEnemy);
 }
 
@@ -1855,6 +1858,7 @@ function update() {
   }
   if (mylingWarningTimer  > 0) mylingWarningTimer--;
   if (maraEmpWarningTimer > 0) maraEmpWarningTimer--;
+  if (jotunnWarningTimer  > 0) jotunnWarningTimer--;
 
   updateWave();
 
@@ -1943,6 +1947,13 @@ function update() {
     if (reward > 0) {
       slain++;
       waveSlainCount++;
+      // Kill milestone celebrations
+      if (slain === 100 || slain === 250 || slain === 500 || slain === 1000 || slain === 2000) {
+        const mx = (GOAL.col + 1) * CELL_SIZE;
+        const my = (GOAL.row + 0.5) * CELL_SIZE - 28;
+        dmgFloaters.push({ x: mx, y: my, val: `${slain} SLAIN!`, life: 130, maxLife: 130, color: '#ffd040', large: true, suffix: '' });
+        spawnParticles(mx, my + 16, '#ffd040', 20);
+      }
       const valBonus = (b.source?.rune === 'valhalla') ? Math.ceil(reward * 0.5) : 0;
       gold        += reward + valBonus;
       goldEarned  += reward + valBonus;
@@ -2978,11 +2989,15 @@ function drawTopBar() {
   const midX = Math.round(BASE_W / 2);
   const displayWave = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
   const wLabel = `WAVE ${displayWave} / ${MAX_WAVES}`;
+  const wThreat = displayWave / MAX_WAVES;
+  const wIsBoss = BOSS_WAVES.has(displayWave);
+  const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
+  const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
 
   ctx.font        = 'bold 13px monospace';
-  ctx.fillStyle   = '#a8ecd0';
-  ctx.shadowColor = 'rgba(100,220,160,0.45)';
-  ctx.shadowBlur  = 6;
+  ctx.fillStyle   = wColor;
+  ctx.shadowColor = wGlow;
+  ctx.shadowBlur  = wIsBoss ? 10 : 6;
   ctx.textAlign   = 'center';
   ctx.fillText(wLabel, midX - 30, cy);
   ctx.shadowBlur  = 0;
@@ -4860,6 +4875,7 @@ function draw() {
   drawChapterBanner();
   drawMylingWarning();
   drawMaraEmpWarning();
+  drawJotunnWarning();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawPathBlockFlash();
   drawDragGhost();
@@ -4948,6 +4964,22 @@ function drawMaraEmpWarning() {
   ctx.shadowColor = `rgba(140,60,220,${fadeAlpha * 0.8})`;
   ctx.shadowBlur  = 10;
   ctx.fillText('◆ MARA — EMP DISABLES NEARBY TOWERS', cx, by);
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawJotunnWarning() {
+  if (jotunnWarningTimer <= 0) return;
+  const fadeAlpha = jotunnWarningTimer < 60 ? jotunnWarningTimer / 60 : 1;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const by = GRID_TOP + 50;
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 11px monospace';
+  ctx.fillStyle   = `rgba(80,180,255,${fadeAlpha * 0.92})`;
+  ctx.shadowColor = `rgba(40,120,220,${fadeAlpha * 0.8})`;
+  ctx.shadowBlur  = 10;
+  ctx.fillText('◆ JÖTUNN — MASSIVE HP, RESISTS SLOWING', cx, by);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }
