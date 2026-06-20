@@ -84,7 +84,8 @@ export const TOWER_DEFS = {
     damage:       22,
     radius:       7,
     bulletSpeed:  11,
-    bulletShape:  'arrow'
+    bulletShape:  'arrow',
+    fireFlashDuration: 5,
   },
   [TOWER_TYPES.CATAPULT]: {
     label:        'Catapult',
@@ -106,8 +107,8 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.BLONDIE]: {
     label:        'Blondie',
     key:          '6',
-    color:        '#c050a0',
-    rangeColor:   'rgba(255,100,190,0.28)',
+    color:        '#c8a030',
+    rangeColor:   'rgba(220,180,60,0.26)',
     cost:         42,
     range:        90,
     fireRate:     35,
@@ -135,8 +136,8 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.HYDDA]: {
     label:        'Healer',
     key:          '8',
-    color:        '#2e9a50',
-    rangeColor:   'rgba(40,160,80,0.22)',
+    color:        '#4a8840',
+    rangeColor:   'rgba(60,120,50,0.24)',
     cost:         64,
     range:        0,
     fireRate:     120,
@@ -261,7 +262,7 @@ export class Tower {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
     let total = base;
     for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
-    return Math.floor(total * 0.60);
+    return Math.floor(total * 0.70);
   }
   get maxed()       { return this.level >= MAX_LEVEL; }
 
@@ -349,22 +350,23 @@ export class Tower {
       b.source = this;
       if (this.type === TOWER_TYPES.PILTORN) b.canPierce = true;
       bullets.push(b);
-      this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 12;
+      this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 20;
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
       return 0;
     }
 
     target.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1));
-    this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 12;
+    this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 20;
     this.fireCooldown = this.fireRate;
     if (target.hp <= 0) { target.hp = 0; target.kill(); return 1; }
     return 0;
   }
 
   draw(ctx) {
-    const t   = performance.now() * 0.001;
-    const def = TOWER_DEFS[this.type];
+    const _now = performance.now();
+    const t    = _now * 0.001;
+    const def  = TOWER_DEFS[this.type];
 
     // Colored baseplate — scaled to footprint
     const fpW = this.footprint.w * 14;
@@ -408,7 +410,7 @@ export class Tower {
       ctx.strokeStyle = sc + '55';
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, 3]);
-      ctx.lineDashOffset = -(performance.now() * 0.012) % 5;
+      ctx.lineDashOffset = -(_now * 0.012) % 5;
       ctx.beginPath();
       ctx.rect(this.x - fpW / 2 - 2, this.y - fpH / 2 - 2, fpW + 4, fpH + 4);
       ctx.stroke();
@@ -417,7 +419,7 @@ export class Tower {
     }
 
     // Range ring — only when selected and range is non-zero
-    if (this.type !== TOWER_TYPES.BERSERK && this.range > 0 && this.selected) {
+    if (this.range > 0 && this.selected) {
       ctx.strokeStyle = this.rangeColor;
       ctx.lineWidth   = 1;
       ctx.setLineDash([3, 8]);
@@ -557,7 +559,12 @@ export class Tower {
       ctx.save();
       ctx.font      = 'bold 7px monospace';
       ctx.textAlign = 'center';
-      const bw = ctx.measureText(badge).width + 5;
+      const _badgeKey = `${badge}_7`;
+      if (!this._badgeW || this._badgeWKey !== _badgeKey) {
+        this._badgeW    = ctx.measureText(badge).width + 5;
+        this._badgeWKey = _badgeKey;
+      }
+      const bw = this._badgeW;
       ctx.fillStyle = 'rgba(6,3,14,0.9)';
       ctx.fillRect(this.x - bw / 2, this.y + 6, bw, 8);
       ctx.fillStyle = this.maxed ? '#ff9040' : '#e8c040';
@@ -569,7 +576,7 @@ export class Tower {
     if (this.rune) {
       const RUNE_COLORS = { ironEdge: '#e85040', swiftStrike: '#88aaee', frostRune: '#60c8f0', battleHymn: '#c87840', valhalla: '#f0c840' };
       const rc = RUNE_COLORS[this.rune] ?? '#ffffff';
-      const pulse = 0.6 + Math.sin(performance.now() * 0.006 + this.x) * 0.4;
+      const pulse = 0.6 + Math.sin(_now * 0.006 + this.x) * 0.4;
       ctx.save();
       ctx.shadowColor = rc; ctx.shadowBlur = 5 + pulse * 4;
       ctx.fillStyle = rc; ctx.globalAlpha = 0.75 + pulse * 0.25;
@@ -580,7 +587,7 @@ export class Tower {
     // MVP crown — small pulsing crown above tower when mvpTimer > 0
     if (this.mvpTimer > 0) {
       const mt = Math.max(1, this.mvpTimer);
-      const pulse = 0.6 + Math.sin(performance.now() * 0.009) * 0.4;
+      const pulse = 0.6 + Math.sin(_now * 0.009) * 0.4;
       ctx.save();
       ctx.globalAlpha = Math.min(1, mt / 120);
       const cx = this.x, cy = this.y - this.radius - 14;
@@ -614,7 +621,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 68, 'rgba(220,70,10,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 68, 'rgba(220,70,10,0.85)', this.level)) return;
 
     const axeSpin = t * (this.fireFlash > 0 ? 12 : 3.5);
 
@@ -789,7 +796,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 72, 'rgba(220,180,60,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 72, 'rgba(220,180,60,0.9)', this.level)) return;
 
     const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -949,7 +956,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 62, 'rgba(90,140,190,0.75)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 62, 'rgba(90,140,190,0.75)', this.level)) return;
 
     // Stone base
     ctx.fillStyle = '#9aaa9a';
@@ -1095,7 +1102,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 68, 'rgba(200,130,30,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 68, 'rgba(200,130,30,0.85)', this.level)) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const swingOffset = this.fireFlash > 0 ? (this.fireFlash / (this.maxFireFlash || 6)) * 0.25 : 0;
@@ -1188,7 +1195,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 64, 'rgba(255,110,200,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 64, 'rgba(255,110,200,0.9)', this.level)) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
@@ -1301,7 +1308,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'piltorn', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 62, 'rgba(100,140,190,0.8)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'piltorn', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 62, 'rgba(100,140,190,0.8)', this.level)) return;
 
     // Stone tower body
     ctx.fillStyle = '#4a3a2e';
@@ -1396,7 +1403,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 9, 2.3, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'hydda', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 58, 'rgba(50,200,90,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'hydda', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 58, 'rgba(50,200,90,0.85)', this.level)) return;
 
     // Hut walls — weathered wood planks
     ctx.fillStyle = '#5a3818';
@@ -1496,7 +1503,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'isjatten', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 72, 'rgba(100,190,255,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'isjatten', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 72, 'rgba(100,190,255,0.9)', this.level)) return;
 
     // Stone base pedestal
     ctx.fillStyle = '#3a2a1e';
@@ -1643,7 +1650,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 12, 3, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'drakship', this.fireFlash > 0 ? 2 : (Math.floor(performance.now() / 700) % 2), x, y, this.aimAngle, 70, 'rgba(200,100,30,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'drakship', this.fireFlash > 0 ? 2 : (Math.floor(_now / 700) % 2), x, y, this.aimAngle, 70, 'rgba(200,100,30,0.85)', this.level)) return;
 
     // Ship hull — rotates with aim direction
     ctx.save();

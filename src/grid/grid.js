@@ -122,8 +122,8 @@ export class Grid {
 
   draw(ctx, time = 0, drawGridLines = true) {
     if (drawGridLines) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = 'rgba(80,60,30,0.28)';
+      ctx.lineWidth = 0.6;
       ctx.beginPath();
       for (let x = 0; x <= this.cols; x++) {
         ctx.moveTo(x * this.cellSize, 0);

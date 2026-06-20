@@ -43,9 +43,9 @@ export const ENEMY_DEFS = {
     speed:          1.2,
     hp:             110,
     radius:         6,
-    reward:         8,
-    color:          '#50883a',   // sickly pale green — corrupted child spirit (style bible)
-    highlightColor: '#88bb50',
+    reward:         12,
+    color:          '#3a7acc',   // spectral blue — corrupted child spirit
+    highlightColor: '#88bbff',
     flying:         true
   },
   jotunn: {
@@ -54,8 +54,8 @@ export const ENEMY_DEFS = {
     hp:             700,
     radius:         13,
     reward:         32,
-    color:          '#2a3a4c',   // cold slate — Norse frost giant
-    highlightColor: '#40b0ff',   // ice-blue core
+    color:          '#5c4030',   // stone-brown — Norse earth giant
+    highlightColor: '#e88020',   // amber — volcanic heat
     flying:         false
   }
 };
@@ -80,7 +80,7 @@ export class Enemy {
     this.alive          = true;
     this.reached        = false;
     this.deathTimer     = 0;    // frames remaining for death fade animation
-    this.isElite        = this.maxHp >= 300;  // auto-flagged for high-HP enemies
+    this.isElite        = false;  // set by spawnEnemy elite branch only
 
     // Boss fields — set externally by spawnBoss()
     this.isBoss      = false;
@@ -161,6 +161,14 @@ export class Enemy {
         const t = this.deathTimer / 12;
         this.deathTimer--;
         ctx.save();
+        // White kill-flash on first frame (deathTimer === 12 before decrement means t===1 here)
+        if (t >= (11 / 12)) {
+          ctx.globalAlpha = 0.80;
+          ctx.fillStyle   = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.radius * 1.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.globalAlpha = t * 0.7;
         ctx.translate(this.x, this.y);
         ctx.scale(1 + (1 - t) * 0.4, 1 + (1 - t) * 0.4);
@@ -364,7 +372,7 @@ export class Enemy {
       ctx.restore();
     }
 
-    this._drawHpBar(ctx);
+    if (!this.isBoss) this._drawHpBar(ctx);
   }
 
   _drawSprite(ctx) {
@@ -856,8 +864,8 @@ export class Enemy {
     const pctFull = this.hp / this.maxHp;
     // Always draw tray for bosses so their bar is always visible; skip entirely only for
     // non-boss enemies at 100% HP (tray still drawn so position is spatially readable)
-    const barW = this.radius * (this.isBoss ? 4.0 : 2.8);
-    const barH = this.isBoss ? 7 : 3;
+    const barW = this.radius * (this.isBoss ? 4.0 : 3.2);
+    const barH = this.isBoss ? 7 : 5;
     const barX = this.x - barW / 2;
     const barY = this.y - this.radius - (this.isBoss ? 18 : 10);
 
@@ -900,7 +908,7 @@ export class Enemy {
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
       ctx.globalAlpha = 1;
       if (pct < 1.0) {
-        ctx.fillStyle = pct > 0.50 ? '#60c840' : pct > 0.25 ? '#e8c040' : '#e84040';
+        ctx.fillStyle = pct > 0.50 ? '#48a038' : pct > 0.25 ? '#c8a030' : '#e84040';
         ctx.fillRect(barX, barY, barW * pct, barH);
         // Colorblind-safe: tick marks at 25 / 50 / 75 %
         ctx.strokeStyle = 'rgba(0,0,0,0.50)';
