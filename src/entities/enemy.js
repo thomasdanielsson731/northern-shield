@@ -1,4 +1,5 @@
 import { SPRITES } from '../assets.js';
+import { getSpriteScale } from '../config.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -373,12 +374,16 @@ export class Enemy {
     const frame = Math.floor(performance.now() / 180) % 2;  // cycle IDLE/WALK frames only
     const dh    = this.radius * (this.isBoss ? 7.8 : 6.0);
     const dw    = dh * sp.frameW / sp.frameH;
+    // Apply experimental sprite scale multiplier
+    const scale = getSpriteScale();
+    const dhs = Math.round(dh * scale);
+    const dws = Math.round(dw * scale);
 
     // Ground shadow
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.beginPath();
-    ctx.ellipse(this.x + 1, this.y + this.radius * 0.55, dw * 0.52, dw * 0.18, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x + 1, this.y + this.radius * 0.55, dws * 0.52, dws * 0.18, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
@@ -392,7 +397,7 @@ export class Enemy {
     if (sp.rows < 4 && dx < 0) ctx.scale(-1, 1);
     ctx.drawImage(sp.img,
       frame * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
-      -dw / 2, -dh * 0.88, dw, dh);
+      -dws / 2, -dhs * 0.88, dws, dhs);
     ctx.restore();
 
     // Flying badge for Myling

@@ -1,4 +1,5 @@
 import { SPRITES } from '../assets.js';
+import { getSpriteScale } from '../config.js';
 
 function _drawVikingShield(ctx, sx, sy, r, isBlue) {
   // Wooden rim
@@ -175,7 +176,8 @@ export class Grid {
 
     const sp = SPRITES['portal'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
-      const dw = cs * 6.5;
+      const scale = getSpriteScale();
+      const dw = cs * 6.5 * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
       ctx.shadowColor = `rgba(140,60,255,${0.65 + pulse * 0.35})`;
@@ -312,7 +314,8 @@ export class Grid {
 
     const sp = SPRITES['trelleborg'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
-      const dw = cs * 7;
+      const scale = getSpriteScale();
+      const dw = cs * 7 * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
       if (hr < 0.66) {

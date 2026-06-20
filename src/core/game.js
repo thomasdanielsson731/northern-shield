@@ -3,6 +3,7 @@ import { Grid, CELL } from '../grid/grid.js';
 import { Enemy, ENEMY_TYPES, ENEMY_DEFS } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
+import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie, sfxWaveClear,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -1598,6 +1599,23 @@ window.addEventListener('keydown', e => {
 
   if (key === 'g') {
     showGrid = !showGrid;
+    return;
+  }
+
+  // Runtime sprite scale adjustments for quick visual tests
+  if (e.key === '[') {
+    changeSpriteScale(-0.05);
+    console.log('Sprite scale:', getSpriteScale());
+    return;
+  }
+  if (e.key === ']') {
+    changeSpriteScale(0.05);
+    console.log('Sprite scale:', getSpriteScale());
+    return;
+  }
+  if (e.key === '0') {
+    setSpriteScale(1.0);
+    console.log('Sprite scale reset to 1.0');
     return;
   }
 
@@ -3490,6 +3508,27 @@ function drawTopBar() {
   ctx.font      = '9px monospace';
   ctx.fillStyle = showHelp ? 'rgba(240,200,80,0.85)' : 'rgba(140,110,60,0.4)';
   ctx.fillText('[?]', FT + pw - 6, cy);
+
+  // Sprite scale indicator (experimental visual tuning) — high-contrast pill
+  try {
+    const sc = getSpriteScale();
+    const pillW = 74, pillH = 20;
+    const pillX = FT + pw - pillW - 12; // place left of help hint
+    const pillY = barMid - pillH / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(10,10,12,0.78)';
+    ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.roundRect(pillX + 0.5, pillY + 0.5, pillW - 1, pillH - 1, 6); ctx.stroke();
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f0f0f8';
+    ctx.fillText(`Scale ${sc.toFixed(2)}`, pillX + pillW / 2, pillY + pillH / 2 + 4);
+    ctx.restore();
+  } catch (err) {
+    // ignore if config missing
+  }
 
   ctx.restore();
 }

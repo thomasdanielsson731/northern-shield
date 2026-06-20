@@ -1,5 +1,6 @@
 import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
+import { getSpriteScale } from '../config.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -16,6 +17,9 @@ function angleToRow(angle) {
 function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null, level = 1) {
   const sp = SPRITES[spriteKey];
   if (!sp) return false;
+  // Apply experimental sprite scale multiplier
+  const scale = getSpriteScale();
+  dw = Math.round(dw * scale);
   const dh = Math.round(dw * sp.frameH / sp.frameW);
   const glowBlur = level >= 8 ? 20 : level >= 5 ? 17 : 14;
   const row = sp.rows >= 4 ? angleToRow(aimAngle) : 0;
