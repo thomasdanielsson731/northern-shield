@@ -1150,6 +1150,55 @@ function initTerrain() {
   }
   tc.lineCap = 'butt';
 
+  // ── Wildflowers — tiny coloured clusters ─────────────────────────────────
+  {
+    const flowerColors = [
+      ['rgba(230,210,40,0.85)', 'rgba(255,245,120,0.50)'],  // yellow
+      ['rgba(238,238,248,0.80)', 'rgba(200,215,255,0.45)'], // white
+      ['rgba(125,55,175,0.78)', 'rgba(155,95,215,0.42)'],   // purple
+      ['rgba(205,95,138,0.75)', 'rgba(238,148,175,0.42)'],  // pink
+    ];
+    for (let i = 0, n = 28 + Math.floor(rng() * 18); i < n; i++) {
+      const fx = rng() * W, fy = rng() * H;
+      const [main, glow] = flowerColors[Math.floor(rng() * flowerColors.length)];
+      const count = 2 + Math.floor(rng() * 5);
+      for (let f = 0; f < count; f++) {
+        const px = fx + (rng() - 0.5) * cs * 1.8;
+        const py = fy + (rng() - 0.5) * cs * 1.2;
+        const r  = 0.85 + rng() * 0.85;
+        // Stem
+        tc.strokeStyle = `rgba(45,82,22,${0.45 + rng() * 0.3})`;
+        tc.lineWidth   = 0.45;
+        tc.beginPath();
+        tc.moveTo(px, py + r + 0.8);
+        tc.lineTo(px + (rng() - 0.5) * 1.5, py + r + 2.8);
+        tc.stroke();
+        // Glow halo
+        tc.fillStyle = glow;
+        tc.beginPath(); tc.arc(px, py, r + 0.9, 0, Math.PI * 2); tc.fill();
+        // Petal disc
+        tc.fillStyle = main;
+        tc.beginPath(); tc.arc(px, py, r, 0, Math.PI * 2); tc.fill();
+        // Centre dot on larger flowers
+        if (r > 1.3) {
+          tc.fillStyle = 'rgba(255,245,200,0.65)';
+          tc.beginPath(); tc.arc(px, py, r * 0.28, 0, Math.PI * 2); tc.fill();
+        }
+      }
+    }
+    tc.lineWidth = 1;
+  }
+
+  // ── Pebble scatter — tiny stones between larger rocks ─────────────────────
+  for (let i = 0, n = 90 + Math.floor(rng() * 60); i < n; i++) {
+    const px = rng() * W, py = rng() * H;
+    const g  = Math.floor(48 + rng() * 38);
+    tc.fillStyle = `rgba(${g},${g - 2},${g + 5},${0.30 + rng() * 0.28})`;
+    tc.beginPath();
+    tc.ellipse(px, py, 0.55 + rng() * 0.72, 0.38 + rng() * 0.48, rng() * Math.PI, 0, Math.PI * 2);
+    tc.fill();
+  }
+
   // ── Small runestones ──────────────────────────────────────────────────────
   for (let i = 0, n = 3 + Math.floor(rng() * 4); i < n; i++) {
     const rstx = cs * 0.6 + rng() * (W - cs * 1.2);
@@ -2504,6 +2553,263 @@ function drawPath() {
   }
 
   ctx.restore();
+}
+
+// ── Fortress Complex — procedural architectural details around GOAL ───────────
+// Drawn before grid.draw() so GOAL cell content (sprite, gold pile) renders on top.
+function drawFortressComplex() {
+  if (gamePhase !== 'playing') return;
+  const cs  = CELL_SIZE;
+  const gx  = GOAL.col * cs + cs / 2;
+  const gy  = GOAL.row * cs + cs / 2;
+  const now = performance.now() * 0.001;
+
+  // ── Great Hall (longhouse) — extends left of the fortress sprite ──────────
+  {
+    const hw = cs * 3.0, hh = cs * 1.05;
+    const hx = gx - cs * 4.9, hy = gy - cs * 0.65;
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(hx + 2, hy + 3, hw, hh);
+    // Aged timber walls
+    ctx.fillStyle = '#211205';
+    ctx.fillRect(hx, hy, hw, hh);
+    // Vertical plank lines
+    ctx.save();
+    ctx.strokeStyle = 'rgba(10,6,1,0.42)';
+    ctx.lineWidth   = 0.65;
+    for (let i = 1; i < 7; i++) {
+      const lx = hx + i * hw / 7;
+      ctx.beginPath(); ctx.moveTo(lx, hy); ctx.lineTo(lx, hy + hh); ctx.stroke();
+    }
+    ctx.restore();
+    // Thatched roof — trapezoid
+    const roofH = cs * 0.85;
+    ctx.fillStyle = '#38200a';
+    ctx.beginPath();
+    ctx.moveTo(hx - cs * 0.18, hy);
+    ctx.lineTo(hx + hw + cs * 0.18, hy);
+    ctx.lineTo(hx + hw * 0.5 + cs * 0.22, hy - roofH);
+    ctx.lineTo(hx + hw * 0.5 - cs * 0.22, hy - roofH);
+    ctx.closePath();
+    ctx.fill();
+    // Roof ridge
+    ctx.strokeStyle = '#583520';
+    ctx.lineWidth   = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(hx + hw * 0.5 - cs * 0.22, hy - roofH + 1.5);
+    ctx.lineTo(hx + hw * 0.5 + cs * 0.22, hy - roofH + 1.5);
+    ctx.stroke();
+    // Thatch stroke lines
+    ctx.save();
+    ctx.strokeStyle = 'rgba(70,48,18,0.30)';
+    ctx.lineWidth   = 0.55;
+    for (let i = 0; i < 6; i++) {
+      const t  = i / 6;
+      const lx = hx + t * hw;
+      const ly = hy;
+      const tx = hx + hw * 0.5 + (t - 0.5) * cs * 0.44;
+      const ty = hy - roofH;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(tx, ty); ctx.stroke();
+    }
+    ctx.restore();
+    // Windows (amber glow slits)
+    ctx.save();
+    ctx.fillStyle   = 'rgba(255,190,65,0.18)';
+    ctx.strokeStyle = 'rgba(50,28,8,0.55)';
+    ctx.lineWidth   = 0.5;
+    for (const wx of [hx + hw * 0.2, hx + hw * 0.58]) {
+      ctx.fillRect(wx - 2, hy + hh * 0.18, 4, 5);
+      ctx.strokeRect(wx - 2, hy + hh * 0.18, 4, 5);
+      ctx.beginPath();
+      ctx.moveTo(wx - 2, hy + hh * 0.18 + 2.5);
+      ctx.lineTo(wx + 2, hy + hh * 0.18 + 2.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Shields on Great Hall wall ─────────────────────────────────────────────
+  {
+    const sy  = gy - cs * 0.65 + cs * 1.05 * 0.45;
+    const sx0 = gx - cs * 5.25;
+    const shR = cs * 0.27;
+    for (let i = 0; i < 4; i++) {
+      const sx  = sx0 + i * cs * 0.65;
+      const isB = i % 2 === 0;
+      ctx.save();
+      // Rim
+      ctx.fillStyle = '#180904';
+      ctx.beginPath(); ctx.arc(sx, sy, shR, 0, Math.PI * 2); ctx.fill();
+      // Quadrant face
+      ctx.save();
+      ctx.beginPath(); ctx.arc(sx, sy, shR - 0.8, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = isB ? '#17388c' : '#7a1208';
+      ctx.fillRect(sx - shR, sy - shR, shR, shR);
+      ctx.fillRect(sx, sy, shR, shR);
+      ctx.fillStyle = '#c8b850';
+      ctx.fillRect(sx, sy - shR, shR, shR);
+      ctx.fillRect(sx - shR, sy, shR, shR);
+      ctx.restore();
+      // Boss stud
+      ctx.fillStyle = '#2e1606';
+      ctx.beginPath(); ctx.arc(sx, sy, shR * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Watchtower — stone tower; tip peeks above fortress sprite ─────────────
+  {
+    const tw = cs * 0.88, th = cs * 3.1;
+    const tx = gx - cs * 4.4, ty = gy - cs * 4.2;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(tx + 2, ty + 3, tw, th);
+    // Stone body
+    ctx.fillStyle = '#262012';
+    ctx.fillRect(tx, ty, tw, th);
+    // Mortar lines
+    ctx.save();
+    ctx.strokeStyle = 'rgba(8,6,2,0.40)';
+    ctx.lineWidth   = 0.5;
+    for (let i = 1; i < 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo(tx, ty + i * th / 8);
+      ctx.lineTo(tx + tw, ty + i * th / 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // Arrow slits
+    ctx.fillStyle = 'rgba(0,0,0,0.68)';
+    ctx.fillRect(tx + tw * 0.35, ty + th * 0.22, tw * 0.3, th * 0.13);
+    ctx.fillRect(tx + tw * 0.35, ty + th * 0.56, tw * 0.3, th * 0.10);
+    // Crenellations
+    const cn = 3, cw = tw / (cn * 2 - 1), ch = cs * 0.27;
+    ctx.fillStyle = '#262012';
+    for (let i = 0; i < cn; i++) {
+      ctx.fillRect(tx + i * cw * 2, ty - ch, cw, ch);
+    }
+    ctx.fillStyle = '#1a1408';
+    ctx.fillRect(tx - 1, ty - ch, tw + 2, 2);
+    // Animated torch on side
+    const flick = 0.55 + Math.sin(now * 9.1) * 0.24 + Math.sin(now * 13.8) * 0.10;
+    ctx.fillStyle = '#5a3810';
+    ctx.fillRect(tx + tw + 1.5, ty + th * 0.18, 1.5, cs * 0.38);
+    const tg = ctx.createRadialGradient(
+      tx + tw + 2.5, ty + th * 0.16, 0,
+      tx + tw + 2.5, ty + th * 0.16, 5 * flick
+    );
+    tg.addColorStop(0, `rgba(255,235,140,${flick * 0.95})`);
+    tg.addColorStop(0.4, `rgba(255,130,20,${flick * 0.62})`);
+    tg.addColorStop(1, 'rgba(200,50,0,0)');
+    ctx.fillStyle = tg;
+    ctx.beginPath();
+    ctx.ellipse(tx + tw + 2.5, ty + th * 0.14, 2.5 * flick, 3.8 * flick, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Banner on watchtower crossbar ─────────────────────────────────────────
+  {
+    const tw = cs * 0.88;
+    const tx = gx - cs * 4.4, ty = gy - cs * 4.2;
+    const bw = cs * 0.55, bh = cs * 0.65;
+    const barY = ty - cs * 0.27 + 1;
+    ctx.save();
+    // Crossbar
+    ctx.strokeStyle = '#5a3810'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(tx + tw * 0.5, barY);
+    ctx.lineTo(tx + tw * 0.5 + bw, barY);
+    ctx.stroke();
+    // Banner cloth
+    ctx.fillStyle = '#8a1020';
+    ctx.beginPath();
+    ctx.moveTo(tx + tw * 0.5, barY);
+    ctx.lineTo(tx + tw * 0.5 + bw, barY);
+    ctx.lineTo(tx + tw * 0.5 + bw, barY + bh);
+    ctx.lineTo(tx + tw * 0.5 + bw * 0.6, barY + bh + cs * 0.18);
+    ctx.lineTo(tx + tw * 0.5, barY + bh);
+    ctx.closePath();
+    ctx.fill();
+    // Norse symbol
+    const bsx = tx + tw * 0.5 + bw * 0.5, bsy = barY + bh * 0.45;
+    ctx.strokeStyle = 'rgba(228,185,68,0.72)'; ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(bsx, bsy - 3);   ctx.lineTo(bsx, bsy + 3);
+    ctx.moveTo(bsx - 3, bsy);   ctx.lineTo(bsx + 3, bsy);
+    ctx.moveTo(bsx - 2, bsy - 2); ctx.lineTo(bsx + 2, bsy + 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Treasury — heavy stone vault below-left ───────────────────────────────
+  {
+    const vw = cs * 1.35, vh = cs * 0.88;
+    const vx = gx - cs * 3.8, vy = gy + cs * 0.85;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(vx + 2, vy + 3, vw, vh);
+    // Stone walls
+    ctx.fillStyle = '#1a1205';
+    ctx.fillRect(vx, vy, vw, vh);
+    // Mortar grid
+    ctx.save();
+    ctx.strokeStyle = 'rgba(8,5,1,0.38)'; ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(vx, vy + vh / 2); ctx.lineTo(vx + vw, vy + vh / 2); ctx.stroke();
+    ctx.moveTo(vx + vw / 2, vy); ctx.lineTo(vx + vw / 2, vy + vh); ctx.stroke();
+    ctx.restore();
+    // Peaked stone roof
+    ctx.fillStyle = '#241808';
+    ctx.beginPath();
+    ctx.moveTo(vx - 1, vy);
+    ctx.lineTo(vx + vw + 1, vy);
+    ctx.lineTo(vx + vw / 2, vy - cs * 0.58);
+    ctx.closePath();
+    ctx.fill();
+    // Arched door
+    const dr = vw * 0.17;
+    ctx.fillStyle = 'rgba(0,0,0,0.68)';
+    ctx.beginPath();
+    ctx.arc(vx + vw / 2, vy + vh - dr, dr, Math.PI, 0);
+    ctx.fillRect(vx + vw / 2 - dr, vy + vh - dr, dr * 2, dr);
+    ctx.fill();
+    // Gold finial on peak
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,200,40,0.60)';
+    ctx.shadowBlur  = 5;
+    ctx.fillStyle   = 'rgba(255,215,50,0.38)';
+    ctx.beginPath(); ctx.arc(vx + vw / 2, vy - cs * 0.58, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Second banner (Great Hall left end) ───────────────────────────────────
+  {
+    const bx = gx - cs * 5.4, by = gy - cs * 0.65 - cs * 0.85 - cs * 0.4;
+    const bw = cs * 0.5, bh = cs * 0.58;
+    ctx.save();
+    ctx.strokeStyle = '#5a3810'; ctx.lineWidth = 1;
+    // Pole
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by + cs * 1.3); ctx.stroke();
+    // Crossbar
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
+    // Cloth
+    ctx.fillStyle = '#6a1c30';
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx + bw, by);
+    ctx.lineTo(bx + bw, by + bh);
+    ctx.lineTo(bx, by + bh);
+    ctx.closePath();
+    ctx.fill();
+    // Stripe details
+    ctx.strokeStyle = 'rgba(218,172,58,0.58)'; ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(bx, by + bh * 0.35); ctx.lineTo(bx + bw, by + bh * 0.35);
+    ctx.moveTo(bx, by + bh * 0.68); ctx.lineTo(bx + bw, by + bh * 0.68);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawFrames() {
@@ -4623,6 +4929,8 @@ function draw() {
     for (const fc of wallFrostCells) ctx.fillRect(fc.x, fc.y, fc.cs, fc.cs);
     ctx.restore();
   }
+
+  drawFortressComplex();
 
   grid.draw(ctx, time, showGrid);
   drawPath();
