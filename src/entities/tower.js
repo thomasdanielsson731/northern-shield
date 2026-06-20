@@ -129,7 +129,7 @@ export const TOWER_DEFS = {
     fireFlashDuration: 8,
   },
   [TOWER_TYPES.HYDDA]: {
-    label:        'Hydda',
+    label:        'Healer',
     key:          '8',
     color:        '#2e9a50',
     rangeColor:   'rgba(40,160,80,0.22)',
@@ -142,7 +142,7 @@ export const TOWER_DEFS = {
     fireFlashDuration: 6,
   },
   [TOWER_TYPES.ISJATTEN]: {
-    label:        'Isjätte',
+    label:        'Ice Giant',
     key:          '9',
     color:        '#60b8f0',
     rangeColor:   'rgba(80,170,240,0.22)',
@@ -158,7 +158,7 @@ export const TOWER_DEFS = {
     fireFlashDuration: 20,
   },
   [TOWER_TYPES.DRAKSHIP]: {
-    label:        'Drakship',
+    label:        'Dragonship',
     key:          '0',
     color:        '#b05820',
     rangeColor:   'rgba(170,80,30,0.24)',

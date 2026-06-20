@@ -228,7 +228,7 @@ const WAVE_EVENTS = {
   60: { id: 'frostStorm',   label: '❄ FROST STORM',   desc: '+30% HP, 20% slower',        hpMult: 1.30, speedMult: 0.80 },
   65: { id: 'blitz',        label: '⚡ BLITZ',          desc: '+40% speed',                 speedMult: 1.40 },
   80: { id: 'darkHarvest',  label: '☠ DARK HARVEST',  desc: '+40% HP, +4 Jötunn',         hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
-  90: { id: 'ragnarok',     label: '⚔ FÖRSPELET',     desc: '+50% HP, +40% speed',        hpMult: 1.50, speedMult: 1.40 },
+  90: { id: 'ragnarok',     label: '⚔ THE PRELUDE',    desc: '+50% HP, +40% speed',        hpMult: 1.50, speedMult: 1.40 },
 };
 
 // ── achievements ──────────────────────────────────────────────────────────────
@@ -1742,11 +1742,11 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  // Speed toggle buttons (three discrete: ×1, ×2, ×4)
+  // Speed toggle button — single click cycles ×1 → ×2 → ×4 → ×1
   for (const sb of speedBtns) {
     if (e.button === 0 && mouseX >= sb.x && mouseX <= sb.x + sb.w &&
         mouseY >= sb.y && mouseY <= sb.y + sb.h) {
-      gameSpeed = sb.speed;
+      gameSpeed = gameSpeed >= 4 ? 1 : gameSpeed >= 2 ? 4 : 2;
       return;
     }
   }
@@ -2839,14 +2839,12 @@ function drawRightPanel() {
     }
   }
 
-  // ── SPEED CONTROL — three triangle buttons (×1 / ×2 / ×4), always fixed ──────
+  // ── SPEED CONTROL — single toggle button, click/[F] cycles ×1 → ×2 → ×4 ────
   {
     const spBtnH  = 26;
-    const spBtnY  = GRID_TOP + fullH - 168;   // fixed: always above rune forge
+    const spBtnY  = GRID_TOP + fullH - 168;
     const spBtnX  = px + 6;
     const spBtnW  = pw - 12;
-    const bw      = Math.floor(spBtnW / 3);
-    const speeds  = [1, 2, 4];
     speedBtns = [];
 
     // Helper: draw N right-pointing triangles centered at (cx, cy)
@@ -2856,7 +2854,6 @@ function drawRightPanel() {
       let tx = cx - total / 2;
       ctx.fillStyle = color;
       for (let i = 0; i < n; i++) {
-        // For x4: arrange as 2×2 grid
         let ox = tx, oy = cy;
         if (n === 4) {
           const col = i % 2, row = Math.floor(i / 2);
@@ -2875,57 +2872,42 @@ function drawRightPanel() {
       }
     }
 
-    for (let i = 0; i < 3; i++) {
-      const sp  = speeds[i];
-      const bx  = spBtnX + i * bw;
-      const active = gameSpeed === sp;
-      const fill   = active
-        ? (sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)')
-        : 'rgba(22,14,6,0.85)';
-      const border = active
-        ? (sp >= 4 ? 0.95 : sp >= 2 ? 0.85 : 0.70)
-        : 0.22;
-      const bStroke = active
-        ? (sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.8)')
-        : 'rgba(160,110,40,0.25)';
+    const sp       = gameSpeed;
+    const fill     = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
+    const bStroke  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
+    const triColor = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
+    const nextSp   = sp >= 4 ? 1 : sp >= 2 ? 4 : 2;
 
-      // Panel
-      const rad = i === 0 ? [5,0,0,5] : i === 2 ? [0,5,5,0] : [0,0,0,0];
-      ctx.save();
-      ctx.beginPath(); ctx.roundRect(bx, spBtnY, bw, spBtnH, rad);
-      ctx.fillStyle = fill; ctx.fill();
-      ctx.strokeStyle = bStroke; ctx.lineWidth = active ? 1.5 : 0.8; ctx.stroke();
-      if (active) {
-        ctx.shadowColor = bStroke; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.roundRect(bx, spBtnY, bw, spBtnH, rad);
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0;
-      ctx.restore();
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(spBtnX, spBtnY, spBtnW, spBtnH, 5);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = bStroke; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.shadowColor = bStroke; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.roundRect(spBtnX, spBtnY, spBtnW, spBtnH, 5); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
-      // Triangles
-      const triColor = active
-        ? (sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080')
-        : 'rgba(160,120,60,0.45)';
-      const cy = spBtnY + spBtnH * 0.42;
-      drawSpeedTriangles(bx + bw / 2, cy, sp === 1 ? 1 : sp === 2 ? 2 : 4, triColor, 4.5);
+    const cy = spBtnY + spBtnH * 0.42;
+    drawSpeedTriangles(spBtnX + spBtnW * 0.38, cy, sp === 1 ? 1 : sp === 2 ? 2 : 4, triColor, 4.5);
 
-      // Speed label below triangles
-      ctx.font      = `${active ? 'bold ' : ''}8px monospace`;
-      ctx.fillStyle = active ? triColor : 'rgba(140,100,50,0.45)';
-      ctx.textAlign = 'center';
-      ctx.fillText(`×${sp}`, bx + bw / 2, spBtnY + spBtnH - 4);
-      ctx.textAlign = 'left';
+    ctx.font      = 'bold 9px monospace';
+    ctx.fillStyle = triColor;
+    ctx.textAlign = 'left';
+    ctx.fillText(`×${sp}`, spBtnX + spBtnW * 0.60, spBtnY + spBtnH - 5);
 
-      speedBtns.push({ x: bx, y: spBtnY, w: bw, h: spBtnH, speed: sp });
-    }
+    ctx.font      = '7px monospace';
+    ctx.fillStyle = 'rgba(180,140,80,0.55)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`→ ×${nextSp}`, spBtnX + spBtnW - 4, spBtnY + spBtnH - 5);
+    ctx.textAlign = 'left';
 
-    // [F] hint below the row
     ctx.font      = '8px monospace';
-    ctx.fillStyle = 'rgba(120,90,40,0.4)';
+    ctx.fillStyle = 'rgba(160,120,60,0.70)';
     ctx.textAlign = 'center';
     ctx.fillText('[F] cycle speed', spBtnX + spBtnW / 2, spBtnY + spBtnH + 9);
     ctx.textAlign = 'left';
+
+    speedBtns.push({ x: spBtnX, y: spBtnY, w: spBtnW, h: spBtnH });
   }
 
   // ── Rune inventory summary ───────────────────────────────────────────────────
@@ -4601,7 +4583,8 @@ function draw() {
     }
   }
 
-  towers.forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
+  [...towers].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
+    .forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
 
   // Hover range ring — faint range circle on tower under cursor (without selecting)
   if (!selectedTower && !dragItem) {
