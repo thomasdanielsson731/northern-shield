@@ -1,0 +1,42 @@
+100-WAVE SYSTEM — Northern Shield
+
+ GOAL:
+     Give Northern Shield a clear endgoal: survive 100 waves.
+     Difficulty should scale smoothly so early waves are accessible
+     and later waves feel like a siege.
+
+ CURRENT STATE:
+     WaveComposition(n) generates wave content from a formula.
+     No hard cap on waves — game continues indefinitely.
+     No "you won" state.
+
+ WAVE SCALING DESIGN:
+
+     Phases:
+     - Waves 1-20: Early threat. Graveborn dominant. No Golems until wave 10.
+     - Waves 21-50: Midgame. Wisps introduced. Banshees from wave 30.
+     - Waves 51-75: Hard. Multiple Golems. Larger packs.
+     - Waves 76-99: Very hard. Mixed all types. HP and speed bonuses.
+     - Wave 100: Final siege. Large spawn, all enemy types. Victory on clear.
+
+     Scaling formulas:
+     - Enemy HP mult: 1 + waveNumber * 0.08
+     - Enemy count: base + Math.floor(waveNumber * 0.4)
+     - Speed mult (wave 50+): 1 + (waveNumber - 50) * 0.005
+
+ VICTORY STATE:
+     - Surviving wave 100 triggers 'victory' game state
+     - Show VICTORY screen instead of DEFEATED
+     - Save highscore with 'cleared: true' flag
+     - Distinct gold/green themed gameover screen
+
+ IMPLEMENTATION NOTES:
+     - Add 'MAX_WAVES = 100' constant to game.js
+     - Check after each wave clear: if waveNumber >= MAX_WAVES, trigger victory
+     - Pass hpMult and speedMult into spawnEnemy() from waveComposition()
+     - Show 'Wave X / 100' in top bar instead of just 'Wave X'
+
+ RULES:
+ - Scaling must be smooth — no sudden difficulty spikes
+ - Wave 100 must be winnable by a skilled player
+ - Do not alter core BFS or tower logic for this feature

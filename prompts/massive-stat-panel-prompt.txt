@@ -1,0 +1,41 @@
+MASSIVE STAT PANEL — Northern Shield
+
+ GOAL:
+     Players want to know exactly what their towers are doing.
+     A detailed stat panel on tower selection rewards expert play.
+
+ CURRENT STATE:
+     Selected tower shows a small panel with: type, level, range, upgrade button, sell button.
+     TOWER_DEFS has: label, cost, range, fireRate, damage, radius, bulletSpeed.
+     Tower has: level, maxed, type, totalKills (if tracked).
+
+ PROPOSED PANEL CONTENT:
+
+     Header:
+     - Tower type name (Norse label) + level badge ("L3")
+     - Tower color dot for quick identification
+
+     Core Stats:
+     - Damage: base * levelMultiplier (show effective value)
+     - Attack Speed: fireRate converted to "X.X/s" (human-readable)
+     - Range: in cells (range/CELL_SIZE, rounded)
+     - Special: "Slow", "Splash", "Stun", "EMP" badge if applicable
+
+     Economy:
+     - Sell value: Math.floor(cost * 0.6) gold
+     - Total invested: cost + sum of upgrade costs
+     - Kills by this tower (track 'tower.kills' in Tower class)
+
+     Upgrade preview:
+     - Next upgrade cost + damage after upgrade (greyed out if maxed)
+
+ IMPLEMENTATION NOTES:
+     - Panel is drawn in drawSelectedTowerPanel() in game.js
+     - Add 'kills' counter to Tower class, increment when bullet kills enemy
+     - Firerate to "/s": (60 / fireRate).toFixed(1)
+     - Panel may need to be wider — check right panel space or float near tower
+
+ RULES:
+ - Show effective stats, not base stats — include upgrade scaling
+ - Never show raw internal values like fireRate in frames
+ - Stat panel hides when no tower is selected — no permanent UI slot

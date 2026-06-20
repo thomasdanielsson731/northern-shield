@@ -1,0 +1,38 @@
+BOSS WARNING SYSTEM — Northern Shield
+
+ GOAL:
+     When a Golem (boss) is about to spawn, the player must know.
+     The warning should build tension without breaking gameflow.
+
+ CURRENT STATE:
+     Golem (tank) is in ENEMY_DEFS — high HP, slow, large radius.
+     Wave composition shows "Golem xN" in right panel during break.
+     No dynamic warning event on boss spawn.
+
+ PROPOSED SYSTEM:
+
+     Pre-wave warning (in break state):
+     - If next wave contains Golems: show a red "BOSS INCOMING" banner
+     - Banner fades in for 0.5s, holds 2s, fades out
+     - Show during countdown phase, not during active combat
+
+     Spawn moment:
+     - When a Golem is spawned: flash the portal bright red for 0.3s
+     - Screen shake: small impact jolt (3px, 10 frames)
+     - Golem entrance: scale from 0.5x to 1.0x over 20 frames (spawn animation)
+
+     Boss health bar:
+     - While a Golem is alive: show a health bar above the enemy
+     - All enemies have hp/maxHp — use this for the bar
+     - Bar color: green > 75%, yellow 50-75%, red < 50%
+     - Boss bar is taller (4px instead of 2px) and has a border
+
+ IMPLEMENTATION NOTES:
+     - Track 'bossWarningTimer' in game.js during countdown
+     - 'boss': true flag in ENEMY_DEFS for Golem (tank)
+     - Health bars drawn in Enemy.draw() if boss = true or hp < maxHp
+
+ RULES:
+ - Warning banner never covers the grid playarea — show in HUD overlay
+ - Boss health bar does not show for regular enemies at full health
+ - Keep the warning feeling optional to read — not an interrupting popup

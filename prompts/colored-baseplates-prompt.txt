@@ -1,0 +1,38 @@
+COLORED BASEPLATES — Northern Shield
+
+ GOAL:
+     Visually distinguish tower types on the grid even without sprites.
+     Baseplates ground towers in the terrain and read instantly at a glance.
+
+ CURRENT STATE:
+     Towers sit on the grid with no ground indicator.
+     Selected tower shows range circle but nothing else.
+     TOWER_DEFS[type].color is already defined — use it.
+
+ PROPOSED APPROACH:
+     Draw a small rounded-rect baseplate behind each tower sprite.
+     Color: derived from TOWER_DEFS[type].color with low opacity (~0.25)
+     Size: CELL_SIZE x CELL_SIZE (14x14px), radius 2
+
+ IMPLEMENTATION:
+     In Tower.draw(ctx), before calling the _drawXXX method:
+
+         const def = TOWER_DEFS[this.type];
+         ctx.save();
+         ctx.globalAlpha = 0.22;
+         ctx.fillStyle = def.color;
+         // drawRoundedRect at (this.cx - 7, this.cy - 7, 14, 14, 2)
+         ctx.fill();
+         ctx.restore();
+
+     For walls: use a similar baseplate with the wall color (#6644aa)
+
+ SELECTED TOWER VARIANT:
+     When tower is selected (selectedTower===tower):
+     - Increase opacity to 0.50
+     - Add a 1px border stroke in the tower's def.color at full opacity
+
+ RULES:
+ - Baseplate drawn BEFORE the tower sprite/shape — never on top
+ - Do not change grid.js or renderer.js for this feature
+ - Keep it subtle: the sprite is the focus, the baseplate is ambient

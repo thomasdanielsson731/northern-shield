@@ -1,0 +1,42 @@
+ENEMY READABILITY SYSTEM — Northern Shield
+
+ GOAL:
+     At a glance, player knows which enemies are threatening, which are healthy,
+     and where the path is crowded. Four enemy types must read differently.
+
+ CURRENT STATE:
+     Enemy types: Graveborn (purple), Wisp (blue), Golem (amber), Banshee (cyan)
+     Each has radius, color, highlightColor in ENEMY_DEFS.
+     No HP bars for regular enemies. No status indicators.
+
+ PROPOSED READABILITY IMPROVEMENTS:
+
+     HP Bars (all enemies):
+     - Thin horizontal bar (2px tall) above each enemy
+     - Width: enemy.radius * 2.5 (scaled to size)
+     - Only show if enemy.hp < enemy.maxHp (hidden at full health)
+     - Color: '#40d040' > 66%, '#e8c040' > 33%, '#f04040' below
+
+     Type badges:
+     - Golem: larger radius + double-ring outline showing boss status
+     - Wisp: dashed circle outline showing flying status
+     - Banshee: EMP lightning zap icon next to name (cyan lightning bolt)
+
+     Status indicators:
+     - Slowed: blue ring pulse around enemy (Shield Wall effect)
+     - Stunned: gold stars orbiting enemy (Blondie effect)
+     - Track 'enemy.slowed' and 'enemy.stunned' booleans per enemy
+
+     Path crowding indicator:
+     - If >5 enemies are within 5 cells of each other: draw warning area
+     - Light red overlay on those grid cells (semi-transparent)
+
+ IMPLEMENTATION NOTES:
+     - HP bars drawn in Enemy.draw(ctx), after body
+     - Add 'maxHp' to Enemy constructor (set = def.hp)
+     - 'slowed' and 'stunned' already implicitly present — explicitate as booleans
+
+ RULES:
+ - HP bars are hidden at full health — screen must not feel cluttered
+ - Name labels above enemies are NOT added — too much noise
+ - Status effects should look visually distinct from each other

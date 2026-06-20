@@ -1,0 +1,37 @@
+CORE / GOAL SYSTEM — Northern Shield
+
+ GOAL:
+     The Northern Shield itself — the thing being defended — should have
+     visual presence and react to damage. Make losing lives feel weighty.
+
+ CURRENT STATE:
+     GOAL cell at col 49, row 15. Enemies that reach it deduct 1 life.
+     Lives starts at 15. Game over at 0.
+     No visual difference between full health and near-death state.
+
+ PROPOSED SYSTEM:
+
+     Core Health States:
+     - Healthy (11-15 lives): Bright gold glow, pulsing calmly
+     - Damaged (6-10 lives): Amber glow, crack pattern overlay
+     - Critical (1-5 lives): Red glow, faster pulse, screen edge vignette
+
+     Goal cell visual:
+     - Draw a rune shield symbol (circle + cross) centered on the goal cell
+     - Color based on health state above
+     - Pulse speed: slow (0.02 rad/frame) normal, fast (0.06) critical
+
+     Screen vignette:
+     - Draw a radial gradient overlay at critical health
+     - Red gradient from edges, transparent in center
+     - Opacity: Math.max(0, (5 - lives) / 5 * 0.35)
+
+ IMPLEMENTATION NOTES:
+     - Health state derived from lives each frame — no extra variable needed
+     - Vignette drawn in draw() after grid but before HUD
+     - Goal visual drawn inside the grid render pass
+
+ RULES:
+ - Never change lives logic — this is purely visual feedback
+ - Vignette does NOT appear at full health
+ - Keep goal cell visible throughout — never cover it with towers

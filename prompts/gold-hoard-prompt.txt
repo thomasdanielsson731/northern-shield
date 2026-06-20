@@ -1,0 +1,31 @@
+GOLD HOARD SYSTEM — Northern Shield
+
+ GOAL:
+     Make gold feel meaningful and strategic.
+     Hoarding gold should have a payoff, not just be safety margin.
+
+ CURRENT STATE:
+     Gold starts at 85. Earned from killing enemies (reward per ENEMY_DEFS).
+     Spent on walls (5g), towers (50-250g), upgrades.
+     No bonus for hoarding. Gold accumulates passively.
+
+ PROPOSED MECHANICS:
+
+     Interest system:
+     - Every wave break, award bonus gold equal to Math.floor(gold * 0.05)
+     - Cap bonus at 50g per break to prevent snowballing
+     - Display brief "+Xg Hoard Interest" notification on wave start
+
+     Wave-clear bonus:
+     - If all enemies are slain before timer runs out: +10g bonus
+     - No leaks in wave: additional +5g
+
+ IMPLEMENTATION NOTES:
+     - Apply interest in the 'break' state transition in game.js
+     - Track 'waveLeaks' boolean, reset each wave, set true when life lost
+     - No new UI panel needed — show bonus as a floating gold particle
+
+ RULES:
+ - Never award interest during 'active' wave state
+ - Keep bonus small — the core loop is build-defend, not idle-farming
+ - Do not add a separate gold production building — defer post-core

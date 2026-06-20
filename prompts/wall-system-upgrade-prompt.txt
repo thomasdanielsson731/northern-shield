@@ -1,0 +1,46 @@
+WALL SYSTEM UPGRADE — Northern Shield
+
+ GOAL:
+     Shield Wall walls should look like a connected fortification,
+     not a grid of isolated squares. Auto-connecting segments improve
+     readability and feel.
+
+ CURRENT STATE:
+     Walls are drawn as individual rectangles with a purple color.
+     No connection to adjacent walls.
+     Reference: assets/towers/reference_skoldmur_variants.png shows
+     straight segment, corner left/right, T-junction, end piece variants.
+
+ PROPOSED SYSTEM:
+
+     Connectivity check:
+     For each wall cell, check 4 neighbors (N/S/E/W).
+     Build a 'mask' = (north ? 1:0) | (east ? 2:0) | (south ? 4:0) | (west ? 8:0)
+
+     Variant selection:
+     - mask === 0: isolated (cap on all sides)
+     - mask = has only opposites (1+4 or 2+8): straight segment
+     - mask = L-shaped: corner
+     - mask = T-shaped: T-junction
+     - mask = all 4: cross
+
+     Drawing:
+     - Use canvas paths to draw the correct variant per mask
+     - Or sprite sheet if reference_skoldmur_variants.png is sliced and added to assets.js
+
+ ADJACENCY SLOW:
+     Shield Wall already slows nearby enemies.
+     Enhancement: more adjacent walls = stronger slow
+     - 1 wall neighbor: +0% bonus (base)
+     - 2-3 wall neighbors: +10% slow bonus
+     - 4 wall neighbors: +20% slow bonus
+
+ IMPLEMENTATION NOTES:
+     - Connectivity checked in drawing code only (no grid logic change)
+     - grid.getCell(c, r) returns CELL type — compare against CELL.WALL
+     - Slow bonus logic goes in Tower.update() area-effect block
+
+ RULES:
+ - Connectivity is visual-only — do not change wall collision or BFS
+ - Walls still block path regardless of variant
+ - Sprite variants are optional; start with canvas-drawn variants

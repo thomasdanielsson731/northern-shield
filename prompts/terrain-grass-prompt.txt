@@ -1,0 +1,38 @@
+TERRAIN + GRASS — Northern Shield
+
+ GOAL:
+     The grid should feel like a Norse battlefield, not an empty board.
+     Subtle terrain variation adds life without distracting from gameplay.
+
+ CURRENT STATE:
+     Grid background is a dark solid fill per cell (dark stone/earth tone).
+     CELL_SIZE=14px. Grid is 50x30.
+     No terrain variants, no texture overlay.
+
+ PROPOSED APPROACH:
+
+     Static noise texture:
+     - Generate an offscreen canvas once at init with per-cell variation
+     - Each cell gets a slight brightness variant (+/-10% of base color)
+     - Based on a seeded random value per cell (store in a 'noiseMap' array)
+
+     Terrain types (visual only, no gameplay effect):
+     - EMPTY cell: dark earth with occasional grass tuft overlay
+     - PATH cells: slightly lighter, worn-down soil look
+     - WALL cells: cobblestone texture hint (small rects overlaid)
+
+     Grass tufts:
+     - Randomly placed small green strokes (2-3 px lines) on empty cells
+     - Color: '#2a4a18' to '#3a6020' random
+     - Density: 1 tuft per ~8 empty cells
+     - Drawn to offscreen canvas at init, blitted each frame
+
+ IMPLEMENTATION NOTES:
+     - Offscreen canvas initialized once in game.js at startup
+     - When grid changes (wall placed), re-draw only affected cells
+     - Never draw grass on SPAWN, GOAL, WALL, or TOWER cells
+
+ RULES:
+ - Terrain is decorative only — zero gameplay impact
+ - Must not reduce readability of path, towers, or enemies
+ - Do not regenerate each frame — use offscreen cache

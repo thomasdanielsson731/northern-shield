@@ -1,0 +1,36 @@
+PORTAL SYSTEM — Northern Shield
+
+ GOAL:
+     The spawn gate (Time Portal) and goal are the emotional anchors of the map.
+     They should look alive and dramatic — player knows instantly where threat comes from.
+
+ CURRENT STATE:
+     Spawn gate is a purple void portal with rotating runic rings. Already implemented.
+     Goal cell is drawn as a plain colored cell — no special animation.
+     SPAWN = { col: 0, row: 15 }
+     GOAL = { col: COLS-1, row: 15 }
+
+ PROPOSED ENHANCEMENTS:
+
+     Goal Visual:
+     - Draw a glowing crystal or runestone at the goal cell
+     - Pulsing red/amber glow that intensifies as lives drop
+     - Use ctx.shadowBlur + sin() for the pulse animation
+
+     Spawn Portal enhancements:
+     - Flash brighter when an enemy spawns (tie to spawnEnemy() event)
+     - Wave number rune carved into portal frame (draw in center of ring)
+
+     Warning pulse:
+     - Last 3 seconds of break/countdown: portal pulses red (glow intensifies)
+     - Gives player a visual cue to finish placing towers
+
+ IMPLEMENTATION NOTES:
+     - Keep portal animation in the grid draw pass, not HUD
+     - Use a shared 'frameTick' counter for sin() animations (already in game.js)
+     - Always ctx.restore() after shadowBlur to prevent state leak
+
+ RULES:
+ - No changes to Grid class logic — only visual layer
+ - Portal flash is cosmetic only, no gameplay effect
+ - Keep goal and spawn clearly distinguishable by color
