@@ -60,6 +60,8 @@ Stylized Viking dark fantasy. NOT realistic. NOT pixel art.
 
 ## 4. SCALE RULES
 
+> Current live production uses a 0.45 sprite scale multiplier. Export art to these original sheet sizes, then apply the game’s runtime scale to match the live build.
+
 | Asset type          | Per-frame size | Sprite sheet format         | Total sheet size |
 |---------------------|----------------|-----------------------------|-----------------|
 | Tower (directional) | 128 × 128 px   | 4 cols × 4 rows             | 512 × 512 px    |
