@@ -23,7 +23,7 @@ const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 const SPAWN = { col: 0,        row: 11 };
 const GOAL  = { col: COLS - 1, row: 11 };
 
-const WALL_COST = 8;
+const WALL_COST = 12;
 
 const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 62, gap: 4 };
 
@@ -83,10 +83,12 @@ let panelSellBtn    = null;
 let restartBtn      = null;
 let toplistBtn      = null;
 let nextWaveBtn     = null;
+let autoNextBtn     = null;
 let runeForgeBtn    = null;
 let gameSpeed  = 1;
 let speedBtns  = [];   // [{x,y,w,h,speed}, ...]
 let _frameTick = 0;
+let rightPanelScale = 1.0;
 
 let dragItem    = null;  // { id, label, color, cost, mode } while dragging from build bar
 let pendingSell = null;  // { col, row, timer } — tower awaiting sell confirmation
@@ -1837,6 +1839,15 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
+  // Auto-next toggle button (right panel, break/countdown)
+  if (e.button === 0 && autoNextBtn && !gameOver) {
+    if (mouseX >= autoNextBtn.x && mouseX <= autoNextBtn.x + autoNextBtn.w &&
+        mouseY >= autoNextBtn.y && mouseY <= autoNextBtn.y + autoNextBtn.h) {
+      autoNextWave = !autoNextWave;
+      return;
+    }
+  }
+
   // Next-wave button (right panel)
   if (e.button === 0 && nextWaveBtn && !gameOver) {
     if (mouseX >= nextWaveBtn.x && mouseX <= nextWaveBtn.x + nextWaveBtn.w &&
@@ -1966,6 +1977,10 @@ canvas.addEventListener('wheel', e => {
   gridPanY = (outerY - GRID_TOP)  - localY * gridZoom;
   clampGridPan();
 }, { passive: false });
+
+function clampRightPanelScale() {
+  rightPanelScale = Math.max(0.92, Math.min(1.08, rightPanelScale));
+}
 
 // ── update ────────────────────────────────────────────────────────────────────
 
@@ -3346,6 +3361,27 @@ function drawRightPanel() {
     runeForgeBtn = null;
   }
 
+  // ── AUTO NEXT toggle (break/countdown only) ─────────────────────────────────
+  if (!gameOver && waveState !== 'active') {
+    const autoH  = 30;
+    const autoY  = GRID_TOP + fullH - autoH - 10 - 44 - 8;
+    const autoX  = px + 6;
+    const autoW  = pw - 12;
+    const autoFill = autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)';
+    const autoBorder = autoNextWave ? 0.88 : 0.24;
+    drawFantasyPanel(autoX, autoY, autoW, autoH, autoFill, autoBorder, 5);
+    ctx.font        = 'bold 10px monospace';
+    ctx.textAlign   = 'center';
+    ctx.fillStyle   = autoNextWave ? '#8af090' : 'rgba(210,210,240,0.75)';
+    ctx.fillText(autoNextWave ? 'AUTO NEXT: ON' : 'AUTO NEXT: OFF', autoX + autoW / 2, autoY + 17);
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(170,140,80,0.65)';
+    ctx.fillText('[A] toggle', autoX + autoW / 2, autoY + 26);
+    autoNextBtn = { x: autoX, y: autoY, w: autoW, h: autoH };
+  } else {
+    autoNextBtn = null;
+  }
+
   // ── NEXT WAVE ──────────────────────────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
     const btnH = 44;
@@ -3362,7 +3398,7 @@ function drawRightPanel() {
     ctx.font = '11px monospace'; ctx.shadowBlur = 0;
     if (autoNextWave) {
       ctx.fillStyle = '#60ee80';
-      ctx.fillText('AUTO', btnX + btnW / 2, btnY + 32);
+      ctx.fillText('AUTO ENGAGED', btnX + btnW / 2, btnY + 32);
     } else {
       ctx.fillStyle = 'rgba(255,200,180,0.8)';
       ctx.fillText('[Space]', btnX + btnW / 2, btnY + 32);

@@ -2,6 +2,12 @@
 
 HTML5 Canvas tower defense game with a Norse dark fantasy theme.
 
+## Recent updates
+
+- Added an Auto Next toggle to automatically advance from break/countdown to the next wave.
+- Updated the tower economy with adjusted prices for improved pacing and decision clarity.
+- Reinforced right-panel feedback for auto mode and wave readiness state.
+
 ## Tech Stack
 
 - JavaScript + HTML5 Canvas

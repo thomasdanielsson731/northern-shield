@@ -218,6 +218,8 @@ Clash of Clans-inspirerad fantasy-estetik med nordiskt/vikinga-tema:
 - Guldmynt flyger i parabolbåge från stupade fiender till skattkammaren
 - Nordiska fiendetyper: Draugr, Myling, Jötunn, Mara — med sprite-assets
 - Rund tidsportal i lila/void som spawn-punkt
+- Auto Next: nytt snabbvägsflöde för spelare som vill förenkla mellanvågsskiften.
+- Tornekonomi har finjusterats för tydligare tidiga val och bättre pacing.
 - Trelleborg-fästning som mål med skadat rödglöd vid låg hälsa
 
 Tornsprites skalade 35–50% större med färgbaserad glödeffekt per klass:
