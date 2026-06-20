@@ -15,6 +15,11 @@ npx vite              # start dev server
 npx vitest run        # run all tests once
 npx vitest            # run tests in watch mode
 npx vitest run tests/tower.unit.test.js   # run a single test file
+
+## Recent implementation notes
+
+- Added an Auto Next toggle UI for faster wave progression.
+- Adjusted tower costs for better midgame pacing and defensive decision-making.
 ```
 
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
