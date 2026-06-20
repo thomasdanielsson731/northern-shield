@@ -170,6 +170,36 @@ export class Enemy {
       return;
     }
 
+    // Boss ground aura — pulsing crimson ring that scales with threat
+    if (this.isBoss) {
+      const bT     = performance.now() * 0.001;
+      const bPulse = 0.5 + Math.sin(bT * 1.8) * 0.5;
+      const auraR  = this.radius * 3.8;
+      const ag = ctx.createRadialGradient(
+        this.x, this.y + this.radius * 0.4, 0,
+        this.x, this.y + this.radius * 0.4, auraR
+      );
+      ag.addColorStop(0,    `rgba(180,20,20,${0.40 + bPulse * 0.20})`);
+      ag.addColorStop(0.45, `rgba(90,10,10,${0.18 + bPulse * 0.08})`);
+      ag.addColorStop(1,    'rgba(0,0,0,0)');
+      ctx.save();
+      ctx.fillStyle = ag;
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y + this.radius * 0.3, auraR, auraR * 0.52, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const rot = bT * 0.5;
+      ctx.translate(this.x, this.y);
+      ctx.rotate(rot);
+      ctx.strokeStyle = `rgba(200,30,15,${0.22 + bPulse * 0.14})`;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([4, 7]);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 2.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
     // Myling flight shadow — wider ellipse + dashed drop line for clear altitude read
     if (this.type === ENEMY_TYPES.MYLING) {
       const shadowY = this.y + this.radius + 4;
@@ -341,7 +371,7 @@ export class Enemy {
     if (!sp || !sp.img.complete || sp.img.naturalWidth === 0) return false;
 
     const frame = Math.floor(performance.now() / 180) % 2;  // cycle IDLE/WALK frames only
-    const dh    = this.radius * 6.0;
+    const dh    = this.radius * (this.isBoss ? 7.8 : 6.0);
     const dw    = dh * sp.frameW / sp.frameH;
 
     // Ground shadow

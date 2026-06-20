@@ -58,7 +58,7 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.VALKYRIE]: {
     label:        'Valkyrie',
     key:          '3',
-    color:        '#88aaee',
+    color:        '#c8a030',
     rangeColor:   'rgba(100,140,220,0.28)',
     cost:         35,
     range:        110,
@@ -72,7 +72,7 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.MILITARY]: {
     label:        'Archer',
     key:          '4',
-    color:        '#6688aa',
+    color:        '#3a8830',
     rangeColor:   'rgba(80,120,170,0.26)',
     cost:         35,
     range:        80,
@@ -363,18 +363,16 @@ export class Tower {
     const fpW = this.footprint.w * 14;
     const fpH = this.footprint.h * 14;
     ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.22;
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.32;
     ctx.fillStyle   = def.color;
     ctx.beginPath();
     ctx.roundRect(this.x - fpW / 2, this.y - fpH / 2, fpW, fpH, 3);
     ctx.fill();
-    // Footprint border for multi-cell towers
-    if (this.footprint.w > 1 || this.footprint.h > 1) {
-      ctx.globalAlpha = 0.38;
-      ctx.strokeStyle = def.color;
-      ctx.lineWidth   = 1;
-      ctx.stroke();
-    }
+    // Inner highlight rim
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.05 : 0.22;
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth   = this.footprint.w > 1 || this.footprint.h > 1 ? 1.5 : 1;
+    ctx.stroke();
     ctx.restore();
 
     // Ground shadow — soft ellipse beneath the sprite; gradient cached by shadowR
@@ -400,7 +398,7 @@ export class Tower {
       const synergyColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0' };
       const sc = synergyColors[this._synergy] ?? '#ffffff';
       ctx.save();
-      ctx.strokeStyle = sc + '99';
+      ctx.strokeStyle = sc + '55';
       ctx.lineWidth   = 1;
       ctx.setLineDash([2, 3]);
       ctx.lineDashOffset = -(performance.now() * 0.012) % 5;

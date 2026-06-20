@@ -175,19 +175,19 @@ export class Grid {
 
     const sp = SPRITES['portal'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
-      const dw = cs * 4;
+      const dw = cs * 6.5;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
-      ctx.shadowColor = `rgba(140,60,255,${0.55 + pulse * 0.45})`;
-      ctx.shadowBlur  = 16 * pulse;
+      ctx.shadowColor = `rgba(140,60,255,${0.65 + pulse * 0.35})`;
+      ctx.shadowBlur  = 22 * pulse;
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - dw / 2, cy - dh / 2, dw, dh);
       ctx.restore();
       // Pulsing purple void at center
       ctx.save();
-      ctx.globalAlpha = 0.25 * pulse;
+      ctx.globalAlpha = 0.30 * pulse;
       ctx.fillStyle   = '#a030ff';
       ctx.beginPath();
-      ctx.arc(cx, cy, cs * 0.8, 0, Math.PI * 2);
+      ctx.arc(cx, cy, cs * 0.9, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     } else {
@@ -249,6 +249,54 @@ export class Grid {
       ctx.fillStyle   = `rgba(245,225,255,${0.75 + pulse * 0.25})`;
       ctx.beginPath();
       ctx.arc(cx, cy, 1.8 + pulse * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ── Rotating rune ring — always drawn over sprite or fallback ─────────────
+    {
+      const rot1 =  time * 1.1;
+      const rot2 = -time * 0.7;
+      const ringR = cs * 2.6;
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      ctx.rotate(rot1);
+      ctx.strokeStyle = `rgba(160,80,255,${0.28 + pulse * 0.22})`;
+      ctx.lineWidth   = 0.8;
+      ctx.setLineDash([2, 5]);
+      ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.save();
+        ctx.translate(Math.cos(a) * ringR, Math.sin(a) * ringR);
+        ctx.fillStyle = `rgba(200,140,255,${0.55 + pulse * 0.35})`;
+        ctx.beginPath(); ctx.arc(0, 0, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.rotate(rot2 - rot1);
+      ctx.strokeStyle = `rgba(100,160,255,${0.18 + pulse * 0.14})`;
+      ctx.lineWidth   = 0.6;
+      ctx.setLineDash([1, 4]);
+      ctx.beginPath(); ctx.arc(0, 0, ringR * 0.72, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // ── Smoke wisps drifting up from portal base ───────────────────────────────
+    for (let i = 0; i < 4; i++) {
+      const si = i / 4;
+      const sw = cs * 0.7 * Math.sin(time * 1.4 + i * 2.1);
+      const sh = cy + cs * (0.4 + Math.sin(time * 2.1 + i * 1.8) * 0.15);
+      const sr = 2.2 + Math.sin(time + i) * 0.8;
+      const sa = (0.10 + Math.sin(time * 1.8 + i * 0.7) * 0.04) * (1 - si * 0.25);
+      ctx.save();
+      ctx.globalAlpha = sa;
+      ctx.fillStyle   = '#c880ff';
+      ctx.beginPath();
+      ctx.arc(cx + sw, sh, sr, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -435,6 +483,39 @@ export class Grid {
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.restore();
+    }
+
+    // ── Fortress torches — two flickering flames flanking the fortress ─────────
+    {
+      const flickerL = 0.55 + Math.sin(time * 9.1) * 0.25 + Math.sin(time * 13.7) * 0.12;
+      const flickerR = 0.55 + Math.sin(time * 8.3 + 1.4) * 0.25 + Math.sin(time * 12.1 + 0.9) * 0.12;
+      const torchPositions = [
+        { tx: cx - cs * 2.6, ty: cy - cs * 0.5, flicker: flickerL },
+        { tx: cx + cs * 2.6, ty: cy - cs * 0.5, flicker: flickerR },
+      ];
+      for (const { tx, ty, flicker } of torchPositions) {
+        ctx.save();
+        // Torch pole
+        ctx.fillStyle = '#5a3812';
+        ctx.fillRect(tx - 1, ty, 2, cs * 1.0);
+        // Torch head
+        ctx.fillStyle = '#8a5820';
+        ctx.fillRect(tx - 2.5, ty - 3, 5, 5);
+        // Flame glow
+        ctx.shadowColor = `rgba(255,150,40,${flicker * 0.75})`;
+        ctx.shadowBlur  = 8 * flicker;
+        // Flame body
+        const fGrad = ctx.createRadialGradient(tx, ty - 2, 0, tx, ty - 2, 5);
+        fGrad.addColorStop(0,   `rgba(255,240,150,${flicker * 0.95})`);
+        fGrad.addColorStop(0.4, `rgba(255,140,30,${flicker * 0.75})`);
+        fGrad.addColorStop(1,   'rgba(200,60,10,0)');
+        ctx.fillStyle = fGrad;
+        ctx.beginPath();
+        ctx.ellipse(tx, ty - 3, 3 * flicker, 5 * flicker, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
     }
   }
 

@@ -2614,9 +2614,10 @@ function drawRightPanel() {
 
   const lx    = px + 10;
   const dotX  = px + 8;
-  let   ly    = GRID_TOP + 14;
   const rEdge = px + pw - 8;
   const barW  = pw - 20;
+  // drawWaveAnnouncement draws a 40px banner at GRID_TOP+2; start below it
+  let   ly    = GRID_TOP + 50;
 
   ctx.save();
 
@@ -2644,32 +2645,18 @@ function drawRightPanel() {
   const progress     = displayWaveR / MAX_WAVES;
   const waveBarColor = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
 
-  ctx.font      = 'bold 8px monospace';
-  ctx.fillStyle = 'rgba(160,120,50,0.50)';
-  ctx.textAlign = 'left';
-  ctx.fillText('WAVE', lx, ly);
-  ctx.font      = 'bold 15px monospace';
-  ctx.fillStyle = '#f0d060';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${displayWaveR}`, rEdge - 26, ly);
-  ctx.font      = '9px monospace';
-  ctx.fillStyle = 'rgba(160,130,55,0.50)';
-  ctx.fillText(`/ ${MAX_WAVES}`, rEdge, ly);
-  ctx.textAlign = 'left';
-  ly += 8;
-
   ctx.fillStyle = 'rgba(30,15,4,0.9)';
-  ctx.beginPath(); ctx.roundRect(lx, ly, barW, 10, 4); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(lx, ly, barW, 8, 3); ctx.fill();
   if (progress > 0) {
     ctx.fillStyle   = waveBarColor;
-    ctx.shadowColor = waveBarColor; ctx.shadowBlur = 4;
-    ctx.beginPath(); ctx.roundRect(lx, ly, Math.max(2, barW * progress), 10, 4); ctx.fill();
+    ctx.shadowColor = waveBarColor; ctx.shadowBlur = 3;
+    ctx.beginPath(); ctx.roundRect(lx, ly, Math.max(2, barW * progress), 8, 3); ctx.fill();
     ctx.shadowBlur  = 0;
   }
-  ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.textAlign = 'center';
-  ctx.fillText(`${Math.round(progress * 100)}%`, lx + barW / 2, ly + 7.5);
+  ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.textAlign = 'right';
+  ctx.fillText(`${Math.round(progress * 100)}%  / ${MAX_WAVES}`, rEdge, ly + 6.5);
   ctx.textAlign = 'left';
-  ly += 16;
+  ly += 14;
   divider();
 
   if (waveState === 'active') {
