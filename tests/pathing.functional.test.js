@@ -13,7 +13,8 @@ describe('Pathing (functional)', () => {
 
     const initialPath = grid.findPath(spawn.col, spawn.row, goal.col, goal.row);
     const initialPixelPath = initialPath.map(({ col, row }) => grid.cellCenter(col, row));
-    const enemy = new Enemy(initialPixelPath, 2);
+    const enemy = new Enemy(initialPixelPath);
+    enemy.baseSpeed = 2;
 
     for (let i = 0; i < 12; i++) enemy.update();
 
