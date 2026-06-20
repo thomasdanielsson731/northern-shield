@@ -264,7 +264,7 @@ function drawAchievementToasts() {
   const alpha = toast.timer > 30 ? Math.min(1, (200 - toast.timer) / 20) : toast.timer / 30;
   const tw = 200, th = 44;
   const tx = BASE_W / 2 - tw / 2;
-  const ty = GRID_TOP + 55;
+  const ty = BASE_H - 80;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle   = 'rgba(4,12,4,0.97)';
@@ -504,11 +504,11 @@ const MAX_WAVES          = 100;
 const BOSS_WAVES = new Set([10, 25, 50, 75, 100]);
 
 const BOSS_CONFIGS = {
-  10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 1200,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true  },
-  25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false },
-  50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 9500,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false },
-  75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 32000, radius: 26, speedMult: 1.35, reward: 500, phase75: true,  phase50SlowImmune: true  },
-  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: true  },
+  10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 1200,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true,  hint: 'Spawns Draugr • Becomes slow-immune at 50%' },
+  25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false, hint: 'EMP disables towers at 50%' },
+  50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 9500,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false, hint: 'Summons Mylings • Full EMP blackout at 50%' },
+  75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 32000, radius: 26, speedMult: 1.35, reward: 500, phase75: true,  phase50SlowImmune: true,  hint: 'Enrages at 75% • Spawns Jötunn at 50%' },
+  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: true,  hint: 'Summons Jötunn • Fire surge at 50%' },
 };
 
 let waveNumber      = 0;
@@ -561,6 +561,7 @@ let _vigGradCache   = null, _vigCacheW  = 0, _vigCacheH = 0;
 let pathBlockFlash = null;
 
 function spawnParticles(x, y, color, count = 10) {
+  if (particles.length >= 300) return;
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
     const speed = 1.2 + Math.random() * 2.8;
@@ -577,6 +578,7 @@ function spawnParticles(x, y, color, count = 10) {
 }
 
 function spawnGoldCoins(screenX, screenY, reward, overrideSpeed) {
+  if (goldCoins.length >= 20) goldCoins[0].t = 1;
   const n = reward >= 20 ? 3 : reward >= 8 ? 2 : 1;
   for (let i = 0; i < n; i++) {
     goldCoins.push({
@@ -788,7 +790,7 @@ function startNextWave() {
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
 
   sfxWaveStart();
-  spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#c89040', 12);
+  spawnParticles(GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2, GRID_TOP + SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#c89040', 12);
 }
 
 function updateWave() {
@@ -833,8 +835,8 @@ function updateWave() {
       }
     }
   } else if (enemies.length === 0) {
-    // Wave-clear bonus — capped at 110g for wave 30+ to prevent economy inflation
-    const rawBonus     = Math.min(20 + waveNumber * 3, 110);
+    // Wave-clear bonus — kicker at wave 40+ to offset upgrade pressure
+    const rawBonus     = 20 + waveNumber * 3 + (waveNumber >= 40 ? (waveNumber - 40) * 2 : 0);
     const flawlessBonus = waveLeak ? 0 : Math.min(4 + Math.floor(waveNumber * 0.8), 30);
     const clearBonus   = rawBonus + flawlessBonus;
     gold       += clearBonus;
@@ -1294,6 +1296,9 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   const newEnemy = new Enemy(path, type, hpScale);
   newEnemy.baseSpeed *= waveSpeedScale;
   newEnemy.speed     *= waveSpeedScale;
+  if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss) {
+    newEnemy.reward += Math.min(40, Math.floor(waveNumber / 10) * 5);
+  }
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
   enemies.push(newEnemy);
@@ -1366,8 +1371,11 @@ function tryPlaceAt(col, row, mode, towerType) {
     for (let dr = 0; dr < fp.h; dr++) {
       const c = col + dc, r = row + dr;
       const fc = grid.getCell(c, r);
-      if (fc === null || fc !== CELL.EMPTY) return false;
-      if (fc === CELL.SPAWN || fc === CELL.GOAL) return false;
+      if (fc === null || fc === CELL.SPAWN || fc === CELL.GOAL) return false;
+      if (fc !== CELL.EMPTY) {
+        pathBlockFlash = { col, row, timer: 70, type: 'occupied' };
+        return false;
+      }
       if (hasEnemyInCell(c, r)) return false;
     }
   }
@@ -1441,7 +1449,7 @@ function handleRightClickAt(mouseX, mouseY) {
     const wallKey = `w_${col}_${row}`;
     if (pendingSell && pendingSell.key === wallKey) {
       wallFrostDirty = true;
-      gold += Math.floor(WALL_COST * 0.5);
+      gold += Math.floor(WALL_COST * 0.75);
       grid.setCell(col, row, CELL.EMPTY);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
       rerouteActiveEnemies();
@@ -1470,6 +1478,13 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
+
+  // Map select keyboard navigation
+  if (gamePhase === 'mapSelect') {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); selectedMapIdx = (selectedMapIdx + PRESET_MAPS.length - 1) % PRESET_MAPS.length; return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); selectedMapIdx = (selectedMapIdx + 1) % PRESET_MAPS.length; return; }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); initGame(PRESET_MAPS[selectedMapIdx]); return; }
+  }
 
   // Pause works even in game over state, mute always
   if (key === 'p' && !gameOver && gamePhase === 'playing') {
@@ -1907,6 +1922,9 @@ function update() {
       if (types === 'military+valkyrie') { a._synergy = b._synergy = 'eagleEye'; }
       else if (types === 'berserk+catapult') { a._synergy = b._synergy = 'siegeFury'; }
       else if (types === 'blondie+isjatten') { a._synergy = b._synergy = 'winterGrip'; }
+      else if (types === 'berserk+valkyrie') { a._synergy = b._synergy = 'shieldWall'; }
+      else if (types === 'drakship+hydda')   { a._synergy = b._synergy = 'tidecall'; }
+      else if (types === 'isjatten+piltorn') { a._synergy = b._synergy = 'runeChain'; }
     }
   }
 
@@ -1915,10 +1933,15 @@ function update() {
     // Apply synergy stat boosts temporarily around update()
     const _origRange  = tower.range;
     const _origSplash = tower.splashDamage;
-    if (tower._synergy === 'eagleEye') tower.range = Math.round(tower.range * 1.15);
+    if (tower._synergy === 'eagleEye')  tower.range = Math.round(tower.range * 1.15);
     if (tower._synergy === 'siegeFury' && tower.splashDamage)
       tower.splashDamage = Math.round(tower.splashDamage * 1.20);
-    tower._synergyDmgBoost = (tower._synergy === 'winterGrip') ? 1.15 : 1;
+    if (tower._synergy === 'tidecall' && tower.splashDamage)
+      tower.splashDamage = Math.round(tower.splashDamage * 1.15);
+    tower._synergyDmgBoost = tower._synergy === 'winterGrip' ? 1.15
+                           : tower._synergy === 'shieldWall' ? 1.10
+                           : tower._synergy === 'runeChain'  ? 1.15
+                           : 1;
 
     // Tag new bullets with this tower as source (for kill tracking)
     const _prevBulletLen = bullets.length;
@@ -1989,7 +2012,7 @@ function update() {
       const killY    = (b.canPierce && b.alive) ? b.lastKillY : (b.target?.y ?? b.y);
       const killBoss = (b.canPierce && b.alive) ? b.lastKillIsBoss : (b.target?.isBoss ?? false);
       sfxDie(killBoss);
-      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : '#f0e040' });
+      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44' });
       if (killBoss) {
         if (b.target && b.canPierce && b.alive) { /* boss killed mid-pierce — handled at deathTimer */ }
         else if (b.target?.isBoss) onBossKilled(b.target);
@@ -2034,7 +2057,7 @@ function update() {
               if (b.source) b.source.killCount++;
               if (splashKills === 1) sfxDie(enemy.isBoss);  // only play once per splash cluster
               if (b.source) b.source.damageDealt += b.splashDamage;
-              dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: '#ff9040' });
+              dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: _splashVal >= 20 ? '#ff9040' : '#ffcc44' });
               if (enemy.isBoss) {
                 onBossKilled(enemy);
               } else {
@@ -2054,8 +2077,8 @@ function update() {
       if (b.slowDuration > 0 && b.target?.slowImmune) {
         dmgFloaters.push({ x: b.target.x, y: b.target.y - 16, val: 'IMMUNE', life: 44, maxLife: 44, color: '#ffcc00', suffix: '' });
       }
-      // Enemy stagger pushback on heavy hits (Catapult, Berserker, Drakship)
-      if (b.damage > 40 && b.target?.alive) {
+      // Enemy stagger pushback on heavy hits (Catapult, Berserker, Drakship, Valkyrie)
+      if (b.damage > 40 && b.target != null) {
         const tgt = b.target;
         const nxt = tgt.path?.[tgt.pathIndex + 1];
         if (nxt) {
@@ -2065,6 +2088,9 @@ function update() {
             tgt.staggerVX    = -(ddx / dlen) * 2;
             tgt.staggerVY    = -(ddy / dlen) * 2;
             tgt.staggerTimer = 4;
+            // Immediate push so killing blows also show recoil during death animation
+            tgt.x += tgt.staggerVX;
+            tgt.y += tgt.staggerVY;
           }
         }
       }
@@ -2074,7 +2100,7 @@ function update() {
                          : b.shape === 'arrow' ? '#e8c870'
                          : b.shape === 'stun'  ? '#ffe840'
                          : '#ffd86b';
-        impactFlashes.push({ x: b.x, y: b.y, maxR: Math.max(7, b.damage * 0.2), life: 1, color: flashColor });
+        impactFlashes.push({ x: b.x, y: b.y, maxR: Math.max(10, b.damage * 0.28), life: 1, color: flashColor });
       }
       bullets.splice(i, 1);
     }
@@ -2187,10 +2213,13 @@ function update() {
   if (pathChevronsTimer > 0) pathChevronsTimer--;
   if (chainKillDisplay) { chainKillDisplay.life--; if (chainKillDisplay.life <= 0) chainKillDisplay = null; }
 
-  // Advance floating gold numbers
+  // Advance floating gold numbers (swap-and-pop for O(1) removal)
   for (let i = dmgFloaters.length - 1; i >= 0; i--) {
     dmgFloaters[i].life--;
-    if (dmgFloaters[i].life <= 0) dmgFloaters.splice(i, 1);
+    if (dmgFloaters[i].life <= 0) {
+      dmgFloaters[i] = dmgFloaters[dmgFloaters.length - 1];
+      dmgFloaters.length--;
+    }
   }
 
   // Update splash rings
@@ -3580,8 +3609,8 @@ function drawTowerPanel(tower) {
   ctx.fillText(`☠ ${tower.killCount ?? 0} kills`, px + 10, killRow);
   ctx.textAlign = 'right';
   if (tower._synergy) {
-    const synLabels = { eagleEye: 'Eagle Eye +15%rng', siegeFury: 'Siege Fury +20%spl', winterGrip: "Winter's Grip +15%dmg" };
-    const synColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0' };
+    const synLabels = { eagleEye: 'Eagle Eye +15%rng', siegeFury: 'Siege Fury +20%spl', winterGrip: "Winter's Grip +15%dmg", shieldWall: 'Shield Wall +10%dmg', tidecall: 'Tidecall +15%spl', runeChain: 'Rune Chain +15%dmg' };
+    const synColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0', shieldWall: '#e0a040', tidecall: '#40b8e0', runeChain: '#c080f0' };
     ctx.fillStyle = synColors[tower._synergy];
     ctx.fillText(`⬡ ${synLabels[tower._synergy]}`, px + panelW - 10, killRow);
   } else if ((tower.damageDealt ?? 0) > 0) {
@@ -3796,8 +3825,11 @@ function drawBossWarning() {
   if (bossWarnAlpha <= 0.01 || gameOver) return;
   const { width } = getViewSize();
   const cx      = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const bossCfg  = BOSS_CONFIGS[waveNumber + 1];
+  const bossLabel = bossCfg ? bossCfg.name : 'BOSS';
   const bannerY = GRID_TOP + 36;
-  const bannerW = 250, bannerH = 34;
+  const bannerH = bossCfg?.hint ? 46 : 34;
+  const bannerW = 280;
 
   ctx.save();
   ctx.globalAlpha = bossWarnAlpha;
@@ -3809,19 +3841,22 @@ function drawBossWarning() {
   ctx.lineWidth   = 1.2;
   ctx.stroke();
 
-  const bossCfg  = BOSS_CONFIGS[waveNumber + 1];
-  const bossLabel = bossCfg ? bossCfg.name : 'BOSS';
-
   ctx.textAlign   = 'center';
   ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = '#f0e8d0';
   ctx.shadowColor = 'rgba(255,50,20,0.95)';
   ctx.shadowBlur  = 14;
-  ctx.fillText(`⚠  ${bossLabel}  ⚠`, cx, bannerY + 14);
+  ctx.fillText(`⚠  ${bossLabel}  ⚠`, cx, bannerY + 13);
   ctx.font        = '11px monospace';
   ctx.fillStyle   = 'rgba(255,180,140,0.85)';
   ctx.shadowBlur  = 6;
-  ctx.fillText('BOSS APPROACHING', cx, bannerY + 27);
+  ctx.fillText('BOSS APPROACHING', cx, bannerY + 26);
+  if (bossCfg?.hint) {
+    ctx.font      = '9px monospace';
+    ctx.fillStyle = 'rgba(220,140,80,0.75)';
+    ctx.shadowBlur = 0;
+    ctx.fillText(bossCfg.hint, cx, bannerY + 39);
+  }
   ctx.shadowBlur  = 0;
   ctx.restore();
 }
@@ -3955,13 +3990,13 @@ function drawBossHpBar() {
   }
 
   // Phase threshold markers
-  ctx.strokeStyle = 'rgba(240,190,30,0.70)';
-  ctx.lineWidth   = 1.5;
+  ctx.strokeStyle = 'rgba(240,190,30,0.90)';
+  ctx.lineWidth   = 2;
   ctx.beginPath(); ctx.moveTo(barX + barW * 0.5, barY - 2); ctx.lineTo(barX + barW * 0.5, barY + barH + 2); ctx.stroke();
   if (cfg?.phase75) {
-    ctx.strokeStyle = 'rgba(200,140,20,0.50)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY); ctx.lineTo(barX + barW * 0.75, barY + barH); ctx.stroke();
+    ctx.strokeStyle = 'rgba(200,140,20,0.70)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY - 1); ctx.lineTo(barX + barW * 0.75, barY + barH + 1); ctx.stroke();
   }
 
   // Boss name — blinks rapidly when ENRAGED (≤50% HP)
@@ -4620,7 +4655,7 @@ function draw() {
 
   // Active synergy glow rings
   {
-    const synColors = { eagleEye: 'rgba(120,160,240,0.32)', siegeFury: 'rgba(230,110,40,0.32)', winterGrip: 'rgba(80,200,240,0.32)' };
+    const synColors = { eagleEye: 'rgba(120,160,240,0.32)', siegeFury: 'rgba(230,110,40,0.32)', winterGrip: 'rgba(80,200,240,0.32)', shieldWall: 'rgba(220,160,40,0.32)', tidecall: 'rgba(40,180,220,0.32)', runeChain: 'rgba(180,100,240,0.32)' };
     const synPulse  = 0.5 + Math.sin(performance.now() * 0.004) * 0.5;
     ctx.save();
     for (const t of towers) {
@@ -4775,14 +4810,14 @@ function draw() {
   drawParticles();
   drawImpactFlashes();
 
-  // ── Mara EMP shockwave rings ────────────────────────────────────────────────
+  // ── Mara EMP shockwave rings (amber-red: danger, not frost) ────────────────
   for (const er of empRings) {
     const alpha = (er.life / er.maxLife) * 0.7;
     ctx.save();
-    ctx.strokeStyle = `rgba(130,60,220,${alpha})`;
+    ctx.strokeStyle = `rgba(255,120,20,${alpha})`;
     ctx.lineWidth   = 1.2;
     ctx.beginPath(); ctx.arc(er.x, er.y, er.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = `rgba(180,100,255,${alpha * 0.55})`;
+    ctx.strokeStyle = `rgba(255,180,60,${alpha * 0.55})`;
     ctx.lineWidth   = 3;
     ctx.beginPath(); ctx.arc(er.x, er.y, er.r * 0.7, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
@@ -4824,17 +4859,18 @@ function draw() {
     ctx.restore();
   }
 
-  // ── Isjätte nova rings ───────────────────────────────────────────────────────
+  // ── Isjätte nova rings (lineWidth thins as ring expands) ───────────────────
   for (const nr of novaRings) {
+    const frac  = 1 - nr.life / nr.maxLife;
     const alpha = (nr.life / nr.maxLife) * 0.80;
     ctx.save();
     ctx.shadowColor = `rgba(140,220,255,${alpha})`;
     ctx.shadowBlur  = 6;
     ctx.strokeStyle = `rgba(160,230,255,${alpha})`;
-    ctx.lineWidth   = 2;
+    ctx.lineWidth   = Math.max(0.5, 2.5 * (1 - frac));
     ctx.beginPath(); ctx.arc(nr.x, nr.y, nr.r, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = `rgba(200,240,255,${alpha * 0.35})`;
-    ctx.lineWidth   = 5;
+    ctx.lineWidth   = Math.max(0.5, 5 * (1 - frac));
     ctx.beginPath(); ctx.arc(nr.x, nr.y, nr.r * 0.6, 0, Math.PI * 2); ctx.stroke();
     ctx.shadowBlur  = 0;
     ctx.restore();
@@ -5089,26 +5125,27 @@ function drawPathBlockFlash() {
   if (!pathBlockFlash) return;
   pathBlockFlash.timer--;
   if (pathBlockFlash.timer <= 0) { pathBlockFlash = null; return; }
-  const { col, row, timer } = pathBlockFlash;
+  const { col, row, timer, type } = pathBlockFlash;
+  const occupied = type === 'occupied';
   const alpha = Math.min(1, timer / 20) * (timer % 8 < 4 ? 1 : 0.4); // strobe flash
   const vx = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
   const vy = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
   const vs = CELL_SIZE * gridZoom;
   ctx.save();
   ctx.globalAlpha  = alpha * 0.55;
-  ctx.fillStyle    = '#e84040';
+  ctx.fillStyle    = occupied ? '#e8b040' : '#e84040';
   ctx.fillRect(vx, vy, vs, vs);
   ctx.globalAlpha  = alpha * 0.9;
-  ctx.strokeStyle  = '#ff4040';
+  ctx.strokeStyle  = occupied ? '#ffd040' : '#ff4040';
   ctx.lineWidth    = 2;
   ctx.strokeRect(vx + 1, vy + 1, vs - 2, vs - 2);
   ctx.globalAlpha  = Math.min(1, timer / 20) * 0.92;
   ctx.font         = 'bold 9px monospace';
-  ctx.fillStyle    = '#ff8080';
+  ctx.fillStyle    = occupied ? '#ffe080' : '#ff8080';
   ctx.textAlign    = 'center';
-  ctx.shadowColor  = 'rgba(220,0,0,0.8)';
+  ctx.shadowColor  = occupied ? 'rgba(220,160,0,0.8)' : 'rgba(220,0,0,0.8)';
   ctx.shadowBlur   = 8;
-  ctx.fillText('PATH BLOCKED', vx + vs / 2, vy - 4);
+  ctx.fillText(occupied ? 'OCCUPIED' : 'PATH BLOCKED', vx + vs / 2, vy - 4);
   ctx.shadowBlur   = 0;
   ctx.restore();
 }

@@ -63,20 +63,22 @@ export class Bullet {
         reward = this.target.reward ?? 6;
       }
 
-      // Pierce: find next target within 80px and continue
+      // Pierce: find next target within 80px, cap at 4 total hits
       if (this.canPierce && enemies) {
         if (!this.pierced) this.pierced = new Set();
         this.pierced.add(this.target);
-        let nextTarget = null, bestDist = 80;
-        for (const e of enemies) {
-          if (!e.alive || e.reached || this.pierced.has(e)) continue;
-          const ex = e.x - this.x, ey = e.y - this.y;
-          const ed = Math.sqrt(ex * ex + ey * ey);
-          if (ed < bestDist) { bestDist = ed; nextTarget = e; }
-        }
-        if (nextTarget) {
-          this.target = nextTarget;
-          return reward;   // stay alive, pierce continues
+        if (this.pierced.size < 4) {
+          let nextTarget = null, bestDist = 80;
+          for (const e of enemies) {
+            if (!e.alive || e.reached || this.pierced.has(e)) continue;
+            const ex = e.x - this.x, ey = e.y - this.y;
+            const ed = Math.sqrt(ex * ex + ey * ey);
+            if (ed < bestDist) { bestDist = ed; nextTarget = e; }
+          }
+          if (nextTarget) {
+            this.target = nextTarget;
+            return reward;   // stay alive, pierce continues
+          }
         }
       }
 

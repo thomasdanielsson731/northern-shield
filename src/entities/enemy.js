@@ -170,15 +170,25 @@ export class Enemy {
       return;
     }
 
-    // Myling flight shadow — offset ellipse below sprite shows it is airborne
+    // Myling flight shadow — wider ellipse + dashed drop line for clear altitude read
     if (this.type === ENEMY_TYPES.MYLING) {
-      const shadowY = this.y + this.radius + 2;
+      const shadowY = this.y + this.radius + 4;
       ctx.save();
       ctx.globalAlpha = 0.35;
       ctx.fillStyle   = 'rgba(0,0,0,0.7)';
       ctx.beginPath();
-      ctx.ellipse(this.x, shadowY, this.radius * 0.9, this.radius * 0.38, 0, 0, Math.PI * 2);
+      ctx.ellipse(this.x, shadowY, this.radius * 1.1, this.radius * 0.45, 0, 0, Math.PI * 2);
       ctx.fill();
+      // Dashed drop-line from feet to shadow
+      ctx.globalAlpha = 0.40;
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y + this.radius);
+      ctx.lineTo(this.x, shadowY - this.radius * 0.45);
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
     }
 
@@ -301,6 +311,21 @@ export class Enemy {
       ctx.fillStyle   = 'rgba(255,200,60,0.85)';
       ctx.shadowColor = '#ffcc00';
       ctx.shadowBlur  = 5;
+      ctx.beginPath();
+      ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
+      ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // Elite indicator — amber diamond above HP bar for high-HP enemies
+    if (this.isElite && !this.isBoss) {
+      ctx.save();
+      const ix = this.x + this.radius + 4, iy = this.y - this.radius - 6;
+      const s  = 3;
+      ctx.fillStyle   = 'rgba(230,150,30,0.80)';
+      ctx.shadowColor = '#e89020';
+      ctx.shadowBlur  = 4;
       ctx.beginPath();
       ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
       ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
@@ -833,21 +858,26 @@ export class Enemy {
       ctx.fillText(this.bossName ?? 'BOSS', this.x, barY - 3);
       ctx.shadowBlur = 0;
       ctx.restore();
-    } else if (pct < 1.0) {
+    } else {
+      // Tray always visible — faint at full HP so first hit depletes a pre-existing resource
+      ctx.globalAlpha = pct < 1.0 ? 1 : 0.30;
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = pct > 0.50 ? '#60c840' : pct > 0.25 ? '#e8c040' : '#e84040';
-      ctx.fillRect(barX, barY, barW * pct, barH);
-      // Colorblind-safe: tick marks at 25 / 50 / 75 %
-      ctx.strokeStyle = 'rgba(0,0,0,0.50)';
-      ctx.lineWidth   = 0.8;
-      for (const t of [0.25, 0.5, 0.75]) {
-        const tx = barX + barW * t;
-        ctx.beginPath(); ctx.moveTo(tx, barY); ctx.lineTo(tx, barY + barH); ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (pct < 1.0) {
+        ctx.fillStyle = pct > 0.50 ? '#60c840' : pct > 0.25 ? '#e8c040' : '#e84040';
+        ctx.fillRect(barX, barY, barW * pct, barH);
+        // Colorblind-safe: tick marks at 25 / 50 / 75 %
+        ctx.strokeStyle = 'rgba(0,0,0,0.50)';
+        ctx.lineWidth   = 0.8;
+        for (const t of [0.25, 0.5, 0.75]) {
+          const tx = barX + barW * t;
+          ctx.beginPath(); ctx.moveTo(tx, barY); ctx.lineTo(tx, barY + barH); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(200,160,40,0.32)';
+        ctx.lineWidth   = 0.5;
+        ctx.strokeRect(barX, barY, barW, barH);
       }
-      ctx.strokeStyle = 'rgba(200,160,40,0.32)';
-      ctx.lineWidth   = 0.5;
-      ctx.strokeRect(barX, barY, barW, barH);
     }
   }
 }

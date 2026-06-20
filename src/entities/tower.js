@@ -135,7 +135,7 @@ export const TOWER_DEFS = {
     rangeColor:   'rgba(40,160,80,0.22)',
     cost:         50,
     range:        0,
-    fireRate:     180,
+    fireRate:     120,
     damage:       0,
     radius:       7,
     bulletSpeed:  0,
@@ -147,8 +147,8 @@ export const TOWER_DEFS = {
     color:        '#60b8f0',
     rangeColor:   'rgba(80,170,240,0.22)',
     cost:         70,
-    range:        65,
-    fireRate:     120,
+    range:        80,
+    fireRate:     150,
     damage:       30,
     radius:       9,
     bulletSpeed:  0,
@@ -227,9 +227,13 @@ export class Tower {
   _applyLevel() {
     const n   = this.level - 1;
     const def = TOWER_DEFS[this.type];
-    this.damage       = Math.round(this.baseDamage   * (1 + n * 0.25));
-    this.range        = Math.round(this.baseRange    * (1 + n * 0.08));
-    this.fireRate     = Math.max(4, Math.round(this.baseFireRate * (1 - n * 0.05)));
+    // Diminishing returns at levels 6-10: +15%/+5%/-3% instead of +25%/+8%/-5%
+    const dmgMult   = n < 5 ? 1 + n * 0.25  : 1.25 + (n - 5) * 0.15;
+    const rangeMult = n < 5 ? 1 + n * 0.08  : 1.40 + (n - 5) * 0.05;
+    const rateMult  = n < 5 ? 1 - n * 0.05  : 0.75 - (n - 5) * 0.03;
+    this.damage       = Math.round(this.baseDamage   * dmgMult);
+    this.range        = Math.round(this.baseRange    * rangeMult);
+    this.fireRate     = Math.max(4, Math.round(this.baseFireRate * rateMult));
     this.slowFactor   = def.slowFactor   ?? 1;
     this.slowDuration = def.slowDuration ?? 0;
     if (this.slowDuration > 0) this.slowDuration = Math.round(this.slowDuration * (1 + (this.level - 1) * 0.10));
@@ -286,7 +290,6 @@ export class Tower {
     // ── Isjätte: AoE ice nova — damages & slows all enemies in range ─────────
     if (this.type === TOWER_TYPES.ISJATTEN) {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
-      this.fireCooldown = this.fireRate;  // always reset so cadence is predictable
       const rangeSq = this.range * this.range;
       let killed = 0, hit = false;
       for (const enemy of enemies) {
@@ -304,6 +307,7 @@ export class Tower {
         if (enemy.hp <= 0) { enemy.hp = 0; enemy.kill(); enemy._killed = true; killed++; }
       }
       if (!hit) return null;
+      this.fireCooldown = this.fireRate;  // only reset when enemies were in range
       this.fireFlash = this.maxFireFlash;
       return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
     }
@@ -451,7 +455,7 @@ export class Tower {
         ctx.lineWidth   = 5 * alpha;
         ctx.lineCap     = 'round';
         ctx.beginPath();
-        ctx.arc(this.x, this.y, 18, this.aimAngle - 1.1, this.aimAngle + 1.1);
+        ctx.arc(this.x, this.y, this.range, this.aimAngle - 1.1, this.aimAngle + 1.1);
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
