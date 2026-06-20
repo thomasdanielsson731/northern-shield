@@ -106,6 +106,7 @@ let portalFlashColor = 'red'; // 'red' for boss, 'blue' for regular Jötunn
 let bossDefeatTimer  = 0;   // frames to show boss defeat announcement
 let bossDefeatText   = '';  // e.g. "DRAUGEN-JARL DEFEATED"
 let bossDefeatGold   = 0;   // gold earned from boss kill
+let _runeForgeHintTimer = 0; // one-time post-first-boss rune forge hint (frames)
 
 let splashRings       = [];  // catapult impact rings: { x, y, r, maxR, life, maxLife }
 let empRings          = [];  // Mara EMP rings: { x, y, r, life, maxLife }
@@ -121,7 +122,8 @@ let firstKillDone     = false;  // triggers enhanced coin arc on first kill
 let mylingWarningTimer  = 0;    // frames remaining for first-Myling warning banner
 let maraEmpWarningTimer = 0;   // frames remaining for first-Mara EMP warning banner
 let jotunnWarningTimer  = 0;   // frames remaining for first-Jötunn warning banner
-let chainKillDone     = false;  // one-shot CHAIN KILL! text (catapult 3+)
+let chainKillDone     = new Set();  // per-tower chain kill (catapult 3+), cleared each wave
+let _synergyDirty    = true;        // recompute synergy pairs on next tick
 let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
 let lifeLostTimer     = 0;      // frames for LIFE LOST text near hoard
 let pathChevronsTimer = 0;      // countdown for wave-1 path direction chevrons
@@ -248,6 +250,8 @@ let flawlessCount  = 0;  // total flawless waves this run (for achievement)
 let flawlessStreak = 0;  // consecutive flawless waves (resets on any leak)
 
 function unlockAchievement(id) {
+  // Re-read from storage to stay idempotent across sessions
+  try { JSON.parse(localStorage.getItem(ACH_KEY) || '[]').forEach(i => _earnedAch.add(i)); } catch {}
   if (_earnedAch.has(id)) return;
   _earnedAch.add(id);
   try { localStorage.setItem(ACH_KEY, JSON.stringify([..._earnedAch])); } catch {}
@@ -293,7 +297,15 @@ const HS_KEY    = 'northern-shield-hs';
 const HS_MAX    = 8;
 
 function loadHighScores() {
-  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(HS_KEY)) || [];
+    return raw.filter(s => s && typeof s === 'object').map(s => ({
+      waves: Math.min(9999,  Math.max(0, parseInt(s.waves)  || 0)),
+      slain: Math.min(99999, Math.max(0, parseInt(s.slain)  || 0)),
+      gold:  Math.min(9999999, Math.max(0, parseInt(s.gold) || 0)),
+      name:  String(s.name || 'Anonymous').replace(/[^a-zA-Z0-9 _\-]/g, '').slice(0, 16) || 'Anonymous',
+    }));
+  } catch { return []; }
 }
 
 function saveHighScore(score) {
@@ -339,7 +351,7 @@ function promptNameAndSave(scoreData) {
       e.stopPropagation();
       input.removeEventListener('keydown', onKey);
       overlay.style.display = 'none';
-      const name = input.value.trim().slice(0, 16) || 'Anonymous';
+      const name = input.value.trim().replace(/[^a-zA-Z0-9 _\-]/g, '').slice(0, 16) || 'Anonymous';
       highScores = saveHighScore({ ..._pendingScore, name });
       if (_currentMapName && _pendingScore) saveMapBest(_currentMapName, _pendingScore.waves, _pendingScore.slain);
       _pendingScore = null;
@@ -403,11 +415,13 @@ function restartGame() {
   isPanning         = false;
   rightClickDragged = false;
   rightClickSaved   = null;
-  chainKillDone     = false;
+  chainKillDone     = new Set();
   chainKillDisplay  = null;
   lifeLostTimer     = 0;
   pathChevronsTimer = 300;
   pathBlockFlash    = null;
+  _synergyDirty     = true;
+  _buildBtnsCache   = null;
   bestWave          = { wave: 0, slain: 0, gold: 0 };
   waveSlainCount    = 0;
   waveGoldStart     = goldEarned;
@@ -487,7 +501,8 @@ function removeTower(tower) {
   }
   towers      = towers.filter(t => t !== tower);
   currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
-  pathDirty   = true;
+  pathDirty      = true;
+  _synergyDirty  = true;
   rerouteActiveEnemies();
   wallFrostDirty = true;
 }
@@ -773,7 +788,7 @@ function startNextWave() {
   spawnTimer  = 0;
   waveActiveFrames = 0;
   waveState   = 'active';
-  chainKillDone  = false;
+  chainKillDone  = new Set();
   waveSlainCount = 0;
   waveGoldStart  = goldEarned;
   waveStartTick  = performance.now();
@@ -1251,7 +1266,9 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
+let _buildBtnsCache = null;
 function getBuildButtons() {
+  if (_buildBtnsCache) return _buildBtnsCache;
   const nBtn   = BUILD_ITEMS.length;
   const panelX = GRID_LEFT + 2;
   const panelW = COLS * CELL_SIZE - 4;
@@ -1259,13 +1276,14 @@ function getBuildButtons() {
   const gap    = 3;
   const cardW  = nBtn > 0 ? Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn) : 0;
   const btnY   = GRID_BOTTOM + 7;
-  return BUILD_ITEMS.map((item, i) => ({
+  _buildBtnsCache = BUILD_ITEMS.map((item, i) => ({
     ...item,
     x:      panelX + padX + i * (cardW + gap),
     y:      btnY,
     width:  cardW,
     height: BUILD_BTN.h
   }));
+  return _buildBtnsCache;
 }
 
 function getBuildButtonAt(mx, my) {
@@ -1423,6 +1441,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     const cy = (row + fp.h / 2) * CELL_SIZE;
     const t = new Tower(cx, cy, col, row, towerType);
     towers.push(t);
+    _synergyDirty = true;
     // Synergy ring: Berserker placed next to a wall
     if (towerType === TOWER_TYPES.BERSERK) {
       const adjBW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
@@ -1903,28 +1922,31 @@ function update() {
 
   updateWave();
 
-  // ── Synergy detection ─────────────────────────────────────────────────────────
-  for (const t of towers) t._synergy = null;
-  function _towersAdjacent(a, b) {
-    const afp = a.footprint ?? { w: 1, h: 1 }, bfp = b.footprint ?? { w: 1, h: 1 };
-    for (let ac = a.col; ac < a.col + afp.w; ac++)
-      for (let ar = a.row; ar < a.row + afp.h; ar++)
-        for (let bc = b.col; bc < b.col + bfp.w; bc++)
-          for (let br = b.row; br < b.row + bfp.h; br++)
-            if (Math.abs(ac - bc) <= 1 && Math.abs(ar - br) <= 1) return true;
-    return false;
-  }
-  for (let _si = 0; _si < towers.length; _si++) {
-    for (let _sj = _si + 1; _sj < towers.length; _sj++) {
-      const a = towers[_si], b = towers[_sj];
-      if (!_towersAdjacent(a, b)) continue;
-      const types = [a.type, b.type].sort().join('+');
-      if (types === 'military+valkyrie') { a._synergy = b._synergy = 'eagleEye'; }
-      else if (types === 'berserk+catapult') { a._synergy = b._synergy = 'siegeFury'; }
-      else if (types === 'blondie+isjatten') { a._synergy = b._synergy = 'winterGrip'; }
-      else if (types === 'berserk+valkyrie') { a._synergy = b._synergy = 'shieldWall'; }
-      else if (types === 'drakship+hydda')   { a._synergy = b._synergy = 'tidecall'; }
-      else if (types === 'isjatten+piltorn') { a._synergy = b._synergy = 'runeChain'; }
+  // ── Synergy detection — only recomputed when towers change ───────────────────
+  if (_synergyDirty) {
+    _synergyDirty = false;
+    for (const t of towers) t._synergy = null;
+    function _towersAdjacent(a, b) {
+      const afp = a.footprint ?? { w: 1, h: 1 }, bfp = b.footprint ?? { w: 1, h: 1 };
+      for (let ac = a.col; ac < a.col + afp.w; ac++)
+        for (let ar = a.row; ar < a.row + afp.h; ar++)
+          for (let bc = b.col; bc < b.col + bfp.w; bc++)
+            for (let br = b.row; br < b.row + bfp.h; br++)
+              if (Math.abs(ac - bc) <= 1 && Math.abs(ar - br) <= 1) return true;
+      return false;
+    }
+    for (let _si = 0; _si < towers.length; _si++) {
+      for (let _sj = _si + 1; _sj < towers.length; _sj++) {
+        const a = towers[_si], b = towers[_sj];
+        if (!_towersAdjacent(a, b)) continue;
+        const types = [a.type, b.type].sort().join('+');
+        if (types === 'military+valkyrie') { a._synergy = b._synergy = 'eagleEye'; }
+        else if (types === 'berserk+catapult') { a._synergy = b._synergy = 'siegeFury'; }
+        else if (types === 'blondie+isjatten') { a._synergy = b._synergy = 'winterGrip'; }
+        else if (types === 'berserk+valkyrie') { a._synergy = b._synergy = 'shieldWall'; }
+        else if (types === 'drakship+hydda')   { a._synergy = b._synergy = 'tidecall'; }
+        else if (types === 'isjatten+piltorn') { a._synergy = b._synergy = 'runeChain'; }
+      }
     }
   }
 
@@ -2067,8 +2089,8 @@ function update() {
             }
           }
         }
-        if (splashKills >= 3 && !chainKillDone) {
-          chainKillDone    = true;
+        if (splashKills >= 3 && b.source && !chainKillDone.has(b.source)) {
+          chainKillDone.add(b.source);
           chainKillDisplay = { x: ix, y: iy - 20, life: 100, maxLife: 100, count: splashKills };
           sfxChainKill();
         }
@@ -2582,16 +2604,16 @@ function drawFrames() {
 
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const pw = BASE_W - px - 36;  // 32px frame + 4px inner gap
+  const pw = BASE_W - px - 36;
   speedBtns = [];
   runeForgeBtn = null;
   if (pw < 60) return;
 
-  const fullH = BASE_H - GRID_TOP - 36;  // 32px frame + 4px inner gap
-  drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(42,22,6,0.97)');
+  const fullH = BASE_H - GRID_TOP - 36;
+  drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(8,4,1,0.98)');
 
   const lx    = px + 10;
-  const dotX  = px + 7;
+  const dotX  = px + 8;
   let   ly    = GRID_TOP + 14;
   const rEdge = px + pw - 8;
   const barW  = pw - 20;
@@ -2599,106 +2621,137 @@ function drawRightPanel() {
   ctx.save();
 
   function divider() {
-    ctx.strokeStyle = 'rgba(200,150,30,0.18)';
+    ctx.strokeStyle = 'rgba(200,150,30,0.14)';
     ctx.lineWidth   = 0.5;
     ctx.beginPath();
     ctx.moveTo(px + 6, ly); ctx.lineTo(px + pw - 6, ly);
     ctx.stroke();
-    ly += 9;
+    ly += 8;
   }
 
-  // ── WAVE PROGRESS ──────────────────────────────────────────────────────────
-  ctx.font      = 'bold 11px monospace';
-  ctx.fillStyle = '#c0a060';
+  function sectionLabel(label, accent = 'rgba(190,140,40,0.55)') {
+    ctx.fillStyle = accent;
+    ctx.fillRect(px + 6, ly - 7, 2, 10);
+    ctx.font      = 'bold 8px monospace';
+    ctx.fillStyle = accent;
+    ctx.textAlign = 'left';
+    ctx.fillText(label, lx + 4, ly);
+    ly += 12;
+  }
+
+  // ── WAVE PROGRESS ───────────────────────────────────────────────────────────
+  const displayWaveR = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
+  const progress     = displayWaveR / MAX_WAVES;
+  const waveBarColor = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
+
+  ctx.font      = 'bold 8px monospace';
+  ctx.fillStyle = 'rgba(160,120,50,0.50)';
   ctx.textAlign = 'left';
   ctx.fillText('WAVE', lx, ly);
-  ctx.fillStyle = '#f0c840';
+  ctx.font      = 'bold 15px monospace';
+  ctx.fillStyle = '#f0d060';
   ctx.textAlign = 'right';
-  const displayWaveR = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
-  ctx.fillText(`${displayWaveR} / ${MAX_WAVES}`, rEdge, ly);
+  ctx.fillText(`${displayWaveR}`, rEdge - 26, ly);
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = 'rgba(160,130,55,0.50)';
+  ctx.fillText(`/ ${MAX_WAVES}`, rEdge, ly);
   ctx.textAlign = 'left';
-  ly += 7;
+  ly += 8;
 
-  const progress  = displayWaveR / MAX_WAVES;
-  const barColor  = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
-  ctx.fillStyle   = 'rgba(60,30,8,0.8)';
-  ctx.beginPath(); ctx.roundRect(lx, ly, barW, 6, 3); ctx.fill();
+  ctx.fillStyle = 'rgba(30,15,4,0.9)';
+  ctx.beginPath(); ctx.roundRect(lx, ly, barW, 10, 4); ctx.fill();
   if (progress > 0) {
-    ctx.fillStyle = barColor;
-    ctx.beginPath(); ctx.roundRect(lx, ly, barW * progress, 6, 3); ctx.fill();
+    ctx.fillStyle   = waveBarColor;
+    ctx.shadowColor = waveBarColor; ctx.shadowBlur = 4;
+    ctx.beginPath(); ctx.roundRect(lx, ly, Math.max(2, barW * progress), 10, 4); ctx.fill();
+    ctx.shadowBlur  = 0;
   }
-  ly += 14;
+  ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.textAlign = 'center';
+  ctx.fillText(`${Math.round(progress * 100)}%`, lx + barW / 2, ly + 7.5);
+  ctx.textAlign = 'left';
+  ly += 16;
   divider();
 
   if (waveState === 'active') {
-    // ── COMBAT MODE: lives + on-field count ──────────────────────────────────
+    // ── COMBAT MODE ──────────────────────────────────────────────────────────────
     const livesColor = lives <= 3 ? '#ff5050' : lives <= 7 ? '#ffaa50' : '#60ee80';
     const livesRatio = lives / STARTING_LIVES;
 
-    ctx.font      = 'bold 11px monospace';
-    ctx.fillStyle = '#c0a060';
+    ctx.fillStyle = 'rgba(80,190,80,0.55)';
+    ctx.fillRect(px + 6, ly - 7, 2, 10);
+    ctx.font      = 'bold 8px monospace';
+    ctx.fillStyle = 'rgba(80,190,80,0.55)';
     ctx.textAlign = 'left';
-    ctx.fillText('DEFEND', lx, ly);
-    // Active wave event badge (right-aligned, same line)
+    ctx.fillText('DEFEND', lx + 4, ly);
     if (currentWaveEvent) {
       ctx.font      = 'bold 8px monospace';
       ctx.fillStyle = 'rgba(255,200,60,0.85)';
       ctx.textAlign = 'right';
       ctx.fillText(currentWaveEvent.label, rEdge, ly);
-      ctx.textAlign = 'left';
     }
-    ly += 14;
-
-    // Big lives bar
-    ctx.fillStyle = 'rgba(60,30,8,0.8)';
-    ctx.beginPath(); ctx.roundRect(lx, ly, barW, 9, 4); ctx.fill();
-    ctx.fillStyle = livesColor;
-    ctx.shadowColor = livesColor; ctx.shadowBlur = lives <= 5 ? 6 : 0;
-    ctx.beginPath(); ctx.roundRect(lx, ly, barW * livesRatio, 9, 4); ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
     ly += 13;
 
-    ctx.font = 'bold 14px monospace';
-    ctx.fillStyle = livesColor;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${lives}`, px + pw / 2, ly); ly += 4;
-    ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.6)';
-    ctx.fillText('lives remaining', px + pw / 2, ly); ly += 14;
+    ctx.fillStyle = 'rgba(30,15,4,0.9)';
+    ctx.beginPath(); ctx.roundRect(lx, ly, barW, 10, 4); ctx.fill();
+    if (livesRatio > 0) {
+      ctx.fillStyle   = livesColor;
+      ctx.shadowColor = livesColor; ctx.shadowBlur = lives <= 5 ? 8 : 0;
+      ctx.beginPath(); ctx.roundRect(lx, ly, Math.max(2, barW * livesRatio), 10, 4); ctx.fill();
+      ctx.shadowBlur  = 0;
+    }
+    ly += 13;
+
+    ctx.font        = 'bold 18px monospace';
+    ctx.fillStyle   = livesColor;
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = livesColor; ctx.shadowBlur = lives <= 5 ? 12 : 0;
+    ctx.fillText(`${lives}`, px + pw / 2, ly);
+    ctx.shadowBlur  = 0;
+    ly += 4;
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(150,120,60,0.55)';
+    ctx.fillText('lives remaining', px + pw / 2, ly);
     ctx.textAlign = 'left';
+    ly += 14;
 
     divider();
 
-    // On-field count + slain
-    ctx.font = '11px monospace';
     const waveGoldNow = goldEarned - waveGoldStart;
     const onFieldRows = [
       { label: '◈ On field', value: `${enemies.filter(e => e.alive).length} / ${waveTotal}`, color: '#e8a060' },
-      { label: '★ Slain',    value: `${waveSlainCount} / ${slain}`,      color: '#f0e060' },
-      { label: '⚡ Leaked',   value: `${STARTING_LIVES - lives}`,        color: (STARTING_LIVES - lives) > 0 ? '#ff8080' : '#60e880' },
-      { label: '◆ Wave',     value: `+${waveGoldNow}`,                  color: '#e8c040' },
+      { label: '⚔ Slain',   value: `${waveSlainCount} / ${slain}`,      color: '#f0e060'  },
+      { label: '◈ Leaked',  value: `${STARTING_LIVES - lives}`,         color: (STARTING_LIVES - lives) > 0 ? '#ff8080' : '#70e890' },
+      { label: '◆ Wave +',  value: `+${waveGoldNow}`,                   color: '#e8c040'  },
     ];
+    ctx.font = '10px monospace';
     for (const r of onFieldRows) {
-      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
-      ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
-      ctx.textAlign = 'left'; ly += 13;
+      ctx.fillStyle = 'rgba(190,155,95,0.60)'; ctx.textAlign = 'left';
+      ctx.fillText(r.label, lx, ly);
+      ctx.font      = 'bold 10px monospace'; ctx.fillStyle = r.color; ctx.textAlign = 'right';
+      ctx.fillText(r.value, rEdge, ly);
+      ctx.font      = '10px monospace'; ctx.textAlign = 'left'; ly += 13;
     }
 
-    // Top damage dealer
     if (towers.length > 0) {
       const top = towers.reduce((a, b) => b.damageDealt > a.damageDealt ? b : a, towers[0]);
       if (top.damageDealt > 0) {
         const def = TOWER_DEFS[top.type];
-        ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';
+        ly += 2;
+        ctx.font      = '9px monospace';
+        ctx.fillStyle = 'rgba(150,120,60,0.55)'; ctx.textAlign = 'left';
         ctx.fillText('⚔ Top', lx, ly);
         ctx.fillStyle = def.color; ctx.textAlign = 'right';
         ctx.fillText(`${def.label} ${top.damageDealt}`, rEdge, ly);
-        ctx.textAlign = 'left'; ly += 13;
+        ctx.textAlign = 'left'; ly += 11;
       }
     }
   } else {
-    // ── BREAK / COUNTDOWN MODE: incoming + economy ───────────────────────────
+    // ── BREAK / COUNTDOWN MODE ──────────────────────────────────────────────────
     const restWave = waveState === 'break' && BOSS_WAVES.has(waveNumber);
-    ctx.font        = 'bold 11px monospace';
+
+    ctx.fillStyle = restWave ? 'rgba(80,200,120,0.55)' : 'rgba(190,140,40,0.55)';
+    ctx.fillRect(px + 6, ly - 7, 2, 14);
+    ctx.font       = 'bold 11px monospace';
     if (restWave) {
       const rp = 0.7 + Math.sin(performance.now() * 0.003) * 0.3;
       ctx.fillStyle   = `rgba(80,200,120,${rp})`;
@@ -2707,34 +2760,29 @@ function drawRightPanel() {
       ctx.fillStyle   = '#f0c840';
       ctx.shadowColor = 'rgba(220,170,30,0.7)';
     }
-    ctx.shadowBlur  = 6;
-    ctx.fillText(waveState === 'countdown' ? 'PREPARE ▶SPC' : restWave ? 'REST WAVE' : 'INCOMING ▶SPC', lx, ly); ly += 14;
-    ctx.shadowBlur  = 0;
+    ctx.shadowBlur = 6; ctx.textAlign = 'left';
+    ctx.fillText(waveState === 'countdown' ? 'PREPARE  ▶SPC' : restWave ? 'REST WAVE' : 'INCOMING  ▶SPC', lx + 4, ly);
+    ly += 14; ctx.shadowBlur = 0;
 
-    const nextIsBossWave  = BOSS_WAVES.has(waveNumber + 1);
-    const in2IsBossWave   = !nextIsBossWave && BOSS_WAVES.has(waveNumber + 2);
-    const nextBossCfg     = nextIsBossWave ? BOSS_CONFIGS[waveNumber + 1] : null;
-    const in2BossCfg      = in2IsBossWave  ? BOSS_CONFIGS[waveNumber + 2] : null;
+    const nextIsBossWave = BOSS_WAVES.has(waveNumber + 1);
+    const in2IsBossWave  = !nextIsBossWave && BOSS_WAVES.has(waveNumber + 2);
+    const nextBossCfg    = nextIsBossWave ? BOSS_CONFIGS[waveNumber + 1] : null;
+    const in2BossCfg     = in2IsBossWave  ? BOSS_CONFIGS[waveNumber + 2] : null;
 
     if (in2IsBossWave && in2BossCfg) {
-      ctx.font        = '9px monospace';
-      ctx.fillStyle   = 'rgba(255,140,60,0.60)';
-      ctx.textAlign   = 'left';
-      ctx.fillText(`⚠ ${in2BossCfg.name} in 2 waves`, lx, ly); ly += 12;
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(255,140,60,0.60)'; ctx.textAlign = 'left';
+      ctx.fillText(`⚠ ${in2BossCfg.name} in 2`, lx, ly); ly += 12;
     }
 
     if (nextIsBossWave && nextBossCfg) {
-      const pulse = 0.6 + Math.sin(performance.now() * 0.004) * 0.4;
-      ctx.font        = `bold 11px monospace`;
+      const pulse     = 0.6 + Math.sin(performance.now() * 0.004) * 0.4;
+      ctx.font        = 'bold 11px monospace';
       ctx.fillStyle   = `rgba(255,${Math.round(80 + pulse * 60)},30,${0.7 + pulse * 0.3})`;
-      ctx.shadowColor = 'rgba(255,80,20,0.8)';
-      ctx.shadowBlur  = 6 + pulse * 6;
+      ctx.shadowColor = 'rgba(255,80,20,0.8)'; ctx.shadowBlur = 6 + pulse * 6;
       ctx.textAlign   = 'left';
       ctx.fillText(nextBossCfg.name, lx, ly); ly += 14;
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = 'rgba(200,140,80,0.75)';
-      ctx.shadowBlur = 0;
-      ctx.fillText('Herald squad + BOSS', lx, ly); ly += 14;
+      ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(200,140,80,0.75)'; ctx.shadowBlur = 0;
+      ctx.fillText('Herald squad + BOSS', lx, ly); ly += 13;
     } else {
       const next    = waveComposition(waveNumber + 1);
       const entries = [
@@ -2744,94 +2792,98 @@ function drawRightPanel() {
         { label: 'Mara',   count: next.maras,    color: '#7040c0', skip: next.maras   === 0, boss: false, flying: false },
       ];
       let bossHeaderDrawn = false;
-      ctx.font = '11px monospace';
       for (const e of entries) {
         if (e.skip) continue;
         if (e.boss && !bossHeaderDrawn) {
-          ctx.font = 'bold 11px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.7)'; ctx.textAlign = 'left';
-          ctx.fillText('— BOSS —', lx + 4, ly); ly += 13;
-          bossHeaderDrawn = true; ctx.font = '11px monospace';
+          ly += 3;
+          ctx.fillStyle = 'rgba(180,80,20,0.14)';
+          ctx.fillRect(lx - 2, ly - 8, barW + 4, 14);
+          ctx.fillStyle = 'rgba(200,100,20,0.55)';
+          ctx.fillRect(lx - 2, ly - 8, 2, 14);
+          ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(220,130,30,0.75)'; ctx.textAlign = 'left';
+          ctx.fillText('BOSS', lx + 4, ly + 2);
+          ly += 11; bossHeaderDrawn = true;
         }
-        ctx.beginPath(); ctx.arc(dotX, ly - 3, 4, 0, Math.PI * 2);
-        ctx.fillStyle = e.color; ctx.fill();
-        ctx.fillStyle = e.color; ctx.textAlign = 'left';
-        ctx.fillText(e.label + (e.flying ? ' ▲' : ''), lx + 2, ly);
-        ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.beginPath(); ctx.roundRect(lx - 2, ly - 9, barW + 4, 14, 3); ctx.fill();
+        ctx.fillStyle   = e.color;
+        ctx.shadowColor = e.color; ctx.shadowBlur = 5;
+        ctx.beginPath(); ctx.arc(dotX + 2, ly - 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur  = 0;
+        ctx.font = 'bold 10px monospace'; ctx.fillStyle = e.color; ctx.textAlign = 'left';
+        ctx.fillText(e.label + (e.flying ? ' ▲' : ''), lx + 8, ly);
+        ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
         ctx.fillText(`×${e.count}`, rEdge, ly);
         ctx.textAlign = 'left'; ly += 15;
       }
     }
 
-    // Wave event indicator for next wave
+    // Wave event for next wave
     const nextEv = WAVE_EVENTS[waveNumber + 1];
     if (nextEv) {
       ly += 2;
       const evPulse = 0.70 + Math.sin(performance.now() * 0.004) * 0.30;
+      ctx.fillStyle = 'rgba(200,150,20,0.10)';
+      ctx.beginPath(); ctx.roundRect(lx - 2, ly - 8, barW + 4, 24, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(240,180,30,0.60)';
+      ctx.fillRect(lx - 2, ly - 8, 2, 24);
       ctx.font        = 'bold 9px monospace';
       ctx.fillStyle   = `rgba(255,200,60,${evPulse})`;
-      ctx.shadowColor = `rgba(240,160,20,${evPulse * 0.6})`;
-      ctx.shadowBlur  = 5;
-      ctx.textAlign   = 'left';
-      ctx.fillText(nextEv.label, lx, ly); ly += 12;
+      ctx.shadowColor = `rgba(240,160,20,${evPulse * 0.5})`;
+      ctx.shadowBlur  = 4; ctx.textAlign = 'left';
+      ctx.fillText(`⚡ ${nextEv.label}`, lx + 4, ly); ly += 12;
       ctx.shadowBlur  = 0;
-      ctx.font        = '9px monospace';
-      ctx.fillStyle   = 'rgba(210,170,90,0.75)';
-      ctx.fillText(nextEv.desc, lx, ly); ly += 10;
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,170,90,0.65)';
+      ctx.fillText(nextEv.desc, lx + 4, ly); ly += 10;
     }
 
-    ly += 2;
+    ly += 4;
     divider();
 
-    // Last wave time
     if (lastWaveTimeSec > 0 && waveNumber > 0) {
-      ctx.font = '9px monospace'; ctx.fillStyle = '#a0b8a0'; ctx.textAlign = 'left';
-      ctx.fillText(`Last wave: ${lastWaveTimeSec}s`, lx, ly);
-      ctx.textAlign = 'left'; ly += 12;
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(130,160,130,0.55)'; ctx.textAlign = 'left';
+      ctx.fillText(`Last: ${lastWaveTimeSec}s`, lx, ly); ly += 12;
     }
 
-    // Economy section (break only)
-    ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#c0a060'; ctx.textAlign = 'left';
-    ctx.fillText('ECONOMY', lx, ly); ly += 14;
-    ctx.font = '11px monospace';
-    const net = goldEarned - goldSpent;
+    // ── ECONOMY ────────────────────────────────────────────────────────────────
+    sectionLabel('ECONOMY', 'rgba(190,140,40,0.50)');
+
+    const net          = goldEarned - goldSpent;
     const lastWaveGold = goldEarned - waveGoldStart;
-    const econRows = [
-      { label: '◆ Earned',    value: `+${goldEarned}`,                   color: '#e8c040' },
-      { label: '◆ Spent',     value: `-${goldSpent}`,                    color: 'rgba(200,140,60,0.75)' },
-      { label: '◆ Net',       value: `${net >= 0 ? '+' : ''}${net}`,     color: net >= 0 ? '#a0e880' : '#ff9090' },
-      { label: '◆ Last wave', value: `+${lastWaveGold}g`,                color: 'rgba(220,190,80,0.65)' },
-      flawlessStreak > 0 && { label: '★ Flawless',  value: `${flawlessStreak} streak`, color: '#80d8ff' },
+    const econRows     = [
+      { label: 'Earned',    value: `+${goldEarned}`,                  color: '#e8c040'               },
+      { label: 'Spent',     value: `-${goldSpent}`,                   color: 'rgba(200,140,60,0.80)' },
+      { label: 'Net',       value: `${net >= 0 ? '+' : ''}${net}`,    color: net >= 0 ? '#80e860' : '#ff8080' },
+      { label: 'Last wave', value: `+${lastWaveGold}`,                color: 'rgba(220,190,80,0.70)' },
+      flawlessStreak > 0 && { label: 'Flawless', value: `${flawlessStreak} streak`, color: '#80d8ff' },
     ].filter(Boolean);
     for (const r of econRows) {
-      ctx.fillStyle = '#e8d0a0'; ctx.textAlign = 'left';  ctx.fillText(r.label, lx, ly);
-      ctx.fillStyle = r.color;   ctx.textAlign = 'right'; ctx.fillText(r.value, rEdge, ly);
+      ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(175,140,80,0.60)'; ctx.textAlign = 'left';
+      ctx.fillText(r.label, lx + 6, ly);
+      ctx.font = 'bold 10px monospace'; ctx.fillStyle = r.color; ctx.textAlign = 'right';
+      ctx.fillText(r.value, rEdge, ly);
       ctx.textAlign = 'left'; ly += 13;
     }
 
-    // Path efficiency rating
     if (currentPath && currentPath.length > 1) {
-      const pathSteps = currentPath.length - 1;
-      const minSteps  = Math.abs(GOAL.col - SPAWN.col) + Math.abs(GOAL.row - SPAWN.row);
-      const ratio     = pathSteps / Math.max(1, minSteps);
-      const stars     = ratio >= 3.5 ? '★★★' : ratio >= 2.5 ? '★★☆' : ratio >= 1.6 ? '★☆☆' : '☆☆☆';
+      const pathSteps   = currentPath.length - 1;
+      const minSteps    = Math.abs(GOAL.col - SPAWN.col) + Math.abs(GOAL.row - SPAWN.row);
+      const ratio       = pathSteps / Math.max(1, minSteps);
+      const ratingStars = ratio >= 3.5 ? '★★★' : ratio >= 2.5 ? '★★☆' : ratio >= 1.6 ? '★☆☆' : '☆☆☆';
       const ratingColor = ratio >= 3.5 ? '#f0d040' : ratio >= 2.5 ? '#e8c040' : ratio >= 1.6 ? '#c0a040' : '#806040';
-      ly += 3;
-      ctx.font = '9px monospace';
-      ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
+      ly += 4;
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(130,105,55,0.55)'; ctx.textAlign = 'left';
       ctx.fillText('MAZE', lx, ly);
       ctx.fillStyle = ratingColor; ctx.textAlign = 'right';
-      ctx.fillText(`${stars}  ${pathSteps}c / ${ratio.toFixed(1)}×`, rEdge, ly);
+      ctx.fillText(`${ratingStars}  ${pathSteps}c  ${ratio.toFixed(1)}×`, rEdge, ly);
       ctx.textAlign = 'left'; ly += 11;
     }
-
-    // Total DPS of all towers
     if (towers.length > 0) {
       const totalDps = towers.reduce((sum, t) => {
         if (t.fireRate <= 0) return sum;
         return sum + Math.round(t.damage * 30 / t.fireRate);
       }, 0);
-      ctx.font = '9px monospace';
-      ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(130,105,55,0.55)'; ctx.textAlign = 'left';
       ctx.fillText('DPS', lx, ly);
       ctx.fillStyle = '#e8a060'; ctx.textAlign = 'right';
       ctx.fillText(`~${totalDps}`, rEdge, ly);
@@ -3107,7 +3159,7 @@ function drawTopBar() {
   rx -= ctx.measureText(goldStr).width + 18;
 
   ctx.fillStyle = '#b0d0f0';
-  ctx.fillText(`★ ${slain}`, rx, cy);
+  ctx.fillText(`⚔ ${slain}`, rx, cy);
   rx -= ctx.measureText(`★ ${slain}`).width + 18;
 
   // Stars (rune currency)
@@ -3254,38 +3306,28 @@ function drawBottomBuildBar() {
     ctx.stroke();
 
     const labelSz = btn.width < 60 ? 7 : 9;
+
+    // Row 1: name only (full width, no conflict with cost)
     ctx.font      = `bold ${labelSz}px monospace`;
     ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#f0e8d0' : '#c0b090';
     ctx.textAlign = 'left';
-    ctx.fillText(btn.label, btn.x + 4, infoY + 11);
+    ctx.fillText(btn.label, btn.x + 4, infoY + 9);
 
-    ctx.font      = `${labelSz}px monospace`;
+    // Row 2: ability label (left) + cost (right)
+    const abilityLabel = ABILITY_LABELS[btn.id];
+    ctx.font = `${labelSz}px monospace`;
+    if (abilityLabel) {
+      ctx.fillStyle = !affordable ? '#2a2010' : isSelected ? 'rgba(160,200,255,0.9)' : 'rgba(100,140,190,0.6)';
+      ctx.textAlign = 'left';
+      ctx.fillText(abilityLabel, btn.x + 4, infoY + 20);
+    }
     ctx.textAlign = 'right';
     if (!affordable) {
       ctx.fillStyle = '#e84040';
-      ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 7);
-      ctx.font      = `${labelSz - 1}px monospace`;
-      ctx.fillStyle = '#ff6060';
-      ctx.fillText(`-${btn.cost - gold}g`, btn.x + btn.width - 3, infoY + 16);
+      ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 20);
     } else {
-      ctx.fillStyle = isSelected ? '#e8c040' : '#907840';
-      ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 11);
-    }
-
-    const abilityLabel = ABILITY_LABELS[btn.id];
-    const towerDef = btn.mode === CELL.TOWER ? TOWER_DEFS[btn.id] : null;
-    const rangeVal = towerDef?.range > 0 ? towerDef.range : null;
-    if (abilityLabel) {
-      ctx.font      = `${labelSz}px monospace`;
-      ctx.fillStyle = !affordable ? '#2a2010' : isSelected ? 'rgba(160,200,255,0.9)' : 'rgba(100,140,190,0.6)';
-      ctx.textAlign = rangeVal ? 'left' : 'center';
-      ctx.fillText(abilityLabel, rangeVal ? btn.x + 4 : btn.x + btn.width / 2, infoY + 22);
-    }
-    if (rangeVal) {
-      ctx.font      = `${labelSz}px monospace`;
-      ctx.fillStyle = !affordable ? '#1a1008' : isSelected ? 'rgba(180,200,140,0.75)' : 'rgba(110,140,80,0.50)';
-      ctx.textAlign = 'right';
-      ctx.fillText(`r${rangeVal}`, btn.x + btn.width - 3, infoY + 22);
+      ctx.fillStyle = isSelected ? '#e8c040' : '#706040';
+      ctx.fillText(`◆${btn.cost}`, btn.x + btn.width - 3, infoY + 20);
     }
 
     // Star-gate lock overlay
@@ -3772,6 +3814,9 @@ function onBossKilled(boss) {
       20
     );
   }
+
+  // One-time Rune Forge hint after first boss kill
+  if (_runeForgeHintTimer === 0) _runeForgeHintTimer = 360;
 }
 
 function drawBossDefeat() {
@@ -3800,6 +3845,33 @@ function drawBossDefeat() {
   }
 
   ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawRuneForgeHint() {
+  if (_runeForgeHintTimer <= 0) return;
+  _runeForgeHintTimer--;
+  if (waveState === 'active') return;  // only show during break
+  const alpha = _runeForgeHintTimer > 40 ? Math.min(1, (360 - _runeForgeHintTimer) / 30) : _runeForgeHintTimer / 40;
+  const tw = 240, th = 36;
+  const tx = GRID_LEFT + (COLS * CELL_SIZE) / 2 - tw / 2;
+  const ty = GRID_TOP + ROWS * CELL_SIZE * 0.55;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle   = 'rgba(30,10,50,0.97)';
+  ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, 6); ctx.fill();
+  ctx.strokeStyle = 'rgba(180,100,240,0.80)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, 6); ctx.stroke();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 10px monospace';
+  ctx.fillStyle   = '#d080ff';
+  ctx.shadowColor = 'rgba(180,80,240,0.8)'; ctx.shadowBlur = 8;
+  ctx.fillText(`✦ ${stars} RUNES EARNED — Press R to open Rune Forge`, tx + tw / 2, ty + 15);
+  ctx.shadowBlur  = 0;
+  ctx.font        = '9px monospace';
+  ctx.fillStyle   = 'rgba(200,160,240,0.65)';
+  ctx.fillText('Upgrade your towers between waves', tx + tw / 2, ty + 27);
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -4036,7 +4108,7 @@ function drawHelpOverlay() {
   const pw = 320, ph = 36 + shortcuts.length * 18 + 20;
   const px = width / 2 - pw / 2, py = height / 2 - ph / 2;
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillStyle = 'rgba(0,0,0,0.88)';
   ctx.fillRect(0, 0, width, height);
   drawFantasyPanel(px, py, pw, ph, 'rgba(6,3,16,0.98)', 0.9, 10);
   ctx.textAlign   = 'center';
@@ -4991,6 +5063,7 @@ function draw() {
   drawGoldCoins();
   drawBossWarning();
   drawBossDefeat();
+  drawRuneForgeHint();
   drawWaveAnnouncement();
   drawChapterBanner();
   drawMylingWarning();
