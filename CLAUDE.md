@@ -120,7 +120,7 @@ To activate directional mode for a sprite, set `rows: 4` in its manifest entry i
 
 `footprint` property: catapult is 2×2, drakship is 3×1, all others are 1×1. Multi-cell towers occupy all cells in their footprint.
 
-Two towers are gated behind stars earned in the current run: `isjatten` requires 3 stars, `drakship` requires 5.
+Two towers are gated behind stars earned in the current run: `isjatten` requires 5 stars, `drakship` requires 3 (`TOWER_STAR_GATES` in game.js).
 
 ### Tower upgrades and economy
 
@@ -153,6 +153,56 @@ Pairs of adjacent towers activate automatic stat boosts (detected each tick, app
 | blondie + isjatten | `winterGrip` | +15% damage on both |
 
 Active synergies are shown in the tower detail panel and rendered as a colored glow ring. `tower._synergy` is null or one of the three keys; `tower._synergyDmgBoost` is set to 1.15 (or 1) by game.js before each tower's `update()` call.
+
+### Map selection and game phases
+
+`gamePhase` is either `'mapSelect'` or `'playing'`. On load (and after death/restart), the game shows a map select screen with three preset maps:
+
+| Name | Spawn | Goal | Description |
+|---|---|---|---|
+| MIDGARD | col 0, row 11 | col 35, row 11 | Classic fortress (default) |
+| BIFROST PASS | col 0, row 5 | col 35, row 16 | Off-center lanes |
+| NIDHOGG'S RUN | col 0, row 1 | col 35, row 20 | Corner crossing |
+
+Auto-starts in 10 s (`MAP_AUTO_DELAY`) if the player doesn't pick. `initGame(map)` applies the chosen spawn/goal and resets all state.
+
+### Wave events
+
+`WAVE_EVENTS` is a dictionary keyed by wave number. When a wave with an event starts, the event's modifier is applied for that wave only (`currentWaveEvent`). Upcoming events are shown in the wave status line one wave in advance.
+
+| Wave | Event | Effect |
+|---|---|---|
+| 15 | FROST WIND | −25% enemy speed |
+| 18 | UNDEAD MARCH | +12 extra Draugr |
+| 22 | NIGHT RAID | +20% enemy HP |
+| 30 | BERSERKER RAGE | +30% enemy speed |
+| 35 | SWARM | +10 extra Myling |
+| 40 | IRON HIDE | +30% HP, −15% speed |
+| 48 | WRAITH HUNT | +8 extra Myling |
+| 60 | FROST STORM | +30% HP, −20% speed |
+| 65 | BLITZ | +40% speed |
+| 80 | DARK HARVEST | +40% HP, +4 extra Jötunn |
+| 90 | FÖRSPELET | +50% HP, +40% speed |
+
+### Achievements
+
+Five achievements defined in `ACH_DEFS`, persisted to `localStorage` under key `northern-shield-ach` (a JSON array of earned IDs). Toast notifications queue in `_achToasts`.
+
+| ID | Title | Trigger |
+|---|---|---|
+| `firstBoss` | CHIEFTAIN | First boss slain |
+| `wave25` | IRON WALL | Survive to wave 25 |
+| `wave50` | BULWARK | Survive to wave 50 |
+| `wave100` | SHIELD ETERNAL | Clear all 100 waves |
+| `flawless5` | GHOST WALKER | 5 flawless waves in one run |
+
+### Endless mode
+
+After wave 100 is cleared: `endlessMode` flips to `true`, a victory banner plays, the run score is saved, and the game continues beyond `MAX_WAVES` with escalating difficulty. Waves past 100 still earn stars and gold.
+
+### Wave threat coloring
+
+The wave status line in the HUD is colored by threat: boss waves are red (`#ff4020`), waves > 80% through the 100-wave arc are orange (`#ff7020`), > 50% are yellow (`#e8c040`), and earlier waves are green (`#60ee80`). The same colors are used for the progress bar and wave announcement banner.
 
 ### Core game rule: path-validity enforcement
 
