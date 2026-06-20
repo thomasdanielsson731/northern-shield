@@ -223,6 +223,9 @@ export class Tower {
     this.targetLineTimer = 0;
     this.rune            = null;
 
+    // MVP marker timer (frames); when >0 the tower is highlighted as MVP
+    this.mvpTimer = 0;
+
     this.selected      = false;
     this._applyLevel();
     this.fireCooldown  = this.fireRate;  // start with full cooldown — no instant first shot
@@ -572,6 +575,32 @@ export class Tower {
       ctx.fillStyle = rc; ctx.globalAlpha = 0.75 + pulse * 0.25;
       ctx.beginPath(); ctx.arc(this.x + this.radius - 2, this.y - this.radius + 2, 2.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+    }
+
+    // MVP crown — small pulsing crown above tower when mvpTimer > 0
+    if (this.mvpTimer > 0) {
+      const mt = Math.max(1, this.mvpTimer);
+      const pulse = 0.6 + Math.sin(performance.now() * 0.009) * 0.4;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, mt / 120);
+      const cx = this.x, cy = this.y - this.radius - 14;
+      // Crown base
+      ctx.shadowColor = '#ffd860'; ctx.shadowBlur = 8 * pulse;
+      ctx.fillStyle = '#ffd860';
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy + 4);
+      ctx.lineTo(cx - 5, cy - 2);
+      ctx.lineTo(cx - 1, cy + 4);
+      ctx.lineTo(cx + 2, cy - 3);
+      ctx.lineTo(cx + 6, cy + 4);
+      ctx.closePath(); ctx.fill();
+      // Gems
+      ctx.fillStyle = '#e87050'; ctx.beginPath(); ctx.arc(cx - 5, cy - 1, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#60c8f0'; ctx.beginPath(); ctx.arc(cx + 2, cy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f0e050'; ctx.beginPath(); ctx.arc(cx + 6, cy + 1, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      this.mvpTimer = Math.max(0, this.mvpTimer - 1);
     }
   }
 

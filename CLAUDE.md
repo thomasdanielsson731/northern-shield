@@ -15,11 +15,6 @@ npx vite              # start dev server
 npx vitest run        # run all tests once
 npx vitest            # run tests in watch mode
 npx vitest run tests/tower.unit.test.js   # run a single test file
-
-## Recent implementation notes
-
-- Added an Auto Next toggle UI for faster wave progression.
-- Adjusted tower costs for better midgame pacing and defensive decision-making.
 ```
 
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
@@ -34,6 +29,7 @@ CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test`
 src/
   main.js              — entry point: imports assets.js then game.js
   assets.js            — async sprite manifest; SPRITES shared object, loaded via Image
+  config.js            — runtime sprite scale helpers: getSpriteScale/setSpriteScale/changeSpriteScale (clamped 0.4–1.6, default 0.45)
   core/
     renderer.js        — canvas + ctx with DPR scaling; exports canvas and ctx
     game.js            — everything else (intentionally monolithic; do not split without reason)
@@ -73,7 +69,7 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 | Bottom build bar | below grid, h=62 (`BUILD_BTN.h`) |
 | Ornamental frame | 32 px thick (`FRAME_THICK`), drawn last (on top of everything) |
 
-Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=80`, `STARTING_LIVES=8`, `WALL_COST=8`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
+Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=80`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
 
 ### Render order (each frame)
 

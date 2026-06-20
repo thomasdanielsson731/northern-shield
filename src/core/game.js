@@ -907,6 +907,26 @@ function updateWave() {
     waveLeak  = false;
     waveTimer = 0;
 
+    // --- MVP tower selection: choose the tower that contributed most this wave ---
+    try {
+      let bestTower = null;
+      let bestScore = 0;
+      for (const t of towers) {
+        if (!t) continue;
+        // Score combines raw damage and kills (kills weighted higher)
+        const score = (t.damageDealt || 0) + (t.killCount || 0) * 32;
+        if (score > bestScore) { bestScore = score; bestTower = t; }
+      }
+      // Clear previous MVP timers
+      for (const t of towers) if (t) t.mvpTimer = 0;
+      if (bestTower && bestScore > 0) {
+        bestTower.mvpTimer = 360; // show crown for ~6 seconds (60fps units used across code)
+        dmgFloaters.push({ x: bestTower.x, y: bestTower.y - 18, val: 'MVP', life: 140, maxLife: 140, color: '#ffd060', large: true, suffix: '' });
+        spawnParticles(bestTower.x, bestTower.y, '#f5d030', 16);
+        try { sfxRune(); } catch (e) {}
+      }
+    } catch (e) { /* safe: don't crash gameplay on visual bonus */ }
+
     // Wave milestone achievements
     if (waveNumber === 25)  unlockAchievement('wave25');
     if (waveNumber === 50)  unlockAchievement('wave50');
