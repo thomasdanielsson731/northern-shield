@@ -630,7 +630,7 @@ function updateParticles() {
 
 function drawParticles() {
   if (particles.length === 0) return;
-  ctx.shadowBlur = 5;
+  ctx.shadowBlur = 2;
   for (const p of particles) {
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle   = p.color;
@@ -1391,6 +1391,19 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   }
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
+
+  // Elite variant: larger, faster, higher reward — 15% chance past wave 15 for ground enemies
+  if (waveNumber >= 15 && type !== ENEMY_TYPES.JOTUNN && Math.random() < 0.15) {
+    newEnemy.isEliteSpawned = true;
+    newEnemy.hp             = Math.round(newEnemy.hp * 1.45);
+    newEnemy.maxHp          = newEnemy.hp;
+    newEnemy.baseSpeed     *= 1.12;
+    newEnemy.speed         *= 1.12;
+    newEnemy.reward         = Math.round(newEnemy.reward * 1.6);
+    newEnemy.radius        += 2;
+    newEnemy.eliteLabel     = 'ELITE ' + (ENEMY_DEFS[type]?.label?.toUpperCase() ?? type.toUpperCase());
+  }
+
   enemies.push(newEnemy);
 }
 
@@ -2136,7 +2149,12 @@ function update() {
       const killY    = (b.canPierce && b.alive) ? b.lastKillY : (b.target?.y ?? b.y);
       const killBoss = (b.canPierce && b.alive) ? b.lastKillIsBoss : (b.target?.isBoss ?? false);
       sfxDie(killBoss);
-      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: 52, maxLife: 52, color: valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44' });
+      const isCrit = !killBoss && Math.random() < 0.15;
+      if (isCrit) {
+        dmgFloaters.push({ x: killX, y: killY - 18, val: 'CRIT!', life: 38, maxLife: 38, color: '#ff8820', large: true, suffix: '' });
+        screenShake = Math.max(screenShake, 3);
+      }
+      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: isCrit ? 70 : 52, maxLife: isCrit ? 70 : 52, color: isCrit ? '#ff8820' : valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44', large: isCrit });
       if (killBoss) {
         if (b.target && b.canPierce && b.alive) { /* boss killed mid-pierce — handled at deathTimer */ }
         else if (b.target?.isBoss) onBossKilled(b.target);
@@ -2591,12 +2609,12 @@ function drawPath() {
       }
       const wobX   = Math.sin(t * 2.3 + wi * 1.9) * cs * 0.38;
       const wobY   = Math.cos(t * 1.7 + wi * 2.5) * cs * 0.28;
-      const alpha  = 0.30 + Math.sin(t * 2.1 + wi * 1.4) * 0.18;
-      const radius = 2.2 + Math.sin(t * 1.5 + wi * 0.8) * 0.6;
+      const alpha  = 0.18 + Math.sin(t * 2.1 + wi * 1.4) * 0.10;
+      const radius = 2.0 + Math.sin(t * 1.5 + wi * 0.8) * 0.5;
       ctx.save();
       ctx.fillStyle   = `rgba(130,220,255,${alpha})`;
-      ctx.shadowColor = 'rgba(100,200,255,0.55)';
-      ctx.shadowBlur  = 5;
+      ctx.shadowColor = 'rgba(100,200,255,0.35)';
+      ctx.shadowBlur  = 2;
       ctx.beginPath();
       ctx.arc(wsx + wobX, wsy + wobY, radius, 0, Math.PI * 2);
       ctx.fill();
@@ -4189,18 +4207,27 @@ function onBossKilled(boss) {
   bossDefeatText  = boss.bossName + ' DEFEATED';
   bossDefeatGold  = boss.reward;
 
-  // Particle explosion
-  spawnParticles(boss.x, boss.y, boss.highlightColor, 50);
-  spawnParticles(boss.x, boss.y, '#f5d030', 25);
-  spawnParticles(boss.x, boss.y, boss.color, 20);
+  // Particle explosion — layered burst (Tier 1 spectacle)
+  spawnParticles(boss.x, boss.y, boss.highlightColor, 60);
+  spawnParticles(boss.x, boss.y, '#f5d030', 40);
+  spawnParticles(boss.x, boss.y, '#ffffff', 20);
+  spawnParticles(boss.x, boss.y, boss.color, 30);
+  screenShake = Math.max(screenShake, 32);
 
-  // Gold flood — coins respect pan/zoom so they arc from the correct screen position
-  for (let i = 0; i < 10; i++) {
+  // Treasure burst — 25 staggered coin arcs from boss position
+  for (let i = 0; i < 25; i++) {
+    const ox = (Math.random() - 0.5) * boss.radius * 3;
+    const oy = (Math.random() - 0.5) * boss.radius * 3;
     spawnGoldCoins(
-      GRID_LEFT + gridPanX + gridZoom * (boss.x + (Math.random() - 0.5) * boss.radius * 2),
-      GRID_TOP  + gridPanY + gridZoom * (boss.y + (Math.random() - 0.5) * boss.radius * 2),
-      20
+      GRID_LEFT + gridPanX + gridZoom * (boss.x + ox),
+      GRID_TOP  + gridPanY + gridZoom * (boss.y + oy),
+      Math.ceil(boss.reward / 25)
     );
+  }
+
+  // Additional expand rings for dramatic visual payoff (reuse bossRings)
+  for (let ri = 0; ri < 3; ri++) {
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * (4 + ri * 3), life: 40 + ri * 8, maxLife: 40 + ri * 8, color: ri === 0 ? '#ffd040' : ri === 1 ? boss.highlightColor : '#ffffff' });
   }
 
   // One-time Rune Forge hint after first boss kill
@@ -4265,8 +4292,35 @@ function drawRuneForgeHint() {
 
 function drawBossWarning() {
   if (bossWarnAlpha <= 0.01 || gameOver) return;
-  const { width } = getViewSize();
+  const { width, height } = getViewSize();
   const cx      = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+
+  // Screen-edge red vignette — pulses on every beat during boss countdown
+  const edgePulse = 0.5 + Math.sin(performance.now() * 0.005) * 0.5;
+  const edgeAlpha = bossWarnAlpha * (0.18 + edgePulse * 0.12);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);  // draw in screen space
+  const edgeGrad = ctx.createRadialGradient(width / 2, height / 2, height * 0.25, width / 2, height / 2, height * 0.72);
+  edgeGrad.addColorStop(0, 'rgba(180,10,10,0)');
+  edgeGrad.addColorStop(1, `rgba(180,10,10,${edgeAlpha})`);
+  ctx.fillStyle = edgeGrad;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+
+  // Boss wave countdown — show seconds remaining in large text below banner
+  if (waveState === 'countdown') {
+    const secsLeft = Math.max(1, Math.ceil(waveTimer / 30));
+    if (secsLeft <= 5) {
+      ctx.save();
+      ctx.textAlign   = 'center';
+      ctx.font        = `bold ${18 + (6 - secsLeft) * 2}px monospace`;
+      ctx.fillStyle   = `rgba(255,80,40,${bossWarnAlpha * (0.70 + edgePulse * 0.30)})`;
+      ctx.shadowColor = 'rgba(255,40,10,0.9)'; ctx.shadowBlur = 14;
+      ctx.fillText(secsLeft.toString(), cx, GRID_TOP + 100);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
   const bossCfg  = BOSS_CONFIGS[waveNumber + 1];
   const bossLabel = bossCfg ? bossCfg.name : 'BOSS';
   const bannerY = GRID_TOP + 36;
@@ -5218,6 +5272,60 @@ function draw() {
   }
 
   enemies.forEach(e => e.draw(ctx));
+
+  // ── Post-draw overlays: elite rings, leaking warnings, boss aura ─────────────
+  if (!gameOver) {
+    const _now = performance.now();
+    for (const e of enemies) {
+      if (!e.alive || e.reached) continue;
+
+      // Elite ring + nameplate (Tier 2 unit — gold outline, float label)
+      if (e.isEliteSpawned) {
+        const ePulse = 0.55 + Math.sin(_now * 0.007 + e.x) * 0.45;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,205,50,${0.55 + ePulse * 0.30})`;
+        ctx.lineWidth   = 1.5;
+        ctx.shadowColor = '#ffd040'; ctx.shadowBlur = 6 * ePulse;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // Nameplate
+        ctx.font      = 'bold 7px monospace';
+        ctx.textAlign = 'center';
+        const label   = e.eliteLabel ?? 'ELITE';
+        const tw      = ctx.measureText(label).width + 5;
+        const ty      = e.y - e.radius - 14;
+        ctx.fillStyle = 'rgba(10,6,2,0.78)';
+        ctx.fillRect(e.x - tw / 2, ty - 8, tw, 9);
+        ctx.fillStyle = '#ffd860';
+        ctx.fillText(label, e.x, ty);
+        ctx.restore();
+      }
+
+      // Leaking warning — red pulse ring when enemy is past 75% of path (Tier 1 threat)
+      if (!e.isBoss && e.path && e.path.length > 1 && e.pathIndex / (e.path.length - 1) >= 0.75) {
+        const lPulse = 0.5 + Math.sin(_now * 0.012) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,50,30,${0.50 + lPulse * 0.35})`;
+        ctx.lineWidth   = 1.2;
+        ctx.shadowColor = 'rgba(255,40,10,0.8)'; ctx.shadowBlur = 5 * lPulse;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 2, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      // Boss aura — pulsing red/amber ring around boss while on field (Tier 1)
+      if (e.isBoss) {
+        const bPulse = 0.5 + Math.sin(_now * 0.004) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,80,30,${0.28 + bPulse * 0.22})`;
+        ctx.lineWidth   = 3 + bPulse * 2;
+        ctx.shadowColor = '#ff4020'; ctx.shadowBlur = 14 + bPulse * 8;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 5 + bPulse * 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+  }
 
   // Enemy hover tooltip — name, HP, and type hint when cursor is near an enemy
   if (!gameOver && !dragItem) {
