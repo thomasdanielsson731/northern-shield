@@ -3338,47 +3338,61 @@ function drawRightPanel() {
   const fullH = BASE_H - GRID_TOP - 36;
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(10,6,20,0.98)');
 
-  const lx    = px + 10;
-  const rEdge = px + pw - 8;
-  const barW  = pw - 20;
-  let   ly    = GRID_TOP + 50;  // start below wave announcement banner
+  let   ly    = GRID_TOP + 8;   // cards start near panel top
 
   const _now = performance.now();
 
   ctx.save();
 
-  function miniBar(fillFrac, fillColor, h = 7) {
-    ctx.fillStyle = 'rgba(14,8,4,0.92)';
-    ctx.beginPath(); ctx.roundRect(lx, ly, barW, h, 3); ctx.fill();
-    if (fillFrac > 0.001) {
-      ctx.fillStyle   = fillColor;
-      ctx.shadowColor = fillColor; ctx.shadowBlur = 4;
-      ctx.beginPath(); ctx.roundRect(lx, ly, Math.max(3, barW * Math.min(1, fillFrac)), h, 3); ctx.fill();
-      ctx.shadowBlur  = 0;
-    }
-    ly += h + 4;
+  // ── Card primitives ───────────────────────────────────────────────────────────
+  const _cX = px + 4, _cW = pw - 8;   // card bounds
+  const _bX = _cX + 20, _bW = _cW - 24; // bar bounds (right of icon zone)
+
+  // Card background + left accent strip + icon glyph
+  function _cBase(color, icon, h) {
+    ctx.fillStyle = 'rgba(14,8,4,0.82)';
+    ctx.beginPath(); ctx.roundRect(_cX, ly, _cW, h, 4); ctx.fill();
+    ctx.fillStyle = color; ctx.globalAlpha = 0.72;
+    ctx.fillRect(_cX, ly, 2.5, h);
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 13px monospace'; ctx.fillStyle = color;
+    ctx.shadowColor = color; ctx.shadowBlur = 7;
+    ctx.textAlign = 'center';
+    ctx.fillText(icon, _cX + 11, ly + Math.round(h * 0.62));
+    ctx.shadowBlur = 0; ctx.textAlign = 'left';
   }
 
-  function divider() {
-    ctx.strokeStyle = 'rgba(180,130,30,0.10)';
-    ctx.lineWidth   = 0.5;
-    ctx.beginPath(); ctx.moveTo(px + 6, ly); ctx.lineTo(px + pw - 6, ly); ctx.stroke();
-    ly += 5;
-  }
-
-  // Section header — colored left-strip + tiny label; rightText on same baseline
-  function sec(label, color, rightText = '', rightColor = 'rgba(200,160,80,0.65)') {
-    ctx.fillStyle = color;
-    ctx.fillRect(px + 4, ly, 2, 10);
-    ctx.font = 'bold 7px monospace'; ctx.fillStyle = color;
-    ctx.globalAlpha = 0.55; ctx.textAlign = 'left';
-    ctx.fillText(label, lx + 2, ly + 7);
+  // Tiny section label top-left + right context text
+  function _cLabel(color, label, rightText, rightColor) {
+    ctx.font = '5.5px monospace'; ctx.fillStyle = color;
+    ctx.globalAlpha = 0.48; ctx.textAlign = 'left';
+    ctx.fillText(label, _cX + 20, ly + 8);
     ctx.globalAlpha = 1;
     if (rightText) {
-      ctx.font = 'bold 8px monospace'; ctx.fillStyle = rightColor; ctx.textAlign = 'right';
-      ctx.fillText(rightText, rEdge, ly + 7); ctx.textAlign = 'left';
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = rightColor;
+      ctx.textAlign = 'right'; ctx.fillText(rightText, _cX + _cW - 4, ly + 8);
+      ctx.textAlign = 'left';
     }
-    ly += 11;
+  }
+
+  // Hero value — the dominant number/text in the card
+  function _cHero(text, color, yOff = 19) {
+    ctx.font = 'bold 11px monospace'; ctx.fillStyle = color;
+    ctx.shadowColor = color; ctx.shadowBlur = 3;
+    ctx.textAlign = 'left';
+    ctx.fillText(text, _cX + 20, ly + yOff);
+    ctx.shadowBlur = 0;
+  }
+
+  // Progress bar at a given y-offset inside the current card
+  function _cBar(frac, color, yOff) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(_bX, ly + yOff, _bW, 4, 2); ctx.fill();
+    if (frac > 0.001) {
+      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 3;
+      ctx.beginPath(); ctx.roundRect(_bX, ly + yOff, Math.max(3, _bW * Math.min(1, frac)), 4, 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
   }
 
   // ── 1. THREAT ────────────────────────────────────────────────────────────────
@@ -3386,167 +3400,150 @@ function drawRightPanel() {
   const threatRatio    = endlessMode ? 1.0 : Math.min(1, displayWaveNum / MAX_WAVES);
   const isBossWave     = BOSS_WAVES.has(displayWaveNum);
   const threatColor    = isBossWave ? '#ff2010' : threatRatio > 0.8 ? '#ff6020' : threatRatio > 0.5 ? '#e8c040' : '#50d060';
-  const nextBossWaveN  = [...BOSS_WAVES].filter(w => w > waveNumber).sort((a, b) => a - b)[0] ?? null;
 
   {
-    let threatRight = '', threatRightColor = threatColor;
+    const nextW  = waveState === 'countdown' ? waveNumber : waveNumber + 1;
+    const nextEv = waveState !== 'active' ? WAVE_EVENTS[nextW] : null;
+    const curEv  = waveState === 'active'  ? currentWaveEvent  : null;
+    const hasEv  = !!(nextEv || curEv);
+
+    let heroTxt = '', heroColor = threatColor;
     if (waveState === 'active') {
       const onField = enemies.filter(e => e.alive && !e.reached).length;
-      threatRight = `${onField}/${waveTotal}`;
+      if (isBossWave) { heroTxt = '☠ BOSS ACTIVE'; heroColor = '#ff5030'; }
+      else heroTxt = `${onField} alive`;
     } else {
-      const nextW = waveState === 'countdown' ? waveNumber : waveNumber + 1;
-      if (BOSS_WAVES.has(nextW)) {
-        threatRight = BOSS_CONFIGS[nextW]?.name ?? 'BOSS';
-        threatRightColor = '#ff4020';
+      if (BOSS_WAVES.has(nextW) && BOSS_CONFIGS[nextW]) {
+        heroTxt = `☠ ${BOSS_CONFIGS[nextW].name}`; heroColor = '#ff4020';
       } else {
         const comp  = waveComposition(nextW);
-        const parts = [
-          comp.draugr  > 0 && `${comp.draugr}D`,
-          comp.mylings > 0 && `${comp.mylings}M`,
-          comp.jotunn  > 0 && `${comp.jotunn}J`,
-          comp.maras   > 0 && `${comp.maras}X`,
-        ].filter(Boolean);
-        threatRight = parts.join('·');
+        const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
+                       comp.mylings > 0 && `${comp.mylings}M`,
+                       comp.jotunn  > 0 && `${comp.jotunn}J`,
+                       comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
+        heroTxt = parts.join(' · ');
       }
     }
-    sec('THREAT', threatColor, threatRight, threatRightColor);
-  }
-  miniBar(threatRatio, threatColor, 5);
 
-  if (waveState !== 'active') {
-    const nextW  = waveState === 'countdown' ? waveNumber : waveNumber + 1;
-    const nextEv = WAVE_EVENTS[nextW];
-    if (BOSS_WAVES.has(nextW) && BOSS_CONFIGS[nextW]) {
-      const bCfg  = BOSS_CONFIGS[nextW];
-      const pulse = 0.65 + Math.abs(Math.sin(_now * 0.005)) * 0.35;
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = `rgba(255,80,30,${0.65 + pulse * 0.20})`;
-      ctx.shadowColor = 'rgba(255,50,10,0.50)'; ctx.shadowBlur = 4;
-      ctx.fillText(`☠ ${bCfg.name}`, lx, ly);
-      ctx.shadowBlur = 0; ly += 10;
-    } else if (nextEv) {
-      const isAid = nextEv.id === 'ancestralAid';
-      const pulse  = 0.70 + Math.abs(Math.sin(_now * 0.005)) * 0.30;
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = isAid ? `rgba(140,220,255,${pulse})` : `rgba(255,200,60,${pulse})`;
-      ctx.fillText(`⚡ ${nextEv.label}`, lx, ly); ly += 10;
-    }
-    if (waveHpScale > 1.1) {
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(255,160,80,0.55)'; ctx.textAlign = 'right';
-      ctx.fillText(`HP ×${waveHpScale.toFixed(1)}`, rEdge, ly - 1); ctx.textAlign = 'left';
-    }
-  } else if (isBossWave) {
-    const bCfg  = BOSS_CONFIGS[displayWaveNum];
-    const pulse = 0.65 + Math.sin(_now * 0.005) * 0.35;
-    ctx.font = 'bold 9px monospace';
-    ctx.fillStyle = `rgba(255,80,30,${0.70 + pulse * 0.30})`;
-    ctx.shadowColor = 'rgba(255,50,10,0.55)'; ctx.shadowBlur = 5;
-    ctx.fillText(`☠ ${bCfg?.name ?? 'BOSS'}`, lx, ly);
-    ctx.shadowBlur = 0; ly += 10;
-  }
+    const cardH = hasEv ? 36 : 26;
+    _cBase(threatColor, '☠', cardH);
+    _cLabel(threatColor, 'THREAT', `W${displayWaveNum}`, 'rgba(180,150,80,0.65)');
+    _cHero(heroTxt, heroColor);
+    _cBar(threatRatio, threatColor, cardH - 8);
 
-  divider();
+    if (hasEv) {
+      const ev = nextEv || curEv;
+      const isAid   = ev?.id === 'ancestralAid';
+      const evPulse = 0.70 + Math.abs(Math.sin(_now * 0.005)) * 0.30;
+      ctx.font = '7px monospace';
+      ctx.fillStyle = isAid ? `rgba(140,220,255,${evPulse})` : `rgba(255,200,60,${evPulse})`;
+      ctx.textAlign = 'left';
+      ctx.fillText(`⚡ ${ev.label}`, _cX + 20, ly + cardH - 13);
+    }
+
+    ly += cardH + 4;
+  }
 
   // ── 2. FORTRESS ──────────────────────────────────────────────────────────────
-  const livesColor    = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : '#50e870';
-  const livesFlash    = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
-  const effLivesColor = livesFlash > 0 ? '#ff1818' : livesColor;
-  const livesDanger   = lives <= 3 ? 0.75 + Math.sin(_now * 0.007) * 0.25 : 1;
-  const fortStatus    = lives <= 2 ? 'CRITICAL' : lives <= 4 ? 'BREACHED' : lives < STARTING_LIVES ? 'DAMAGED' : 'HOLDING';
-
-  sec('FORTRESS', '#5882c8', `♥${lives} ${fortStatus}`, effLivesColor);
-
   {
-    const _prevShadow = ctx.shadowBlur;
-    ctx.shadowColor = effLivesColor;
-    ctx.shadowBlur  = livesFlash > 0 ? 8 : lives <= 4 ? 5 : 0;
-    ctx.globalAlpha = livesFlash > 0 ? 0.85 + livesFlash * 0.15 : lives <= 3 ? livesDanger : 1;
-    miniBar(lives / STARTING_LIVES, effLivesColor, 5);
-    ctx.shadowBlur  = _prevShadow; ctx.globalAlpha = 1;
+    const livesColor    = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : '#50e870';
+    const livesFlash    = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
+    const effLivesColor = livesFlash > 0 ? '#ff1818' : livesColor;
+    const fortStatus    = lives <= 2 ? 'CRITICAL' : lives <= 4 ? 'BREACHED' : lives < STARTING_LIVES ? 'DAMAGED' : 'HOLDING';
+    const fortStatColor = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : lives < STARTING_LIVES ? '#e8c040' : 'rgba(80,230,110,0.75)';
+
+    if (livesFlash > 0) { ctx.shadowColor = effLivesColor; ctx.shadowBlur = 8; }
+    ctx.globalAlpha = livesFlash > 0 ? 0.85 + livesFlash * 0.15 : 1;
+
+    _cBase('#5882c8', '♜', 26);
+    _cLabel('#5882c8', 'FORTRESS', fortStatus, fortStatColor);
+    _cHero(`♥ ${lives}`, effLivesColor);
+    _cBar(lives / STARTING_LIVES, effLivesColor, 18);
+
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    ly += 26 + 4;
   }
 
-  divider();
-
-  // ── 3. DEFENDERS ─────────────────────────────────────────────────────────────
+  // ── 3. TREASURY ──────────────────────────────────────────────────────────────
   {
-    let mvpRight = 'no towers', mvpRightColor = 'rgba(130,100,60,0.40)';
-    let _mvpRef  = null;
-    if (towers.length > 0) {
-      _mvpRef = towers.reduce((a, b) => b.damageDealt > a.damageDealt ? b : a, towers[0]);
-      mvpRight      = _mvpRef.damageDealt > 0 ? `${TOWER_DEFS[_mvpRef.type].label} Lv${_mvpRef.level}` : `${towers.length}t no kills`;
-      mvpRightColor = _mvpRef.damageDealt > 0 ? TOWER_DEFS[_mvpRef.type].color : 'rgba(160,130,70,0.55)';
-    }
-    sec('DEFENDERS', '#b87830', mvpRight, mvpRightColor);
+    const hG         = gold;
+    const hoardLevel = hG >= 5000 ? 'LEGENDARY' : hG >= 1000 ? 'WEALTHY' : hG >= 500 ? 'PROSPEROUS' : hG >= 100 ? 'GROWING' : 'SPARSE';
+    const hoardColor = hG >= 5000 ? '#ffd040' : hG >= 1000 ? '#f0a030' : hG >= 500 ? '#c08020' : hG >= 100 ? '#907040' : 'rgba(130,110,70,0.50)';
+    const goldPulse  = hoardPulse > 0;
+    const lastWaveIncome = goldEarned - waveGoldStart;
+    const cardH = 36;
 
-    if (_mvpRef) {
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.60)'; ctx.textAlign = 'left';
-      ctx.fillText(`◈ ${slain} slain`, lx, ly);
-      if (_mvpRef.damageDealt > 0) {
-        ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#e8c040'; ctx.textAlign = 'right';
-        ctx.fillText(`${_mvpRef.damageDealt}dmg ×${_mvpRef.killCount}`, rEdge, ly);
-      } else {
-        ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,110,60,0.40)'; ctx.textAlign = 'right';
-        ctx.fillText(`${towers.length}t`, rEdge, ly);
-      }
-      ctx.textAlign = 'left'; ly += 10;
+    // Card base (manual — treasury gets a bigger icon and special glow)
+    ctx.fillStyle = 'rgba(14,8,4,0.82)';
+    ctx.beginPath(); ctx.roundRect(_cX, ly, _cW, cardH, 4); ctx.fill();
+    ctx.fillStyle = '#c89828'; ctx.globalAlpha = 0.72;
+    ctx.fillRect(_cX, ly, 2.5, cardH);
+    ctx.globalAlpha = 1;
+
+    // Big ◆ icon with pulse glow
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle   = goldPulse ? '#fff8a0' : hoardColor;
+    ctx.shadowColor = goldPulse ? '#ffffa0' : hoardColor; ctx.shadowBlur = goldPulse ? 14 : 6;
+    ctx.textAlign = 'center';
+    ctx.fillText('◆', _cX + 11, ly + 23);
+    ctx.shadowBlur = 0;
+
+    // Label row
+    ctx.font = '5.5px monospace'; ctx.fillStyle = '#c89828';
+    ctx.globalAlpha = 0.48; ctx.textAlign = 'left';
+    ctx.fillText('TREASURY', _cX + 20, ly + 8);
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 7px monospace'; ctx.fillStyle = hoardColor;
+    ctx.textAlign = 'right'; ctx.fillText(hoardLevel, _cX + _cW - 4, ly + 8);
+    ctx.textAlign = 'left';
+
+    // Hero: big gold number
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle   = goldPulse ? '#fff8a0' : '#f0c840';
+    ctx.shadowColor = goldPulse ? '#ffffa0' : 'rgba(240,190,30,0.55)'; ctx.shadowBlur = goldPulse ? 12 : 3;
+    ctx.fillText(`◆ ${Math.floor(_displayGold)}g`, _cX + 20, ly + 22);
+    ctx.shadowBlur = 0;
+
+    // Sub-line: stars + runes + last income
+    const totalOwned = Object.values(runeInventory).reduce((s, v) => s + v, 0);
+    ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    if (totalOwned > 0) {
+      const equipped = RUNE_DEFS.reduce((s, d) => s + runeEquippedCount(d.id), 0);
+      ctx.fillStyle = 'rgba(180,140,220,0.65)';
+      ctx.fillText(`✦${stars}  ${equipped}/${totalOwned} runes`, _cX + 20, ly + 31);
     } else {
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,110,60,0.40)';
-      ctx.fillText('Place towers to defend', lx, ly); ly += 10;
+      ctx.fillStyle = 'rgba(200,170,80,0.50)';
+      ctx.fillText(`✦ ${stars} stars`, _cX + 20, ly + 31);
     }
-    if (waveState === 'active' && currentWaveEvent) {
-      const isAid = currentWaveEvent.id === 'ancestralAid';
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = isAid ? 'rgba(140,220,255,0.80)' : 'rgba(255,200,60,0.80)';
-      ctx.fillText(`⚡ ${currentWaveEvent.label}`, lx, ly); ly += 10;
+    if (lastWaveIncome > 0) {
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#c8a030';
+      ctx.textAlign = 'right'; ctx.fillText(`+${lastWaveIncome}g`, _cX + _cW - 4, ly + 31);
+      ctx.textAlign = 'left';
     }
+
+    ly += cardH + 4;
   }
 
-  divider();
+  // ── 4. CAMPAIGN ──────────────────────────────────────────────────────────────
+  {
+    const progress     = endlessMode ? 1.0 : Math.min(1, displayWaveNum / MAX_WAVES);
+    const waveBarColor = endlessMode ? '#e08040' : (progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040');
+    const campAccent   = 'rgba(140,140,200,0.90)';
+    const hasStreak    = flawlessStreak >= 2;
+    const cardH        = hasStreak ? 36 : 26;
 
-  // ── 4. TREASURY ──────────────────────────────────────────────────────────────
-  const hG         = gold;
-  const hoardLevel = hG >= 5000 ? 'LEGENDARY' : hG >= 1000 ? 'WEALTHY' : hG >= 500 ? 'PROSPEROUS' : hG >= 100 ? 'GROWING' : 'SPARSE';
-  const hoardColor = hG >= 5000 ? '#ffd040' : hG >= 1000 ? '#f0a030' : hG >= 500 ? '#c08020' : hG >= 100 ? '#907040' : 'rgba(130,110,70,0.50)';
+    _cBase(campAccent, '✦', cardH);
+    _cLabel(campAccent, 'CAMPAIGN', `☠${bossesDefeated} ✦${stars}`, 'rgba(190,165,100,0.75)');
+    _cHero(endlessMode ? `W${displayWaveNum} / ∞` : `W${displayWaveNum} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
+    _cBar(progress, waveBarColor, cardH - 8);
 
-  sec('TREASURY', '#c89828', hoardLevel, hoardColor);
+    if (hasStreak) {
+      ctx.font = '7px monospace'; ctx.fillStyle = '#80d8ff';
+      ctx.textAlign = 'left';
+      ctx.fillText(`✦ ${flawlessStreak}× flawless`, _cX + 20, ly + cardH - 13);
+    }
 
-  ctx.font        = 'bold 12px monospace';
-  ctx.fillStyle   = hoardPulse > 0 ? '#fff8a0' : '#f0c840';
-  ctx.shadowColor = 'rgba(240,190,30,0.65)'; ctx.shadowBlur = hoardPulse > 0 ? 10 : 3;
-  ctx.textAlign   = 'left';
-  ctx.fillText(`◆ ${Math.floor(_displayGold)}g`, lx, ly);
-  ctx.shadowBlur  = 0;
-  const lastWaveIncome = goldEarned - waveGoldStart;
-  if (lastWaveIncome > 0) {
-    ctx.font = '8px monospace'; ctx.fillStyle = '#c8a030'; ctx.textAlign = 'right';
-    ctx.fillText(`+${lastWaveIncome}g`, rEdge, ly); ctx.textAlign = 'left';
-  }
-  ly += 12;
-
-  const totalOwned = Object.values(runeInventory).reduce((s, v) => s + v, 0);
-  if (totalOwned > 0) {
-    const equipped = RUNE_DEFS.reduce((s, d) => s + runeEquippedCount(d.id), 0);
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,140,220,0.55)'; ctx.textAlign = 'left';
-    ctx.fillText(`✦ ${stars}★  ${equipped}/${totalOwned} runes`, lx, ly); ly += 9;
-  } else {
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,170,80,0.40)'; ctx.textAlign = 'left';
-    ctx.fillText(`✦ ${stars} stars`, lx, ly); ly += 9;
-  }
-
-  divider();
-
-  // ── 5. CAMPAIGN PROGRESS ─────────────────────────────────────────────────────
-  const progress     = endlessMode ? 1.0 : Math.min(1, displayWaveNum / MAX_WAVES);
-  const waveBarColor = endlessMode ? '#e08040' : (progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040');
-
-  sec('CAMPAIGN', 'rgba(160,160,200,0.60)',
-    `W${displayWaveNum}/${endlessMode ? '∞' : MAX_WAVES}  ☠${bossesDefeated}  ✦${stars}`,
-    'rgba(190,165,100,0.70)');
-  miniBar(progress, waveBarColor, 5);
-
-  if (flawlessStreak >= 2) {
-    ctx.font = '8px monospace'; ctx.fillStyle = '#80d8ff'; ctx.textAlign = 'left';
-    ctx.fillText(`✦ ${flawlessStreak}× flawless`, lx, ly); ly += 9;
+    ly += cardH + 4;
   }
 
   // ── HOARD VISUAL — coin pile fills the empty gap below sections (break only) ─
@@ -3556,7 +3553,7 @@ function drawRightPanel() {
     if (hoarGap >= 12) {
       const hcx    = px + pw * 0.5;
       const hcy    = ly + hoarGap * 0.52;
-      const stack  = hG >= 5000 ? 8 : hG >= 1000 ? 6 : hG >= 500 ? 5 : hG >= 100 ? 3 : hG >= 20 ? 2 : 1;
+      const stack  = gold >= 5000 ? 8 : gold >= 1000 ? 6 : gold >= 500 ? 5 : gold >= 100 ? 3 : gold >= 20 ? 2 : 1;
       const hScale = Math.min(1.0, hoarGap / 48);
       const hPulse = 0.88 + Math.sin(_now * 0.0019) * 0.12;
       ctx.save();
@@ -3581,7 +3578,7 @@ function drawRightPanel() {
           ctx.strokeStyle = 'rgba(255,220,80,0.55)'; ctx.lineWidth = 0.8; ctx.stroke();
         }
       }
-      if (hG >= 500) {
+      if (gold >= 500) {
         ctx.globalAlpha = 0.14 * hPulse;
         ctx.shadowColor = '#f0c030'; ctx.shadowBlur = 10; ctx.fillStyle = '#f0c030';
         ctx.beginPath();
