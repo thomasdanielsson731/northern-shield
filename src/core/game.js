@@ -51,6 +51,7 @@ const BUILD_ITEMS = [
     label:    TOWER_DEFS[type].label,
     key:      TOWER_DEFS[type].key,
     color:    TOWER_DEFS[type].color,
+    glowRgb:  TOWER_DEFS[type].glowRgb,
     cost:     TOWER_DEFS[type].cost,
     mode:     CELL.TOWER,
     category: (['berserk', 'valkyrie', 'military'].includes(type)) ? 'warriors'
@@ -3335,222 +3336,231 @@ function drawRightPanel() {
   runeForgeBtn = null;
   if (pw < 60) return;
 
-  const fullH = BASE_H - GRID_TOP - 36;
+  const fullH    = BASE_H - GRID_TOP - 36;
+  const panelBot = GRID_TOP + fullH;
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(10,6,20,0.98)');
 
-  let   ly    = GRID_TOP + 8;   // cards start near panel top
+  // Wave-announcement banner occupies y=GRID_TOP+2..+46 during break/countdown
+  let ly = waveState === 'active' ? GRID_TOP + 8 : GRID_TOP + 50;
 
   const _now = performance.now();
-
   ctx.save();
 
-  // ── Card primitives ───────────────────────────────────────────────────────────
-  const _cX = px + 4, _cW = pw - 8;   // card bounds
-  const _bX = _cX + 20, _bW = _cW - 24; // bar bounds (right of icon zone)
+  // ── Section layout primitives ─────────────────────────────────────────────────
+  const sX  = px + 6;        // section left x
+  const sW  = pw - 12;       // section width
+  const dLX = px + 14;       // data label x
+  const dVX = px + pw - 8;   // data value x (right-aligned)
+  const bX  = px + 14;       // bar left x
+  const bW  = pw - 22;       // bar width
+  const ROW = 9;              // data row height
+  const HDR = 11;             // section header height
+  const GAP = 4;              // gap between sections
 
-  // Card background + left accent strip + icon glyph
-  function _cBase(color, icon, h) {
-    ctx.fillStyle = 'rgba(14,8,4,0.82)';
-    ctx.beginPath(); ctx.roundRect(_cX, ly, _cW, h, 4); ctx.fill();
-    ctx.fillStyle = color; ctx.globalAlpha = 0.72;
-    ctx.fillRect(_cX, ly, 2.5, h);
+  // Section header: dark bg, left color strip, icon, ALL-CAPS label, optional right text
+  function _hdr(color, icon, label, rightTxt, rightColor) {
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath(); ctx.roundRect(sX, ly, sW, HDR, [3,3,0,0]); ctx.fill();
+    ctx.fillStyle = color; ctx.globalAlpha = 0.82;
+    ctx.fillRect(sX, ly, 3, HDR);
     ctx.globalAlpha = 1;
-    ctx.font = 'bold 13px monospace'; ctx.fillStyle = color;
-    ctx.shadowColor = color; ctx.shadowBlur = 7;
-    ctx.textAlign = 'center';
-    ctx.fillText(icon, _cX + 11, ly + Math.round(h * 0.62));
-    ctx.shadowBlur = 0; ctx.textAlign = 'left';
-  }
-
-  // Tiny section label top-left + right context text
-  function _cLabel(color, label, rightText, rightColor) {
-    ctx.font = '5.5px monospace'; ctx.fillStyle = color;
-    ctx.globalAlpha = 0.48; ctx.textAlign = 'left';
-    ctx.fillText(label, _cX + 20, ly + 8);
-    ctx.globalAlpha = 1;
-    if (rightText) {
-      ctx.font = 'bold 7px monospace'; ctx.fillStyle = rightColor;
-      ctx.textAlign = 'right'; ctx.fillText(rightText, _cX + _cW - 4, ly + 8);
-      ctx.textAlign = 'left';
-    }
-  }
-
-  // Hero value — the dominant number/text in the card
-  function _cHero(text, color, yOff = 19) {
-    ctx.font = 'bold 11px monospace'; ctx.fillStyle = color;
-    ctx.shadowColor = color; ctx.shadowBlur = 3;
-    ctx.textAlign = 'left';
-    ctx.fillText(text, _cX + 20, ly + yOff);
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 4;
+    ctx.fillText(icon, sX + 8, ly + HDR - 2);
     ctx.shadowBlur = 0;
-  }
-
-  // Progress bar at a given y-offset inside the current card
-  function _cBar(frac, color, yOff) {
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath(); ctx.roundRect(_bX, ly + yOff, _bW, 4, 2); ctx.fill();
-    if (frac > 0.001) {
-      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 3;
-      ctx.beginPath(); ctx.roundRect(_bX, ly + yOff, Math.max(3, _bW * Math.min(1, frac)), 4, 2); ctx.fill();
+    ctx.font = 'bold 6.5px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = color; ctx.globalAlpha = 0.88;
+    ctx.fillText(label, sX + 17, ly + HDR - 2);
+    ctx.globalAlpha = 1;
+    if (rightTxt) {
+      ctx.font = 'bold 7px monospace'; ctx.textAlign = 'right';
+      ctx.fillStyle = rightColor ?? 'rgba(180,150,80,0.80)';
+      ctx.shadowColor = rightColor ?? 'transparent'; ctx.shadowBlur = rightColor ? 3 : 0;
+      ctx.fillText(rightTxt, dVX, ly + HDR - 2);
       ctx.shadowBlur = 0;
     }
+    ctx.textAlign = 'left';
+    ly += HDR;
   }
 
-  // ── 1. THREAT ────────────────────────────────────────────────────────────────
-  const displayWaveNum = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
-  const threatRatio    = endlessMode ? 1.0 : Math.min(1, displayWaveNum / MAX_WAVES);
-  const isBossWave     = BOSS_WAVES.has(displayWaveNum);
-  const threatColor    = isBossWave ? '#ff2010' : threatRatio > 0.8 ? '#ff6020' : threatRatio > 0.5 ? '#e8c040' : '#50d060';
+  // Data row: label left (muted) + value right (bold)
+  function _row(label, value, valColor) {
+    ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.fillText(label, dLX, ly + ROW - 2);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = valColor ?? 'rgba(225,205,165,0.88)';
+    if (valColor) { ctx.shadowColor = valColor; ctx.shadowBlur = 2; }
+    ctx.fillText(value, dVX, ly + ROW - 2);
+    ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    ly += ROW;
+  }
 
-  {
-    const nextW  = waveState === 'countdown' ? waveNumber : waveNumber + 1;
-    const nextEv = waveState !== 'active' ? WAVE_EVENTS[nextW] : null;
-    const curEv  = waveState === 'active'  ? currentWaveEvent  : null;
-    const hasEv  = !!(nextEv || curEv);
+  // Dual-value row: label + v1 at mid-right + v2 at far right
+  function _rowDual(label, v1, v1c, v2, v2c) {
+    const midX = sX + Math.floor(sW * 0.52);
+    ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.fillText(label, dLX, ly + ROW - 2);
+    ctx.font = 'bold 7.5px monospace';
+    ctx.fillStyle = v1c ?? 'rgba(225,205,165,0.88)'; ctx.textAlign = 'right';
+    ctx.fillText(v1, midX, ly + ROW - 2);
+    ctx.fillStyle = v2c ?? 'rgba(225,205,165,0.88)'; ctx.textAlign = 'right';
+    ctx.fillText(v2, dVX, ly + ROW - 2);
+    ctx.textAlign = 'left';
+    ly += ROW;
+  }
 
-    let heroTxt = '', heroColor = threatColor;
-    if (waveState === 'active') {
-      const onField = enemies.filter(e => e.alive && !e.reached).length;
-      if (isBossWave) { heroTxt = '☠ BOSS ACTIVE'; heroColor = '#ff5030'; }
-      else heroTxt = `${onField} alive`;
+  // Thin progress bar (4px)
+  function _bar(frac, color) {
+    ctx.fillStyle = 'rgba(0,0,0,0.50)';
+    ctx.beginPath(); ctx.roundRect(bX, ly, bW, 4, 2); ctx.fill();
+    if (frac > 0.001) {
+      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 3;
+      ctx.beginPath(); ctx.roundRect(bX, ly, Math.max(3, bW * Math.min(1, frac)), 4, 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ly += 5;
+  }
+
+  // Segmented threat bar — N colored squares
+  function _segBar(filled, total, color, warnColor) {
+    const sw = Math.floor((bW - (total - 1) * 2) / total);
+    for (let i = 0; i < total; i++) {
+      const sx      = bX + i * (sw + 2);
+      const isFull  = i < filled;
+      const isWarn  = i >= total - 2;
+      ctx.fillStyle = isFull ? (isWarn ? warnColor : color) : 'rgba(50,40,28,0.55)';
+      ctx.globalAlpha = isFull ? 0.88 : 0.40;
+      ctx.beginPath(); ctx.roundRect(sx, ly, sw, 5, 1); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ly += 7;
+  }
+
+  // ── 1. THREAT (active only — wave banner covers this during break) ────────────
+  if (waveState === 'active') {
+    const dispW     = waveNumber;
+    const tRatio    = endlessMode ? 1.0 : Math.min(1, dispW / MAX_WAVES);
+    const isBossW   = BOSS_WAVES.has(dispW);
+    const tColor    = isBossW ? '#ff2010' : tRatio > 0.8 ? '#ff6020' : tRatio > 0.5 ? '#e8c040' : '#50d060';
+    const onField   = enemies.filter(e => e.alive && !e.reached).length;
+    const curEv     = currentWaveEvent;
+    const nextBossW = [...BOSS_WAVES].filter(w => w > dispW).sort((a,b)=>a-b)[0] ?? null;
+
+    _hdr(tColor, '☠', 'THREAT', `W${dispW}`, 'rgba(180,150,80,0.65)');
+    _segBar(Math.ceil(tRatio * 10), 10, tColor, '#ff4020');
+
+    if (isBossW) {
+      _row('Enemies:', '☠ BOSS ACTIVE', '#ff5030');
     } else {
-      if (BOSS_WAVES.has(nextW) && BOSS_CONFIGS[nextW]) {
-        heroTxt = `☠ ${BOSS_CONFIGS[nextW].name}`; heroColor = '#ff4020';
-      } else {
-        const comp  = waveComposition(nextW);
-        const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
-                       comp.mylings > 0 && `${comp.mylings}M`,
-                       comp.jotunn  > 0 && `${comp.jotunn}J`,
-                       comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
-        heroTxt = parts.join(' · ');
-      }
+      const comp  = waveComposition(dispW);
+      const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
+                     comp.mylings > 0 && `${comp.mylings}M`,
+                     comp.jotunn  > 0 && `${comp.jotunn}J`,
+                     comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
+      _row('Enemies:', `${onField} ∙ ${parts.join(' ')}`, tColor);
     }
-
-    const cardH = hasEv ? 36 : 26;
-    _cBase(threatColor, '☠', cardH);
-    _cLabel(threatColor, 'THREAT', `W${displayWaveNum}`, 'rgba(180,150,80,0.65)');
-    _cHero(heroTxt, heroColor);
-    _cBar(threatRatio, threatColor, cardH - 8);
-
-    if (hasEv) {
-      const ev = nextEv || curEv;
-      const isAid   = ev?.id === 'ancestralAid';
-      const evPulse = 0.70 + Math.abs(Math.sin(_now * 0.005)) * 0.30;
-      ctx.font = '7px monospace';
-      ctx.fillStyle = isAid ? `rgba(140,220,255,${evPulse})` : `rgba(255,200,60,${evPulse})`;
-      ctx.textAlign = 'left';
-      ctx.fillText(`⚡ ${ev.label}`, _cX + 20, ly + cardH - 13);
+    if (nextBossW) {
+      _row('Next Boss:', `☠ Wave ${nextBossW}`, '#d05828');
+    } else if (curEv) {
+      _row('Event:', `⚡ ${curEv.label}`, curEv.id === 'ancestralAid' ? '#80d8ff' : '#e8c040');
     }
-
-    ly += cardH + 4;
+    ly += GAP;
   }
 
   // ── 2. FORTRESS ──────────────────────────────────────────────────────────────
   {
-    const livesColor    = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : '#50e870';
-    const livesFlash    = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
-    const effLivesColor = livesFlash > 0 ? '#ff1818' : livesColor;
-    const fortStatus    = lives <= 2 ? 'CRITICAL' : lives <= 4 ? 'BREACHED' : lives < STARTING_LIVES ? 'DAMAGED' : 'HOLDING';
-    const fortStatColor = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : lives < STARTING_LIVES ? '#e8c040' : 'rgba(80,230,110,0.75)';
+    const livC  = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : '#50e870';
+    const flash = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
+    const effC  = flash > 0 ? '#ff1818' : livC;
+    const stat  = lives <= 2 ? 'CRITICAL' : lives <= 4 ? 'BREACHED' : lives < STARTING_LIVES ? 'DAMAGED' : 'SECURE';
+    const statC = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : lives < STARTING_LIVES ? '#e8c040' : '#50e870';
 
-    if (livesFlash > 0) { ctx.shadowColor = effLivesColor; ctx.shadowBlur = 8; }
-    ctx.globalAlpha = livesFlash > 0 ? 0.85 + livesFlash * 0.15 : 1;
-
-    _cBase('#5882c8', '♜', 26);
-    _cLabel('#5882c8', 'FORTRESS', fortStatus, fortStatColor);
-    _cHero(`♥ ${lives}`, effLivesColor);
-    _cBar(lives / STARTING_LIVES, effLivesColor, 18);
-
+    if (flash > 0) { ctx.shadowColor = effC; ctx.shadowBlur = 8; }
+    ctx.globalAlpha = flash > 0 ? 0.85 + flash * 0.15 : 1;
+    _hdr('#5882c8', '♜', 'FORTRESS', stat, statC);
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-    ly += 26 + 4;
+
+    _row('Lives:', `${lives} / ${STARTING_LIVES}`, effC);
+    _bar(lives / STARTING_LIVES, effC);
+    _row('Towers:', `${towers.length}`, '#90a8c8');
+    ly += GAP;
   }
 
-  // ── 3. TREASURY ──────────────────────────────────────────────────────────────
+  // ── 3. DEFENDERS ─────────────────────────────────────────────────────────────
   {
-    const hG         = gold;
-    const hoardLevel = hG >= 5000 ? 'LEGENDARY' : hG >= 1000 ? 'WEALTHY' : hG >= 500 ? 'PROSPEROUS' : hG >= 100 ? 'GROWING' : 'SPARSE';
-    const hoardColor = hG >= 5000 ? '#ffd040' : hG >= 1000 ? '#f0a030' : hG >= 500 ? '#c08020' : hG >= 100 ? '#907040' : 'rgba(130,110,70,0.50)';
-    const goldPulse  = hoardPulse > 0;
-    const lastWaveIncome = goldEarned - waveGoldStart;
-    const cardH = 36;
+    const defC  = '#9070d8';
+    const mvpT  = towers.length ? towers.reduce((best, t) => {
+      const sc = (t.damageDealt||0) + (t.killCount||0)*32 + (t.goldGenerated||0)*1.5;
+      const bs = (best.damageDealt||0) + (best.killCount||0)*32 + (best.goldGenerated||0)*1.5;
+      return sc > bs ? t : best;
+    }) : null;
+    const totalDmg  = towers.reduce((s,t) => s + (t.damageDealt||0), 0);
+    const totalKill = towers.reduce((s,t) => s + (t.killCount||0), 0);
+    const mvpLabel  = mvpT && mvpT.mvpTimer > 0 ? (mvpT.name ?? TOWER_DEFS[mvpT.type]?.label) : null;
 
-    // Card base (manual — treasury gets a bigger icon and special glow)
-    ctx.fillStyle = 'rgba(14,8,4,0.82)';
-    ctx.beginPath(); ctx.roundRect(_cX, ly, _cW, cardH, 4); ctx.fill();
-    ctx.fillStyle = '#c89828'; ctx.globalAlpha = 0.72;
-    ctx.fillRect(_cX, ly, 2.5, cardH);
-    ctx.globalAlpha = 1;
+    _hdr(defC, '⚔', 'DEFENDERS', mvpLabel ? `MVP: ${mvpLabel}` : '', '#ffd040');
 
-    // Big ◆ icon with pulse glow
-    ctx.font = 'bold 16px monospace';
-    ctx.fillStyle   = goldPulse ? '#fff8a0' : hoardColor;
-    ctx.shadowColor = goldPulse ? '#ffffa0' : hoardColor; ctx.shadowBlur = goldPulse ? 14 : 6;
-    ctx.textAlign = 'center';
-    ctx.fillText('◆', _cX + 11, ly + 23);
-    ctx.shadowBlur = 0;
-
-    // Label row
-    ctx.font = '5.5px monospace'; ctx.fillStyle = '#c89828';
-    ctx.globalAlpha = 0.48; ctx.textAlign = 'left';
-    ctx.fillText('TREASURY', _cX + 20, ly + 8);
-    ctx.globalAlpha = 1;
-    ctx.font = 'bold 7px monospace'; ctx.fillStyle = hoardColor;
-    ctx.textAlign = 'right'; ctx.fillText(hoardLevel, _cX + _cW - 4, ly + 8);
-    ctx.textAlign = 'left';
-
-    // Hero: big gold number
-    ctx.font = 'bold 14px monospace';
-    ctx.fillStyle   = goldPulse ? '#fff8a0' : '#f0c840';
-    ctx.shadowColor = goldPulse ? '#ffffa0' : 'rgba(240,190,30,0.55)'; ctx.shadowBlur = goldPulse ? 12 : 3;
-    ctx.fillText(`◆ ${Math.floor(_displayGold)}g`, _cX + 20, ly + 22);
-    ctx.shadowBlur = 0;
-
-    // Sub-line: stars + runes + last income
-    const totalOwned = Object.values(runeInventory).reduce((s, v) => s + v, 0);
-    ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    if (totalOwned > 0) {
-      const equipped = RUNE_DEFS.reduce((s, d) => s + runeEquippedCount(d.id), 0);
-      ctx.fillStyle = 'rgba(180,140,220,0.65)';
-      ctx.fillText(`✦${stars}  ${equipped}/${totalOwned} runes`, _cX + 20, ly + 31);
-    } else {
-      ctx.fillStyle = 'rgba(200,170,80,0.50)';
-      ctx.fillText(`✦ ${stars} stars`, _cX + 20, ly + 31);
+    if (mvpT) {
+      const mName = mvpT.name ?? TOWER_DEFS[mvpT.type]?.label ?? mvpT.type;
+      _row('Champion:', mName, `rgba(${mvpT.glowRgb ?? '180,150,255'},0.95)`);
     }
-    if (lastWaveIncome > 0) {
-      ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#c8a030';
-      ctx.textAlign = 'right'; ctx.fillText(`+${lastWaveIncome}g`, _cX + _cW - 4, ly + 31);
-      ctx.textAlign = 'left';
-    }
-
-    ly += cardH + 4;
+    _rowDual('',
+      `DMG  ${totalDmg.toLocaleString()}`, '#c8903c',
+      `Kills  ${totalKill}`,               '#c07038');
+    ly += GAP;
   }
 
-  // ── 4. CAMPAIGN ──────────────────────────────────────────────────────────────
+  // ── 4. TREASURY ──────────────────────────────────────────────────────────────
   {
-    const progress     = endlessMode ? 1.0 : Math.min(1, displayWaveNum / MAX_WAVES);
-    const waveBarColor = endlessMode ? '#e08040' : (progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040');
-    const campAccent   = 'rgba(140,140,200,0.90)';
-    const hasStreak    = flawlessStreak >= 2;
-    const cardH        = hasStreak ? 36 : 26;
+    const hG      = gold;
+    const hLevel  = hG >= 5000 ? 'LEGENDARY' : hG >= 1000 ? 'WEALTHY' : hG >= 500 ? 'PROSPEROUS' : hG >= 100 ? 'TREASURY' : 'SPARSE';
+    const hColor  = hG >= 5000 ? '#ffd040' : hG >= 1000 ? '#f0a030' : hG >= 500 ? '#c08020' : hG >= 100 ? '#c89828' : '#786040';
+    const pulse   = hoardPulse > 0;
+    const lastInc = goldEarned - waveGoldStart;
+    const incEst  = lastWaveTimeSec > 0 ? Math.ceil(lastInc / Math.max(1, lastWaveTimeSec)) : 0;
 
-    _cBase(campAccent, '✦', cardH);
-    _cLabel(campAccent, 'CAMPAIGN', `☠${bossesDefeated} ✦${stars}`, 'rgba(190,165,100,0.75)');
-    _cHero(endlessMode ? `W${displayWaveNum} / ∞` : `W${displayWaveNum} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
-    _cBar(progress, waveBarColor, cardH - 8);
+    _hdr('#c89828', '◆', 'TREASURY', hLevel, hColor);
 
-    if (hasStreak) {
-      ctx.font = '7px monospace'; ctx.fillStyle = '#80d8ff';
-      ctx.textAlign = 'left';
-      ctx.fillText(`✦ ${flawlessStreak}× flawless`, _cX + 20, ly + cardH - 13);
-    }
+    // Gold — hero-sized value
+    ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.fillText('Gold:', dLX, ly + 10);
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = pulse ? '#fff8a0' : '#f0c840';
+    if (pulse) { ctx.shadowColor = '#ffffa0'; ctx.shadowBlur = 10; }
+    ctx.fillText(`${Math.floor(_displayGold)}g`, dVX, ly + 10);
+    ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    ly += 12;
 
-    ly += cardH + 4;
+    _row('Income / sec:', `${incEst}g`, '#c89828');
+
+    const hFrac = hG >= 5000 ? 1.0 : hG >= 1000 ? 0.80 : hG >= 500 ? 0.60 : hG >= 100 ? 0.35 : Math.min(0.20, hG/100);
+    _bar(hFrac, hColor);
+    ly += GAP;
   }
 
-  // ── HOARD VISUAL — coin pile fills the empty gap below sections (break only) ─
-  if (waveState !== 'active') {
-    const spBtnAbsY = GRID_TOP + fullH - 168;
-    const hoarGap   = spBtnAbsY - ly - 8;   // ly is already absolute (starts at GRID_TOP + 50)
-    if (hoarGap >= 12) {
+  // ── 5. CAMPAIGN ──────────────────────────────────────────────────────────────
+  {
+    const dispW    = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
+    const progress = endlessMode ? 1.0 : Math.min(1, dispW / MAX_WAVES);
+    const bColor   = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
+    const campC    = 'rgba(130,130,195,0.90)';
+
+    _hdr(campC, '✦', 'CAMPAIGN', `✦ ${stars}`, 'rgba(230,200,80,0.80)');
+    _row('Wave Progress:', endlessMode ? `${dispW} / ∞` : `${dispW} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
+    _bar(progress, bColor);
+    _row('Bosses Defeated:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
+      bossesDefeated >= BOSS_WAVES.size ? '#ffd040' : 'rgba(200,180,130,0.80)');
+    ly += GAP;
+  }
+
+  // ── HOARD VISUAL — coin pile in gap between sections and speed button ─────────
+  {
+    const spY     = panelBot - 152;   // speed button top
+    const hoarGap = spY - ly - 4;
+    if (waveState !== 'active' && hoarGap >= 20) {
       const hcx    = px + pw * 0.5;
       const hcy    = ly + hoarGap * 0.52;
       const stack  = gold >= 5000 ? 8 : gold >= 1000 ? 6 : gold >= 500 ? 5 : gold >= 100 ? 3 : gold >= 20 ? 2 : 1;
@@ -3558,207 +3568,134 @@ function drawRightPanel() {
       const hPulse = 0.88 + Math.sin(_now * 0.0019) * 0.12;
       ctx.save();
       ctx.globalAlpha = 0.25;
-      ctx.fillStyle   = 'rgba(0,0,0,0.7)';
-      ctx.beginPath();
-      ctx.ellipse(hcx, hcy + 5 * hScale, 13 * hScale, 3 * hScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-      const coinRX  = 12 * hScale;
-      const coinRY  = coinRX * 0.36;
-      const coinGap = 2.0 * hScale;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.beginPath(); ctx.ellipse(hcx, hcy+5*hScale, 13*hScale, 3*hScale, 0, 0, Math.PI*2); ctx.fill();
+      const coinRX = 12*hScale, coinRY = coinRX*0.36, coinGap = 2.0*hScale;
       ctx.globalAlpha = 0.70 * hPulse;
       for (let ci = 0; ci < stack; ci++) {
-        const coinY   = hcy - ci * coinGap;
-        const bright  = 0.68 + (ci / stack) * 0.32;
-        const r2      = Math.floor(200 * bright + 20);
-        const g2      = Math.floor(148 * bright);
-        ctx.fillStyle = `rgb(${r2},${g2},28)`;
-        ctx.beginPath();
-        ctx.ellipse(hcx, coinY, coinRX, coinRY, 0, 0, Math.PI * 2); ctx.fill();
-        if (ci === stack - 1) {
-          ctx.strokeStyle = 'rgba(255,220,80,0.55)'; ctx.lineWidth = 0.8; ctx.stroke();
-        }
+        const coinY = hcy - ci*coinGap, bright = 0.68 + (ci/stack)*0.32;
+        ctx.fillStyle = `rgb(${Math.floor(200*bright+20)},${Math.floor(148*bright)},28)`;
+        ctx.beginPath(); ctx.ellipse(hcx, coinY, coinRX, coinRY, 0, 0, Math.PI*2); ctx.fill();
+        if (ci === stack-1) { ctx.strokeStyle='rgba(255,220,80,0.55)'; ctx.lineWidth=0.8; ctx.stroke(); }
       }
       if (gold >= 500) {
-        ctx.globalAlpha = 0.14 * hPulse;
-        ctx.shadowColor = '#f0c030'; ctx.shadowBlur = 10; ctx.fillStyle = '#f0c030';
-        ctx.beginPath();
-        ctx.ellipse(hcx, hcy - stack * coinGap * 0.5, coinRX + 3, coinRY + 2, 0, 0, Math.PI * 2);
-        ctx.fill(); ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.14*hPulse; ctx.shadowColor='#f0c030'; ctx.shadowBlur=10; ctx.fillStyle='#f0c030';
+        ctx.beginPath(); ctx.ellipse(hcx, hcy-stack*coinGap*0.5, coinRX+3, coinRY+2, 0, 0, Math.PI*2);
+        ctx.fill(); ctx.shadowBlur=0;
       }
       ctx.restore();
     }
   }
 
-  // ── SPEED CONTROL — single toggle button, click/[F] cycles ×1 → ×2 → ×4 ────
+  // ── SPEED CONTROL ─────────────────────────────────────────────────────────────
   {
-    const spBtnH  = 26;
-    const spBtnY  = GRID_TOP + fullH - 168;
-    const spBtnX  = px + 6;
-    const spBtnW  = pw - 12;
+    const spH = 24, spY = panelBot - 152, spX = px + 6, spW = pw - 12;
     speedBtns = [];
 
-    // Helper: draw N right-pointing triangles centered at (cx, cy)
     function drawSpeedTriangles(cx, cy, n, color, size = 5) {
-      const gap   = 3.5;
-      const total = n * size + (n - 1) * gap;
-      let tx = cx - total / 2;
+      const gap = 3.5, total = n * size + (n-1) * gap;
+      let tx = cx - total/2;
       ctx.fillStyle = color;
       for (let i = 0; i < n; i++) {
         let ox = tx, oy = cy;
         if (n === 4) {
-          const col = i % 2, row = Math.floor(i / 2);
-          const g2 = 3;
-          const total2 = 2 * size + g2;
-          ox = cx - total2 / 2 + col * (size + g2);
-          oy = cy + (row === 0 ? -3.5 : 3.5);
+          const col = i%2, rr = Math.floor(i/2), g2=3, t2=2*size+g2;
+          ox = cx - t2/2 + col*(size+g2); oy = cy + (rr===0 ? -3.5 : 3.5);
         }
         ctx.beginPath();
-        ctx.moveTo(ox,          oy - size * 0.6);
-        ctx.lineTo(ox + size,   oy);
-        ctx.lineTo(ox,          oy + size * 0.6);
-        ctx.closePath();
-        ctx.fill();
+        ctx.moveTo(ox, oy-size*0.6); ctx.lineTo(ox+size, oy); ctx.lineTo(ox, oy+size*0.6);
+        ctx.closePath(); ctx.fill();
         if (n !== 4) tx += size + gap;
       }
     }
 
-    const sp       = gameSpeed;
-    const fill     = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
-    const bStroke  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
-    const triColor = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
-    const nextSp   = sp >= 4 ? 1 : sp >= 2 ? 4 : 2;
+    const sp      = gameSpeed;
+    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
+    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
+    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
+    const nextSp  = sp >= 4 ? 1 : sp >= 2 ? 4 : 2;
 
     ctx.save();
-    ctx.beginPath(); ctx.roundRect(spBtnX, spBtnY, spBtnW, spBtnH, 5);
-    ctx.fillStyle = fill; ctx.fill();
-    ctx.strokeStyle = bStroke; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.shadowColor = bStroke; ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.roundRect(spBtnX, spBtnY, spBtnW, spBtnH, 5); ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.restore();
+    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5);
+    ctx.fillStyle = spFill; ctx.fill();
+    ctx.strokeStyle = spBord; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.shadowColor = spBord; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.restore();
 
-    const cy = spBtnY + spBtnH * 0.42;
-    drawSpeedTriangles(spBtnX + spBtnW * 0.38, cy, sp === 1 ? 1 : sp === 2 ? 2 : 4, triColor, 4.5);
-
-    ctx.font      = 'bold 9px monospace';
-    ctx.fillStyle = triColor;
+    drawSpeedTriangles(spX + spW*0.38, spY + spH*0.42, sp===1?1:sp===2?2:4, triCol, 4.5);
+    ctx.font = 'bold 9px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'left';
+    ctx.fillText(`×${sp}`, spX + spW*0.60, spY + spH - 4);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.55)'; ctx.textAlign = 'right';
+    ctx.fillText(`→ ×${nextSp}`, spX + spW - 4, spY + spH - 4);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,120,60,0.70)'; ctx.textAlign = 'center';
+    ctx.fillText('[F] speed', spX + spW/2, spY + spH + 8);
     ctx.textAlign = 'left';
-    ctx.fillText(`×${sp}`, spBtnX + spBtnW * 0.60, spBtnY + spBtnH - 5);
-
-    ctx.font      = '7px monospace';
-    ctx.fillStyle = 'rgba(180,140,80,0.55)';
-    ctx.textAlign = 'right';
-    ctx.fillText(`→ ×${nextSp}`, spBtnX + spBtnW - 4, spBtnY + spBtnH - 5);
-    ctx.textAlign = 'left';
-
-    ctx.font      = '8px monospace';
-    ctx.fillStyle = 'rgba(160,120,60,0.70)';
-    ctx.textAlign = 'center';
-    ctx.fillText('[F] cycle speed', spBtnX + spBtnW / 2, spBtnY + spBtnH + 9);
-    ctx.textAlign = 'left';
-
-    speedBtns.push({ x: spBtnX, y: spBtnY, w: spBtnW, h: spBtnH });
+    speedBtns.push({ x: spX, y: spY, w: spW, h: spH });
   }
 
-  // (rune summary is now compact in the Treasury section above)
-
-  // ── RUNE FORGE button (break/countdown only) ─────────────────────────────────
+  // ── RUNE FORGE (break/countdown only) ─────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
-    const rfH = 40, rfY = GRID_TOP + fullH - 112, rfX = px + 6, rfW = pw - 12;
-    const rfActive  = showRuneMenu;
-    const hasStars  = stars > 0;
-    const rfPulse   = hasStars ? 0.65 + Math.sin(performance.now() * 0.004) * 0.35 : 0;
+    const rfH = 34, rfY = panelBot - 116, rfX = px + 6, rfW = pw - 12;
+    const rfActive = showRuneMenu, hasStars = stars > 0;
+    const rfPulse  = hasStars ? 0.65 + Math.sin(_now * 0.004) * 0.35 : 0;
     ctx.globalAlpha = hasStars ? 1 : 0.38;
-
-    // Panel with warm amber-purple forge palette
-    const rfFill   = rfActive ? 'rgba(28,14,52,0.98)' : 'rgba(16,8,36,0.96)';
-    const rfBorder = rfActive ? 0.88 : (hasStars ? 0.55 : 0.2);
     ctx.save();
-    if (hasStars && !rfActive) {
-      ctx.shadowColor = `rgba(180,120,255,${rfPulse * 0.6})`;
-      ctx.shadowBlur  = 12;
-    }
-    drawFantasyPanel(rfX, rfY, rfW, rfH, rfFill, rfBorder, 6);
+    if (hasStars && !rfActive) { ctx.shadowColor = `rgba(180,120,255,${rfPulse*0.6})`; ctx.shadowBlur = 12; }
+    drawFantasyPanel(rfX, rfY, rfW, rfH, rfActive ? 'rgba(28,14,52,0.98)' : 'rgba(16,8,36,0.96)',
+      rfActive ? 0.88 : (hasStars ? 0.55 : 0.2), 6);
     ctx.shadowBlur = 0;
-
-    // Left anvil icon — two stacked rects evoking forge/anvil shape
-    const iconX = rfX + 14, iconY = rfY + rfH / 2;
-    ctx.fillStyle = rfActive ? '#c0a0ff' : (hasStars ? `rgba(160,120,220,${0.5 + rfPulse * 0.5})` : '#403050');
-    ctx.fillRect(iconX - 6, iconY - 4, 12, 4);
-    ctx.fillRect(iconX - 4, iconY,      8, 4);
-    // Hammer
-    ctx.save();
-    ctx.translate(iconX + 1, iconY - 8);
-    ctx.rotate(-0.5);
-    ctx.fillStyle = rfActive ? '#e0d0ff' : (hasStars ? `rgba(200,180,255,${0.4 + rfPulse * 0.5})` : '#503860');
-    ctx.fillRect(-1, 0, 2, 7);
-    ctx.fillRect(-3, -3, 6, 3);
-    ctx.restore();
-
-    // RUNE FORGE label
-    ctx.textAlign   = 'left';
-    ctx.font        = `bold 10px monospace`;
-    ctx.fillStyle   = rfActive ? '#d0b0ff' : (hasStars ? `rgba(180,140,255,${0.6 + rfPulse * 0.4})` : '#504060');
+    const iX = rfX+14, iY = rfY+rfH/2;
+    ctx.fillStyle = rfActive ? '#c0a0ff' : (hasStars ? `rgba(160,120,220,${0.5+rfPulse*0.5})` : '#403050');
+    ctx.fillRect(iX-6, iY-4, 12, 4); ctx.fillRect(iX-4, iY, 8, 4);
+    ctx.save(); ctx.translate(iX+1, iY-8); ctx.rotate(-0.5);
+    ctx.fillStyle = rfActive ? '#e0d0ff' : (hasStars ? `rgba(200,180,255,${0.4+rfPulse*0.5})` : '#503860');
+    ctx.fillRect(-1,0,2,7); ctx.fillRect(-3,-3,6,3); ctx.restore();
+    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = rfActive ? '#d0b0ff' : (hasStars ? `rgba(180,140,255,${0.6+rfPulse*0.4})` : '#504060');
     ctx.shadowColor = rfActive ? 'rgba(180,120,255,0.7)' : 'rgba(140,80,220,0.4)';
-    ctx.shadowBlur  = rfActive ? 10 : (hasStars ? rfPulse * 8 : 0);
-    ctx.fillText('RUNE FORGE', rfX + 28, rfY + 17);
-    ctx.shadowBlur  = 0;
-
-    // Star count and keybind
-    ctx.font      = '9px monospace';
+    ctx.shadowBlur  = rfActive ? 10 : (hasStars ? rfPulse*8 : 0);
+    ctx.fillText('RUNE FORGE', rfX+28, rfY+14);
+    ctx.shadowBlur = 0;
+    ctx.font = '8px monospace';
     ctx.fillStyle = hasStars ? '#f0d040' : 'rgba(160,130,60,0.4)';
-    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'flawless waves earn ✦', rfX + 28, rfY + 30);
-
-    ctx.restore();
-    ctx.globalAlpha = 1;
+    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'earn ✦ via flawless waves', rfX+28, rfY+26);
+    ctx.restore(); ctx.globalAlpha = 1;
     runeForgeBtn = hasStars ? { x: rfX, y: rfY, w: rfW, h: rfH } : null;
   } else {
     runeForgeBtn = null;
   }
 
-  // ── AUTO NEXT toggle (break/countdown only) ─────────────────────────────────
+  // ── AUTO NEXT (break/countdown only) ──────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
-    const autoH  = 30;
-    const autoY  = GRID_TOP + fullH - autoH - 10 - 44 - 8;
-    const autoX  = px + 6;
-    const autoW  = pw - 12;
-    const autoFill = autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)';
-    const autoBorder = autoNextWave ? 0.88 : 0.24;
-    drawFantasyPanel(autoX, autoY, autoW, autoH, autoFill, autoBorder, 5);
-    ctx.font        = 'bold 10px monospace';
-    ctx.textAlign   = 'center';
-    ctx.fillStyle   = autoNextWave ? '#8af090' : 'rgba(210,210,240,0.75)';
-    ctx.fillText(autoNextWave ? 'AUTO NEXT: ON' : 'AUTO NEXT: OFF', autoX + autoW / 2, autoY + 17);
-    ctx.font = '8px monospace';
-    ctx.fillStyle = 'rgba(170,140,80,0.65)';
-    ctx.fillText('[A] toggle', autoX + autoW / 2, autoY + 26);
-    autoNextBtn = { x: autoX, y: autoY, w: autoW, h: autoH };
+    const aH = 24, aY = panelBot - 76, aX = px + 6, aW = pw - 12;
+    drawFantasyPanel(aX, aY, aW, aH, autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)',
+      autoNextWave ? 0.88 : 0.24, 5);
+    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = autoNextWave ? '#8af090' : 'rgba(210,210,240,0.75)';
+    ctx.fillText(autoNextWave ? 'AUTO NEXT: ON' : 'AUTO NEXT: OFF', aX + aW/2, aY + 14);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(170,140,80,0.65)';
+    ctx.fillText('[A] toggle', aX + aW/2, aY + 22);
+    ctx.textAlign = 'left';
+    autoNextBtn = { x: aX, y: aY, w: aW, h: aH };
   } else {
     autoNextBtn = null;
   }
 
-  // ── NEXT WAVE ──────────────────────────────────────────────────────────────
+  // ── NEXT WAVE ────────────────────────────────────────────────────────────────
   if (!gameOver && waveState !== 'active') {
-    const btnH = 44;
-    const btnY = GRID_TOP + fullH - btnH - 10;
-    const btnX = px + 6;
-    const btnW = pw - 12;
-
+    const bH = 44, bY = panelBot - bH - 4, bX = px + 6, bW = pw - 12;
     ctx.shadowColor = 'rgba(200,30,20,0.8)'; ctx.shadowBlur = 12;
-    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(140,18,18,0.97)', 0.92, 6);
-    ctx.shadowBlur  = 0;
-    ctx.textAlign   = 'center'; ctx.font = 'bold 11px monospace';
-    ctx.fillStyle   = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
-    ctx.fillText('NEXT WAVE', btnX + btnW / 2, btnY + 17);
+    drawFantasyPanel(bX, bY, bW, bH, 'rgba(140,18,18,0.97)', 0.92, 6);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center'; ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
+    ctx.fillText('NEXT WAVE', bX + bW/2, bY + 17);
     ctx.font = '11px monospace'; ctx.shadowBlur = 0;
-    if (autoNextWave) {
-      ctx.fillStyle = '#60ee80';
-      ctx.fillText('AUTO ENGAGED', btnX + btnW / 2, btnY + 32);
-    } else {
-      ctx.fillStyle = 'rgba(255,200,180,0.8)';
-      ctx.fillText('[Space]', btnX + btnW / 2, btnY + 32);
-    }
-    nextWaveBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = autoNextWave ? '#60ee80' : 'rgba(255,200,180,0.8)';
+    ctx.fillText(autoNextWave ? 'AUTO ENGAGED' : '[Space]', bX + bW/2, bY + 32);
+    ctx.textAlign = 'left';
+    nextWaveBtn = { x: bX, y: bY, w: bW, h: bH };
   } else {
     nextWaveBtn = null;
   }
@@ -3956,6 +3893,23 @@ function drawBottomBuildBar() {
     const fillStyle   = isSelected ? 'rgba(70,40,10,0.97)' : 'rgba(18,9,28,0.92)';
     const borderAlpha = isSelected ? 0.90 : 0.35;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
+
+    // Colored bottom accent strip — matches tower glow on the board
+    if (btn.glowRgb) {
+      const stripAlpha = affordable ? (isSelected ? 1.0 : 0.70) : 0.20;
+      ctx.globalAlpha = stripAlpha;
+      ctx.fillStyle   = `rgba(${btn.glowRgb},0.90)`;
+      ctx.beginPath();
+      ctx.roundRect(btn.x + 3, btn.y + btn.height - 3, btn.width - 6, 3, [0, 0, 3, 3]);
+      ctx.fill();
+      if (isSelected) {
+        // glow bloom on selected card
+        ctx.shadowColor = `rgba(${btn.glowRgb},0.8)`; ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // ── Portrait area ───────────────────────────────────────────────────────────
     const ppx = btn.x + 4;
@@ -4302,7 +4256,7 @@ function drawHud() {
 
 function drawTowerPanel(tower) {
   const panelW = 162;
-  const panelH = tower.maxed ? 134 : 148;
+  const panelH = tower.maxed ? 146 : 160;
   panelRuneBtn = null;
   const { width, height } = getViewSize();
 
@@ -4328,21 +4282,29 @@ function drawTowerPanel(tower) {
   ctx.fillStyle = tower.maxed ? '#ff9040' : '#e8c040';
   ctx.fillText(tower.maxed ? 'MAX' : `Lv ${tower.level}`, px + panelW - 10, py + 17);
 
+  // Defender name
+  if (tower.name) {
+    ctx.textAlign = 'left';
+    ctx.font      = '10px monospace';
+    ctx.fillStyle = 'rgba(220,190,130,0.80)';
+    ctx.fillText(tower.name, px + 10, py + 28);
+  }
+
   // Stats
   ctx.textAlign = 'left';
   ctx.font      = '11px monospace';
   ctx.fillStyle = '#8aaccc';
   if (tower.type === 'hydda') {
-    ctx.fillText(`HEALS ${tower.level >= 5 ? 2 : 1} life every ${Math.round(tower.fireRate / 30)}s`, px + 10, py + 32);
+    ctx.fillText(`HEALS ${tower.level >= 5 ? 2 : 1} life every ${Math.round(tower.fireRate / 30)}s`, px + 10, py + 44);
   } else if (tower.type === 'blondie') {
     const slowPct = Math.round((1 - (def.slowFactor ?? 0.4)) * 100);
     const durSec  = Math.round((def.slowDuration ?? 60) / 30);
-    ctx.fillText(`${slowPct}% SLOW · ${durSec}s · RNG ${tower.range}`, px + 10, py + 32);
+    ctx.fillText(`${slowPct}% SLOW · ${durSec}s · RNG ${tower.range}`, px + 10, py + 44);
   } else if (tower.type === 'isjatten') {
-    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  AoE`, px + 10, py + 32);
+    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  AoE`, px + 10, py + 44);
   } else {
     const dps = tower.fireRate > 0 ? Math.round(tower.damage * 30 / tower.fireRate) : 0;
-    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  DPS ~${dps}`, px + 10, py + 32);
+    ctx.fillText(`DMG ${tower.damage}  RNG ${tower.range}  DPS ~${dps}`, px + 10, py + 44);
   }
 
   if (!tower.maxed) {
@@ -4352,11 +4314,11 @@ function drawTowerPanel(tower) {
     const nextFR  = Math.max(4, Math.round(tower.baseFireRate * (1 - n * 0.05)));
     ctx.font      = '9px monospace';
     ctx.fillStyle = 'rgba(120,200,120,0.65)';
-    ctx.fillText(`▸ Lv${n + 1}: DMG ${nextDmg}  RNG ${nextRng}  SPD ${nextFR}`, px + 10, py + 43);
+    ctx.fillText(`▸ Lv${n + 1}: DMG ${nextDmg}  RNG ${nextRng}  SPD ${nextFR}`, px + 10, py + 55);
   }
 
   // Kill stats + damage dealt / synergy (right side)
-  const killRow = tower.maxed ? py + 45 : py + 58;
+  const killRow = tower.maxed ? py + 57 : py + 70;
   ctx.font      = '10px monospace';
   ctx.fillStyle = '#80aa70';
   ctx.fillText(`☠ ${tower.killCount ?? 0} kills`, px + 10, killRow);
@@ -4373,7 +4335,7 @@ function drawTowerPanel(tower) {
   ctx.textAlign = 'left';
 
   // Divider
-  const divY = tower.maxed ? py + 53 : py + 66;
+  const divY = tower.maxed ? py + 65 : py + 78;
   ctx.strokeStyle = 'rgba(210,160,40,0.2)';
   ctx.lineWidth   = 0.5;
   ctx.beginPath();
@@ -4381,7 +4343,7 @@ function drawTowerPanel(tower) {
   ctx.stroke();
 
   // Upgrade button
-  const btnY  = tower.maxed ? py + 60 : py + 74;
+  const btnY  = tower.maxed ? py + 72 : py + 86;
   const btnH  = 28;
   const upgW  = 94;
   const sellW = 52;
@@ -4781,73 +4743,87 @@ function drawWaveAnnouncement() {
   if (gameOver) return;
   if (waveState === 'active') return;
 
-  // Render inside the right panel — never overlaps the grid
-  const bannerX = GRID_LEFT + COLS * CELL_SIZE + 4;
-  const bannerW = BASE_W - bannerX - 36;
-  const bannerY = GRID_TOP + 2;
-  const bannerH = 40;
-  const accentW = 7;
+  const bX = GRID_LEFT + COLS * CELL_SIZE + 4;
+  const bW = BASE_W - bX - 36;
+  const bY = GRID_TOP + 2;
+  const bH = 44;
+  const tx = bX + 14;
 
   const nextW       = waveState === 'countdown' ? waveNumber : waveNumber + 1;
   const isBoss      = BOSS_WAVES.has(nextW);
   const nextEvent   = WAVE_EVENTS[nextW] ?? (endlessMode && nextW > 101 ? ENDLESS_FLAVOR_EVENTS[(nextW - 102) % 5] : null);
-  const threatRatio = endlessMode ? 1.0 : nextW / MAX_WAVES;
-  const threatColor = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
-  const threatIcon  = isBoss ? ' ☠' : nextEvent ? ` ${nextEvent.label.split(' ')[0]}` : threatRatio > 0.8 ? ' ⚡' : threatRatio > 0.5 ? ' ⚔' : '';
-
-  let line1, line2, glowColor, statusColor, isComplete;
-  if (waveState === 'countdown') {
-    line1       = nextEvent ? nextEvent.desc : 'PREPARE';
-    line2       = `WAVE ${nextW}${threatIcon}`;
-    glowColor   = 'rgba(220,170,40,0.85)';
-    statusColor = threatColor;
-    isComplete  = false;
-  } else {
-    const flawless = flawlessTimer > 0;
-    line1       = `WAVE ${waveNumber} DONE`;
-    line2       = flawless ? '★ FLAWLESS' : (lastWaveTimeSec > 0 ? `${lastWaveTimeSec}s` : '');
-    glowColor   = flawless ? 'rgba(240,210,40,0.9)' : 'rgba(80,220,140,0.8)';
-    statusColor = flawless ? '#f0e060' : '#60ee80';
-    isComplete  = true;
-  }
+  const threatRatio = endlessMode ? 1.0 : Math.min(1, nextW / MAX_WAVES);
+  const isClear     = waveState === 'break';
+  const accentColor = isBoss ? '#ff3820' : isClear ? '#50d870' : '#e8c040';
+  const nextBossW   = [...BOSS_WAVES].filter(w => w > waveNumber).sort((a,b) => a-b)[0] ?? null;
 
   ctx.save();
 
-  // Panel background — boss waves get a distinct red-dark treatment
-  ctx.beginPath(); ctx.roundRect(bannerX, bannerY, bannerW, bannerH, 4);
-  ctx.fillStyle = isComplete ? 'rgba(6,20,10,0.95)' : isBoss ? 'rgba(40,6,6,0.97)' : 'rgba(8,4,16,0.93)'; ctx.fill();
-  const borderStroke = isBoss ? 'rgba(220,40,20,0.75)' : 'rgba(180,130,40,0.55)';
-  ctx.strokeStyle = borderStroke; ctx.lineWidth = isBoss ? 1.5 : 1; ctx.stroke();
-  // Left accent bar
-  ctx.beginPath(); ctx.roundRect(bannerX, bannerY, accentW, bannerH, [4, 0, 0, 4]);
-  ctx.fillStyle = statusColor; ctx.fill();
+  // Card background
+  ctx.fillStyle = isBoss ? 'rgba(28,6,6,0.96)' : isClear ? 'rgba(4,18,8,0.96)' : 'rgba(10,8,20,0.96)';
+  ctx.beginPath(); ctx.roundRect(bX, bY, bW, bH, 4); ctx.fill();
+  // Left accent strip
+  ctx.fillStyle = accentColor; ctx.globalAlpha = 0.80;
+  ctx.fillRect(bX, bY, 3, bH);
+  ctx.globalAlpha = 1;
 
-  const tx = bannerX + accentW + 8;
-
-  // Line 1 — label (smaller, muted)
-  ctx.font      = '9px monospace';
-  ctx.fillStyle = 'rgba(180,150,90,0.75)';
-  ctx.textAlign = 'left';
-  ctx.fillText(line1, tx, bannerY + 14);
-
-  // Line 2 — main text with glow
-  if (line2) {
-    const flawless = isComplete && flawlessTimer > 0;
-    ctx.shadowColor = glowColor; ctx.shadowBlur = 10;
-    ctx.fillStyle   = flawless ? '#f0e060' : (isComplete ? '#60ee80' : threatColor);
-    ctx.font        = 'bold 11px monospace';
-    ctx.fillText(line2, tx, bannerY + 30);
-    ctx.shadowBlur  = 0;
+  // TOP LINE — small muted label (what just happened / what's coming)
+  ctx.font = '7px monospace'; ctx.textAlign = 'left';
+  if (isClear) {
+    const flawless = flawlessTimer > 0;
+    ctx.fillStyle = flawless ? 'rgba(240,215,80,0.72)' : 'rgba(80,200,100,0.65)';
+    ctx.fillText(flawless ? `★ W${waveNumber} FLAWLESS` : `W${waveNumber} CLEARED`, tx, bY + 12);
+  } else {
+    ctx.fillStyle = isBoss ? 'rgba(255,120,60,0.70)' : nextEvent ? 'rgba(255,200,60,0.68)' : 'rgba(180,160,100,0.55)';
+    ctx.fillText(isBoss ? '☠ BOSS WAVE' : nextEvent ? `⚡ ${nextEvent.label}` : 'INCOMING', tx, bY + 12);
+  }
+  // Right of top line: AUTO badge or [Space] hint
+  ctx.textAlign = 'right';
+  if (autoNextWave) {
+    const p = 0.72 + Math.sin(performance.now() * 0.005) * 0.28;
+    ctx.fillStyle = `rgba(80,220,140,${p})`;
+    ctx.fillText('AUTO', bX + bW - 6, bY + 12);
+  } else {
+    ctx.fillStyle = 'rgba(200,170,90,0.45)';
+    ctx.fillText('[Space]', bX + bW - 6, bY + 12);
   }
 
-  // AUTO badge (top-right corner)
-  if (autoNextWave) {
-    const pulse = 0.75 + Math.sin(performance.now() * 0.005) * 0.25;
-    ctx.font      = 'bold 8px monospace';
-    ctx.fillStyle = `rgba(80,220,140,${pulse})`;
+  // MAIN LINE — bold: upcoming wave + composition
+  ctx.textAlign = 'left';
+  let mainText, mainColor;
+  if (isBoss && BOSS_CONFIGS[nextW]) {
+    mainText  = `☠  ${BOSS_CONFIGS[nextW].name}`;
+    mainColor = '#ff5030';
+  } else {
+    const comp  = waveComposition(nextW);
+    const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
+                   comp.mylings > 0 && `${comp.mylings}M`,
+                   comp.jotunn  > 0 && `${comp.jotunn}J`,
+                   comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
+    mainText  = `W${nextW}  —  ${parts.join(' · ')}`;
+    mainColor = accentColor;
+  }
+  ctx.font = 'bold 11px monospace';
+  ctx.fillStyle = mainColor;
+  ctx.shadowColor = mainColor; ctx.shadowBlur = 6;
+  ctx.fillText(mainText, tx, bY + 27);
+  ctx.shadowBlur = 0;
+
+  // Right of main line: next boss marker (if far away)
+  if (!isBoss && nextBossW && nextBossW !== nextW) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,30,0.55)';
     ctx.textAlign = 'right';
-    ctx.shadowColor = 'rgba(60,200,100,0.6)'; ctx.shadowBlur = 5;
-    ctx.fillText('AUTO', bannerX + bannerW - 6, bannerY + 13);
+    ctx.fillText(`☠W${nextBossW}`, bX + bW - 6, bY + 27);
+  }
+
+  // BOTTOM BAR — thin wave arc progress
+  const barY = bY + 36, barX = tx, barW2 = bW - 20;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.roundRect(barX, barY, barW2, 3, 2); ctx.fill();
+  if (threatRatio > 0.001) {
+    const bColor = isBoss ? '#ff3820' : threatRatio > 0.8 ? '#ff7040' : threatRatio > 0.5 ? '#e8c040' : '#50d870';
+    ctx.fillStyle = bColor; ctx.shadowColor = bColor; ctx.shadowBlur = 3;
+    ctx.beginPath(); ctx.roundRect(barX, barY, Math.max(3, barW2 * threatRatio), 3, 2); ctx.fill();
     ctx.shadowBlur = 0;
   }
 
@@ -5542,14 +5518,15 @@ function draw() {
     }
   }
 
-  // Tower light pools — warm amber halo beneath each active tower
+  // Tower light pools — per-tower signature color halo
   for (const t of towers) {
     if (t.disabledTimer > 0) continue;
-    const _tlr = CELL_SIZE * 2.5;
+    const _tlr = CELL_SIZE * 2.8;
+    const rgb = t.glowRgb;
     const _tlg = ctx.createRadialGradient(t.x, t.y + 2, 0, t.x, t.y + 2, _tlr);
-    _tlg.addColorStop(0,   'rgba(255,190,80,0.09)');
-    _tlg.addColorStop(0.55,'rgba(255,160,40,0.04)');
-    _tlg.addColorStop(1,   'rgba(0,0,0,0)');
+    _tlg.addColorStop(0,    `rgba(${rgb},0.12)`);
+    _tlg.addColorStop(0.50, `rgba(${rgb},0.05)`);
+    _tlg.addColorStop(1,    'rgba(0,0,0,0)');
     ctx.fillStyle = _tlg;
     ctx.beginPath(); ctx.arc(t.x, t.y, _tlr, 0, Math.PI * 2); ctx.fill();
   }

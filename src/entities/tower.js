@@ -1,6 +1,7 @@
 import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale } from '../config.js';
+import { getDefenderName } from '../roster/names.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -50,6 +51,7 @@ export const TOWER_DEFS = {
     label:        'Berserker',
     key:          '2',
     color:        '#8a4018',
+    glowRgb:      '220,50,20',
     rangeColor:   'rgba(200,60,20,0.15)',
     cost:         36,
     range:        22,
@@ -63,6 +65,7 @@ export const TOWER_DEFS = {
     label:        'Valkyrie',
     key:          '3',
     color:        '#c8a030',
+    glowRgb:      '100,160,240',
     rangeColor:   'rgba(100,140,220,0.28)',
     cost:         48,
     range:        110,
@@ -77,6 +80,7 @@ export const TOWER_DEFS = {
     label:        'Archer',
     key:          '4',
     color:        '#3a8830',
+    glowRgb:      '50,180,60',
     rangeColor:   'rgba(80,120,170,0.26)',
     cost:         48,
     range:        80,
@@ -91,6 +95,7 @@ export const TOWER_DEFS = {
     label:        'Catapult',
     key:          '5',
     color:        '#8a6030',
+    glowRgb:      '220,120,30',
     rangeColor:   'rgba(130,90,30,0.26)',
     cost:         68,
     range:        120,
@@ -108,6 +113,7 @@ export const TOWER_DEFS = {
     label:        'Blondie',
     key:          '6',
     color:        '#c8a030',
+    glowRgb:      '200,180,50',
     rangeColor:   'rgba(220,180,60,0.26)',
     cost:         42,
     range:        90,
@@ -123,6 +129,7 @@ export const TOWER_DEFS = {
     label:        'Warden',
     key:          '7',
     color:        '#8a7050',
+    glowRgb:      '170,130,60',
     rangeColor:   'rgba(140,110,70,0.26)',
     cost:         54,
     range:        100,
@@ -137,6 +144,7 @@ export const TOWER_DEFS = {
     label:        'Healer',
     key:          '8',
     color:        '#4a8840',
+    glowRgb:      '60,210,100',
     rangeColor:   'rgba(60,120,50,0.24)',
     cost:         64,
     range:        0,
@@ -150,6 +158,7 @@ export const TOWER_DEFS = {
     label:        'Ice Giant',
     key:          '9',
     color:        '#60b8f0',
+    glowRgb:      '80,200,250',
     rangeColor:   'rgba(80,170,240,0.22)',
     cost:         96,
     range:        80,
@@ -166,6 +175,7 @@ export const TOWER_DEFS = {
     label:        'Dragonship',
     key:          '0',
     color:        '#b05820',
+    glowRgb:      '230,70,20',
     rangeColor:   'rgba(170,80,30,0.24)',
     cost:         120,
     range:        130,
@@ -183,6 +193,13 @@ export const TOWER_DEFS = {
 
 const MAX_LEVEL = 10;
 
+function generateId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 export class Tower {
   constructor(x, y, col, row, type = TOWER_TYPES.BERSERK) {
     this.x   = x;
@@ -190,6 +207,8 @@ export class Tower {
     this.col = col;
     this.row = row;
     this.type = type;
+    this.name         = getDefenderName(type);
+    this.defenderId   = generateId();
     this.fireCooldown  = 0;
     this.level         = 1;
     this.damageDealt   = 0;
@@ -203,6 +222,7 @@ export class Tower {
     this.radius        = def.radius;
     this.bulletSpeed   = def.bulletSpeed;
     this.color         = def.color;
+    this.glowRgb       = def.glowRgb ?? '255,190,80';
     this.rangeColor    = def.rangeColor;
     this.splashRadius  = def.splashRadius  ?? 0;
     this.splashDamage  = def.splashDamage  ?? 0;

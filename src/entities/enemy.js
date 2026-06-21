@@ -24,8 +24,8 @@ export const ENEMY_DEFS = {
     hp:             180,
     radius:         7,
     reward:         12,
-    color:          '#5020a0',   // void purple — nightmare spirit (style bible)
-    highlightColor: '#8040c0',
+    color:          '#6018b8',   // vivid deep purple — nightmare spirit
+    highlightColor: '#b060e0',   // saturated violet glow
     flying:         false
   },
   draugr: {
@@ -34,8 +34,8 @@ export const ENEMY_DEFS = {
     hp:             130,
     radius:         7,
     reward:         9,
-    color:          '#4a5c70',   // desaturated slate-blue — undead corpse warrior (style bible)
-    highlightColor: '#80a8c0',
+    color:          '#3a6888',   // more saturated blue-slate — undead corpse warrior
+    highlightColor: '#90c0de',   // brighter ice-blue highlight
     flying:         false
   },
   myling: {
@@ -44,8 +44,8 @@ export const ENEMY_DEFS = {
     hp:             110,
     radius:         6,
     reward:         12,
-    color:          '#3a7acc',   // spectral blue — corrupted child spirit
-    highlightColor: '#88bbff',
+    color:          '#2878e0',   // vivid spectral blue — corrupted child spirit
+    highlightColor: '#aacfff',   // bright ghostly highlight
     flying:         true
   },
   jotunn: {
@@ -55,7 +55,7 @@ export const ENEMY_DEFS = {
     radius:         13,
     reward:         32,
     color:          '#5c4030',   // stone-brown — Norse earth giant
-    highlightColor: '#e88020',   // amber — volcanic heat
+    highlightColor: '#ff9030',   // bright amber-orange volcanic heat
     flying:         false
   }
 };
@@ -180,6 +180,27 @@ export class Enemy {
         ctx.restore();
       }
       return;
+    }
+
+    // Drop shadow — stronger ellipse grounds units against the dark terrain
+    ctx.save();
+    ctx.globalAlpha = this.isBoss ? 0.75 : 0.65;
+    ctx.fillStyle   = 'rgba(0,0,0,0.92)';
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y + this.radius * 0.85, this.radius * (this.isBoss ? 2.0 : 1.4), this.radius * (this.isBoss ? 0.65 : 0.48), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Type identity ring — subtle colored outline helps distinguish enemy types at small sizes
+    if (!this.isBoss) {
+      ctx.save();
+      ctx.strokeStyle = this.highlightColor;
+      ctx.lineWidth   = 0.8;
+      ctx.globalAlpha = 0.28;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // Boss ground aura — pulsing crimson ring that scales with threat

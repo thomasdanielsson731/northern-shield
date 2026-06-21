@@ -1,12 +1,10 @@
 # Northern Shield
 
-HTML5 Canvas tower defense game with a Norse dark fantasy theme.
+Norse dark-fantasy **Fortress Defense RPG** built on HTML5 Canvas. You command a persistent warband of defenders protecting and expanding their fortress across many battles.
 
-## Recent updates
+## Core Fantasy
 
-- Added an Auto Next toggle to automatically advance from break/countdown to the next wave.
-- Updated the tower economy with adjusted prices for improved pacing and decision clarity.
-- Reinforced right-panel feedback for auto mode and wave readiness state.
+Lead a growing band of veteran defenders. They gain experience, level up, and earn names. The fortress expands battle by battle. A Berserker who survived wave 50 is not the same one who faced wave 1.
 
 ## Tech Stack
 
@@ -15,26 +13,46 @@ HTML5 Canvas tower defense game with a Norse dark fantasy theme.
 - Vite dev server
 - No external game engine
 
-## Towers
+## Defenders
 
-- **Shield Wall** — cheap wall, slow aura, shapes the maze
-- **Berserker** — melee, anti-swarm, high fire rate
-- **Valkyrie** — long range, high damage, anti-boss
-- **Archer** — reliable mid-range DPS
-- **Catapult** — splash damage, anti-cluster
-- **Blondie** — stun on hit, crowd control
+The warband is the player's primary asset. Defenders persist across battles with XP, levels, talents, and equipment.
+
+| Defender | Role |
+|---|---|
+| Berserker | Melee burst, anti-swarm |
+| Valkyrie | Long-range sniper, anti-boss |
+| Archer | Fast-fire attrition, reliable DPS |
+| Catapult | AoE siege, anti-cluster |
+| Blondie | Crowd control, stun on hit |
+| Warden | Balanced ranged, generalist |
+| Healer | Support, sustain |
+| Ice Giant | Nova AoE, mass slow |
+| Dragonship | Heavy siege, long-range splash |
+
+## Fortress Structures
+
+Walls and buildings are strategic assets that grow between battles:
+
+- **Shield Walls** — redirect enemies, create kill-zones
+- **Great Hall** — fortress center, sets roster capacity
+- **Barracks** — unlocks new defender classes
+- **Watchtowers** — passive range/vision bonuses
+- **Treasury** — resources and equipment storage
+- **Rune Forge** — craft and apply runes to defenders
 
 ## Enemies
 
-- **Draugr** — undead infantry swarm
-- **Myling** — flying ghost, bypasses walls
-- **Jötunn** — boss-tier tank, extreme HP
-- **Mara** — EMP nightmare spirit, disables towers
+| Enemy | Threat |
+|---|---|
+| Draugr | Undead infantry swarm |
+| Myling | Flying ghost, bypasses walls |
+| Jötunn | Boss-tier tank, extreme HP |
+| Mara | EMP nightmare spirit, disables defenders |
 
-## Goals
+## Design Goals
 
-- Fast iteration
-- Simple architecture
-- High-quality code
-- Playable early
-- No overengineering
+- Defenders feel like characters, not units
+- Long-term roster progression — battle 20 should feel different from battle 1
+- Loss is painful but never feels unfair
+- Strategic deployment over reaction speed
+- Persistent, not roguelite

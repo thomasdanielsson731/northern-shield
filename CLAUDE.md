@@ -23,7 +23,9 @@ CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test`
 
 ## Architecture
 
-### Source layout
+For the full architecture review, target domain model, four-layer design, scalability risks, and migration roadmap, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+### Source layout (current)
 
 ```
 src/
@@ -40,6 +42,9 @@ src/
     bullet.js          — Bullet class; homing projectiles (orb/spear/rock/stun/arrow shapes)
   grid/
     grid.js            — Grid class, CELL enum, BFS pathfinding, cell drawing
+  [roster/]            — planned: Defender class, Roster, XP, talents, equipment (Phase 3+)
+  [fortress/]          — planned: Fortress upgrades, structures (Phase 6+)
+  [campaign/]          — planned: save/load, campaign state, battle history (Phase 2+)
 assets/
   towers/              — sprite PNGs for all 9 tower types
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
@@ -57,6 +62,8 @@ tests/
 
 `game.js` holds all game state (arrays of enemies/towers/bullets, gold, lives, wave state, UI button regions, drag state, coin particles, screen shake, etc.) and all subsystems: game loop, input handling, wave state machine, HUD, right panel, build bar, toplist, terrain baking, path drawing, and frame overlay.
 
+New systems (roster, fortress, campaign) go in **new files under new subdirectories**. `game.js` calls into them; it does not absorb them.
+
 The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other frame); the ×2 speed button makes it tick every frame instead.
 
 ### Canvas layout
@@ -69,7 +76,7 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 | Bottom build bar | below grid, h=62 (`BUILD_BTN.h`) |
 | Ornamental frame | 32 px thick (`FRAME_THICK`), drawn last (on top of everything) |
 
-Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=80`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
+Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
 
 ### Render order (each frame)
 
@@ -211,7 +218,25 @@ Before any wall or tower placement is applied, BFS is run to check that a valid 
 
 ### Design philosophy
 
-Maze-building is the primary mechanic. Players win by routing enemies through kill-zones they control, not by reaction speed. Preserve this in all balance and feature work: more emphasis on placement decisions and path control, less on clicking fast.
+**Northern Shield is a Fortress Defense RPG.** The warband of defenders is the primary gameplay element. Walls, buildings, and towers are supporting systems. See [PRODUCT_DESCRIPTION.md](PRODUCT_DESCRIPTION.md) for the full vision and [ARCHITECTURE.md](ARCHITECTURE.md) for the target technical architecture.
+
+For code work, the relevant constraints:
+
+**Non-negotiable rules:**
+- **Path validity** — BFS check before every placement. Never bypass this.
+- **Battle vs. campaign separation** — `initGame()` will eventually split into `initBattle()` and `initCampaign()`. Do not add cross-battle state to `initGame()` without a plan for this split.
+- **No implicit roguelite resets** — do not silently discard defender state. If state resets, it must be explicit and intentional.
+
+**Coding standards for RPG systems (when building new layers):**
+- New systems go in new files under new subdirectories (`src/roster/`, `src/fortress/`, `src/campaign/`). `game.js` calls into them; it does not absorb them.
+- `saveCampaign()` must never be called synchronously inside `requestAnimationFrame` or the game tick — localStorage serialization blocks the main thread.
+- Defender progression state (XP, career level, talents, equipment) lives on the `Defender` entity, not on the `Tower` placement instance.
+- The `Tower` class is a **combat instance**; the `Defender` class (planned) is a **character entity**. Keep these separate even though they reference the same class template (`TOWER_DEFS`).
+- `localStorage` writes use the `ns-campaign-v2` schema (see ARCHITECTURE.md §3.3). Include a `version` field. Provide a migration path from v1 keys.
+
+**Defender identity:**
+- `glowRgb`, per-tower stats (`damageDealt`, `killCount`, `goldGenerated`), and MVP tracking serve the goal of making defenders feel distinct.
+- Speed and reaction time are not the skill expression. Strategic roster decisions and placement are.
 
 ## Art direction
 
