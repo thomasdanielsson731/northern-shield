@@ -4,6 +4,7 @@ import { Enemy, ENEMY_TYPES, ENEMY_DEFS } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
+import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -186,8 +187,14 @@ let lastWaveTimeSec = 0;        // seconds the previous wave took to clear
 // Flawless notification
 let flawlessTimer   = 0;        // countdown for "+1 ★ FLAWLESS!" text (frames)
 
+// Campaign state — persists across battles, loaded from ns-campaign-v2
+let _campaignState       = null;   // ns-campaign-v2 object
+let battlesCompleted     = 0;
+let _currentBattlePreset = null;   // preset used for the current battle (for Fight Again)
+let _battleResult        = null;   // 'victory' | 'defeat' — set when battle ends
+
 // Map selection
-let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing'
+let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
 let selectedMapIdx   = 0;
 let mapSelectBtns    = [];       // hit areas for map cards
 let mapAutoTimerStart = 0;       // performance.now() when auto-start countdown began
@@ -374,9 +381,16 @@ function promptNameAndSave(scoreData) {
   input.addEventListener('keydown', onKey);
 }
 
-// ── restart ───────────────────────────────────────────────────────────────────
+// ── restart / init ────────────────────────────────────────────────────────────
 
-function restartGame() {
+// Resets all combat state. Does NOT touch campaign state (stars, runeInventory,
+// battlesCompleted, STARTING_LIVES). Call initBattle() for a full battle start.
+function restartCombatState() {
+  // Return any equipped runes to inventory before clearing tower array
+  for (const t of towers) {
+    if (t.rune) runeInventory[t.rune] = (runeInventory[t.rune] ?? 0) + 1;
+  }
+
   grid.cells = Array.from({ length: ROWS }, () => new Array(COLS).fill(CELL.EMPTY));
   grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
   grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
@@ -442,17 +456,13 @@ function restartGame() {
   waveSlainCount    = 0;
   waveGoldStart     = goldEarned;
 
-  stars             = 0;
   flawlessCount     = 0;
   flawlessStreak    = 0;
-  runeInventory     = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
   showRuneMenu      = false;
   showRunePicker    = false;
   runePickerTower   = null;
-  showRuneMenu      = false;
   endlessMode       = false;
   endlessBanner     = 0;
-  STARTING_LIVES    = 8;
   isPaused          = false;
   autoNextWave      = false;
   dmgFloaters       = [];
@@ -471,6 +481,7 @@ function restartGame() {
   towerTargetLines   = [];
   lastWaveTimeSec   = 0;
   flawlessTimer     = 0;
+  _battleResult     = null;
 
   waveNumber       = 0;
   waveTotal        = 0;
@@ -483,17 +494,71 @@ function restartGame() {
   waveActiveFrames = 0;
 }
 
-// Start game with chosen preset map (called from map select screen)
-function initGame(preset) {
+// Set map geometry and start a battle without resetting campaign state.
+// Stars, runeInventory, and battlesCompleted are preserved.
+function initBattle(preset) {
   SPAWN.col = preset.spawn.col;
   SPAWN.row = preset.spawn.row;
   GOAL.col  = preset.goal.col;
   GOAL.row  = preset.goal.row;
   hoardX    = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
   hoardY    = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
-  _currentMapName = preset.name ?? '';
+  _currentMapName      = preset.name ?? '';
+  _currentBattlePreset = preset;
   gamePhase = 'playing';
-  restartGame();
+  restartCombatState();
+}
+
+// Load or create the campaign save, restore campaign state, then start the first battle.
+// Call this when starting a new session from map select.
+function initCampaign(preset) {
+  _campaignState   = migrateLegacySaves();
+  battlesCompleted = _campaignState.battlesCompleted ?? 0;
+  stars            = _campaignState.stars ?? 0;
+  runeInventory    = Object.assign(
+    { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 },
+    _campaignState.runeInventory ?? {}
+  );
+  STARTING_LIVES = 8;
+  initBattle(preset);
+}
+
+// Record battle outcome, persist campaign state, and transition to betweenBattles phase.
+function recordBattleResult(result) {
+  _battleResult = result;
+  if (!_campaignState) return;
+  battlesCompleted++;
+  _campaignState.battlesCompleted = battlesCompleted;
+  _campaignState.stars            = stars;
+  _campaignState.runeInventory    = { ...runeInventory };
+  _campaignState.achievements     = [..._earnedAch];
+
+  const mvpTower = towers.length
+    ? towers.reduce((best, t) => {
+        const sc = (t.damageDealt || 0) + (t.killCount || 0) * 32;
+        const bs = best ? ((best.damageDealt || 0) + (best.killCount || 0) * 32) : -1;
+        return sc > bs ? t : best;
+      }, null)
+    : null;
+
+  _campaignState.battleHistory.push({
+    battleNumber:  battlesCompleted,
+    mapName:       _currentMapName,
+    wavesCleared:  waveNumber,
+    enemiesSlain:  slain,
+    goldEarned,
+    bossesKilled:  [],
+    mvpDefenderId: mvpTower?.defenderId ?? null,
+    timestamp:     Date.now(),
+  });
+
+  try { saveCampaign(_campaignState); } catch {}
+  gamePhase = 'betweenBattles';
+}
+
+// Start game with chosen preset map (called from map select screen).
+function initGame(preset) {
+  initCampaign(preset);
 }
 
 // Count how many of a given rune type are currently equipped on towers
@@ -1028,12 +1093,8 @@ function updateWave() {
     if (waveNumber === 50)  unlockAchievement('wave50');
     if (waveNumber >= MAX_WAVES && !endlessMode) {
       unlockAchievement('wave100');
-      // First time clearing wave 100: enter endless mode, save score, show banner
-      endlessMode   = true;
-      endlessBanner = 360;
-      victory       = true;  // shows banner but game continues
-      highScores    = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
-      victory       = false; // don't stop the game
+      highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
+      recordBattleResult('victory');
     }
     waveState = 'break';
   }
@@ -2023,6 +2084,26 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
+  // Between-battles summary screen
+  if (gamePhase === 'betweenBattles') {
+    if (e.button === 0) {
+      for (const btn of _betweenBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (btn.action === 'fightAgain') {
+            initBattle(_currentBattlePreset);
+          } else {
+            gamePhase = 'mapSelect';
+            mapAutoTimerStart = performance.now();
+            selectedMapIdx = 0;
+          }
+          return;
+        }
+      }
+    }
+    return;
+  }
+
   // Game over: only overlay buttons are interactive
   if (gameOver) {
     if (_pendingScore) return;  // name entry overlay is open — ignore canvas clicks
@@ -2636,6 +2717,7 @@ function update() {
         gameOver   = true;
         sfxGameOver();
         promptNameAndSave({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
+        recordBattleResult('defeat');
       }
     }
   }
@@ -5248,6 +5330,127 @@ function drawRuneMenu() {
   ctx.fillText('Equip runes on towers by selecting a tower  •  Esc / R to close', mx + menuW / 2, my + menuH - 10);
 }
 
+// ── Between-battles summary screen ───────────────────────────────────────────
+
+let _betweenBtns = [];  // hit areas: [{x,y,w,h,action}, ...]
+
+function drawBetweenBattles() {
+  _betweenBtns = [];
+  const W = BASE_W, H = BASE_H;
+  const cx = W / 2, cy = H / 2;
+
+  // Starfield background (reuse existing STARS array)
+  const t = performance.now() * 0.001;
+  for (const s of STARS) {
+    const x = s.x * W, y = s.y * H;
+    const alpha = 0.25 + Math.sin(t * 0.4 + s.phase) * 0.18;
+    ctx.beginPath();
+    ctx.arc(x, y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200,210,255,${alpha})`;
+    ctx.fill();
+  }
+
+  const isVictory  = _battleResult === 'victory';
+  const panelW = 460, panelH = 310;
+  const px = cx - panelW / 2, py = cy - panelH / 2 - 10;
+
+  drawFantasyPanel(px, py, panelW, panelH, 'rgba(4,2,12,0.97)', 0.88, 12);
+
+  ctx.save();
+  ctx.textAlign = 'center';
+
+  // Result header
+  const headerColor  = isVictory ? '#40e880' : '#e84040';
+  const headerShadow = isVictory ? 'rgba(50,220,100,0.7)' : 'rgba(220,50,50,0.7)';
+  const headerText   = isVictory ? 'VICTORY!' : 'DEFEATED';
+  ctx.font        = 'bold 36px monospace';
+  ctx.fillStyle   = headerColor;
+  ctx.shadowColor = headerShadow;
+  ctx.shadowBlur  = 22;
+  ctx.fillText(headerText, cx, py + 44);
+  ctx.shadowBlur  = 0;
+
+  // Battle number
+  ctx.font      = '11px monospace';
+  ctx.fillStyle = 'rgba(200,170,100,0.7)';
+  ctx.fillText(`BATTLE ${battlesCompleted} — ${_currentMapName}`, cx, py + 60);
+
+  // Stats row
+  ctx.font      = '13px monospace';
+  ctx.fillStyle = '#e8c040';
+  ctx.fillText(`Waves: ${waveNumber}   Enemies slain: ${slain}   Gold: ${goldEarned}`, cx, py + 84);
+
+  // Stars — THE key proof of persistence
+  ctx.font        = '14px monospace';
+  ctx.fillStyle   = '#f0d040';
+  ctx.shadowColor = 'rgba(240,190,20,0.7)';
+  ctx.shadowBlur  = 8;
+  ctx.fillText(`✦ ${stars} stars carried forward`, cx, py + 108);
+  ctx.shadowBlur  = 0;
+
+  // Separator
+  ctx.strokeStyle = 'rgba(180,140,60,0.22)';
+  ctx.lineWidth   = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(px + 20, py + 122); ctx.lineTo(px + panelW - 20, py + 122);
+  ctx.stroke();
+
+  // Top defenders this battle
+  const top3 = [...towers]
+    .sort((a, b) => ((b.killCount || 0) + (b.damageDealt || 0) * 0.02) -
+                    ((a.killCount || 0) + (a.damageDealt || 0) * 0.02))
+    .slice(0, 3);
+
+  ctx.font      = '10px monospace';
+  ctx.fillStyle = 'rgba(160,140,100,0.65)';
+  ctx.fillText('DEFENDERS THIS BATTLE', cx, py + 140);
+
+  if (top3.length === 0) {
+    ctx.fillStyle = 'rgba(120,100,70,0.5)';
+    ctx.fillText('none deployed', cx, py + 162);
+  } else {
+    const icons = ['★', '·', '·'];
+    top3.forEach((tower, i) => {
+      const def   = TOWER_DEFS[tower.type];
+      const label = `${icons[i]} ${tower.name} (${def?.label ?? tower.type})  —  ☠${tower.killCount ?? 0}  ⚔${tower.damageDealt ?? 0}`;
+      const rowY  = py + 158 + i * 17;
+      ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
+      ctx.fillStyle = i === 0 ? `rgba(${tower.glowRgb ?? '220,180,60'},0.95)` : 'rgba(180,160,120,0.7)';
+      ctx.fillText(label, cx, rowY);
+    });
+  }
+
+  ctx.restore();
+
+  // Buttons
+  const btnW = 180, btnH = 38, gap = 16;
+  const totalW = btnW * 2 + gap;
+  const b1x = cx - totalW / 2, b2x = cx - totalW / 2 + btnW + gap;
+  const btnY = py + panelH - 58;
+
+  drawFantasyPanel(b1x, btnY, btnW, btnH, 'rgba(8,26,8,0.97)', 0.75, 6);
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 13px monospace';
+  ctx.fillStyle   = '#88ee66';
+  ctx.shadowColor = 'rgba(100,220,80,0.5)';
+  ctx.shadowBlur  = 10;
+  ctx.fillText('FIGHT AGAIN', b1x + btnW / 2, btnY + 25);
+  ctx.restore();
+  _betweenBtns.push({ x: b1x, y: btnY, w: btnW, h: btnH, action: 'fightAgain' });
+
+  drawFantasyPanel(b2x, btnY, btnW, btnH, 'rgba(12,8,28,0.97)', 0.7, 6);
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 13px monospace';
+  ctx.fillStyle   = '#a0b8e0';
+  ctx.shadowColor = 'rgba(120,150,220,0.5)';
+  ctx.shadowBlur  = 8;
+  ctx.fillText('MAP SELECT', b2x + btnW / 2, btnY + 25);
+  ctx.restore();
+  _betweenBtns.push({ x: b2x, y: btnY, w: btnW, h: btnH, action: 'mapSelect' });
+}
+
 function drawMapSelect() {
   mapSelectBtns = [];
   const W = BASE_W, H = BASE_H;
@@ -5417,6 +5620,13 @@ function draw() {
 
   if (gamePhase === 'mapSelect') {
     drawMapSelect();
+    drawFrames();
+    ctx.restore();
+    return;
+  }
+
+  if (gamePhase === 'betweenBattles') {
+    drawBetweenBattles();
     drawFrames();
     ctx.restore();
     return;
