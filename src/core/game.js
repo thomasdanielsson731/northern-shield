@@ -1643,7 +1643,7 @@ function handleRightClickAt(mouseX, mouseY) {
     const wallKey = `w_${col}_${row}`;
     if (pendingSell && pendingSell.key === wallKey) {
       wallFrostDirty = true;
-      gold += Math.floor(WALL_COST * 0.60);
+      gold += Math.floor(WALL_COST * 0.75);
       grid.setCell(col, row, CELL.EMPTY);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
       rerouteActiveEnemies();
@@ -4760,8 +4760,8 @@ function drawBossHpBar() {
   ctx.lineWidth   = 2;
   ctx.beginPath(); ctx.moveTo(barX + barW * 0.5, barY - 2); ctx.lineTo(barX + barW * 0.5, barY + barH + 2); ctx.stroke();
   if (cfg?.phase75) {
-    ctx.strokeStyle = 'rgba(200,140,20,0.70)';
-    ctx.lineWidth   = 1.5;
+    ctx.strokeStyle = 'rgba(200,140,20,0.85)';
+    ctx.lineWidth   = 2;
     ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY - 1); ctx.lineTo(barX + barW * 0.75, barY + barH + 1); ctx.stroke();
   }
   ctx.strokeStyle = ratio <= 0.30 ? 'rgba(255,255,200,0.95)' : 'rgba(255,80,40,0.80)';
@@ -6089,7 +6089,7 @@ function drawPendingSell() {
   } else {
     ctx.font      = '8px monospace';
     ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
-    ctx.fillText(`Refund: ◆${Math.floor(WALL_COST * 0.5)}`, vx + vsW / 2, vy + vsH / 2 + 9);
+    ctx.fillText(`Refund: ◆${Math.floor(WALL_COST * 0.75)}`, vx + vsW / 2, vy + vsH / 2 + 9);
   }
   ctx.restore();
 }
