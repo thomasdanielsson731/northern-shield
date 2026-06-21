@@ -736,16 +736,17 @@ function waveComposition(num) {
 function buildWave(num) {
   if (BOSS_WAVES.has(num)) {
     // Boss wave: herald squad themed per boss, then the boss enters last
-    let heralds;
-    if (num === 10)  heralds = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
-    else if (num === 25) heralds = [...Array(8).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-    else if (num === 50) heralds = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING)];
-    else if (num === 75) heralds = [...Array(4).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-    else               heralds = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(3).fill(ENEMY_TYPES.MARA)];
-    for (let i = heralds.length - 1; i > 0; i--) {
+    let heraldTypes;
+    if (num === 10)  heraldTypes = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
+    else if (num === 25) heraldTypes = [...Array(8).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+    else if (num === 50) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING)];
+    else if (num === 75) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+    else               heraldTypes = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(3).fill(ENEMY_TYPES.MARA)];
+    for (let i = heraldTypes.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [heralds[i], heralds[j]] = [heralds[j], heralds[i]];
+      [heraldTypes[i], heraldTypes[j]] = [heraldTypes[j], heraldTypes[i]];
     }
+    const heralds = heraldTypes.map(t => ({ __herald: true, type: t }));
     heralds.push({ __boss: true, waveNum: num });
     return heralds;
   }
@@ -931,6 +932,9 @@ function updateWave() {
       const next = spawnQueue.shift();
       if (next && next.__boss) {
         spawnBoss(next.waveNum);
+      } else if (next && next.__herald) {
+        const e = spawnEnemy(next.type, waveHpScale);
+        if (e) e.isHerald = true;
       } else {
         spawnEnemy(next, waveHpScale);
       }
@@ -1494,6 +1498,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   }
 
   enemies.push(newEnemy);
+  return newEnemy;
 }
 
 function estimateWaveHp(waveNum) {
@@ -4367,6 +4372,11 @@ function onBossPhase50(boss) {
       t.disabledTimer = 90;
       empRings.push({ x: t.x, y: t.y, r: 0, life: 28, maxLife: 28 });
     }
+    if (chosen.length > 0) {
+      const cx = COLS * CELL_SIZE / 2;
+      const cy = ROWS * CELL_SIZE / 2;
+      dmgFloaters.push({ x: cx, y: cy, val: `${chosen.length} TOWERS DISABLED`, life: 90, maxLife: 90, color: '#e8a040', large: true, suffix: '' });
+    }
     boss.stunTimer = 30;
   } else if (boss.waveNum === 50) {
     // Mara-Void: summons 6 Mylings + stun pause
@@ -4374,6 +4384,11 @@ function onBossPhase50(boss) {
     boss.stunTimer  = 45;
     for (let i = 0; i < 6; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.80);
     bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 7, life: 40, maxLife: 40, color: '#9040e0' });
+  } else if (boss.waveNum === 75) {
+    // Fenrir: spawns 3 Jötunn at 50% — the pack before the final howl
+    boss.stunTimer = 30;
+    for (let i = 0; i < 3; i++) spawnEnemy(ENEMY_TYPES.JOTUNN, waveHpScale * 0.80);
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 8, life: 36, maxLife: 36, color: '#e0c020' });
   }
 
   bossDefeatTimer = 150;
@@ -4755,12 +4770,12 @@ function drawBossHpBar() {
     ctx.shadowBlur = 0;
   }
 
-  // Phase threshold markers
-  ctx.strokeStyle = 'rgba(240,190,30,0.90)';
+  // Phase threshold markers — gold (75%) → amber (50%) → red/cream (25%)
+  ctx.strokeStyle = 'rgba(200,140,20,0.80)';
   ctx.lineWidth   = 2;
   ctx.beginPath(); ctx.moveTo(barX + barW * 0.5, barY - 2); ctx.lineTo(barX + barW * 0.5, barY + barH + 2); ctx.stroke();
   if (cfg?.phase75) {
-    ctx.strokeStyle = 'rgba(200,140,20,0.85)';
+    ctx.strokeStyle = 'rgba(240,190,30,0.90)';
     ctx.lineWidth   = 2;
     ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY - 1); ctx.lineTo(barX + barW * 0.75, barY + barH + 1); ctx.stroke();
   }

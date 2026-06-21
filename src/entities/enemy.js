@@ -82,6 +82,7 @@ export class Enemy {
     this.deathTimer     = 0;    // frames remaining for death fade animation
     this.deathMax       = 0;    // max deathTimer (varies by radius)
     this.isElite        = false;  // set by spawnEnemy elite branch only
+    this.isHerald       = false;  // set for boss-wave herald squad enemies
 
     // Boss fields — set externally by spawnBoss()
     this.isBoss      = false;
@@ -371,6 +372,20 @@ export class Enemy {
       ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
       ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
       ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // Herald ring — orange dashed outline for boss-wave herald enemies
+    if (this.isHerald) {
+      const t = performance.now() * 0.003;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,140,30,${0.55 + Math.sin(t) * 0.25})`;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
     }
 

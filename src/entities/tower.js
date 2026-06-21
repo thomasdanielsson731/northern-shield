@@ -250,7 +250,7 @@ export class Tower {
     if (this.rune === 'battleHymn')  this.range    = Math.round(this.range  * 1.30);
     if (this.rune === 'frostRune') {
       this.slowFactor   = Math.min(this.slowFactor,   0.50);
-      this.slowDuration = Math.max(this.slowDuration, 20);
+      this.slowDuration = Math.min(this.slowDuration + 20, 80);
     }
   }
 
@@ -360,6 +360,10 @@ export class Tower {
     }
 
     target.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1));
+    if (this.rune === 'frostRune' && !target.slowImmune) {
+      target.slowTimer  = Math.max(target.slowTimer ?? 0, this.slowDuration);
+      target.slowFactor = Math.min(target.slowFactor ?? 1, this.slowFactor);
+    }
     this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 20;
     this.fireCooldown = this.fireRate;
     if (target.hp <= 0) { target.hp = 0; target.kill(); return 1; }
