@@ -216,6 +216,7 @@ export class Tower {
     this.levelFlash      = 0;   // frames of milestone glow on level 5 / 10
     this.synergyRingTimer = 0;  // frames of gold ring on Berserker-wall synergy
     this.killCount       = 0;   // total enemy kills credited to this tower
+    this.goldGenerated   = 0;   // total gold reward earned via this tower's kills
     this.footprint       = def.footprint ?? { w: 1, h: 1 };
     this._synergy        = null;  // active synergy key ('eagleEye'|'siegeFury'|'winterGrip'|null)
     this._synergyDmgBoost = 1;   // set by game.js before update() call
@@ -402,7 +403,7 @@ export class Tower {
       this._shadowGrad = g;
     }
     ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.38;
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.52;
     ctx.fillStyle = this._shadowGrad;
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
@@ -595,8 +596,21 @@ export class Tower {
     if (this.mvpTimer > 0) {
       const mt = Math.max(1, this.mvpTimer);
       const pulse = 0.6 + Math.sin(_now * 0.009) * 0.4;
+      const alpha = Math.min(1, mt / 120);
+      // Pulsing gold glow ring beneath tower
       ctx.save();
-      ctx.globalAlpha = Math.min(1, mt / 120);
+      ctx.globalAlpha = alpha * (0.30 + pulse * 0.20);
+      ctx.shadowColor = '#ffd040';
+      ctx.shadowBlur  = 14 * pulse;
+      ctx.strokeStyle = `rgba(255,210,40,${0.55 + pulse * 0.30})`;
+      ctx.lineWidth   = 2.0 + pulse * 1.2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 5 + pulse * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = alpha;
       const cx = this.x, cy = this.y - this.radius - 14;
       // Crown base
       ctx.shadowColor = '#ffd860'; ctx.shadowBlur = 8 * pulse;

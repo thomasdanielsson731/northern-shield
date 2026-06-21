@@ -120,9 +120,9 @@ export class Grid {
     return null;
   }
 
-  draw(ctx, time = 0, drawGridLines = true) {
-    if (drawGridLines) {
-      ctx.strokeStyle = 'rgba(80,60,30,0.28)';
+  draw(ctx, time = 0, gridAlpha = 0.22) {
+    if (gridAlpha > 0) {
+      ctx.strokeStyle = `rgba(80,60,30,${gridAlpha})`;
       ctx.lineWidth = 0.6;
       ctx.beginPath();
       for (let x = 0; x <= this.cols; x++) {
@@ -174,22 +174,32 @@ export class Grid {
     ctx.fillStyle = '#06030c';
     ctx.fillRect(x, y, cs, cs);
 
+    // ── Outer corruption aura ─────────────────────────────────────────────────
+    {
+      const auraGrad = ctx.createRadialGradient(cx, cy, cs * 0.5, cx, cy, cs * 5.5);
+      auraGrad.addColorStop(0,   `rgba(80,20,180,${0.32 + pulse * 0.18})`);
+      auraGrad.addColorStop(0.45,`rgba(40,10,100,${0.14 + pulse * 0.08})`);
+      auraGrad.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = auraGrad;
+      ctx.beginPath(); ctx.arc(cx, cy, cs * 5.5, 0, Math.PI * 2); ctx.fill();
+    }
+
     const sp = SPRITES['portal'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
       const scale = getSpriteScale();
-      const dw = cs * 6.5 * scale;
+      const dw = cs * 8.5 * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
-      ctx.shadowColor = `rgba(140,60,255,${0.65 + pulse * 0.35})`;
-      ctx.shadowBlur  = 22 * pulse;
+      ctx.shadowColor = `rgba(140,60,255,${0.70 + pulse * 0.30})`;
+      ctx.shadowBlur  = 30 * pulse;
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - dw / 2, cy - dh / 2, dw, dh);
       ctx.restore();
       // Pulsing purple void at center
       ctx.save();
-      ctx.globalAlpha = 0.30 * pulse;
+      ctx.globalAlpha = 0.35 * pulse;
       ctx.fillStyle   = '#a030ff';
       ctx.beginPath();
-      ctx.arc(cx, cy, cs * 0.9, 0, Math.PI * 2);
+      ctx.arc(cx, cy, cs * 1.1, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     } else {
@@ -255,50 +265,100 @@ export class Grid {
       ctx.restore();
     }
 
-    // ── Rotating rune ring — always drawn over sprite or fallback ─────────────
+    // ── Rotating rune rings (4 concentric) ────────────────────────────────────
     {
       const rot1 =  time * 1.1;
       const rot2 = -time * 0.7;
-      const ringR = cs * 2.6;
+      const rot3 =  time * 0.45;
+      const rot4 = -time * 1.55;
+      const outerR = cs * 4.0;
       ctx.save();
       ctx.translate(cx, cy);
 
-      ctx.rotate(rot1);
-      ctx.strokeStyle = `rgba(160,80,255,${0.28 + pulse * 0.22})`;
-      ctx.lineWidth   = 0.8;
-      ctx.setLineDash([2, 5]);
-      ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
+      // Outermost ring — slow, spaced rune glyphs
+      ctx.rotate(rot3);
+      ctx.strokeStyle = `rgba(120,50,200,${0.18 + pulse * 0.12})`;
+      ctx.lineWidth   = 0.6;
+      ctx.setLineDash([1.5, 7]);
+      ctx.beginPath(); ctx.arc(0, 0, outerR, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
         ctx.save();
-        ctx.translate(Math.cos(a) * ringR, Math.sin(a) * ringR);
-        ctx.fillStyle = `rgba(200,140,255,${0.55 + pulse * 0.35})`;
-        ctx.beginPath(); ctx.arc(0, 0, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.translate(Math.cos(a) * outerR, Math.sin(a) * outerR);
+        ctx.fillStyle = `rgba(180,100,255,${0.40 + pulse * 0.25})`;
+        ctx.beginPath(); ctx.arc(0, 0, 1.0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
+      // Second ring — medium
+      ctx.rotate(rot1 - rot3);
+      ctx.strokeStyle = `rgba(160,80,255,${0.30 + pulse * 0.22})`;
+      ctx.lineWidth   = 0.85;
+      ctx.setLineDash([2, 5]);
+      ctx.beginPath(); ctx.arc(0, 0, outerR * 0.72, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.save();
+        ctx.translate(Math.cos(a) * outerR * 0.72, Math.sin(a) * outerR * 0.72);
+        ctx.fillStyle = `rgba(210,150,255,${0.62 + pulse * 0.32})`;
+        ctx.beginPath(); ctx.arc(0, 0, 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      // Third ring — inner
       ctx.rotate(rot2 - rot1);
-      ctx.strokeStyle = `rgba(100,160,255,${0.18 + pulse * 0.14})`;
-      ctx.lineWidth   = 0.6;
-      ctx.setLineDash([1, 4]);
-      ctx.beginPath(); ctx.arc(0, 0, ringR * 0.72, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = `rgba(100,160,255,${0.22 + pulse * 0.16})`;
+      ctx.lineWidth   = 0.65;
+      ctx.setLineDash([1.5, 4]);
+      ctx.beginPath(); ctx.arc(0, 0, outerR * 0.46, 0, Math.PI * 2); ctx.stroke();
+
+      // Innermost ring — tight, bright
+      ctx.rotate(rot4 - rot2);
+      ctx.strokeStyle = `rgba(200,140,255,${0.35 + pulse * 0.28})`;
+      ctx.lineWidth   = 0.7;
+      ctx.setLineDash([1, 3]);
+      ctx.beginPath(); ctx.arc(0, 0, outerR * 0.26, 0, Math.PI * 2); ctx.stroke();
 
       ctx.setLineDash([]);
       ctx.restore();
     }
 
-    // ── Smoke wisps drifting up from portal base ───────────────────────────────
-    for (let i = 0; i < 4; i++) {
-      const si = i / 4;
-      const sw = cs * 0.7 * Math.sin(time * 1.4 + i * 2.1);
-      const sh = cy + cs * (0.4 + Math.sin(time * 2.1 + i * 1.8) * 0.15);
-      const sr = 2.2 + Math.sin(time + i) * 0.8;
-      const sa = (0.10 + Math.sin(time * 1.8 + i * 0.7) * 0.04) * (1 - si * 0.25);
+    // ── Energy tendrils — crackling arms from portal ───────────────────────────
+    if (pulse > 0.55) {
+      ctx.save();
+      for (let t = 0; t < 5; t++) {
+        const ta    = (t / 5) * Math.PI * 2 + time * 0.8;
+        const tLen  = cs * (2.0 + Math.sin(time * 3.2 + t * 1.4) * 0.8);
+        const tAlpha = (pulse - 0.55) * 0.45;
+        ctx.strokeStyle = `rgba(200,120,255,${tAlpha})`;
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        // Zigzag path
+        const midX = cx + Math.cos(ta + 0.3) * tLen * 0.55;
+        const midY = cy + Math.sin(ta + 0.3) * tLen * 0.55;
+        ctx.lineTo(midX, midY);
+        ctx.lineTo(cx + Math.cos(ta) * tLen, cy + Math.sin(ta) * tLen);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── Smoke wisps — more, larger, dramatic upward drift ─────────────────────
+    for (let i = 0; i < 10; i++) {
+      const si    = i / 10;
+      const phase = time * (1.2 + si * 0.6) + i * 2.35;
+      const drift = cs * 0.85 * Math.sin(phase);
+      const rise  = cs * (0.5 + si * 1.8 + Math.sin(time * 1.8 + i * 0.8) * 0.22);
+      const sr    = 2.5 + si * 2.8 + Math.sin(time * 1.4 + i) * 0.9;
+      const baseA = 0.12 + Math.sin(time * 1.6 + i * 0.9) * 0.04;
+      const sa    = baseA * (1 - si * 0.55) * (i < 5 ? 1 : 0.7);
+      const col   = i % 3 === 0 ? '#d090ff' : i % 3 === 1 ? '#8860cc' : '#b0a0e8';
       ctx.save();
       ctx.globalAlpha = sa;
-      ctx.fillStyle   = '#c880ff';
+      ctx.fillStyle   = col;
       ctx.beginPath();
-      ctx.arc(cx + sw, sh, sr, 0, Math.PI * 2);
+      ctx.arc(cx + drift, cy - rise, sr, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -311,6 +371,148 @@ export class Grid {
 
     const pulseSpeed = hr > 0.33 ? 3.5 : 8;
     const pulse      = 0.5 + Math.sin(time * pulseSpeed) * 0.5;
+
+    // ── Fortress complex — decorative buildings around the goal ───────────────
+    {
+      ctx.save();
+      ctx.globalAlpha = 0.60;
+
+      // Helper — draw a stone building with peaked or flat roof
+      const drawBuilding = (bx, by, bw, bh, roofH, roofColor, wallColor, shadowAlpha = 0.50) => {
+        // Drop shadow
+        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+        ctx.fillRect(bx + 2, by + 2, bw, bh);
+        // Wall body
+        ctx.fillStyle = wallColor;
+        ctx.fillRect(bx, by, bw, bh);
+        // Stone row lines
+        ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+        ctx.lineWidth = 0.4;
+        for (let row = cs * 0.5; row < bh; row += cs * 0.55) {
+          ctx.beginPath(); ctx.moveTo(bx, by + row); ctx.lineTo(bx + bw, by + row); ctx.stroke();
+        }
+        // Highlight (top-left edge lit)
+        ctx.fillStyle = 'rgba(200,175,120,0.18)';
+        ctx.fillRect(bx, by, 1.5, bh);
+        ctx.fillRect(bx, by, bw, 1.5);
+        // Peaked roof
+        if (roofH > 0) {
+          ctx.fillStyle = 'rgba(0,0,0,0.42)';
+          ctx.beginPath();
+          ctx.moveTo(bx + 2, by + 2); ctx.lineTo(bx + bw / 2 + 2, by - roofH + 2); ctx.lineTo(bx + bw + 2, by + 2);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = roofColor;
+          ctx.beginPath();
+          ctx.moveTo(bx, by); ctx.lineTo(bx + bw / 2, by - roofH); ctx.lineTo(bx + bw, by);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = 'rgba(200,175,120,0.22)';
+          ctx.beginPath();
+          ctx.moveTo(bx, by); ctx.lineTo(bx + bw / 2, by - roofH);
+          ctx.lineWidth = 1.0; ctx.stroke();
+        }
+        // Window amber glow
+        const winFlicker = 0.55 + Math.sin(time * 6.8 + bx * 0.03) * 0.22;
+        ctx.fillStyle = `rgba(255,175,55,${winFlicker * 0.55})`;
+        const winW = Math.max(2, bw * 0.15), winH = Math.max(2, bh * 0.22);
+        const winY = by + bh * 0.28;
+        for (let wi = 0; wi < Math.floor(bw / (winW + cs * 0.5)); wi++) {
+          const winX = bx + cs * 0.3 + wi * (winW + cs * 0.5);
+          if (winX + winW < bx + bw - cs * 0.2) {
+            ctx.fillRect(winX, winY, winW, winH);
+            ctx.shadowColor = 'rgba(255,160,40,0.55)';
+            ctx.shadowBlur  = 3 * winFlicker;
+            ctx.fillRect(winX, winY, winW, winH);
+            ctx.shadowBlur  = 0;
+          }
+        }
+      };
+
+      // Helper — draw a banner pole with hanging flag
+      const drawBannerPole = (px, py, ph, flagColor) => {
+        // Pole
+        ctx.fillStyle = 'rgba(60,35,12,0.85)';
+        ctx.fillRect(px - 0.8, py - ph, 1.6, ph);
+        // Flag (triangular pennant, animated wave)
+        const wave = Math.sin(time * 2.8 + px * 0.02) * cs * 0.18;
+        ctx.fillStyle = flagColor;
+        ctx.beginPath();
+        ctx.moveTo(px, py - ph);
+        ctx.lineTo(px + cs * 1.1 + wave, py - ph + cs * 0.4);
+        ctx.lineTo(px, py - ph + cs * 0.75);
+        ctx.closePath(); ctx.fill();
+        // Flag highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.20)';
+        ctx.beginPath();
+        ctx.moveTo(px, py - ph);
+        ctx.lineTo(px + cs * 0.5 + wave * 0.5, py - ph + cs * 0.2);
+        ctx.lineTo(px, py - ph + cs * 0.35);
+        ctx.closePath(); ctx.fill();
+      };
+
+      // Helper — draw a round watchtower
+      const drawTower = (tx, ty, tr, th, wallColor, roofColor) => {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath(); ctx.arc(tx + 1.5, ty + 2, tr, 0, Math.PI * 2); ctx.fill();
+        // Tower body (cylinder as rect for simplicity)
+        ctx.fillStyle = wallColor;
+        ctx.fillRect(tx - tr, ty - th, tr * 2, th);
+        ctx.beginPath(); ctx.arc(tx, ty, tr, 0, Math.PI * 2); ctx.fill();
+        // Battlements on top
+        ctx.fillStyle = wallColor;
+        const mCount = Math.max(2, Math.floor(tr * 0.8));
+        const mW = tr * 0.4;
+        for (let m = 0; m < mCount; m++) {
+          const ma = (m / mCount) * Math.PI * 2;
+          const mx = tx + Math.cos(ma) * tr * 0.75;
+          const my = ty - th + Math.sin(ma) * tr * 0.35;
+          ctx.fillRect(mx - mW / 2, my - cs * 0.22, mW, cs * 0.22);
+        }
+        // Cone roof
+        ctx.fillStyle = 'rgba(0,0,0,0.40)';
+        ctx.beginPath();
+        ctx.moveTo(tx - tr + 2, ty - th + 2); ctx.lineTo(tx + 2, ty - th - tr * 1.8 + 2); ctx.lineTo(tx + tr + 2, ty - th + 2);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = roofColor;
+        ctx.beginPath();
+        ctx.moveTo(tx - tr, ty - th); ctx.lineTo(tx, ty - th - tr * 1.8); ctx.lineTo(tx + tr, ty - th);
+        ctx.closePath(); ctx.fill();
+        // Window slit
+        const winFlicker2 = 0.50 + Math.sin(time * 5.5 + tx * 0.05) * 0.25;
+        ctx.fillStyle = `rgba(255,160,40,${winFlicker2 * 0.62})`;
+        ctx.fillRect(tx - 1, ty - th * 0.55, 2, cs * 0.28);
+        ctx.shadowColor = 'rgba(255,140,30,0.55)'; ctx.shadowBlur = 4 * winFlicker2;
+        ctx.fillRect(tx - 1, ty - th * 0.55, 2, cs * 0.28);
+        ctx.shadowBlur = 0;
+      };
+
+      const stone = '#2a2216';
+      const stoneLt = '#3c3228';
+      const roofDk = '#1e1608';
+      const roofWood = '#4a2c10';
+
+      // Great Hall (large longhouse — left and above the fortress)
+      drawBuilding(cx - cs * 5.8, cy - cs * 5.2, cs * 3.8, cs * 2.2, cs * 1.1, roofWood, stone);
+
+      // Barracks (medium building — left and below)
+      drawBuilding(cx - cs * 5.5, cy + cs * 2.5, cs * 3.2, cs * 1.8, cs * 0.8, roofWood, stone);
+
+      // Small treasury annex (compact, below-right of great hall)
+      drawBuilding(cx - cs * 2.0, cy - cs * 4.5, cs * 1.8, cs * 1.5, cs * 0.7, roofDk, stoneLt);
+
+      // Watchtower (tall, left of goal)
+      drawTower(cx - cs * 3.8, cy - cs * 1.0, cs * 0.85, cs * 3.5, stoneLt, roofDk);
+
+      // Second small watchtower (above, slightly left)
+      drawTower(cx - cs * 2.2, cy - cs * 5.8, cs * 0.65, cs * 2.8, stone, roofDk);
+
+      // Banner poles
+      drawBannerPole(cx - cs * 6.0, cy - cs * 4.8, cs * 3.5, 'rgba(140,18,18,0.88)');   // deep red
+      drawBannerPole(cx - cs * 4.2, cy - cs * 2.5, cs * 3.0, 'rgba(18,38,120,0.88)');   // midnight blue
+      drawBannerPole(cx - cs * 1.5, cy - cs * 5.5, cs * 2.5, 'rgba(120,90,18,0.88)');   // gold ochre
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
 
     const sp = SPRITES['trelleborg'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
@@ -392,8 +594,17 @@ export class Grid {
     ctx.fillStyle = aura;
     ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2); ctx.fill();
 
-    // ── Gold pile — scattered small coins matching flying coin size ──────────────
-    const stackLevel = Math.min(Math.floor(Math.log2((this.gold || 0) + 2)), 8);
+    // ── Gold pile — coin count tied to treasury thresholds for emotional weight ───
+    //   0 g  → empty ring    100 g → small pile    500 g → medium
+    //   1000g → large pile  5000 g → overflowing
+    const g = this.gold || 0;
+    const stackLevel = g >= 5000 ? 8
+                     : g >= 1000 ? 6 + Math.min(Math.floor((g - 1000) / 2000), 1)
+                     : g >= 500  ? 5
+                     : g >= 100  ? 3 + Math.min(Math.floor((g - 100) / 200), 1)
+                     : g >= 50   ? 2
+                     : g >= 10   ? 1
+                     : 0;
     const coinTotal  = stackLevel === 0 ? 0 : stackLevel * 3 + 2;
     const gPulse     = 0.5 + Math.sin(time * 5.5 + 0.8) * 0.5;
     const pileBaseY  = cy + cs * 0.3;
@@ -419,6 +630,70 @@ export class Grid {
         }
       }
       ctx.shadowBlur = 0;
+
+      // Stage 4+ (1000g): vault glow ring around coin pile
+      if (g >= 1000) {
+        const vaultAlpha = g >= 5000 ? 0.55 : 0.32 + (g - 1000) / 16000;
+        const vaultR = cs * 2.0 + hPulseF * cs * 0.5;
+        ctx.shadowColor = `rgba(255,200,40,${vaultAlpha})`;
+        ctx.shadowBlur  = 12 + gPulse * 8;
+        ctx.strokeStyle = `rgba(255,200,40,${vaultAlpha * 0.70})`;
+        ctx.lineWidth   = 1.2;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        ctx.arc(cx, pileBaseY, vaultR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+        // Scattered gems inside the vault ring
+        const gemColors = ['#60d8f8', '#f06080', '#80f040', '#f0c040'];
+        const gemCount  = g >= 5000 ? 8 : 4;
+        for (let gi = 0; gi < gemCount; gi++) {
+          const ga  = time * 0.6 + gi * (Math.PI * 2 / gemCount);
+          const gr  = cs * (0.85 + Math.sin(time * 2.1 + gi) * 0.18);
+          const gpx = cx + Math.cos(ga) * gr;
+          const gpy = pileBaseY + Math.sin(ga) * gr * 0.42;
+          const gAlpha = 0.45 + Math.sin(time * 4.5 + gi * 1.8) * 0.30;
+          ctx.globalAlpha = gAlpha;
+          ctx.shadowColor = gemColors[gi % gemColors.length];
+          ctx.shadowBlur  = 6 + gPulse * 4;
+          ctx.fillStyle   = gemColors[gi % gemColors.length];
+          ctx.beginPath();
+          ctx.arc(gpx, gpy, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // Stage 5 (5000g): dragon hoard — overflow crown sparkles above pile
+      if (g >= 5000) {
+        const crownPulse = 0.5 + Math.sin(time * 7.2) * 0.5;
+        const sparkCount = 6;
+        for (let si = 0; si < sparkCount; si++) {
+          const sa  = time * 1.2 + si * (Math.PI * 2 / sparkCount);
+          const sAlpha = Math.max(0, 0.35 + Math.sin(time * 5.0 + si * 2.1) * 0.40);
+          const spxD = cx + Math.cos(sa) * cs * 1.5;
+          const spyD = pileBaseY - cs * 0.8 + Math.sin(time * 3.1 + si) * cs * 0.3;
+          ctx.save();
+          ctx.globalAlpha = sAlpha;
+          ctx.shadowColor = '#ffffa0';
+          ctx.shadowBlur  = 8 * crownPulse;
+          // 4-pointed star sparkle
+          ctx.fillStyle = '#fff8c0';
+          ctx.beginPath();
+          for (let p = 0; p < 8; p++) {
+            const pa = (p / 8) * Math.PI * 2 - Math.PI / 2;
+            const pr = p % 2 === 0 ? 4.5 : 1.5;
+            if (p === 0) ctx.moveTo(spxD + Math.cos(pa) * pr, spyD + Math.sin(pa) * pr);
+            else         ctx.lineTo(spxD + Math.cos(pa) * pr, spyD + Math.sin(pa) * pr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
+      }
     } else {
       // Empty hoard ring
       ctx.strokeStyle = 'rgba(130,90,25,0.5)';
@@ -450,23 +725,32 @@ export class Grid {
     ctx.shadowBlur = 0;
     ctx.restore();
 
-    // ── Treasure chest (right of pile) ─────────────────────────────────────────
-    const chX = cx + Math.round(cs * 1.0);
-    const chY = cy + Math.round(cs * 0.4);
+    // ── Treasure chest (right of pile) — drawn after coins so it reads on top ───
+    const chX    = cx + Math.round(cs * 1.05);
+    const chY    = cy + Math.round(cs * 0.35);
+    const chW    = 14, chH = 9;
+    const chGlow = g >= 1000 ? 8 + gPulse * 5 : g >= 500 ? 5 + gPulse * 3 : 3 + gPulse * 2;
     ctx.save();
-    ctx.shadowColor = 'rgba(200,140,30,0.6)';
-    ctx.shadowBlur  = 4 + gPulse * 3;
-    ctx.fillStyle   = '#3a1c08';  // chest shadow
-    ctx.fillRect(chX - 6, chY - 3, 12, 9);
-    ctx.fillStyle   = '#5a3012';  // chest body
-    ctx.fillRect(chX - 6, chY - 3, 12, 8);
-    ctx.fillStyle   = '#7a4820';  // chest lid
-    ctx.fillRect(chX - 6, chY - 3, 12, 3);
-    ctx.fillStyle   = 'rgba(255,220,100,0.35)';
-    ctx.fillRect(chX - 6, chY - 3, 12, 1);
-    ctx.fillStyle   = '#c09020';  // latch
-    ctx.fillRect(chX - 1, chY - 1, 3, 4);
-    ctx.shadowBlur  = 0;
+    ctx.shadowColor = g >= 500 ? `rgba(255,200,40,${0.55 + gPulse * 0.25})` : 'rgba(200,140,30,0.50)';
+    ctx.shadowBlur  = chGlow;
+    // Chest drop shadow (dark outline makes chest pop against gold coins)
+    ctx.fillStyle = 'rgba(0,0,0,0.60)';
+    ctx.fillRect(chX - chW / 2 + 1, chY - chH / 2 + 2, chW, chH);
+    // Chest body
+    ctx.fillStyle = '#5a2e0e';
+    ctx.fillRect(chX - chW / 2, chY - chH / 2, chW, chH);
+    // Chest lid (lighter top third)
+    ctx.fillStyle = '#7a4020';
+    ctx.fillRect(chX - chW / 2, chY - chH / 2, chW, Math.ceil(chH * 0.4));
+    // Gold band across lid edge
+    ctx.fillStyle = g >= 100 ? '#d4a020' : '#907020';
+    ctx.fillRect(chX - chW / 2, chY - chH / 2 + Math.ceil(chH * 0.4) - 1, chW, 1);
+    // Latch — center gold buckle
+    ctx.fillStyle = g >= 200 ? '#f0c030' : '#a08020';
+    ctx.fillRect(chX - 2, chY - 2, 4, 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(chX - 1, chY - 1, 2, 3);
+    ctx.shadowBlur = 0;
     ctx.restore();
 
     // ── Orbiting gold sparkles ──────────────────────────────────────────────────
@@ -550,10 +834,9 @@ export class Grid {
     ctx.fillRect(x, y, cs, cs);
 
     if (adj === 0) {
-      // ── Isolated: two shields side by side ───────────────────────────────
-      const r = cs * 0.25;
-      _drawVikingShield(ctx, cx - cs * 0.22, cy, r, isBlue);
-      _drawVikingShield(ctx, cx + cs * 0.22, cy, r, !isBlue);
+      // ── Isolated: single centred shield — less visual repetition ─────────
+      const r = cs * 0.30;
+      _drawVikingShield(ctx, cx, cy, r, isBlue);
     } else {
       // ── Connected: wooden frame + center shield ───────────────────────────
       const beamHW = 2;
@@ -587,9 +870,17 @@ export class Grid {
       if (E) { ctx.beginPath(); ctx.arc(x + cs - 1, cy,          postR, 0, Math.PI * 2); ctx.fill(); }
       if (W) { ctx.beginPath(); ctx.arc(x + 1,      cy,          postR, 0, Math.PI * 2); ctx.fill(); }
 
-      // Center shield (on top of beams)
+      // Center shield — only on every 3rd connected wall segment for visual variety
       const shieldR = cs * 0.34;
-      _drawVikingShield(ctx, cx, cy, shieldR, isBlue);
+      const showShield = ((Math.floor(x / cs) * 3 + Math.floor(y / cs) * 7) % 3) === 0;
+      if (showShield) _drawVikingShield(ctx, cx, cy, shieldR, isBlue);
+      else {
+        // Replace shield with a wooden rivet/boss
+        ctx.fillStyle = '#3a2010';
+        ctx.beginPath(); ctx.arc(cx, cy, cs * 0.14, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(120,90,50,0.60)';
+        ctx.beginPath(); ctx.arc(cx - cs * 0.04, cy - cs * 0.04, cs * 0.06, 0, Math.PI * 2); ctx.fill();
+      }
 
       // Wooden merlons on exposed top edge
       if (!N) {
@@ -611,5 +902,123 @@ export class Grid {
     ctx.lineWidth   = 0.5;
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
     ctx.restore();
+
+    // Cast shadow onto adjacent empty cells below and to the right (perceived height)
+    if (!S) {
+      ctx.save();
+      const shGrad = ctx.createLinearGradient(x, y + cs, x, y + cs + 4);
+      shGrad.addColorStop(0, 'rgba(0,0,0,0.38)');
+      shGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shGrad;
+      ctx.fillRect(x, y + cs, cs, 4);
+      ctx.restore();
+    }
+    if (!E) {
+      ctx.save();
+      const shGradR = ctx.createLinearGradient(x + cs, y, x + cs + 3, y);
+      shGradR.addColorStop(0, 'rgba(0,0,0,0.22)');
+      shGradR.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shGradR;
+      ctx.fillRect(x + cs, y, 3, cs);
+      ctx.restore();
+    }
+
+    // ── Wall variation — deterministic decorations per cell position ──────────
+    {
+      const col = Math.floor(x / cs);
+      const row = Math.floor(y / cs);
+      const h   = (col * 31 + row * 17 + col * row * 7) & 0xffff;
+
+      // Torch (1 in 5 walls, only on connected walls with exposed top)
+      if ((h % 5) === 0 && adj !== 0 && !N) {
+        const time2 = performance.now() * 0.001;
+        const flicker = 0.55 + Math.sin(time2 * (8.2 + (h % 5) * 0.9)) * 0.26 + Math.sin(time2 * (13.4 + (h % 3))) * 0.12;
+        const tx = cx + ((h % 3) - 1) * cs * 0.28;
+        const ty = cy - cs * 0.25;
+        ctx.save();
+        // Torch bracket
+        ctx.fillStyle = '#4a2a0a';
+        ctx.fillRect(tx - 0.8, ty - 1, 1.6, cs * 0.55);
+        ctx.fillStyle = '#7a4a18';
+        ctx.fillRect(tx - 2, ty - 3, 4, 4);
+        // Flame glow
+        ctx.shadowColor = `rgba(255,140,30,${flicker * 0.70})`;
+        ctx.shadowBlur  = 7 * flicker;
+        const fGrad = ctx.createRadialGradient(tx, ty - 2, 0, tx, ty - 2, 4.5 * flicker);
+        fGrad.addColorStop(0,   `rgba(255,248,180,${flicker * 0.98})`);
+        fGrad.addColorStop(0.4, `rgba(255,130,20,${flicker * 0.72})`);
+        fGrad.addColorStop(1,   'rgba(200,50,5,0)');
+        ctx.fillStyle = fGrad;
+        ctx.beginPath();
+        ctx.ellipse(tx, ty - 2.5, 2.8 * flicker, 4.5 * flicker, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      // Banner (1 in 7 walls, hanging cloth)
+      if ((h % 7) === 0 && adj !== 0) {
+        const time2 = performance.now() * 0.001;
+        const wave   = Math.sin(time2 * 1.8 + col * 0.4) * 0.8;
+        const bannerH = cs * 0.55;
+        const bannerW = cs * 0.38;
+        const bx = cx - bannerW / 2 + wave * 0.3;
+        const by = cy - cs * 0.45;
+        // Color alternates between red and blue by column
+        const bannerCol = (col % 3 === 0) ? 'rgba(130,15,15,0.75)' : (col % 3 === 1) ? 'rgba(15,30,110,0.75)' : 'rgba(100,80,12,0.70)';
+        ctx.save();
+        ctx.fillStyle = bannerCol;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + bannerW + wave * 0.5, by);
+        ctx.lineTo(bx + bannerW * 0.8 + wave * 0.5, by + bannerH);
+        ctx.lineTo(bx + bannerW * 0.2, by + bannerH);
+        ctx.closePath(); ctx.fill();
+        // Banner rune mark
+        ctx.strokeStyle = 'rgba(255,220,80,0.45)';
+        ctx.lineWidth = 0.45;
+        ctx.beginPath();
+        ctx.moveTo(cx, by + bannerH * 0.2); ctx.lineTo(cx, by + bannerH * 0.75);
+        ctx.moveTo(cx - bannerW * 0.18, by + bannerH * 0.42); ctx.lineTo(cx + bannerW * 0.18, by + bannerH * 0.42);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Damage cracks (1 in 8 walls)
+      if ((h % 8) === 0 && adj !== 0) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.62)';
+        ctx.lineWidth = 0.55;
+        const crackX = cx + ((h >> 4) % 3 - 1) * cs * 0.22;
+        const crackY = cy + ((h >> 7) % 3 - 1) * cs * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(crackX, crackY - cs * 0.30);
+        ctx.lineTo(crackX + cs * 0.10, crackY);
+        ctx.lineTo(crackX - cs * 0.08, crackY + cs * 0.25);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,200,120,0.14)';
+        ctx.beginPath();
+        ctx.moveTo(crackX - 0.5, crackY - cs * 0.30);
+        ctx.lineTo(crackX + cs * 0.10 - 0.5, crackY);
+        ctx.lineTo(crackX - cs * 0.08 - 0.5, crackY + cs * 0.25);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Iron spikes on top merlons (1 in 4 walls with exposed top)
+      if ((h % 4) === 0 && !N && adj !== 0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(55,50,48,0.88)';
+        const spikeY = cy - cs * 0.46;
+        for (const sx of [cx - cs * 0.22, cx + cs * 0.22]) {
+          ctx.beginPath();
+          ctx.moveTo(sx - 1, spikeY);
+          ctx.lineTo(sx, spikeY - cs * 0.18);
+          ctx.lineTo(sx + 1, spikeY);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
   }
 }
