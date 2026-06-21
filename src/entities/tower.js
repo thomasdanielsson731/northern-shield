@@ -2,6 +2,7 @@ import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale } from '../config.js';
 import { getDefenderName } from '../roster/names.js';
+import { careerBonusForLevel } from '../roster/defender.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -209,6 +210,7 @@ export class Tower {
     this.type = type;
     this.name         = getDefenderName(type);
     this.defenderId   = generateId();
+    this._careerLevel = 0;
     this.fireCooldown  = 0;
     this.level         = 1;
     this.damageDealt   = 0;
@@ -273,6 +275,20 @@ export class Tower {
       this.slowFactor   = Math.min(this.slowFactor,   0.50);
       this.slowDuration = Math.min(this.slowDuration + 20, 80);
     }
+    if (this._careerLevel > 0) {
+      const { dm, rm, cm } = careerBonusForLevel(this._careerLevel);
+      this.damage   = Math.round(this.damage   * dm);
+      this.range    = Math.round(this.range    * rm);
+      this.fireRate = Math.max(4, Math.round(this.fireRate * cm));
+    }
+  }
+
+  // Called by game.js after roster lookup — overwrites generated name/id, applies career stats.
+  applyCareerData(defenderId, name, careerLevel) {
+    this.defenderId   = defenderId;
+    this.name         = name;
+    this._careerLevel = careerLevel;
+    this._applyLevel();
   }
 
   get upgradeCost() {

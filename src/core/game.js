@@ -5,6 +5,8 @@ import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
+import { Roster } from '../roster/roster.js';
+import { ROMAN } from '../roster/defender.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -191,6 +193,7 @@ let flawlessTimer   = 0;        // countdown for "+1 ★ FLAWLESS!" text (frames
 let _campaignState       = null;   // ns-campaign-v2 object
 let battlesCompleted     = 0;
 let _currentBattlePreset = null;   // preset used for the current battle (for Fight Again)
+let _roster              = new Roster();
 let _battleResult        = null;   // 'victory' | 'defeat' — set when battle ends
 
 // Map selection
@@ -390,6 +393,7 @@ function restartCombatState() {
   for (const t of towers) {
     if (t.rune) runeInventory[t.rune] = (runeInventory[t.rune] ?? 0) + 1;
   }
+  _roster.releaseAll();
 
   grid.cells = Array.from({ length: ROWS }, () => new Array(COLS).fill(CELL.EMPTY));
   grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
@@ -520,6 +524,8 @@ function initCampaign(preset) {
     _campaignState.runeInventory ?? {}
   );
   STARTING_LIVES = 8;
+  _roster = new Roster();
+  _roster.load(_campaignState.defenders ?? []);
   initBattle(preset);
 }
 
@@ -551,6 +557,10 @@ function recordBattleResult(result) {
     mvpDefenderId: mvpTower?.defenderId ?? null,
     timestamp:     Date.now(),
   });
+
+  _roster.grantBattleXP(towers, waveNumber);
+  _roster.releaseAll();
+  _campaignState.defenders = _roster.toJSON();
 
   try { saveCampaign(_campaignState); } catch {}
   gamePhase = 'betweenBattles';
@@ -1865,6 +1875,10 @@ function tryPlaceAt(col, row, mode, towerType) {
     const cx = (col + fp.w / 2) * CELL_SIZE;
     const cy = (row + fp.h / 2) * CELL_SIZE;
     const t = new Tower(cx, cy, col, row, towerType);
+    // Link to roster: reuse an existing veteran if available, otherwise register the new recruit.
+    const def = _roster.link(towerType, t.defenderId, t.name);
+    if (def.careerLevel > 0) t.applyCareerData(def.defenderId, def.name, def.careerLevel);
+    else { t.defenderId = def.defenderId; t.name = def.name; }
     towers.push(t);
     _synergyDirty = true;
     // Synergy ring: Berserker placed next to a wall
@@ -4364,12 +4378,13 @@ function drawTowerPanel(tower) {
   ctx.fillStyle = tower.maxed ? '#ff9040' : '#e8c040';
   ctx.fillText(tower.maxed ? 'MAX' : `Lv ${tower.level}`, px + panelW - 10, py + 17);
 
-  // Defender name
+  // Defender name + career level
   if (tower.name) {
+    const careerRoman = tower._careerLevel > 0 ? `  [${ROMAN[tower._careerLevel] ?? tower._careerLevel}]` : '';
     ctx.textAlign = 'left';
     ctx.font      = '10px monospace';
     ctx.fillStyle = 'rgba(220,190,130,0.80)';
-    ctx.fillText(tower.name, px + 10, py + 28);
+    ctx.fillText(tower.name + careerRoman, px + 10, py + 28);
   }
 
   // Stats
@@ -5412,7 +5427,8 @@ function drawBetweenBattles() {
     const icons = ['★', '·', '·'];
     top3.forEach((tower, i) => {
       const def   = TOWER_DEFS[tower.type];
-      const label = `${icons[i]} ${tower.name} (${def?.label ?? tower.type})  —  ☠${tower.killCount ?? 0}  ⚔${tower.damageDealt ?? 0}`;
+      const lvlTag = tower._careerLevel > 0 ? ` ${ROMAN[tower._careerLevel] ?? ''}` : '';
+      const label = `${icons[i]} ${tower.name}${lvlTag} (${def?.label ?? tower.type})  —  ☠${tower.killCount ?? 0}  ⚔${tower.damageDealt ?? 0}`;
       const rowY  = py + 158 + i * 17;
       ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
       ctx.fillStyle = i === 0 ? `rgba(${tower.glowRgb ?? '220,180,60'},0.95)` : 'rgba(180,160,120,0.7)';
