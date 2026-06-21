@@ -197,7 +197,8 @@ const ABILITY_LABELS = {
   military: 'RAPID',
   catapult: 'SPLASH',
   blondie:  '60% SLOW',
-  piltorn:  'PIERCE',
+  piltorn:  'PIERCE ×4',
+  warden:   'PIERCE ×4',
   hydda:    'HEAL LIFE',
   isjatten: 'NOVA',
   drakship: 'VOLLEY',
@@ -212,7 +213,7 @@ const PRESET_MAPS = [
 const RUNE_DEFS = [
   { id: 'ironEdge',    label: 'IRON EDGE',    symbol: '⚔', desc: '+25% dmg on 1 tower',    cost: 3, maxOwned: 3, color: '#e85040' },
   { id: 'swiftStrike', label: 'SWIFT STRIKE', symbol: '⚡', desc: '−15% fire cooldown',     cost: 4, maxOwned: 2, color: '#88aaee' },
-  { id: 'frostRune',   label: 'FROST RUNE',   symbol: '❄', desc: 'Adds/boosts slow on hit', cost: 2, maxOwned: 3, color: '#60c8f0' },
+  { id: 'frostRune',   label: 'FROST RUNE',   symbol: '❄', desc: 'Adds/boosts slow on hit', cost: 3, maxOwned: 3, color: '#60c8f0' },
   { id: 'battleHymn',  label: 'BATTLE HYMN',  symbol: '◎', desc: '+30% range',              cost: 3, maxOwned: 1, color: '#c87840' },
   { id: 'valhalla',    label: 'VALHALLA',      symbol: '♥', desc: '+50% kill gold',          cost: 5, maxOwned: 2, color: '#f0c840' },
 ];
@@ -225,18 +226,20 @@ const TOWER_STAR_GATES = {
 
 // Special wave modifiers shown in advance and applied on wave start
 const WAVE_EVENTS = {
-  15: { id: 'frostWind',    label: '❄ FROST WIND',    desc: 'All enemies 25% slower',     speedMult: 0.75 },
-  18: { id: 'undeadMarch',  label: '☠ UNDEAD MARCH',  desc: '+12 Draugr to wave',         bonus: { type: 'draugr', count: 12 } },
-  20: { id: 'ancestralAid', label: '⚡ ANCESTRAL AID', desc: 'Choose a tower — free upgrade', special: 'upgrade' },
-  22: { id: 'nightRaid',    label: '🌑 NIGHT RAID',    desc: '+20% enemy HP',               hpMult: 1.20 },
-  30: { id: 'berserkerRage',label: '⚔ BERSERKER RAGE',desc: '+30% enemy speed',           speedMult: 1.30 },
-  35: { id: 'swarmWave',    label: '⚡ SWARM',          desc: '+10 Myling to wave',         bonus: { type: 'myling', count: 10 } },
-  40: { id: 'ironHide',     label: '⚔ IRON HIDE',     desc: '+30% HP, −15% speed',        hpMult: 1.30, speedMult: 0.85 },
-  48: { id: 'wraithHunt',   label: '👁 WRAITH HUNT',   desc: 'Extra Myling pack +8',       bonus: { type: 'myling', count: 8 } },
-  60: { id: 'frostStorm',   label: '❄ FROST STORM',   desc: '+30% HP, 20% slower',        hpMult: 1.30, speedMult: 0.80 },
-  65: { id: 'blitz',        label: '⚡ BLITZ',          desc: '+40% speed',                 speedMult: 1.40 },
-  80: { id: 'darkHarvest',  label: '☠ DARK HARVEST',  desc: '+40% HP, +4 Jötunn',         hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
-  90: { id: 'ragnarok',     label: '⚔ THE PRELUDE',    desc: '+50% HP, +40% speed',        hpMult: 1.50, speedMult: 1.40 },
+  15: { id: 'frostWind',       label: '❄ FROST WIND',       desc: 'All enemies 25% slower',         speedMult: 0.75 },
+  18: { id: 'undeadMarch',     label: '☠ UNDEAD MARCH',     desc: '+12 Draugr to wave',             bonus: { type: 'draugr', count: 12 } },
+  20: { id: 'ancestralAid',    label: '✦ ANCESTRAL AID',    desc: 'Choose a tower — free upgrade',  special: 'upgrade' },
+  22: { id: 'nightRaid',       label: '🌑 NIGHT RAID',       desc: '+20% enemy HP',                  hpMult: 1.20 },
+  23: { id: 'northernRelief',  label: '♥ NORTHERN RELIEF',  desc: '+1 life (up to max)',             special: 'life' },
+  30: { id: 'berserkerRage',   label: '⚔ BERSERKER RAGE',   desc: '+30% enemy speed',               speedMult: 1.30 },
+  35: { id: 'swarmWave',       label: '☠ SWARM',             desc: '+10 Myling to wave',             bonus: { type: 'myling', count: 10 } },
+  40: { id: 'ironHide',        label: '⚔ IRON HIDE',        desc: '+30% HP, −15% speed',            hpMult: 1.30, speedMult: 0.85 },
+  48: { id: 'wraithHunt',      label: '👁 WRAITH HUNT',      desc: 'Extra Myling pack +8',           bonus: { type: 'myling', count: 8 } },
+  54: { id: 'mistThickens',    label: '🌫 MIST THICKENS',    desc: 'Towers −10% range this wave',    rangeMult: 0.90 },
+  60: { id: 'frostStorm',      label: '❄ FROST STORM',      desc: '+30% HP, 20% slower',            hpMult: 1.30, speedMult: 0.80 },
+  65: { id: 'blitz',           label: '⚡ BLITZ',             desc: '+40% speed',                     speedMult: 1.40 },
+  80: { id: 'darkHarvest',     label: '☠ DARK HARVEST',     desc: '+40% HP, +4 Jötunn',             hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
+  90: { id: 'ragnarok',        label: '⚔ THE PRELUDE',       desc: '+50% HP, +40% speed',            hpMult: 1.50, speedMult: 1.40 },
 };
 
 // ── achievements ──────────────────────────────────────────────────────────────
@@ -455,6 +458,7 @@ function restartGame() {
   affordFlashTimer   = 0;
   preBossPortalTimer = 0;
   ancestralAidActive = false;
+  waveRangeMult      = 1;
   bossRings          = [];
   pathDirty          = true;
   towerTargetLines   = [];
@@ -534,11 +538,11 @@ const ENDLESS_FLAVOR_EVENTS = [
 ];
 
 const BOSS_CONFIGS = {
-  10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 1200,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true,  hint: 'Spawns Draugr • Becomes slow-immune at 50%' },
-  25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false, hint: 'EMP disables towers at 50%' },
-  50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 9500,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false, hint: 'Summons Mylings • Full EMP blackout at 50%' },
-  75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 24000, radius: 26, speedMult: 1.20, reward: 500, phase75: true,  phase50SlowImmune: true,  hint: 'Enrages at 75% • Spawns Jötunn at 50%' },
-  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: true,  hint: 'Summons Jötunn • Fire surge at 50%' },
+  10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 1200,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true,  phase25: true,  hint: 'Spawns Draugr • Slow-immune at 50% • Death Shriek disables 2 towers at 25%' },
+  25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false, phase25: true,  hint: 'EMP disables towers at 50% • Earth Stomp speed surge at 25%' },
+  50:  { name: 'MARA-VOID',        type: ENEMY_TYPES.MARA,   hp: 9500,  radius: 16, speedMult: 1.10, reward: 250, phase75: false, phase50SlowImmune: false, phase25: true,  hint: 'Summons Mylings • Full EMP blackout at 50% • Death Surge spawns 2 Mara at 25%' },
+  75:  { name: 'FENRIR',           type: ENEMY_TYPES.JOTUNN, hp: 24000, radius: 26, speedMult: 1.20, reward: 500, phase75: true,  phase50SlowImmune: true,  phase25: true,  hint: 'Enrages at 75% • Spawns Jötunn at 50% • The Howl stuns all towers at 25%' },
+  100: { name: 'SURTR',            type: ENEMY_TYPES.JOTUNN, hp: 90000, radius: 32, speedMult: 0.75, reward: 1000,phase75: true,  phase50SlowImmune: true,  phase25: true,  hint: 'Summons Jötunn • Fire surge at 50% & 25% — fire columns across the path' },
 };
 
 let waveNumber      = 0;
@@ -549,6 +553,7 @@ let spawnQueue      = [];
 let spawnTimer      = 0;
 let waveHpScale     = 1;
 let waveSpeedScale  = 1;
+let waveRangeMult   = 1;   // applied to tower.range this wave (MIST THICKENS: 0.90)
 let waveActiveFrames = 0;
 
 function getWaveBands(waveNum) {
@@ -801,15 +806,39 @@ let victory   = false;
 let waveLeak  = false;
 
 function startNextWave() {
+  ancestralAidActive = false;   // clear any unused Aid from prior wave
   waveNumber++;
   const _bands   = getWaveBands(waveNumber);
   waveHpScale    = _bands.hp;
   waveSpeedScale = _bands.speed;
+  waveRangeMult  = 1;
   currentWaveEvent = WAVE_EVENTS[waveNumber] ?? null;
   if (currentWaveEvent) {
     if (currentWaveEvent.hpMult)    waveHpScale    = Math.round(waveHpScale    * currentWaveEvent.hpMult    * 100) / 100;
     if (currentWaveEvent.speedMult) waveSpeedScale = Math.round(waveSpeedScale * currentWaveEvent.speedMult * 100) / 100;
-    if (currentWaveEvent.special === 'upgrade' && towers.length > 0) ancestralAidActive = true;
+    if (currentWaveEvent.rangeMult) waveRangeMult  = currentWaveEvent.rangeMult;
+    if (currentWaveEvent.special === 'upgrade') {
+      if (towers.some(t => !t.maxed)) {
+        ancestralAidActive = true;
+      } else if (towers.length > 0) {
+        // All towers maxed — grant gold instead
+        const bonus = 20;
+        gold       += bonus;
+        goldEarned += bonus;
+        const bx = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+        const by = GOAL.row * CELL_SIZE - 12;
+        dmgFloaters.push({ x: bx, y: by, val: bonus, life: 100, maxLife: 100, color: '#80f0ff', large: false, suffix: 'g RUNE LEGACY' });
+      }
+    }
+    if (currentWaveEvent.special === 'life') {
+      if (lives < STARTING_LIVES) {
+        lives++;
+        const bx = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
+        const by = GOAL.row * CELL_SIZE - 20;
+        dmgFloaters.push({ x: bx, y: by, val: '+1 LIFE', life: 120, maxLife: 120, color: '#60ee80', large: true, suffix: '' });
+        spawnParticles(bx, by, '#60d8a0', 12);
+      }
+    }
   }
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
@@ -1441,6 +1470,9 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss) {
     newEnemy.reward += Math.min(40, Math.floor(waveNumber / 10) * 5);
   }
+  if (type === ENEMY_TYPES.MARA && !newEnemy.isBoss) {
+    newEnemy.reward += Math.min(20, Math.floor(waveNumber / 15) * 3);
+  }
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
 
@@ -1979,16 +2011,20 @@ canvas.addEventListener('mousedown', e => {
   // Left-click on placed tower: select it (or consume Ancestral Aid free upgrade)
   if (cell === CELL.TOWER) {
     const clickedT = getTowerAtCell(col, row);
-    if (ancestralAidActive && clickedT && !clickedT.maxed) {
-      ancestralAidActive = false;
-      clickedT.upgrade();
-      sfxUpgrade(clickedT.type);
-      spawnParticles(GRID_LEFT + gridPanX + gridZoom * clickedT.x, GRID_TOP + gridPanY + gridZoom * clickedT.y, '#f0d040', 20);
-      const fx = GRID_LEFT + gridPanX + gridZoom * clickedT.x;
-      const fy = GRID_TOP  + gridPanY + gridZoom * (clickedT.y - 14);
-      dmgFloaters.push({ x: fx - GRID_LEFT, y: fy - GRID_TOP, val: 'FREE UPGRADE', life: 120, maxLife: 120, color: '#f0d040', large: true, suffix: '' });
-      selectedTower = clickedT;
-      return;
+    if (ancestralAidActive && clickedT) {
+      if (clickedT.maxed) {
+        dmgFloaters.push({ x: clickedT.x, y: clickedT.y - 16, val: 'ALREADY MAXED', life: 80, maxLife: 80, color: '#ff8040', large: false, suffix: '' });
+      } else {
+        ancestralAidActive = false;
+        const savedGold = clickedT.upgradeCost ?? 0;
+        clickedT.upgrade();
+        sfxUpgrade(clickedT.type);
+        spawnParticles(clickedT.x, clickedT.y, '#80f0ff', 20);
+        const suffix = savedGold > 0 ? `  ≈${savedGold}g SAVED` : '';
+        dmgFloaters.push({ x: clickedT.x, y: clickedT.y - 16, val: 'FREE UPGRADE', life: 120, maxLife: 120, color: '#80f0ff', large: true, suffix });
+        selectedTower = clickedT;
+        return;
+      }
     }
     selectedTower = clickedT ?? null;
     return;
@@ -2132,11 +2168,27 @@ function update() {
     }
   }
 
+  // ── Hydda adjacency aura — +8% damage to all towers adjacent to a Healer ────
+  for (const t of towers) t._hyddaAdjacent = false;
+  for (const hydda of towers) {
+    if (hydda.type !== TOWER_TYPES.HYDDA) continue;
+    for (const t of towers) {
+      if (t === hydda) continue;
+      const fp = t.footprint ?? { w: 1, h: 1 };
+      let adj = false;
+      for (let dc = 0; dc < fp.w && !adj; dc++)
+        for (let dr = 0; dr < fp.h && !adj; dr++)
+          if (Math.abs(t.col + dc - hydda.col) <= 1 && Math.abs(t.row + dr - hydda.row) <= 1) adj = true;
+      if (adj) t._hyddaAdjacent = true;
+    }
+  }
+
   // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
     // Apply synergy stat boosts temporarily around update()
     const _origRange  = tower.range;
     const _origSplash = tower.splashDamage;
+    if (waveRangeMult !== 1) tower.range = Math.round(tower.range * waveRangeMult);
     if (tower._synergy === 'eagleEye')  tower.range = Math.round(tower.range * 1.15);
     if (tower._synergy === 'siegeFury' && tower.splashDamage)
       tower.splashDamage = Math.round(tower.splashDamage * 1.20);
@@ -2146,6 +2198,7 @@ function update() {
                            : tower._synergy === 'shieldWall' ? 1.10
                            : tower._synergy === 'runeChain'  ? 1.15
                            : 1;
+    if (tower._hyddaAdjacent) tower._synergyDmgBoost *= 1.08;
 
     // Tag new bullets with this tower as source (for kill tracking)
     const _prevBulletLen = bullets.length;
@@ -2168,6 +2221,19 @@ function update() {
       }
       if (healCount > 0) spawnParticles(tower.x, tower.y, '#60d8a0', 10 * healCount);
       if (lives >= STARTING_LIVES) tower.fireFlash = 0;
+      // Tidecall: Healer also slows nearest enemy within 100px on heal
+      if (tower._synergy === 'tidecall' && healCount > 0) {
+        let nearestEnemy = null, nearestDist = 100;
+        for (const e of enemies) {
+          if (!e.alive || e.reached) continue;
+          const d = Math.hypot(e.x - tower.x, e.y - tower.y);
+          if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+        }
+        if (nearestEnemy) {
+          nearestEnemy.slowTimer  = Math.max(nearestEnemy.slowTimer ?? 0, 60);
+          nearestEnemy.slowFactor = Math.min(nearestEnemy.slowFactor ?? 1, 0.65);
+        }
+      }
     } else if (tr.type === 'nova') {
       sfxNova();
       novaRings.push({ x: tr.x, y: tr.y, r: 0, maxR: tr.r, life: 26, maxLife: 26 });
@@ -2208,7 +2274,7 @@ function update() {
         dmgFloaters.push({ x: mx, y: my, val: `${slain} SLAIN!`, life: 130, maxLife: 130, color: '#ffd040', large: true, suffix: '' });
         spawnParticles(mx, my + 16, '#ffd040', 20);
       }
-      const valBonus = (b.source?.rune === 'valhalla') ? Math.ceil(reward * 0.5) : 0;
+      const valBonus = (b.source?.rune === 'valhalla') ? Math.min(20, Math.ceil(reward * 0.5)) : 0;
       gold        += reward + valBonus;
       goldEarned  += reward + valBonus;
       if (b.source) b.source.killCount++;
@@ -3276,18 +3342,19 @@ function drawRightPanel() {
     const nextEv = WAVE_EVENTS[waveNumber + 1];
     if (nextEv) {
       ly += 2;
-      const evPulse = 0.70 + Math.sin(performance.now() * 0.004) * 0.30;
-      ctx.fillStyle = 'rgba(200,150,20,0.10)';
+      const evPulse = 0.70 + Math.abs(Math.sin(performance.now() * 0.005)) * 0.30;
+      const isAid   = nextEv.id === 'ancestralAid';
+      ctx.fillStyle = isAid ? 'rgba(80,180,255,0.08)' : 'rgba(200,150,20,0.10)';
       ctx.beginPath(); ctx.roundRect(lx - 2, ly - 8, barW + 4, 24, 3); ctx.fill();
-      ctx.fillStyle = 'rgba(240,180,30,0.60)';
+      ctx.fillStyle = isAid ? 'rgba(140,220,255,0.65)' : 'rgba(240,180,30,0.60)';
       ctx.fillRect(lx - 2, ly - 8, 2, 24);
       ctx.font        = 'bold 9px monospace';
-      ctx.fillStyle   = `rgba(255,200,60,${evPulse})`;
-      ctx.shadowColor = `rgba(240,160,20,${evPulse * 0.5})`;
+      ctx.fillStyle   = isAid ? `rgba(140,220,255,${evPulse})` : `rgba(255,200,60,${evPulse})`;
+      ctx.shadowColor = isAid ? `rgba(80,180,255,${evPulse * 0.5})` : `rgba(240,160,20,${evPulse * 0.5})`;
       ctx.shadowBlur  = 4; ctx.textAlign = 'left';
-      ctx.fillText(`⚡ ${nextEv.label}`, lx + 4, ly); ly += 12;
+      ctx.fillText(`NEXT: ${nextEv.label}`, lx + 4, ly); ly += 12;
       ctx.shadowBlur  = 0;
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,170,90,0.65)';
+      ctx.font = '8px monospace'; ctx.fillStyle = isAid ? 'rgba(140,210,255,0.65)' : 'rgba(200,170,90,0.65)';
       ctx.fillText(nextEv.desc, lx + 4, ly); ly += 10;
     }
 
@@ -3988,9 +4055,15 @@ function drawHud() {
       ctx.font        = 'bold 38px monospace';
       ctx.fillText('VICTORY!', cx, cy - 32);
       ctx.shadowBlur  = 0;
+      const livesLostForTier = STARTING_LIVES - lives;
+      const tierLabel = livesLostForTier === 0 ? 'LEGENDARY DEFENSE'
+                      : livesLostForTier <= 2   ? 'STALWART SHIELD'
+                      :                           'THE NORTH ENDURES';
       ctx.fillStyle   = '#f0c840';
+      ctx.font        = 'bold 11px monospace';
+      ctx.fillText(tierLabel, cx, cy - 14);
       ctx.font        = '13px monospace';
-      ctx.fillText('Northern Shield held for 100 waves', cx, cy - 4);
+      ctx.fillText('Northern Shield held for 100 waves', cx, cy - 0);
     } else {
       ctx.shadowColor = 'rgba(200,50,50,0.7)';
       ctx.shadowBlur  = 22;
@@ -4291,37 +4364,61 @@ function onBossPhase50(boss) {
 
 function onBossPhase25(boss) {
   sfxBossPhase();
-  screenShake = Math.max(screenShake, 14);
+  screenShake = Math.max(screenShake, 22);
   spawnParticles(boss.x, boss.y, boss.highlightColor, 30);
   spawnParticles(boss.x, boss.y, '#ffffff', 12);
-  bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 8, life: 40, maxLife: 40, color: '#ff2020' });
-  bossDefeatTimer = 120;
-  bossDefeatText  = `${boss.bossName} — FINAL STAND`;
+  bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 12, life: 40, maxLife: 40, color: '#ff8800' });
+  bossDefeatTimer = 180;
   bossDefeatGold  = 0;
 
+  const FINAL_STAND_NAMES = {
+    10:  'DRAUGEN-JARL — DEATH SHRIEK',
+    25:  'JÖTUNHELM WALKER — EARTH STOMP',
+    50:  'MARA-VOID — DEATH SURGE',
+    75:  'FENRIR — THE HOWL',
+    100: 'SURTR — WORLD FIRE',
+  };
+  bossDefeatText = FINAL_STAND_NAMES[boss.waveNum] ?? `${boss.bossName} — FINAL STAND`;
+
   if (boss.waveNum === 10) {
-    // Draugen-Jarl: rises from the dead — resurrects 2 draugr
-    for (let i = 0; i < 2; i++) spawnEnemy(ENEMY_TYPES.DRAUGR, waveHpScale * 1.2);
-  } else if (boss.waveNum === 25) {
-    // Jötunhelm Walker: ground stomp — EMP 3 random towers
-    const eligible = towers.filter(t => t.disabledTimer <= 0);
-    const chosen   = eligible.sort(() => Math.random() - 0.5).slice(0, 3);
+    // Draugen-Jarl DEATH SHRIEK: disable the 2 nearest towers + scream ring
+    const byDist = towers.slice().sort((a, b) =>
+      Math.hypot(a.x - boss.x, a.y - boss.y) - Math.hypot(b.x - boss.x, b.y - boss.y));
+    const chosen = byDist.slice(0, 2);
     for (const t of chosen) {
       t.disabledTimer = 60;
-      empRings.push({ x: GRID_LEFT + t.x, y: GRID_TOP + t.y, r: 0, life: 28, maxLife: 28 });
+      empRings.push({ x: t.x, y: t.y, r: 0, life: 28, maxLife: 28 });
     }
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 8, life: 30, maxLife: 30, color: '#8040e0' });
+    boss.stunTimer = 20;
+  } else if (boss.waveNum === 25) {
+    // Jötunhelm Walker EARTH STOMP: speed surge + rumble ring
+    boss.baseSpeed *= 1.35;
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 6, life: 30, maxLife: 30, color: '#c87020' });
+    const cx = COLS * CELL_SIZE / 2;
+    const cy = ROWS * CELL_SIZE / 2;
+    dmgFloaters.push({ x: cx, y: cy, val: 'GROUND STOMP', life: 90, maxLife: 90, color: '#e8a040', large: true, suffix: '' });
     boss.stunTimer = 20;
   } else if (boss.waveNum === 50) {
-    // Mara-Void: death scream — 4 Mylings + speed surge
-    boss.baseSpeed *= 1.20;
-    for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
+    // Mara-Void DEATH SURGE: speed burst + 2 EMP Mara spawns
+    boss.baseSpeed *= 1.30;
+    for (let i = 0; i < 2; i++) spawnEnemy(ENEMY_TYPES.MARA, waveHpScale * 0.85);
   } else if (boss.waveNum === 75) {
-    // Fenrir howls — stun all towers for 1s
-    for (const t of towers) { t.disabledTimer = 30; }
+    // Fenrir THE HOWL: stun ALL towers, empRing per tower, gameSpeed-adjusted duration
+    const stunDur = Math.max(30, Math.round(30 / gameSpeed));
+    for (const t of towers) {
+      t.disabledTimer = stunDur;
+      empRings.push({ x: t.x, y: t.y, r: 0, life: 28, maxLife: 28 });
+    }
     boss.stunTimer = 35;
     bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: COLS * CELL_SIZE, life: 28, maxLife: 28, color: '#e0a020' });
+    if (towers.length > 0) {
+      const cx = COLS * CELL_SIZE / 2;
+      const cy = ROWS * CELL_SIZE / 2;
+      dmgFloaters.push({ x: cx, y: cy, val: `${towers.length} TOWERS DISABLED`, life: 90, maxLife: 90, color: '#e8a040', large: true, suffix: '' });
+    }
   } else if (boss.waveNum === 100) {
-    // Surtr: fire surge — 3 splash columns across the path
+    // Surtr WORLD FIRE: fire surge — 3 splash columns across the path (grid-local coords)
     const pts = currentPath ?? [];
     const step = Math.floor(pts.length / 4);
     for (let s = 1; s <= 3; s++) {
@@ -4329,11 +4426,11 @@ function onBossPhase25(boss) {
       if (pt) {
         const px = (pt.col + 0.5) * CELL_SIZE;
         const py = (pt.row + 0.5) * CELL_SIZE;
-        spawnParticles(px, py, '#ff4010', 20);
+        spawnParticles(px, py, '#ff1800', 20);
         splashRings.push({ x: px, y: py, r: 0, maxR: 40, life: 18, maxLife: 18, color: '#ff6020' });
       }
     }
-    screenShake = Math.max(screenShake, 18);
+    screenShake = Math.max(screenShake, 22);
   }
 }
 
@@ -4386,9 +4483,9 @@ function drawBossDefeat() {
   ctx.textAlign   = 'center';
 
   ctx.font        = 'bold 22px monospace';
-  ctx.shadowColor = isKill ? 'rgba(40,220,80,0.95)' : 'rgba(255,160,20,0.95)';
+  ctx.shadowColor = isKill ? 'rgba(40,220,80,0.95)' : 'rgba(255,136,0,0.95)';
   ctx.shadowBlur  = 20;
-  ctx.fillStyle   = isKill ? '#60ee80' : '#ffe080';
+  ctx.fillStyle   = isKill ? '#60ee80' : '#ff8800';
   ctx.fillText(bossDefeatText, cx, cy);
 
   if (isKill) {
@@ -4636,7 +4733,7 @@ function drawBossHpBar() {
     ctx.lineWidth   = 1.5;
     ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY - 1); ctx.lineTo(barX + barW * 0.75, barY + barH + 1); ctx.stroke();
   }
-  ctx.strokeStyle = 'rgba(255,80,40,0.80)';
+  ctx.strokeStyle = ratio <= 0.30 ? 'rgba(255,255,200,0.95)' : 'rgba(255,80,40,0.80)';
   ctx.lineWidth   = 1.5;
   ctx.beginPath(); ctx.moveTo(barX + barW * 0.25, barY - 2); ctx.lineTo(barX + barW * 0.25, barY + barH + 2); ctx.stroke();
 
@@ -5265,6 +5362,25 @@ function draw() {
       ctx.setLineDash([]);
       ctx.restore();
     }
+    // Ancestral Aid: pulsing gold outline on hovered upgradeable tower
+    if (ancestralAidActive && hoverT && !hoverT.maxed) {
+      const aidPulse = 0.65 + Math.abs(Math.sin(performance.now() * 0.010)) * 0.35;
+      const fp = hoverT.footprint ?? { w: 1, h: 1 };
+      const fx = hoverT.col * CELL_SIZE;
+      const fy = hoverT.row * CELL_SIZE;
+      const fw = fp.w * CELL_SIZE;
+      const fh = fp.h * CELL_SIZE;
+      ctx.save();
+      ctx.strokeStyle = `rgba(240,200,60,${aidPulse})`;
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([3, 4]);
+      ctx.shadowColor = '#f0c840';
+      ctx.shadowBlur  = 6 * aidPulse;
+      ctx.strokeRect(fx, fy, fw, fh);
+      ctx.setLineDash([]);
+      ctx.shadowBlur  = 0;
+      ctx.restore();
+    }
   }
 
   // Rune badges — glowing indicator above each tower with an equipped rune
@@ -5524,7 +5640,11 @@ function draw() {
     ctx.restore();
   }
 
-  // ── Boss phase rings (expanded amber/highlight burst on phase 75) ────────────
+  // ── Boss phase rings — clipped to grid bounds to avoid bleeding into HUD/frame ─
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, COLS * CELL_SIZE, ROWS * CELL_SIZE);
+  ctx.clip();
   for (let i = bossRings.length - 1; i >= 0; i--) {
     const br = bossRings[i];
     br.r    += (br.maxR - br.r) * 0.16;
@@ -5543,6 +5663,7 @@ function draw() {
     ctx.shadowBlur  = 0;
     ctx.restore();
   }
+  ctx.restore();
 
   // ── Tower targeting lines — brief aimline from tower to last fired target ───
   if (!gameOver && waveState === 'active') {
@@ -5789,16 +5910,16 @@ function drawChapterBanner() {
 
 function drawAncestralAidBanner() {
   if (!ancestralAidActive) return;
-  const pulse = 0.75 + Math.sin(performance.now() * 0.005) * 0.25;
+  const pulse = 0.65 + Math.abs(Math.sin(performance.now() * 0.010)) * 0.35;
   const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
   const cy = GRID_TOP + 22;
   ctx.save();
   ctx.textAlign   = 'center';
   ctx.font        = 'bold 13px monospace';
-  ctx.fillStyle   = `rgba(240,210,60,${pulse})`;
-  ctx.shadowColor = `rgba(220,170,20,${pulse * 0.9})`;
+  ctx.fillStyle   = `rgba(140,220,255,${pulse})`;
+  ctx.shadowColor = `rgba(80,180,255,${pulse * 0.9})`;
   ctx.shadowBlur  = 14;
-  ctx.fillText('⚡ ANCESTRAL AID — Click a tower for a free upgrade', cx, cy);
+  ctx.fillText('✦ ANCESTRAL AID — Click a tower for a free upgrade', cx, cy);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }

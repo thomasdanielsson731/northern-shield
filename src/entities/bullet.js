@@ -76,6 +76,7 @@ export class Bullet {
             if (ed < bestDist) { bestDist = ed; nextTarget = e; }
           }
           if (nextTarget) {
+            this.damage = Math.max(1, Math.round(this.damage * 0.85));  // −15% per pierce hit
             this.target = nextTarget;
             return reward;   // stay alive, pierce continues
           }

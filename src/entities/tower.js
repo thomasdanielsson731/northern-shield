@@ -122,8 +122,8 @@ export const TOWER_DEFS = {
   [TOWER_TYPES.PILTORN]: {
     label:        'Warden',
     key:          '7',
-    color:        '#6890b8',
-    rangeColor:   'rgba(80,130,190,0.24)',
+    color:        '#8a7050',
+    rangeColor:   'rgba(140,110,70,0.26)',
     cost:         54,
     range:        100,
     fireRate:     14,
@@ -315,7 +315,7 @@ export class Tower {
         if (enemy.hp <= 0) { enemy.hp = 0; enemy.kill(); enemy._killed = true; killed++; }
       }
       if (!hit) return null;
-      this.fireCooldown = this.fireRate;  // only reset when enemies were in range
+      this.fireCooldown = this.level >= 5 ? Math.min(this.fireRate, 120) : this.fireRate;
       this.fireFlash = this.maxFireFlash;
       return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
     }
@@ -1300,7 +1300,7 @@ export class Tower {
     ctx.fill();
   }
 
-  // ── Piltorn: heavy stone watchtower with crossbow ─────────────────────────────
+  // ── Warden: stone watchtower with pierce crossbow ─────────────────────────────
   _drawPiltorn(ctx, t) {
     const x = this.x, y = this.y;
 
