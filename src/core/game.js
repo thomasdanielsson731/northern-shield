@@ -3349,6 +3349,14 @@ function drawRightPanel() {
       }
     }
 
+    // HP scale suffix — show when enemy HP is scaled significantly
+    if (waveHpScale > 1.1) {
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(255,160,80,0.70)';
+      ctx.textAlign = 'right';
+      ctx.fillText(`HP ×${waveHpScale.toFixed(1)}`, rEdge, ly - 2);
+      ctx.textAlign = 'left';
+    }
+
     // Wave event for next wave
     const nextEv = WAVE_EVENTS[waveNumber + 1];
     if (nextEv) {
@@ -4213,7 +4221,7 @@ function drawTowerPanel(tower) {
   ctx.fillText(`☠ ${tower.killCount ?? 0} kills`, px + 10, killRow);
   ctx.textAlign = 'right';
   if (tower._synergy) {
-    const synLabels = { eagleEye: 'Eagle Eye +15%rng', siegeFury: 'Siege Fury +20%spl', winterGrip: "Winter's Grip +15%dmg", shieldWall: 'Shield Wall +10%dmg', tidecall: 'Tidecall +15%spl', runeChain: 'Rune Chain +15%dmg' };
+    const synLabels = { eagleEye: 'Eagle Eye +15%rng', siegeFury: 'Siege Fury +20%spl', winterGrip: "Winter's Grip +15%dmg", shieldWall: 'Shield Wall +10%dmg', tidecall: 'Tidecall +15%spl', runeChain: 'Rune Chain +15%dmg +1pierce' };
     const synColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0', shieldWall: '#e0a040', tidecall: '#40b8e0', runeChain: '#c080f0' };
     ctx.fillStyle = synColors[tower._synergy];
     ctx.fillText(`⬡ ${synLabels[tower._synergy]}`, px + panelW - 10, killRow);

@@ -68,7 +68,7 @@ export class Bullet {
       if (this.canPierce && enemies) {
         if (!this.pierced) this.pierced = new Set();
         this.pierced.add(this.target);
-        if (this.pierced.size < 4) {
+        if (this.pierced.size < (this.pierceCap ?? 4)) {
           let nextTarget = null, bestDist = 80;
           for (const e of enemies) {
             if (!e.alive || e.reached || this.pierced.has(e)) continue;

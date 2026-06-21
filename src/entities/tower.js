@@ -348,7 +348,10 @@ export class Tower {
         this.bulletShape
       );
       b.source = this;
-      if (this.type === TOWER_TYPES.PILTORN) b.canPierce = true;
+      if (this.type === TOWER_TYPES.PILTORN) {
+        b.canPierce = true;
+        if (this._synergy === 'runeChain') b.pierceCap = 5;  // +1 pierce target from Rune Chain
+      }
       bullets.push(b);
       this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 20;
       this.fireCooldown = this.fireRate;
