@@ -5,9 +5,10 @@ import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import {
-  ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie, sfxWaveClear,
+  ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
-  sfxRune, sfxSell, sfxSplash, sfxChainKill, sfxEmp, sfxWaveStart, sfxGameOver
+  sfxRune, sfxSell, sfxSplash, sfxChainKill, sfxEmp, sfxWaveStart, sfxGameOver,
+  sfxFlawless, sfxWaveDone, sfxEndlessStart, sfxEndlessMilestone,
 } from './sounds.js';
 
 const COLS = 36;
@@ -521,6 +522,14 @@ const MAX_WAVES          = 100;
 
 const BOSS_WAVES = new Set([10, 25, 50, 75, 100]);
 
+const ENDLESS_FLAVOR_EVENTS = [
+  { label: 'SKYFELL SWARM',  desc: 'Flying assault'   },
+  { label: 'TITAN MARCH',    desc: 'Giants approach'   },
+  { label: 'BLOOD FRENZY',   desc: 'All-out assault',  speedMult: 1.20 },
+  { label: 'WRAITH RUSH',    desc: 'Wraiths unleashed' },
+  { label: 'IRON HORDE',     desc: 'Mass draugr'       },
+];
+
 const BOSS_CONFIGS = {
   10:  { name: 'DRAUGEN-JARL',     type: ENEMY_TYPES.JOTUNN, hp: 1200,  radius: 18, speedMult: 0.85, reward: 80,  phase75: true,  phase50SlowImmune: true,  hint: 'Spawns Draugr • Becomes slow-immune at 50%' },
   25:  { name: 'JÖTUNHELM WALKER', type: ENEMY_TYPES.JOTUNN, hp: 3600,  radius: 22, speedMult: 0.60, reward: 150, phase75: false, phase50SlowImmune: false, hint: 'EMP disables towers at 50%' },
@@ -750,6 +759,21 @@ function buildWave(num) {
     return rest;
   }
 
+  // Endless waves (102+): rotating flavored compositions
+  if (endlessMode && num > 101) {
+    const epoch  = num - 102;
+    const flavor = epoch % 5;
+    const scale  = 1 + Math.floor(epoch / 5) * 0.12;  // +12% enemies per 5-wave epoch
+    let q;
+    if      (flavor === 0) q = [...Array(Math.round(28*scale)).fill(ENEMY_TYPES.MYLING),  ...Array(Math.round(18*scale)).fill(ENEMY_TYPES.DRAUGR)];
+    else if (flavor === 1) q = [...Array(Math.round(8*scale)).fill(ENEMY_TYPES.JOTUNN),   ...Array(Math.round(14*scale)).fill(ENEMY_TYPES.DRAUGR), ...Array(Math.round(4*scale)).fill(ENEMY_TYPES.MARA)];
+    else if (flavor === 2) q = [...Array(Math.round(16*scale)).fill(ENEMY_TYPES.DRAUGR),  ...Array(Math.round(12*scale)).fill(ENEMY_TYPES.MYLING), ...Array(Math.round(5*scale)).fill(ENEMY_TYPES.JOTUNN), ...Array(Math.round(6*scale)).fill(ENEMY_TYPES.MARA)];
+    else if (flavor === 3) q = [...Array(Math.round(14*scale)).fill(ENEMY_TYPES.MARA),    ...Array(Math.round(20*scale)).fill(ENEMY_TYPES.MYLING)];
+    else                   q = [...Array(Math.round(60*scale)).fill(ENEMY_TYPES.DRAUGR),  ...Array(Math.round(6*scale)).fill(ENEMY_TYPES.JOTUNN)];
+    for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; }
+    return q;
+  }
+
   const { draugr, mylings, jotunn, maras } = waveComposition(num);
   const queue = [
     ...Array(draugr).fill(ENEMY_TYPES.DRAUGR),
@@ -810,6 +834,25 @@ function startNextWave() {
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
   if (waveNumber === 51) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 3: THE IRON WINTER'; }
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
+
+  // Endless mode: flavored wave events + milestone banners every 25 waves
+  if (endlessMode) {
+    if (waveNumber === 101) { sfxEndlessStart(); }
+    if (waveNumber > 101) {
+      const epoch  = waveNumber - 102;
+      currentWaveEvent = ENDLESS_FLAVOR_EVENTS[epoch % 5];
+      if (currentWaveEvent?.speedMult) {
+        waveSpeedScale = Math.round(waveSpeedScale * currentWaveEvent.speedMult * 100) / 100;
+      }
+    }
+    if (waveNumber > 100 && (waveNumber - 100) % 25 === 0) {
+      const depth  = Math.floor((waveNumber - 100) / 25);
+      const names  = ['TITAN REALM', 'RAGNARÖK ETERNAL', 'BEYOND THE VEIL', 'JÖRMUNGANDR WAKES'];
+      chapterBannerTimer = 240;
+      chapterBannerText  = `∞ WAVE ${waveNumber}: ${names[(depth - 1) % names.length]}`;
+      sfxEndlessMilestone();
+    }
+  }
 
   sfxWaveStart();
   spawnParticles(GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2, GRID_TOP + SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#c89040', 12);
@@ -884,10 +927,11 @@ function updateWave() {
       screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
       spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#a07830', 10);
-      sfxWaveClear();
+      sfxFlawless();
       const streakSuffix = flawlessStreak >= 3 ? ` ×${flawlessStreak}` : '';
       dmgFloaters.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP - 30, val: `1 ★${streakSuffix}`, life: 100, maxLife: 100, color: '#f0d040', large: true, suffix: '' });
     } else {
+      sfxWaveDone();
       flawlessStreak = 0;
       hoardPulse = 18;
     }
@@ -2093,7 +2137,7 @@ function update() {
     for (let _bi = _prevBulletLen; _bi < bullets.length; _bi++) {
       bullets[_bi].source = tower;
     }
-    if (bullets.length > _prevBulletLen) sfxShoot(tower.bulletShape);
+    if (bullets.length > _prevBulletLen) sfxShoot(tower.bulletShape, tower.type);
 
     // Restore temporarily modified stats
     tower.range        = _origRange;
@@ -2156,7 +2200,8 @@ function update() {
       const killX    = (b.canPierce && b.alive) ? b.lastKillX : (b.target?.x ?? b.x);
       const killY    = (b.canPierce && b.alive) ? b.lastKillY : (b.target?.y ?? b.y);
       const killBoss = (b.canPierce && b.alive) ? b.lastKillIsBoss : (b.target?.isBoss ?? false);
-      sfxDie(killBoss);
+      const killType = (b.canPierce && b.alive) ? null : (b.target?.type ?? '');
+      sfxDie(killBoss, killType);
       const isCrit = !killBoss && Math.random() < 0.15;
       if (isCrit) {
         dmgFloaters.push({ x: killX, y: killY - 18, val: 'CRIT!', life: 38, maxLife: 38, color: '#ff8820', large: true, suffix: '' });
@@ -2209,7 +2254,7 @@ function update() {
               gold       += _splashVal;
               goldEarned += _splashVal;
               if (b.source) b.source.killCount++;
-              if (splashKills === 1) sfxDie(enemy.isBoss);  // only play once per splash cluster
+              if (splashKills === 1) sfxDie(enemy.isBoss, enemy.type);  // only play once per splash cluster
               if (b.source) b.source.damageDealt += b.splashDamage;
               dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: _splashVal >= 20 ? '#ff9040' : '#ffcc44' });
               if (enemy.isBoss) {
@@ -3033,9 +3078,10 @@ function drawRightPanel() {
   }
 
   // ── WAVE PROGRESS ───────────────────────────────────────────────────────────
-  const displayWaveR = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
-  const progress     = displayWaveR / MAX_WAVES;
-  const waveBarColor = progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040';
+  const displayWaveR  = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
+  const progress      = endlessMode ? 1.0 : Math.min(1, displayWaveR / MAX_WAVES);
+  const waveBarColor  = endlessMode ? '#e08040' : (progress < 0.5 ? '#60c840' : progress < 0.8 ? '#e8c040' : '#e84040');
+  const progressLabel = endlessMode ? `∞ ${displayWaveR}` : `${Math.round(progress * 100)}%  / ${MAX_WAVES}`;
 
   ctx.fillStyle = 'rgba(30,15,4,0.9)';
   ctx.beginPath(); ctx.roundRect(lx, ly, barW, 8, 3); ctx.fill();
@@ -3046,7 +3092,7 @@ function drawRightPanel() {
     ctx.shadowBlur  = 0;
   }
   ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.textAlign = 'right';
-  ctx.fillText(`${Math.round(progress * 100)}%  / ${MAX_WAVES}`, rEdge, ly + 6.5);
+  ctx.fillText(progressLabel, rEdge, ly + 6.5);
   ctx.textAlign = 'left';
   ly += 14;
   divider();
@@ -3510,8 +3556,8 @@ function drawTopBar() {
   // ── CENTER: wave label + timer ───────────────────────────────────────────────
   const midX = Math.round(BASE_W / 2);
   const displayWave = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
-  const wLabel = `WAVE ${displayWave} / ${MAX_WAVES}`;
-  const wThreat = displayWave / MAX_WAVES;
+  const wLabel  = endlessMode ? `WAVE ${displayWave} / ∞` : `WAVE ${displayWave} / ${MAX_WAVES}`;
+  const wThreat = endlessMode ? 1.0 : displayWave / MAX_WAVES;
   const wIsBoss = BOSS_WAVES.has(displayWave);
   const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
   const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
@@ -4396,8 +4442,8 @@ function drawWaveAnnouncement() {
 
   const nextW       = waveState === 'countdown' ? waveNumber : waveNumber + 1;
   const isBoss      = BOSS_WAVES.has(nextW);
-  const nextEvent   = WAVE_EVENTS[nextW];
-  const threatRatio = nextW / MAX_WAVES;
+  const nextEvent   = WAVE_EVENTS[nextW] ?? (endlessMode && nextW > 101 ? ENDLESS_FLAVOR_EVENTS[(nextW - 102) % 5] : null);
+  const threatRatio = endlessMode ? 1.0 : nextW / MAX_WAVES;
   const threatColor = isBoss ? '#ff4020' : threatRatio > 0.8 ? '#ff7020' : threatRatio > 0.5 ? '#e8c040' : '#60ee80';
   const threatIcon  = isBoss ? ' ☠' : nextEvent ? ` ${nextEvent.label.split(' ')[0]}` : threatRatio > 0.8 ? ' ⚡' : threatRatio > 0.5 ? ' ⚔' : '';
 
@@ -5664,7 +5710,7 @@ function drawChapterBanner() {
   ctx.font        = '10px monospace';
   ctx.fillStyle   = `rgba(200,160,80,${alpha * 0.75})`;
   ctx.shadowBlur  = 8;
-  ctx.fillText('— THE SIEGE INTENSIFIES —', cx, cy + 18);
+  ctx.fillText(endlessMode ? '— THE ENDLESS SIEGE —' : '— THE SIEGE INTENSIFIES —', cx, cy + 18);
   ctx.shadowBlur = 0;
   ctx.restore();
 }
