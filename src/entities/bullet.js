@@ -44,8 +44,9 @@ export class Bullet {
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
       this.target.hp = Math.max(0, this.target.hp - this.damage);
       if (this.source) this.source.damageDealt += actualDamage;
-      this.target.hitFlash    = this.damage > 80 ? 14 : this.damage > 40 ? 9 : this.damage > 15 ? 5 : 3;
-      this.target.hitFlashMax = this.target.hitFlash;
+      this.target.hitFlash      = this.damage > 80 ? 14 : this.damage > 40 ? 9 : this.damage > 15 ? 5 : 3;
+      this.target.hitFlashMax   = this.target.hitFlash;
+      this.target.hitFlashColor = this.damage > 50 ? '255,136,32' : this.damage >= 15 ? '240,200,64' : '96,128,255';
 
       if (this.slowDuration > 0) {
         this.target.slowTimer  = Math.max(this.target.slowTimer ?? 0, this.slowDuration);

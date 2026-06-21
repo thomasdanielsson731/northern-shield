@@ -749,8 +749,9 @@ function buildWave(num) {
   }
 
   // Solo introductions — new enemy type appears alone so player can learn it
+  if (num === 1)  return Array(3).fill(ENEMY_TYPES.DRAUGR);
   if (num === 8)  return [...Array(2).fill(ENEMY_TYPES.MYLING)];
-  if (num === 12) return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+  if (num === 9)  return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
   if (num === 21) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
 
   // Rest waves — 2 easier waves after each boss (1st = very light, 2nd = moderate)
@@ -933,8 +934,8 @@ function updateWave() {
       }
     }
   } else if (enemies.length === 0) {
-    // Wave-clear bonus — kicker at wave 40+ to offset upgrade pressure
-    const rawBonus     = 20 + waveNumber * 3 + (waveNumber >= 40 ? (waveNumber - 40) * 2 : 0);
+    // Wave-clear bonus — stronger in early waves to help economy
+    const rawBonus     = 30 + waveNumber * 4 + (waveNumber >= 40 ? (waveNumber - 40) * 2 : 0);
     const flawlessBonus = waveLeak ? 0 : Math.min(4 + Math.floor(waveNumber * 0.8), 30);
     const clearBonus   = rawBonus + flawlessBonus;
     gold       += clearBonus;
@@ -954,6 +955,7 @@ function updateWave() {
       flawlessTimer     = 180;
       hoardPulse = 60;
       stars++;   // 1 star for flawless wave
+      if (stars === 1 && _runeForgeHintTimer <= 0) _runeForgeHintTimer = 360;
       flawlessCount++;
       flawlessStreak++;
       if (flawlessCount >= 5) unlockAchievement('flawless5');
@@ -1518,6 +1520,7 @@ function spawnBoss(waveNum) {
   boss.isBoss       = true;
   boss.bossName     = cfg.name;
   boss.waveNum      = waveNum;
+  boss.stunTimer    = 45;   // dramatic entrance pause
   enemies.push(boss);
 }
 
@@ -2324,8 +2327,9 @@ function update() {
           const dy = enemy.y - iy;
           if (dx * dx + dy * dy <= b.splashRadius * b.splashRadius) {
             enemy.hp -= b.splashDamage;
-            enemy.hitFlash    = b.splashDamage > 40 ? 7 : 4;
-            enemy.hitFlashMax = enemy.hitFlash;
+            enemy.hitFlash      = b.splashDamage > 40 ? 7 : 4;
+            enemy.hitFlashMax   = enemy.hitFlash;
+            enemy.hitFlashColor = b.splashDamage > 50 ? '255,136,32' : b.splashDamage >= 15 ? '240,200,64' : '96,128,255';
             if (enemy.hp <= 0) {
               enemy.hp    = 0;
               enemy.kill();
@@ -4306,9 +4310,9 @@ function onBossPhase75(boss) {
   bossDefeatText  = (boss.bossName ?? 'BOSS') + ' — PHASE SHIFT';
   // Expanding flash ring — telegraphs the summon event
   bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 5.5, life: 34, maxLife: 34, color: boss.highlightColor });
-  // Portal-side ring: shows WHERE the minions will spawn
-  const spawnPx = GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2;
-  const spawnPy = GRID_TOP  + SPAWN.row * CELL_SIZE + CELL_SIZE / 2;
+  // Portal-side ring: shows WHERE the minions will spawn (grid-local coords)
+  const spawnPx = SPAWN.col * CELL_SIZE + CELL_SIZE / 2;
+  const spawnPy = SPAWN.row * CELL_SIZE + CELL_SIZE / 2;
   bossRings.push({ x: spawnPx, y: spawnPy, r: 6, maxR: 38, life: 44, maxLife: 44, color: '#ff4020' });
   portalFlash = 28;
   portalFlashColor = 'red';
@@ -4346,7 +4350,7 @@ function onBossPhase50(boss) {
     const chosen   = eligible.sort(() => Math.random() - 0.5).slice(0, 2);
     for (const t of chosen) {
       t.disabledTimer = 90;
-      empRings.push({ x: GRID_LEFT + t.x, y: GRID_TOP + t.y, r: 0, life: 28, maxLife: 28 });
+      empRings.push({ x: t.x, y: t.y, r: 0, life: 28, maxLife: 28 });
     }
     boss.stunTimer = 30;
   } else if (boss.waveNum === 50) {
@@ -4370,6 +4374,14 @@ function onBossPhase25(boss) {
   bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 12, life: 40, maxLife: 40, color: '#ff8800' });
   bossDefeatTimer = 180;
   bossDefeatGold  = 0;
+
+  // Survival bonus: 10% of boss reward for lasting to final stand
+  const survivalBonus = Math.round(boss.reward * 0.10);
+  if (survivalBonus > 0) {
+    gold       += survivalBonus;
+    goldEarned += survivalBonus;
+    dmgFloaters.push({ x: boss.x, y: boss.y + boss.radius + 10, val: `+${survivalBonus}`, life: 110, maxLife: 110, color: '#ffd060', large: false, suffix: 'g ENDURED' });
+  }
 
   const FINAL_STAND_NAMES = {
     10:  'DRAUGEN-JARL — DEATH SHRIEK',
@@ -4400,8 +4412,10 @@ function onBossPhase25(boss) {
     dmgFloaters.push({ x: cx, y: cy, val: 'GROUND STOMP', life: 90, maxLife: 90, color: '#e8a040', large: true, suffix: '' });
     boss.stunTimer = 20;
   } else if (boss.waveNum === 50) {
-    // Mara-Void DEATH SURGE: speed burst + 2 EMP Mara spawns
+    // Mara-Void DEATH SURGE: speed burst + 2 EMP Mara spawns + purple portal flash
     boss.baseSpeed *= 1.30;
+    portalFlash      = 22;
+    portalFlashColor = 'purple';
     for (let i = 0; i < 2; i++) spawnEnemy(ENEMY_TYPES.MARA, waveHpScale * 0.85);
   } else if (boss.waveNum === 75) {
     // Fenrir THE HOWL: stun ALL towers, empRing per tower, gameSpeed-adjusted duration
@@ -4439,7 +4453,9 @@ function onBossKilled(boss) {
   unlockAchievement('firstBoss');
   sfxDie(true);
   screenShake    = Math.max(screenShake, 28);
-  hoardPulse     = 80;   // mega pulse on boss kill
+  hoardPulse     = 120;  // mega pulse on boss kill
+  portalFlash      = 20;
+  portalFlashColor = 'gold';
   bossDefeatTimer = 210;
   bossDefeatText  = boss.bossName + ' DEFEATED';
   bossDefeatGold  = boss.reward;
@@ -5511,15 +5527,18 @@ function draw() {
   // Portal flash on enemy spawn (drawn before enemies so they appear on top)
   if (portalFlash > 0) {
     const { x: spx, y: spy } = grid.cellCenter(SPAWN.col, SPAWN.row);
-    const maxFrames = portalFlashColor === 'red' ? 32 : 14;
+    const maxFrames = portalFlashColor === 'red' ? 32 : portalFlashColor === 'gold' ? 20 : 14;
     const fa = (portalFlash / maxFrames) * 0.75;
-    const [fr, fg, fb] = portalFlashColor === 'red' ? [255, 40, 20] : [60, 140, 255];
+    const [fr, fg, fb] = portalFlashColor === 'red'    ? [255, 40,  20]
+                       : portalFlashColor === 'gold'   ? [255, 190, 30]
+                       : portalFlashColor === 'purple' ? [180, 60,  240]
+                       : [60, 140, 255];
     ctx.save();
     ctx.shadowColor = `rgba(${fr},${fg},${fb},${fa})`;
-    ctx.shadowBlur  = portalFlashColor === 'red' ? 36 : 20;
+    ctx.shadowBlur  = portalFlashColor === 'red' ? 36 : portalFlashColor === 'gold' ? 28 : 20;
     ctx.fillStyle   = `rgba(${fr},${fg},${fb},${fa * 0.55})`;
     ctx.beginPath();
-    ctx.arc(spx, spy, CELL_SIZE * (portalFlashColor === 'red' ? 1.2 : 0.85), 0, Math.PI * 2);
+    ctx.arc(spx, spy, CELL_SIZE * (portalFlashColor === 'red' ? 1.2 : portalFlashColor === 'gold' ? 1.0 : 0.85), 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -5848,6 +5867,7 @@ function draw() {
   drawMylingWarning();
   drawMaraEmpWarning();
   drawJotunnWarning();
+  drawWave1Hint();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawPathBlockFlash();
   drawDragGhost();
@@ -5968,6 +5988,22 @@ function drawJotunnWarning() {
   ctx.shadowColor = `rgba(40,120,220,${fadeAlpha * 0.8})`;
   ctx.shadowBlur  = 10;
   ctx.fillText('◆ JÖTUNN — MASSIVE HP, RESISTS SLOWING', cx, by);
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawWave1Hint() {
+  if (waveNumber !== 0 || waveState !== 'countdown') return;
+  const cx     = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const cy     = GRID_TOP + ROWS * CELL_SIZE - 18;
+  const pulse  = 0.5 + Math.abs(Math.sin(performance.now() * 0.003)) * 0.5;
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = '10px monospace';
+  ctx.fillStyle   = `rgba(200,170,100,${pulse * 0.80})`;
+  ctx.shadowColor = `rgba(160,120,60,${pulse * 0.6})`;
+  ctx.shadowBlur  = 6;
+  ctx.fillText('Enemies march  Portal → Fortress  •  Build walls to maze them', cx, cy);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }

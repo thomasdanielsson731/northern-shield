@@ -277,7 +277,7 @@ export class Enemy {
     if (this.hitFlash > 0) {
       const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
       const hfAlpha = hRatio * 0.78;
-      ctx.strokeStyle = `rgba(255,240,200,${hfAlpha})`;
+      ctx.strokeStyle = `rgba(${this.hitFlashColor ?? '255,240,200'},${hfAlpha})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
@@ -286,7 +286,7 @@ export class Enemy {
       // Expanding ring — decrement happens after both draws use hRatio
       const expandR = this.radius + (1 - hRatio) * 14;
       ctx.save();
-      ctx.strokeStyle = `rgba(255,255,220,${hRatio * 0.6})`;
+      ctx.strokeStyle = `rgba(${this.hitFlashColor ?? '255,240,200'},${hRatio * 0.6})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, expandR, 0, Math.PI * 2);
