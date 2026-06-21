@@ -166,6 +166,7 @@ let chapterBannerText  = '';      // text to display in chapter banner
 let currentWaveEvent   = null;    // wave event applied this wave (from WAVE_EVENTS)
 let affordFlashTimer   = 0;       // frames of build-bar flash when can't afford anything
 let preBossPortalTimer = 0;       // accumulates during countdown/break before boss wave
+let ancestralAidActive = false;   // wave 20 event: next tower click gets a free upgrade
 let bossRings          = [];      // { x, y, r, maxR, life, maxLife, color } boss phase rings
 let pathCanvas         = null;    // offscreen canvas caching the static stone road
 let pathDirty          = true;    // true when path changed — triggers re-bake
@@ -226,6 +227,7 @@ const TOWER_STAR_GATES = {
 const WAVE_EVENTS = {
   15: { id: 'frostWind',    label: '❄ FROST WIND',    desc: 'All enemies 25% slower',     speedMult: 0.75 },
   18: { id: 'undeadMarch',  label: '☠ UNDEAD MARCH',  desc: '+12 Draugr to wave',         bonus: { type: 'draugr', count: 12 } },
+  20: { id: 'ancestralAid', label: '⚡ ANCESTRAL AID', desc: 'Choose a tower — free upgrade', special: 'upgrade' },
   22: { id: 'nightRaid',    label: '🌑 NIGHT RAID',    desc: '+20% enemy HP',               hpMult: 1.20 },
   30: { id: 'berserkerRage',label: '⚔ BERSERKER RAGE',desc: '+30% enemy speed',           speedMult: 1.30 },
   35: { id: 'swarmWave',    label: '⚡ SWARM',          desc: '+10 Myling to wave',         bonus: { type: 'myling', count: 10 } },
@@ -452,6 +454,7 @@ function restartGame() {
   currentWaveEvent   = null;
   affordFlashTimer   = 0;
   preBossPortalTimer = 0;
+  ancestralAidActive = false;
   bossRings          = [];
   pathDirty          = true;
   towerTargetLines   = [];
@@ -806,6 +809,7 @@ function startNextWave() {
   if (currentWaveEvent) {
     if (currentWaveEvent.hpMult)    waveHpScale    = Math.round(waveHpScale    * currentWaveEvent.hpMult    * 100) / 100;
     if (currentWaveEvent.speedMult) waveSpeedScale = Math.round(waveSpeedScale * currentWaveEvent.speedMult * 100) / 100;
+    if (currentWaveEvent.special === 'upgrade' && towers.length > 0) ancestralAidActive = true;
   }
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
@@ -1972,9 +1976,21 @@ canvas.addEventListener('mousedown', e => {
 
   if (e.button !== 0) return;
 
-  // Left-click on placed tower: select it
+  // Left-click on placed tower: select it (or consume Ancestral Aid free upgrade)
   if (cell === CELL.TOWER) {
-    selectedTower = getTowerAtCell(col, row) ?? null;
+    const clickedT = getTowerAtCell(col, row);
+    if (ancestralAidActive && clickedT && !clickedT.maxed) {
+      ancestralAidActive = false;
+      clickedT.upgrade();
+      sfxUpgrade(clickedT.type);
+      spawnParticles(GRID_LEFT + gridPanX + gridZoom * clickedT.x, GRID_TOP + gridPanY + gridZoom * clickedT.y, '#f0d040', 20);
+      const fx = GRID_LEFT + gridPanX + gridZoom * clickedT.x;
+      const fy = GRID_TOP  + gridPanY + gridZoom * (clickedT.y - 14);
+      dmgFloaters.push({ x: fx - GRID_LEFT, y: fy - GRID_TOP, val: 'FREE UPGRADE', life: 120, maxLife: 120, color: '#f0d040', large: true, suffix: '' });
+      selectedTower = clickedT;
+      return;
+    }
+    selectedTower = clickedT ?? null;
     return;
   }
 
@@ -2404,6 +2420,10 @@ function update() {
     if (!enemy.phase50Done && ratio <= 0.50) {
       enemy.phase50Done = true;
       onBossPhase50(enemy);
+    }
+    if (!enemy.phase25Done && ratio <= 0.25) {
+      enemy.phase25Done = true;
+      onBossPhase25(enemy);
     }
   }
 
@@ -4005,9 +4025,9 @@ function drawHud() {
     {
       const goalY = (stars > 0 || bestWave.wave > 0) ? cy + 86 : cy + 54;
       const nextGoal = stars < TOWER_STAR_GATES.isjatten
-        ? `→ Earn ${TOWER_STAR_GATES.isjatten} ★ to unlock Isjatten`
+        ? `→ Earn ${TOWER_STAR_GATES.isjatten} ★ to unlock Ice Giant`
         : stars < TOWER_STAR_GATES.drakship
-          ? `→ Earn ${TOWER_STAR_GATES.drakship} ★ to unlock Drakship`
+          ? `→ Earn ${TOWER_STAR_GATES.drakship} ★ to unlock Dragonship`
           : null;
       if (nextGoal) {
         ctx.font      = '10px monospace';
@@ -4267,6 +4287,54 @@ function onBossPhase50(boss) {
   bossDefeatTimer = 150;
   bossDefeatText  = `${boss.bossName} — ENRAGED!`;
   bossDefeatGold  = 0;
+}
+
+function onBossPhase25(boss) {
+  sfxBossPhase();
+  screenShake = Math.max(screenShake, 14);
+  spawnParticles(boss.x, boss.y, boss.highlightColor, 30);
+  spawnParticles(boss.x, boss.y, '#ffffff', 12);
+  bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 8, life: 40, maxLife: 40, color: '#ff2020' });
+  bossDefeatTimer = 120;
+  bossDefeatText  = `${boss.bossName} — FINAL STAND`;
+  bossDefeatGold  = 0;
+
+  if (boss.waveNum === 10) {
+    // Draugen-Jarl: rises from the dead — resurrects 2 draugr
+    for (let i = 0; i < 2; i++) spawnEnemy(ENEMY_TYPES.DRAUGR, waveHpScale * 1.2);
+  } else if (boss.waveNum === 25) {
+    // Jötunhelm Walker: ground stomp — EMP 3 random towers
+    const eligible = towers.filter(t => t.disabledTimer <= 0);
+    const chosen   = eligible.sort(() => Math.random() - 0.5).slice(0, 3);
+    for (const t of chosen) {
+      t.disabledTimer = 60;
+      empRings.push({ x: GRID_LEFT + t.x, y: GRID_TOP + t.y, r: 0, life: 28, maxLife: 28 });
+    }
+    boss.stunTimer = 20;
+  } else if (boss.waveNum === 50) {
+    // Mara-Void: death scream — 4 Mylings + speed surge
+    boss.baseSpeed *= 1.20;
+    for (let i = 0; i < 4; i++) spawnEnemy(ENEMY_TYPES.MYLING, waveHpScale * 0.9);
+  } else if (boss.waveNum === 75) {
+    // Fenrir howls — stun all towers for 1s
+    for (const t of towers) { t.disabledTimer = 30; }
+    boss.stunTimer = 35;
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: COLS * CELL_SIZE, life: 28, maxLife: 28, color: '#e0a020' });
+  } else if (boss.waveNum === 100) {
+    // Surtr: fire surge — 3 splash columns across the path
+    const pts = currentPath ?? [];
+    const step = Math.floor(pts.length / 4);
+    for (let s = 1; s <= 3; s++) {
+      const pt = pts[s * step] ?? pts[pts.length - 1];
+      if (pt) {
+        const px = (pt.col + 0.5) * CELL_SIZE;
+        const py = (pt.row + 0.5) * CELL_SIZE;
+        spawnParticles(px, py, '#ff4010', 20);
+        splashRings.push({ x: px, y: py, r: 0, maxR: 40, life: 18, maxLife: 18, color: '#ff6020' });
+      }
+    }
+    screenShake = Math.max(screenShake, 18);
+  }
 }
 
 function onBossKilled(boss) {
@@ -4568,6 +4636,9 @@ function drawBossHpBar() {
     ctx.lineWidth   = 1.5;
     ctx.beginPath(); ctx.moveTo(barX + barW * 0.75, barY - 1); ctx.lineTo(barX + barW * 0.75, barY + barH + 1); ctx.stroke();
   }
+  ctx.strokeStyle = 'rgba(255,80,40,0.80)';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath(); ctx.moveTo(barX + barW * 0.25, barY - 2); ctx.lineTo(barX + barW * 0.25, barY + barH + 2); ctx.stroke();
 
   // Boss name — blinks rapidly when ENRAGED (≤50% HP)
   const enraged   = ratio <= 0.5;
@@ -5652,6 +5723,7 @@ function draw() {
   drawRuneForgeHint();
   drawWaveAnnouncement();
   drawChapterBanner();
+  drawAncestralAidBanner();
   drawMylingWarning();
   drawMaraEmpWarning();
   drawJotunnWarning();
@@ -5712,6 +5784,22 @@ function drawChapterBanner() {
   ctx.shadowBlur  = 8;
   ctx.fillText(endlessMode ? '— THE ENDLESS SIEGE —' : '— THE SIEGE INTENSIFIES —', cx, cy + 18);
   ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawAncestralAidBanner() {
+  if (!ancestralAidActive) return;
+  const pulse = 0.75 + Math.sin(performance.now() * 0.005) * 0.25;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const cy = GRID_TOP + 22;
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 13px monospace';
+  ctx.fillStyle   = `rgba(240,210,60,${pulse})`;
+  ctx.shadowColor = `rgba(220,170,20,${pulse * 0.9})`;
+  ctx.shadowBlur  = 14;
+  ctx.fillText('⚡ ANCESTRAL AID — Click a tower for a free upgrade', cx, cy);
+  ctx.shadowBlur  = 0;
   ctx.restore();
 }
 

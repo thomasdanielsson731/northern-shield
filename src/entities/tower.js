@@ -120,7 +120,7 @@ export const TOWER_DEFS = {
     bulletShape:  'stun'
   },
   [TOWER_TYPES.PILTORN]: {
-    label:        'Piltorn',
+    label:        'Warden',
     key:          '7',
     color:        '#6890b8',
     rangeColor:   'rgba(80,130,190,0.24)',
