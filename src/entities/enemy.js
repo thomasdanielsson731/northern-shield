@@ -80,6 +80,7 @@ export class Enemy {
     this.alive          = true;
     this.reached        = false;
     this.deathTimer     = 0;    // frames remaining for death fade animation
+    this.deathMax       = 0;    // max deathTimer (varies by radius)
     this.isElite        = false;  // set by spawnEnemy elite branch only
 
     // Boss fields — set externally by spawnBoss()
@@ -110,7 +111,8 @@ export class Enemy {
   kill() {
     if (!this.alive) return;
     this.alive      = false;
-    this.deathTimer = 12;  // trigger death fade (12 frames ≈ 0.4s)
+    this.deathMax   = Math.round(12 * (1 + this.radius / 14));
+    this.deathTimer = this.deathMax;
   }
 
   update() {
@@ -158,11 +160,11 @@ export class Enemy {
     // Death fade animation — briefly show corpse fading out after death
     if (!this.alive) {
       if (this.deathTimer > 0) {
-        const t = this.deathTimer / 12;
+        const t = this.deathMax > 0 ? this.deathTimer / this.deathMax : 1;
         this.deathTimer--;
         ctx.save();
-        // White kill-flash on first frame (deathTimer === 12 before decrement means t===1 here)
-        if (t >= (11 / 12)) {
+        // White kill-flash on first frame
+        if (this.deathTimer >= this.deathMax - 2) {
           ctx.globalAlpha = 0.80;
           ctx.fillStyle   = '#ffffff';
           ctx.beginPath();

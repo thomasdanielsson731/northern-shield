@@ -231,6 +231,8 @@ const WAVE_EVENTS = {
   20: { id: 'ancestralAid',    label: '✦ ANCESTRAL AID',    desc: 'Choose a tower — free upgrade',  special: 'upgrade' },
   22: { id: 'nightRaid',       label: '🌑 NIGHT RAID',       desc: '+20% enemy HP',                  hpMult: 1.20 },
   23: { id: 'northernRelief',  label: '♥ NORTHERN RELIEF',  desc: '+1 life (up to max)',             special: 'life' },
+  26: { id: 'mistSettles',     label: '🌫 MIST SETTLES',     desc: 'Enemies 10% slower',             speedMult: 0.90 },
+  27: { id: 'mistSettles',     label: '🌫 MIST SETTLES',     desc: 'Enemies 10% slower',             speedMult: 0.90 },
   30: { id: 'berserkerRage',   label: '⚔ BERSERKER RAGE',   desc: '+30% enemy speed',               speedMult: 1.30 },
   35: { id: 'swarmWave',       label: '☠ SWARM',             desc: '+10 Myling to wave',             bonus: { type: 'myling', count: 10 } },
   40: { id: 'ironHide',        label: '⚔ IRON HIDE',        desc: '+30% HP, −15% speed',            hpMult: 1.30, speedMult: 0.85 },
@@ -2267,6 +2269,11 @@ function update() {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
     const reward = b.update(enemies);
+    // Pierce chain sfx: fire once when bullet hits its 2nd distinct target
+    if (b.canPierce && b.alive && b.pierced?.size === 2 && !b._pierceSfxDone) {
+      b._pierceSfxDone = true;
+      sfxChainKill();
+    }
     if (reward > 0) {
       slain++;
       waveSlainCount++;
@@ -6131,17 +6138,29 @@ function drawDragGhost() {
 
     // Range ring preview for towers
     if (dragItem.mode === CELL.TOWER) {
-      const tRange = TOWER_DEFS[dragItem.id]?.range ?? 0;
+      const tDef   = TOWER_DEFS[dragItem.id];
+      const tRange = tDef?.range ?? 0;
       if (tRange > 0) {
         const cx2 = fpVX + fpVW / 2;
         const cy2 = fpVY + fpVH / 2;
-        ctx.strokeStyle = TOWER_DEFS[dragItem.id]?.rangeColor ?? 'rgba(200,200,200,0.3)';
+        ctx.strokeStyle = tDef?.rangeColor ?? 'rgba(200,200,200,0.3)';
         ctx.lineWidth   = 1;
         ctx.setLineDash([4, 6]);
         ctx.beginPath();
         ctx.arc(cx2, cy2, tRange * gridZoom, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+        // Splash radius ring for catapult/drakship
+        const splashR = tDef?.splashRadius ?? 0;
+        if (splashR > 0) {
+          ctx.strokeStyle = 'rgba(255,140,40,0.70)';
+          ctx.lineWidth   = 1;
+          ctx.setLineDash([6, 2]);
+          ctx.beginPath();
+          ctx.arc(cx2, cy2, splashR * gridZoom, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       }
     }
     ctx.restore();
