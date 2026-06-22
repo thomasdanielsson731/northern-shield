@@ -7,7 +7,7 @@ export const FORTRESS_DEFS = {
     icon:     '⚔',
     desc:     'Lowers defender recruit cost and boosts starting gold',
     maxLevel: 3,
-    cost:     [60, 100, 160],  // goldReserve cost for levels 1, 2, 3
+    cost:     [50, 85, 140],  // goldReserve cost for levels 1, 2, 3
     bonuses:  [
       {},                                                              // level 0 — baseline
       { recruitCostReduction: 5,  startingGoldBonus:  20 },
@@ -26,7 +26,7 @@ export const FORTRESS_DEFS = {
     icon:     '🛡',
     desc:     'Multiplies the damage bonus on all equipped items',
     maxLevel: 3,
-    cost:     [80, 130, 200],
+    cost:     [65, 110, 170],
     bonuses:  [
       { equipDmMult: 1.00 },
       { equipDmMult: 1.08 },
@@ -45,7 +45,7 @@ export const FORTRESS_DEFS = {
     icon:     '👁',
     desc:     'Reveals upcoming wave events earlier in the HUD',
     maxLevel: 3,
-    cost:     [50, 90, 140],
+    cost:     [40, 75, 115],
     bonuses:  [
       { eventPreviewBonus: 0 },
       { eventPreviewBonus: 1 },
@@ -64,7 +64,7 @@ export const FORTRESS_DEFS = {
     icon:     '🧱',
     desc:     'Reduces wall build cost and deepens the slow on adjacent enemies',
     maxLevel: 3,
-    cost:     [60, 110, 180],
+    cost:     [50, 90, 145],
     bonuses:  [
       { wallCostReduction: 0, wallSlowBonus: 0.00 },
       { wallCostReduction: 1, wallSlowBonus: 0.04 },

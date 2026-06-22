@@ -51,9 +51,14 @@ export class Grid {
     this.rows = rows;
     this.cellSize = cellSize;
     this.cells = Array.from({ length: rows }, () => new Array(cols).fill(CELL.EMPTY));
-    this.healthRatio = 1;  // set by game.js each frame: lives / STARTING_LIVES
-    this.gold        = 0;  // set by game.js each frame: current gold
-    this.hoardPulse  = 0;  // set by game.js each frame: coin-landing bounce
+    this.healthRatio     = 1;  // set by game.js each frame: lives / STARTING_LIVES
+    this.gold            = 0;  // set by game.js each frame: current gold
+    this.hoardPulse      = 0;  // set by game.js each frame: coin-landing bounce
+    this.fortressUpgrades = {}; // set by game.js: { barracks, armory, watchtower, wallworks } levels
+  }
+
+  setFortressUpgrades(upgrades) {
+    this.fortressUpgrades = upgrades ?? {};
   }
 
   getCell(col, row) {
@@ -490,25 +495,80 @@ export class Grid {
       const roofDk = '#1e1608';
       const roofWood = '#4a2c10';
 
-      // Great Hall (large longhouse — left and above the fortress)
-      drawBuilding(cx - cs * 5.8, cy - cs * 5.2, cs * 3.8, cs * 2.2, cs * 1.1, roofWood, stone);
+      const fu = this.fortressUpgrades ?? {};
+      const barrLvl  = fu.barracks   ?? 0;
+      const armLvl   = fu.armory     ?? 0;
+      const watchLvl = fu.watchtower ?? 0;
+      const wallLvl  = fu.wallworks  ?? 0;
 
-      // Barracks (medium building — left and below)
-      drawBuilding(cx - cs * 5.5, cy + cs * 2.5, cs * 3.2, cs * 1.8, cs * 0.8, roofWood, stone);
+      // Great Hall — scales with total fortress investment
+      const totalLvl = barrLvl + armLvl + watchLvl + wallLvl;
+      const hallW = cs * (3.8 + totalLvl * 0.08);
+      const hallH = cs * (2.2 + totalLvl * 0.04);
+      drawBuilding(cx - cs * 5.8, cy - cs * 5.2, hallW, hallH, cs * 1.1, roofWood, stone);
 
-      // Small treasury annex (compact, below-right of great hall)
-      drawBuilding(cx - cs * 2.0, cy - cs * 4.5, cs * 1.8, cs * 1.5, cs * 0.7, roofDk, stoneLt);
+      // Barracks — grows with barracks upgrade level
+      const barrW = cs * (3.2 + barrLvl * 0.35);
+      const barrH = cs * (1.8 + barrLvl * 0.18);
+      drawBuilding(cx - cs * 5.5, cy + cs * 2.5, barrW, barrH, cs * 0.8, roofWood, stone);
 
-      // Watchtower (tall, left of goal)
-      drawTower(cx - cs * 3.8, cy - cs * 1.0, cs * 0.85, cs * 3.5, stoneLt, roofDk);
+      // Armory/treasury annex — grows with armory upgrade; gets forge glow
+      const armW = cs * (1.8 + armLvl * 0.4);
+      const armH = cs * (1.5 + armLvl * 0.3);
+      drawBuilding(cx - cs * 2.0, cy - cs * 4.5, armW, armH, cs * (0.7 + armLvl * 0.15), roofDk, armLvl >= 2 ? '#3a2018' : stoneLt);
+      // Forge glow (armory L1+)
+      if (armLvl >= 1) {
+        const forgeFlicker = 0.12 + Math.sin(time * 5.5 + 1.2) * 0.06;
+        ctx.fillStyle = `rgba(255,90,10,${forgeFlicker})`;
+        ctx.beginPath(); ctx.arc(cx - cs * 0.8, cy - cs * 3.2, cs * (0.55 + armLvl * 0.15), 0, Math.PI * 2); ctx.fill();
+        if (armLvl >= 2) {
+          // Sparks
+          for (let sp = 0; sp < 3; sp++) {
+            const sx = cx - cs * 0.8 + Math.sin(time * 7.1 + sp * 2.1) * cs * 0.4;
+            const sy = cy - cs * 3.2 - Math.abs(Math.sin(time * 6.3 + sp * 1.7)) * cs * 0.6;
+            ctx.fillStyle = `rgba(255,180,40,${0.4 + sp * 0.1})`;
+            ctx.beginPath(); ctx.arc(sx, sy, 0.8, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      }
+      // Full smithy building (armory L3)
+      if (armLvl >= 3) {
+        drawBuilding(cx - cs * 0.2, cy - cs * 4.8, cs * 1.4, cs * 1.2, cs * 0.5, roofDk, '#3a2018');
+      }
 
-      // Second small watchtower (above, slightly left)
-      drawTower(cx - cs * 2.2, cy - cs * 5.8, cs * 0.65, cs * 2.8, stone, roofDk);
+      // Main watchtower — taller with each watchtower upgrade
+      const wt1H = cs * (3.5 + watchLvl * 0.7);
+      drawTower(cx - cs * 3.8, cy - cs * 1.0, cs * (0.85 + watchLvl * 0.06), wt1H, stoneLt, roofDk);
+      // Beacon fire at top (watchtower L3)
+      if (watchLvl >= 3) {
+        const bfFlicker = 0.6 + Math.sin(time * 9.2) * 0.3;
+        ctx.fillStyle = `rgba(255,120,20,${bfFlicker * 0.7})`;
+        ctx.beginPath(); ctx.arc(cx - cs * 3.8, cy - cs * 1.0 - wt1H - cs * 0.3, cs * 0.45, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowColor = '#ff7010'; ctx.shadowBlur = 6 * bfFlicker;
+        ctx.fill(); ctx.shadowBlur = 0;
+      }
 
-      // Banner poles
+      // Second watchtower — taller with watchtower upgrade
+      const wt2H = cs * (2.8 + watchLvl * 0.5);
+      drawTower(cx - cs * 2.2, cy - cs * 5.8, cs * (0.65 + watchLvl * 0.05), wt2H, stone, roofDk);
+      // Third watchtower (watchLvl L2+)
+      if (watchLvl >= 2) {
+        drawTower(cx - cs * 6.5, cy + cs * 0.5, cs * 0.70, cs * 3.0, stone, roofDk);
+      }
+
+      // Banner poles — base 3; barracks adds one, wallworks adds one
       drawBannerPole(cx - cs * 6.0, cy - cs * 4.8, cs * 3.5, 'rgba(140,18,18,0.88)');   // deep red
       drawBannerPole(cx - cs * 4.2, cy - cs * 2.5, cs * 3.0, 'rgba(18,38,120,0.88)');   // midnight blue
       drawBannerPole(cx - cs * 1.5, cy - cs * 5.5, cs * 2.5, 'rgba(120,90,18,0.88)');   // gold ochre
+      if (barrLvl >= 2) {
+        drawBannerPole(cx - cs * 3.5, cy + cs * 3.5, cs * 2.2, 'rgba(18,80,30,0.88)'); // forest green
+      }
+      if (wallLvl >= 1) {
+        drawBannerPole(cx - cs * 5.0, cy - cs * 3.0, cs * 2.8, 'rgba(100,60,18,0.88)'); // bronze
+      }
+      if (wallLvl >= 3) {
+        drawBannerPole(cx - cs * 0.5, cy - cs * 3.5, cs * 2.2, 'rgba(80,10,100,0.88)'); // royal purple
+      }
 
       ctx.globalAlpha = 1;
       ctx.restore();

@@ -214,7 +214,7 @@ let _betweenSubtab      = 'recruit';     // 'recruit' | 'fortress' — bottom se
 let _pendingDismiss     = null;          // defenderId awaiting dismiss confirm
 let _rosterScrollOffset = 0;            // how many defender rows scrolled past top
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
-let _reserveContrib     = 0;            // gold added to reserve this battle (20% of goldEarned)
+let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
 
 // Map selection
@@ -529,11 +529,13 @@ function restartCombatState() {
 // Stars, runeInventory, and battlesCompleted are preserved.
 function initBattle(preset) {
   // Recompute fortress bonuses from latest saved upgrades each battle
-  _fortressBonuses      = getFortressBonuses(_campaignState?.fortressUpgrades ?? {});
+  const _curFortressUpgrades = _campaignState?.fortressUpgrades ?? {};
+  _fortressBonuses      = getFortressBonuses(_curFortressUpgrades);
   _effectiveWallCost    = Math.max(4, 12 - _fortressBonuses.wallCostReduction);
   _wallSlowFactor       = Math.max(0.35, 0.65 - _fortressBonuses.wallSlowBonus);
   _effectiveRecruitCost = Math.max(10, 30 - _fortressBonuses.recruitCostReduction);
   _buildBtnsCache       = null;  // regenerate with updated wall cost
+  grid.setFortressUpgrades(_curFortressUpgrades);
 
   SPAWN.col = preset.spawn.col;
   SPAWN.row = preset.spawn.row;
@@ -606,7 +608,7 @@ function recordBattleResult(result) {
     timestamp:     Date.now(),
   });
 
-  _reserveContrib = Math.floor(goldEarned * 0.20);
+  _reserveContrib = Math.floor(goldEarned * 0.25);
   goldReserve += _reserveContrib;
   _campaignState.goldReserve       = goldReserve;
   _campaignState.equipmentInventory = _equipmentInventory.slice();
@@ -2276,6 +2278,7 @@ canvas.addEventListener('mousedown', e => {
                 _effectiveWallCost    = Math.max(4, 12 - _fortressBonuses.wallCostReduction);
                 _wallSlowFactor       = Math.max(0.35, 0.65 - _fortressBonuses.wallSlowBonus);
                 _effectiveRecruitCost = Math.max(10, 30 - _fortressBonuses.recruitCostReduction);
+                grid.setFortressUpgrades(upgrades);
                 try { saveCampaign(_campaignState); } catch {}
               }
             }
