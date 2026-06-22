@@ -52,6 +52,10 @@ src/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
+  chronicle/
+    chronicle.js       — All Chronicle + Defender Legacy exports: TRAIT_DEFS, SCAR_DEFS, VETERAN_RANKS, BOND_NAMES, TITLE_DEFS,
+                         getRank(), getRandomTrait(), checkScars(), checkTitles(), generateBio(), generateEpitaph(),
+                         generateBattleReport(), generateBondName(), wrapText()
 assets/
   towers/              — sprite PNGs for all 9 tower types
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
@@ -294,6 +298,78 @@ Boss drop schedule: wave 10 → common, wave 25 → rare, wave 50 → rare, wave
 | Armory | Equipment damage multiplier ×1.08/1.13/1.20 | level 3 |
 | Watchtower | Wave event preview +1/2/3 waves ahead | level 3 |
 | Wallworks | Wall cost −1/2/3g, adjacent slow +4/7/10% | level 3 |
+
+### Chronicle system
+
+`src/chronicle/chronicle.js` is the story-generation module. All functions are pure — they receive data and return text/objects. `game.js` calls into them; `chronicle.js` never imports from `game.js`.
+
+**Chronicle data flow:**
+1. `_chronicleBattleData` is assembled in `recordBattleResult()` (while `towers[]` is still populated, before `releaseAll()`)
+2. `generateBattleReport(battleData)` → produces `{ result, prose, bossKills, mvpName, notableEvents }`
+3. Stored in `_campaignState.chronicle.battles[]` (persisted via `saveCampaign()`)
+4. Displayed in `drawChronicleOverlay()` — filterable by defender via `_chronicleDefFilter`
+
+**Campaign state additions for Chronicle/Legacy:**
+```js
+_campaignState = {
+  chronicle:     { battles: [], warbandName: '' },
+  hallOfFallen:  [],   // dismissed VETERAN+ defenders (epitaph, scars, titles, battles)
+  hallOfHonored: [],   // formally retired CHAMPION+ defenders
+  bonds:         [],   // active bond records: { defenderIds, name, formed, battleCount }
+  coDeployments: {},   // pair-keyed co-deployment counts: '[id1:id2]' → count
+  legacyBonuses: {},   // class-keyed bonus from retired defenders: type → { fromName, dm }
+}
+```
+
+### Defender Legacy System
+
+10 systems that turn defenders from stats into characters. All implemented as of 2026-06-22.
+
+**Traits** — 8 personalities assigned at recruit/link, class-weighted. Affect Chronicle prose via `TRAIT_REPORT_CLAUSE`. Immutable after assignment.
+
+| Trait | Description |
+|---|---|
+| reckless | Fires into clusters, first to engage |
+| steadfast | Holds position, never yields |
+| brooding | Dark presence, minimal words |
+| serene | Unshakeable calm under pressure |
+| methodical | Precise, systematic, no wasted effort |
+| impulsive | Acts before the order is given |
+| vengeful | Remembers every scar |
+| devout | Fights for something beyond the battle |
+
+**Veteran Ranks** — 6 tiers computed from `level + battles + kills + titles`. Display in rank color on roster cards and in Chronicle prose.
+
+| Rank | Requirements | Color |
+|---|---|---|
+| GREENHORN | fallback | `#706860` |
+| WARRIOR | level 3, 5 battles | `#8090c0` |
+| VETERAN | level 5, 15 battles, 50 kills | `#90c870` |
+| CHAMPION | level 8, 30 battles, 150 kills | `#e89040` |
+| IRONGUARD | level 10, 50 battles, 1 title | `#c0a0ff` |
+| LEGEND | level 10, 100 battles, 3 titles | `#ffd040` |
+
+**Battle Scars** — 7 scars earned through specific conditions. Maximum 4 per defender. Permanent.
+
+| Scar | Trigger |
+|---|---|
+| lone_stand | Survived a Last Stand wave as the only deployed defender |
+| mark_last_hour | Deployed when fortress had 1 rampart remaining |
+| rampart_wound | Deployed during 3+ fortress breaches |
+| draugen_scar | 3+ Draugen-Jarl boss battles while deployed |
+| jotunn_scar | 3+ Jötun Walker boss battles while deployed |
+| fenrir_brand | Survived a Fenrir wave while deployed |
+| bond_grief | Bonded partner was dismissed or retired |
+
+**Bonds** — co-deployment tracking via `_campaignState.coDeployments[key]` where `key = [id1,id2].sort().join(':')`. Bond forms at 5+ shared battles. Name is deterministic from defender IDs via `generateBondName()`. Bond grief scar assigned when a bonded partner is dismissed or retired.
+
+**Promotion queue** — `_promotionQueue = []` accumulates `{defenderName, rankLabel, text, type}` entries during `recordBattleResult()`. Shown as acknowledgeable banners at top of roster panel between battles. Cleared on `initBattle()`.
+
+**Retirement** — CHAMPION+ defenders can RETIRE WITH HONOR (modal ceremony). Adds to `hallOfHonored`. Assigns `legacyBonuses[def.type]` for next recruited defender of same class. Bond grief scar assigned to surviving bonded defenders.
+
+**Auto-generated biography** — `generateBio(defender, chronicle, classLabel)` produces a 4-5 sentence biography. Opened via 📜 BIO button on roster cards, also shown in retirement ceremony.
+
+**Hall of Fallen / Hall of Honored** — both visible at bottom of Chronicle overlay. Fallen = dismissed VETERAN+. Honored = formally retired.
 
 ## Art direction
 
