@@ -215,6 +215,9 @@ let _betweenSubtab      = 'recruit';     // 'recruit' | 'fortress' — bottom se
 let _pendingDismiss     = null;          // defenderId awaiting dismiss confirm
 let _rosterScrollOffset = 0;            // how many defender rows scrolled past top
 let _renameState        = null;          // { defenderId, draft } while canvas rename is active
+let _enemyIntroSeen     = new Set();     // enemy types shown intro banner this campaign
+let _enemyIntroBanner   = null;          // { type, timer, label, hint } for first-encounter tooltip
+let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
@@ -472,6 +475,7 @@ function restartCombatState() {
   _pendingDismiss    = null;
   _rosterScrollOffset = 0;
   _renameState       = null;
+  _enemyIntroBanner  = null;
   _battleXpData      = [];
   _reserveContrib    = 0;
   _bossLootBanner    = null;
@@ -638,6 +642,7 @@ function recordBattleResult(result) {
 
   try { saveCampaign(_campaignState); } catch {}
   if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
+  _betweenFadeIn = 30;
   gamePhase = 'betweenBattles';
 }
 
@@ -1829,6 +1834,20 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
     newEnemy.eliteLabel     = 'ELITE ' + (ENEMY_DEFS[type]?.label?.toUpperCase() ?? type.toUpperCase());
   }
 
+  // First-encounter intro banner for new enemy types
+  const _INTRO_HINTS = {
+    [ENEMY_TYPES.WARG]:      { label: '⚡ NEW: WARG',      hint: 'Fast wolf pack — kite shield them; splash towers shine here' },
+    [ENEMY_TYPES.EINHERJAR]: { label: '🛡 NEW: EINHERJAR', hint: 'Armored Viking — slow but very tanky; focus burst damage' },
+    [ENEMY_TYPES.MYLING]:    { label: '★ NEW: MYLING',     hint: 'Spectral flier — ignores walls; use ranged defenders' },
+    [ENEMY_TYPES.JOTUNN]:    { label: '★ NEW: JÖTUNN',     hint: 'Earth giant — massive HP but very slow; early upgrade focus' },
+    [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves' },
+  };
+  if (!_enemyIntroSeen.has(type) && _INTRO_HINTS[type]) {
+    _enemyIntroSeen.add(type);
+    const { label, hint } = _INTRO_HINTS[type];
+    _enemyIntroBanner = { label, hint, timer: 210, maxTimer: 210 };
+  }
+
   enemies.push(newEnemy);
   return newEnemy;
 }
@@ -1836,7 +1855,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
 function estimateWaveHp(waveNum) {
   const comp  = waveComposition(Math.max(1, waveNum));
   const scale = getWaveBands(waveNum).hp;
-  return Math.round((comp.draugr * 130 + comp.mylings * 110 + comp.jotunn * 700 + comp.maras * 130) * scale);
+  return Math.round((comp.draugr * 130 + comp.mylings * 110 + comp.jotunn * 700 + comp.maras * 180 + (comp.wargs ?? 0) * 95 + (comp.einherjars ?? 0) * 460) * scale);
 }
 
 function spawnBoss(waveNum) {
@@ -3783,10 +3802,12 @@ function drawRightPanel() {
       _row('Enemies:', '☠ BOSS ACTIVE', '#ff5030');
     } else {
       const comp  = waveComposition(dispW);
-      const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
-                     comp.mylings > 0 && `${comp.mylings}M`,
-                     comp.jotunn  > 0 && `${comp.jotunn}J`,
-                     comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
+      const parts = [comp.draugr      > 0 && `${comp.draugr}D`,
+                     comp.mylings     > 0 && `${comp.mylings}M`,
+                     comp.jotunn      > 0 && `${comp.jotunn}J`,
+                     comp.maras       > 0 && `${comp.maras}X`,
+                     (comp.wargs ?? 0)      > 0 && `${comp.wargs}W`,
+                     (comp.einherjars ?? 0) > 0 && `${comp.einherjars}E`].filter(Boolean);
       _row('Enemies:', `${onField} ∙ ${parts.join(' ')}`, tColor);
     }
     if (nextBossW) {
@@ -5217,10 +5238,12 @@ function drawWaveAnnouncement() {
     mainColor = '#ff5030';
   } else {
     const comp  = waveComposition(nextW);
-    const parts = [comp.draugr  > 0 && `${comp.draugr}D`,
-                   comp.mylings > 0 && `${comp.mylings}M`,
-                   comp.jotunn  > 0 && `${comp.jotunn}J`,
-                   comp.maras   > 0 && `${comp.maras}X`].filter(Boolean);
+    const parts = [comp.draugr      > 0 && `${comp.draugr}D`,
+                   comp.mylings     > 0 && `${comp.mylings}M`,
+                   comp.jotunn      > 0 && `${comp.jotunn}J`,
+                   comp.maras       > 0 && `${comp.maras}X`,
+                   (comp.wargs ?? 0)      > 0 && `${comp.wargs}W`,
+                   (comp.einherjars ?? 0) > 0 && `${comp.einherjars}E`].filter(Boolean);
     mainText  = `W${nextW}  —  ${parts.join(' · ')}`;
     mainColor = accentColor;
   }
@@ -5353,6 +5376,33 @@ function drawBossLootBanner() {
   ctx.shadowBlur = 0;
   ctx.font = '10px monospace'; ctx.fillStyle = rarCol;
   ctx.fillText(`${iDef.slot === 'weapon' ? '⚔' : '🛡'} ${iDef.name}`, cx, by + 28);
+  ctx.restore();
+}
+
+function drawEnemyIntroBanner() {
+  if (!_enemyIntroBanner || _enemyIntroBanner.timer <= 0) return;
+  _enemyIntroBanner.timer--;
+  const { timer, maxTimer, label, hint } = _enemyIntroBanner;
+  const alpha = Math.min(1, (maxTimer - timer) / 20) * (timer < 40 ? timer / 40 : 1);
+  const bw = 230, bh = 34;
+  const bx = GRID_LEFT + 6;
+  const by = GRID_TOP + ROWS * CELL_SIZE - bh - 26;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(4,8,20,0.95)';
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,120,200,0.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.stroke();
+  // Accent strip
+  ctx.fillStyle = 'rgba(60,120,200,0.70)';
+  ctx.fillRect(bx, by, 3, bh);
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#80b8ff';
+  ctx.shadowColor = '#4080ff'; ctx.shadowBlur = 6;
+  ctx.fillText(label, bx + 9, by + 13);
+  ctx.shadowBlur = 0;
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,170,220,0.70)';
+  ctx.fillText(hint, bx + 9, by + 26);
   ctx.restore();
 }
 
@@ -5701,6 +5751,14 @@ let _betweenBtns = [];  // hit areas: [{x,y,w,h,action}, ...]
 function drawBetweenBattles() {
   _betweenBtns = [];
   const W = BASE_W, H = BASE_H;
+
+  // Fade-in on screen entry
+  const fadeAlpha = _betweenFadeIn > 0
+    ? Math.min(1, (30 - _betweenFadeIn) / 20)
+    : 1;
+  if (_betweenFadeIn > 0) _betweenFadeIn--;
+  ctx.save();
+  ctx.globalAlpha = fadeAlpha;
 
   // Starfield background
   const t = performance.now() * 0.001;
@@ -6205,7 +6263,8 @@ function drawBetweenBattles() {
     }
   }
 
-  ctx.restore();
+  ctx.restore(); // right panel clip
+  ctx.restore(); // fade-in globalAlpha
 }
 
 const MAP_SELECT_FLAVOR = [
@@ -7095,6 +7154,7 @@ function draw() {
   drawBossWarning();
   drawBossDefeat();
   drawBossLootBanner();
+  drawEnemyIntroBanner();
   drawRuneForgeHint();
   drawWaveAnnouncement();
   drawChapterBanner();
