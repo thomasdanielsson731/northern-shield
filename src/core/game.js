@@ -1042,7 +1042,7 @@ function startNextWave() {
   }
 
   // Chapter milestone banners
-  if (waveNumber ===  1) { chapterBannerTimer = 180; chapterBannerText = 'CHAPTER 1: THE NORTHERN MARCH'; }
+  if (waveNumber ===  1) { chapterBannerTimer = 240; chapterBannerText = 'CHAPTER 1: THE NORTHERN MARCH'; }
   if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
   if (waveNumber === 51) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 3: THE IRON WINTER'; }
   if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
@@ -4240,16 +4240,17 @@ function drawRightPanel() {
     }
 
     const sp      = gameSpeed;
-    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
-    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
-    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
+    const _spIdle = waveState === 'active' && sp === 1;
+    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : _spIdle ? 'rgba(14,30,12,0.90)' : 'rgba(30,60,22,0.97)';
+    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : _spIdle ? 'rgba(40,90,38,0.45)' : 'rgba(80,200,80,0.80)';
+    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : _spIdle ? '#507050' : '#a0f080';
     const nextSp  = sp >= 4 ? 1 : sp >= 2 ? 4 : 2;
 
     ctx.save();
     ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5);
     ctx.fillStyle = spFill; ctx.fill();
     ctx.strokeStyle = spBord; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.shadowColor = spBord; ctx.shadowBlur = 8;
+    ctx.shadowColor = spBord; ctx.shadowBlur = _spIdle ? 2 : 8;
     ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5); ctx.stroke();
     ctx.shadowBlur = 0; ctx.restore();
 
@@ -7312,13 +7313,13 @@ function draw() {
   // ── Path direction chevrons (wave 1 tutorial, first 4s) ──────────────────────
   if (pathChevronsTimer > 0 && _pathPts.length >= 2) {
     const pts2  = _pathPts;
-    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.45;
+    const pulse = 0.45 + Math.sin(performance.now() * 0.006) * 0.30;
     const alpha = Math.min(1, pathChevronsTimer / 30) * pulse;
     const chevSize = 4;
     ctx.save();
-    ctx.fillStyle   = `rgba(255,230,80,${alpha * 0.85})`;
-    ctx.shadowColor = `rgba(220,180,20,${alpha})`;
-    ctx.shadowBlur  = 6;
+    ctx.fillStyle   = `rgba(255,230,80,${alpha * 0.60})`;
+    ctx.shadowColor = `rgba(220,180,20,${alpha * 0.55})`;
+    ctx.shadowBlur  = 3;
     for (let i = 0; i < pts2.length - 1; i++) {
       const mx  = (pts2[i].x + pts2[i + 1].x) / 2;
       const my  = (pts2[i].y + pts2[i + 1].y) / 2;
@@ -7517,20 +7518,28 @@ function draw() {
 function drawChapterBanner() {
   if (chapterBannerTimer <= 0) return;
   chapterBannerTimer--;
-  const alpha = chapterBannerTimer > 40 ? Math.min(1, (210 - chapterBannerTimer) / 20) : chapterBannerTimer / 40;
+  const maxT  = 240;
+  const alpha = chapterBannerTimer > 40
+    ? Math.min(1, (maxT - chapterBannerTimer) / 22)
+    : chapterBannerTimer / 40;
   const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
-  const cy = GRID_TOP + (ROWS * CELL_SIZE) / 2 - 20;
+  const cy = GRID_TOP + (ROWS * CELL_SIZE) / 2 - 18;
   ctx.save();
-  ctx.textAlign   = 'center';
-  ctx.font        = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+
+  // Dark backing strip for legibility
+  ctx.fillStyle = `rgba(4,2,10,${alpha * 0.68})`;
+  ctx.beginPath(); ctx.roundRect(cx - 130, cy - 22, 260, 42, 4); ctx.fill();
+
+  ctx.font        = 'bold 18px monospace';
   ctx.fillStyle   = `rgba(240,200,60,${alpha})`;
-  ctx.shadowColor = `rgba(200,130,20,${alpha * 0.9})`;
-  ctx.shadowBlur  = 20;
+  ctx.shadowColor = `rgba(200,130,20,${alpha * 0.95})`;
+  ctx.shadowBlur  = 14;
   ctx.fillText(chapterBannerText, cx, cy);
-  ctx.font        = '10px monospace';
-  ctx.fillStyle   = `rgba(200,160,80,${alpha * 0.75})`;
-  ctx.shadowBlur  = 8;
-  ctx.fillText(endlessMode ? '— THE ENDLESS SIEGE —' : '— THE SIEGE INTENSIFIES —', cx, cy + 18);
+  ctx.font        = '11px monospace';
+  ctx.fillStyle   = `rgba(200,160,80,${alpha * 0.80})`;
+  ctx.shadowBlur  = 6;
+  ctx.fillText(endlessMode ? '— THE ENDLESS SIEGE —' : '— THE SIEGE INTENSIFIES —', cx, cy + 16);
   ctx.shadowBlur = 0;
   ctx.restore();
 }
