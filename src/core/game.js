@@ -4391,16 +4391,17 @@ function drawTopBar() {
   const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
   const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
 
-  // Dim battle number context above wave label
-  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,110,70,0.50)'; ctx.textAlign = 'center';
-  ctx.fillText(`BATTLE ${battlesCompleted + 1}`, midX - 30, cy - 7);
-  ctx.font        = 'bold 11px monospace';
+  // Map name is the primary identity; wave label demoted to small subtitle
+  const _centerName = _currentMapName || 'NORTHERN SHIELD';
+  ctx.font        = `bold ${wIsBoss ? 13 : 12}px monospace`;
   ctx.fillStyle   = wColor;
   ctx.shadowColor = wGlow;
   ctx.shadowBlur  = wIsBoss ? 10 : 6;
   ctx.textAlign   = 'center';
-  ctx.fillText(wLabel, midX - 30, cy);
+  ctx.fillText(_centerName, midX - 30, cy - 3);
   ctx.shadowBlur  = 0;
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,110,70,0.45)';
+  ctx.fillText(wLabel, midX - 30, cy + 8);
 
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -4430,9 +4431,9 @@ function drawTopBar() {
   ctx.shadowColor = livesLostFlash > 0 ? `rgba(255,0,0,${livesLostFlash * 0.95})` : lives <= 3 ? `rgba(255,30,30,${livesDangerPulse * 0.85})` : 'rgba(255,80,80,0.3)';
   ctx.shadowBlur  = livesLostFlash > 0 ? 16 : lives <= 3 ? 6 + livesDangerPulse * 10 : 4;
   ctx.globalAlpha = livesLostFlash > 0 ? 0.7 + livesLostFlash * 0.3 : lives <= 3 ? 0.85 + livesDangerPulse * 0.15 : 1;
-  ctx.fillText(`♥ ${lives}`, rx, cy);
+  ctx.fillText(`⚑ ${lives}/${STARTING_LIVES}`, rx, cy);
   ctx.globalAlpha = 1;
-  rx -= ctx.measureText(`♥ ${lives}`).width + 18;
+  rx -= ctx.measureText(`⚑ ${lives}/${STARTING_LIVES}`).width + 18;
   ctx.shadowBlur  = 0;
 
   // ── Gold ────────────────────────────────────────────────────────────────────
@@ -4529,6 +4530,14 @@ function drawBottomBuildBar() {
   const buildPanelY = GRID_BOTTOM + 4;
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
+
+  // Panel identity label — reads as warband roster, not tower build menu
+  ctx.save();
+  ctx.font      = 'bold 7px monospace';
+  ctx.fillStyle = 'rgba(200,155,80,0.50)';
+  ctx.textAlign = 'left';
+  ctx.fillText('WARBAND', buildPanelX + 8, buildPanelY + 11);
+  ctx.restore();
 
   for (const btn of buttons) {
     const isSelected = btn.mode === CELL.WALL
@@ -6981,23 +6990,33 @@ function draw() {
     ctx.restore();
   }
 
-  // Defender nameplates — name tag below each deployed, named defender
+  // Defender nameplates — prominent name tag below each deployed, named defender
   {
     ctx.save();
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
-    ctx.font         = '4.5px monospace';
+    ctx.font         = 'bold 6px monospace';
     for (const t of towers) {
       if (!t.name) continue;
-      const fp = t.footprint ?? { w: 1, h: 1 };
-      const nx = t.x;
-      const ny = t.y + fp.h * CELL_SIZE / 2 + 2;
-      const tw = ctx.measureText(t.name).width;
-      const padX = 1.5;
-      ctx.fillStyle = 'rgba(4,2,10,0.72)';
-      ctx.beginPath(); ctx.roundRect(nx - tw / 2 - padX, ny, tw + padX * 2, 6, 1); ctx.fill();
-      ctx.fillStyle = t.glowRgb ? `rgba(${t.glowRgb},0.88)` : 'rgba(220,190,130,0.88)';
-      ctx.fillText(t.name, nx, ny + 0.5);
+      const fp   = t.footprint ?? { w: 1, h: 1 };
+      const nx   = t.x;
+      const ny   = t.y + fp.h * CELL_SIZE / 2 + 2;
+      const tw   = ctx.measureText(t.name).width;
+      const padX = 2.5;
+      const tagH = 8;
+      // Pill shadow for depth
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath(); ctx.roundRect(nx - tw / 2 - padX + 0.5, ny + 0.5, tw + padX * 2, tagH, 1.5); ctx.fill();
+      // Pill background — tinted with the defender's glow color
+      const pillC = t.glowRgb ? `rgba(${t.glowRgb},0.22)` : 'rgba(20,10,30,0.88)';
+      ctx.fillStyle = pillC;
+      ctx.beginPath(); ctx.roundRect(nx - tw / 2 - padX, ny, tw + padX * 2, tagH, 1.5); ctx.fill();
+      // Name text with glow
+      ctx.fillStyle   = t.glowRgb ? `rgba(${t.glowRgb},1.0)` : 'rgba(235,210,155,1.0)';
+      ctx.shadowColor = t.glowRgb ? `rgba(${t.glowRgb},0.70)` : 'rgba(220,180,100,0.50)';
+      ctx.shadowBlur  = 4;
+      ctx.fillText(t.name, nx, ny + 1);
+      ctx.shadowBlur  = 0;
     }
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
@@ -7325,34 +7344,8 @@ function draw() {
     ctx.restore();
   }
 
-  // ── Path direction chevrons (wave 1 tutorial, first 4s) ──────────────────────
-  if (pathChevronsTimer > 0 && _pathPts.length >= 2) {
-    const pts2  = _pathPts;
-    const pulse = 0.45 + Math.sin(performance.now() * 0.006) * 0.30;
-    const alpha = Math.min(1, pathChevronsTimer / 30) * pulse;
-    const chevSize = 4;
-    ctx.save();
-    ctx.fillStyle   = `rgba(255,230,80,${alpha * 0.60})`;
-    ctx.shadowColor = `rgba(220,180,20,${alpha * 0.55})`;
-    ctx.shadowBlur  = 3;
-    for (let i = 0; i < pts2.length - 1; i++) {
-      const mx  = (pts2[i].x + pts2[i + 1].x) / 2;
-      const my  = (pts2[i].y + pts2[i + 1].y) / 2;
-      const ang = Math.atan2(pts2[i + 1].y - pts2[i].y, pts2[i + 1].x - pts2[i].x);
-      ctx.save();
-      ctx.translate(mx, my);
-      ctx.rotate(ang);
-      ctx.beginPath();
-      ctx.moveTo( chevSize,          0);
-      ctx.lineTo(-chevSize * 0.7, -chevSize * 0.6);
-      ctx.lineTo(-chevSize * 0.7,  chevSize * 0.6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-    ctx.shadowBlur = 0;
-    ctx.restore();
-  }
+  // Path direction chevrons removed — the arrows read as tower-defense genre signal.
+  // The path stones already communicate terrain; directional arrows are redundant.
 
   // ── LIFE LOST flash near hoard ────────────────────────────────────────────────
   if (lifeLostTimer > 0) {
@@ -7365,7 +7358,7 @@ function draw() {
     ctx.fillStyle   = `rgba(255,80,60,${alpha})`;
     ctx.shadowColor = `rgba(220,40,20,${alpha})`;
     ctx.shadowBlur  = 8;
-    ctx.fillText(`LIFE LOST  (${lives} left)`, hx, hy);
+    ctx.fillText(`RAMPART BREACHED  (${lives} remain)`, hx, hy);
     ctx.shadowBlur  = 0;
     ctx.restore();
   }
