@@ -4529,6 +4529,16 @@ function drawBottomBuildBar() {
     const borderAlpha = isSelected ? 0.90 : 0.35;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
 
+    // Category color stripe — 2px across top of card
+    const _catColor = btn.category === 'warriors' ? 'rgba(200,70,30,0.60)'
+                    : btn.category === 'siege'     ? 'rgba(140,115,75,0.60)'
+                    : btn.category === 'mystic'    ? 'rgba(130,55,195,0.60)'
+                    : 'rgba(55,95,140,0.55)';  // walls
+    ctx.fillStyle   = _catColor;
+    ctx.globalAlpha = affordable ? 1 : 0.45;
+    ctx.beginPath(); ctx.roundRect(btn.x + 3, btn.y + 3, btn.width - 6, 2, [1, 1, 0, 0]); ctx.fill();
+    ctx.globalAlpha = 1;
+
     // Colored bottom accent strip — matches tower glow on the board
     if (btn.glowRgb) {
       const stripAlpha = affordable ? (isSelected ? 1.0 : 0.70) : 0.20;
@@ -4907,7 +4917,7 @@ function drawTowerPanel(tower) {
   ));
   const talentExtraH = hasTalents ? 13 : 0;
   const defForPanel = _roster?.find(tower.defenderId);
-  const hasItems = !!(defForPanel && (defForPanel.equipment[0] || defForPanel.equipment[1]));
+  const hasItems = !!defForPanel;  // always show equipment section for roster-linked defenders
   const itemsExtraH = hasItems ? 14 : 0;
   const panelH = (tower.maxed ? 146 : 160) + talentExtraH + itemsExtraH;
   panelRuneBtn = null;
@@ -5088,12 +5098,19 @@ function drawTowerPanel(tower) {
     ctx.fillText('ITEMS', px + 10, itemSecY + 10);
     [0, 1].forEach(si => {
       const iid = defForPanel.equipment[si];
-      if (!iid) return;
+      const slotIcon = si === 0 ? '⚔' : '🛡';
+      const slotX    = px + 36 + si * 62;
+      ctx.font = '8px monospace'; ctx.textAlign = 'left';
+      if (!iid) {
+        ctx.fillStyle = 'rgba(80,65,40,0.40)';
+        ctx.fillText(`${slotIcon} —`, slotX, itemSecY + 10);
+        return;
+      }
       const iDef = ITEM_DEFS[iid];
       if (!iDef) return;
       const ec = RARITY_COLOR[iDef.rarity] ?? '#aaa';
-      ctx.font = '8px monospace'; ctx.fillStyle = ec; ctx.textAlign = 'left';
-      ctx.fillText(`${si === 0 ? '⚔' : '🛡'} ${iDef.name.slice(0, 12)}`, px + 36 + si * 62, itemSecY + 10);
+      ctx.fillStyle = ec;
+      ctx.fillText(`${slotIcon} ${iDef.name.slice(0, 10)}`, slotX, itemSecY + 10);
     });
   }
 
@@ -6945,6 +6962,29 @@ function draw() {
       ctx.stroke();
     }
     ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // Defender nameplates — name tag below each deployed, named defender
+  {
+    ctx.save();
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font         = '4.5px monospace';
+    for (const t of towers) {
+      if (!t.name) continue;
+      const fp = t.footprint ?? { w: 1, h: 1 };
+      const nx = t.x;
+      const ny = t.y + fp.h * CELL_SIZE / 2 + 2;
+      const tw = ctx.measureText(t.name).width;
+      const padX = 1.5;
+      ctx.fillStyle = 'rgba(4,2,10,0.72)';
+      ctx.beginPath(); ctx.roundRect(nx - tw / 2 - padX, ny, tw + padX * 2, 6, 1); ctx.fill();
+      ctx.fillStyle = t.glowRgb ? `rgba(${t.glowRgb},0.88)` : 'rgba(220,190,130,0.88)';
+      ctx.fillText(t.name, nx, ny + 0.5);
+    }
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign    = 'left';
     ctx.restore();
   }
 
