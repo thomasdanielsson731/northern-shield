@@ -9,6 +9,7 @@ import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
+import { TALENT_DEFS, getTalentBonuses } from '../roster/talents.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -200,6 +201,7 @@ let _equipmentInventory  = [];     // array of item IDs available to equip
 let _currentBattlePreset = null;   // preset used for the current battle (for Fight Again)
 let _roster              = new Roster();
 let _battleResult        = null;   // 'victory' | 'defeat' — set when battle ends
+let _newBattleTalentUnlocks = [];  // [{defName, talentId}] — talents unlocked at end of last battle
 
 // Between-battles UI state
 let _recruitType  = null;   // currently selected class in recruit picker
@@ -397,6 +399,7 @@ function promptNameAndSave(scoreData) {
 // Resets all combat state. Does NOT touch campaign state (stars, runeInventory,
 // battlesCompleted, STARTING_LIVES). Call initBattle() for a full battle start.
 function restartCombatState() {
+  _newBattleTalentUnlocks = [];
   // Return any equipped runes to inventory before clearing tower array
   for (const t of towers) {
     if (t.rune) runeInventory[t.rune] = (runeInventory[t.rune] ?? 0) + 1;
@@ -572,7 +575,7 @@ function recordBattleResult(result) {
   _campaignState.goldReserve       = goldReserve;
   _campaignState.equipmentInventory = _equipmentInventory.slice();
 
-  _roster.grantBattleXP(towers, waveNumber);
+  _newBattleTalentUnlocks = _roster.grantBattleXP(towers, waveNumber);
   _roster.releaseAll();
   _campaignState.defenders = _roster.toJSON();
 
@@ -1900,9 +1903,10 @@ function tryPlaceAt(col, row, mode, towerType) {
     const t = new Tower(cx, cy, col, row, towerType);
     // Link to roster: reuse an existing veteran if available, otherwise register the new recruit.
     const def = _roster.link(towerType, t.defenderId, t.name);
-    const eqBonuses = getItemBonuses(def.equipment);
-    const hasBonus  = def.careerLevel > 0 || def.equipment.some(Boolean);
-    if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses);
+    const eqBonuses     = getItemBonuses(def.equipment);
+    const talentBonuses = getTalentBonuses(def.talents);
+    const hasBonus = def.careerLevel > 0 || def.equipment.some(Boolean) || def.talents.length > 0;
+    if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses, talentBonuses);
     else { t.defenderId = def.defenderId; t.name = def.name; }
     towers.push(t);
     _synergyDirty = true;
@@ -5551,6 +5555,26 @@ function drawBetweenBattles() {
     });
   }
 
+  // Talent unlocks earned this battle
+  if (_newBattleTalentUnlocks.length > 0) {
+    const tlY0 = lpY + 170 + top3.length * 22 + 14;
+    ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(lpX + 12, tlY0); ctx.lineTo(lpX + lpW - 12, tlY0); ctx.stroke();
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.6)';
+    ctx.fillText('TALENTS UNLOCKED', lcx, tlY0 + 13);
+    _newBattleTalentUnlocks.forEach(({ defName, talentId }, i) => {
+      const tDef2  = TALENT_DEFS[talentId];
+      if (!tDef2) return;
+      const entryY = tlY0 + 27 + i * 18;
+      ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0d060';
+      ctx.shadowColor = 'rgba(240,200,60,0.5)'; ctx.shadowBlur = 5;
+      ctx.fillText(`✦ ${defName} — ${tDef2.name}`, lcx, entryY);
+      ctx.shadowBlur = 0;
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,140,80,0.6)';
+      ctx.fillText(tDef2.desc, lcx, entryY + 10);
+    });
+  }
+
   ctx.restore();
 
   // Buttons at bottom of left panel
@@ -5602,7 +5626,7 @@ function drawBetweenBattles() {
   const listTop  = rpY + 49;
   const listBot  = rpY + rpH - recruitH - 4;
   const listH    = listBot - listTop;
-  const rowH     = 56;
+  const rowH     = 70;
   const maxRows  = Math.floor(listH / rowH);
 
   // Roster list (clip to avoid overflow)
@@ -5667,6 +5691,17 @@ function drawBetweenBattles() {
       ctx.fillText(label, cx2 + 3, cy2 + 9);
       _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
     });
+
+    // Talent row — unlocked talents listed at the bottom of the card
+    const talY = ry + 56;
+    if (def.talents.length > 0) {
+      const names = def.talents.map(id => TALENT_DEFS[id]?.name ?? id).join(' · ');
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(240,200,60,0.55)';
+      ctx.fillText(`✦ ${names}`, rix, talY + 8);
+    } else {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(100,80,50,0.35)';
+      ctx.fillText('✦ no talents yet', rix, talY + 8);
+    }
 
     // DISMISS button
     const dW = 46, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;

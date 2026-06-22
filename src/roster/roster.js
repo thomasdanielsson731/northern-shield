@@ -38,14 +38,19 @@ export class Roster {
   }
 
   // Grant post-battle XP to all deployed defenders based on their tower's battle stats.
-  // towers: Tower[] array from game.js (each has defenderId, killCount, waveNumber).
+  // Returns [{defName, talentId}] for any talents unlocked this battle.
   grantBattleXP(towers, wavesCleared) {
+    const unlocks = [];
     for (const tower of towers) {
       const def = this.find(tower.defenderId);
       if (def) {
-        def.grantBattleXP(tower.killCount ?? 0, wavesCleared);
+        const { newTalentIds } = def.grantBattleXP(tower.killCount ?? 0, wavesCleared);
         def.careerDamage += tower.damageDealt ?? 0;
+        for (const talentId of newTalentIds) {
+          unlocks.push({ defName: def.name, talentId });
+        }
       }
     }
+    return unlocks;
   }
 }

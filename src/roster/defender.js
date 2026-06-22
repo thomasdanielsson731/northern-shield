@@ -1,3 +1,5 @@
+import { CLASS_TALENTS } from './talents.js';
+
 // XP thresholds to reach each career level (index = level)
 export const CAREER_XP = [0, 50, 150, 350, 700, 1200, 1800, 2500, 3500, 4800, 6500];
 
@@ -42,15 +44,28 @@ export class Defender {
     this.battlesPlayed = 0;
     this.deployed      = false;
     this.equipment     = [null, null]; // [weaponItemId|null, armorItemId|null]
+    this.talents       = [];           // IDs of unlocked talents (auto-unlocked at milestones)
   }
 
+  // Returns { earned, newTalentIds } — newTalentIds is empty unless a milestone was crossed.
   grantBattleXP(kills, wavesCleared) {
+    const prevLevel     = this.careerLevel;
     const earned        = kills * XP_PER_KILL + wavesCleared * XP_PER_WAVE;
     this.xp            += earned;
     this.careerKills   += kills;
     this.battlesPlayed++;
     this.careerLevel    = careerLevelFromXP(this.xp);
-    return earned;
+
+    const newTalentIds = [];
+    const classTalents = CLASS_TALENTS[this.type] ?? {};
+    for (let lvl = prevLevel + 1; lvl <= this.careerLevel; lvl++) {
+      const talId = classTalents[lvl];
+      if (talId && !this.talents.includes(talId)) {
+        this.talents.push(talId);
+        newTalentIds.push(talId);
+      }
+    }
+    return { earned, newTalentIds };
   }
 
   toJSON() {
@@ -64,6 +79,7 @@ export class Defender {
       careerDamage:  this.careerDamage,
       battlesPlayed: this.battlesPlayed,
       equipment:     this.equipment,
+      talents:       this.talents,
     };
   }
 
@@ -75,6 +91,7 @@ export class Defender {
     d.careerDamage  = data.careerDamage  ?? 0;
     d.battlesPlayed = data.battlesPlayed ?? 0;
     d.equipment     = data.equipment     ?? [null, null];
+    d.talents       = data.talents       ?? [];
     return d;
   }
 }

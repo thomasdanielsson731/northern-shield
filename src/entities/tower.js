@@ -3,6 +3,7 @@ import { SPRITES } from '../assets.js';
 import { getSpriteScale } from '../config.js';
 import { getDefenderName } from '../roster/names.js';
 import { careerBonusForLevel } from '../roster/defender.js';
+import { getTalentBonuses } from '../roster/talents.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -246,6 +247,7 @@ export class Tower {
     this.lastTargetY     = null;
     this.targetLineTimer = 0;
     this.rune            = null;
+    this._talentBonuses  = null;
 
     // MVP marker timer (frames); when >0 the tower is highlighted as MVP
     this.mvpTimer = 0;
@@ -287,14 +289,22 @@ export class Tower {
       if (rm !== 1) this.range    = Math.round(this.range    * rm);
       if (cm !== 1) this.fireRate = Math.max(4, Math.round(this.fireRate * cm));
     }
+    if (this._talentBonuses) {
+      const { dm, rm, cm, slowMult } = this._talentBonuses;
+      if (dm !== 1)       this.damage    = Math.round(this.damage   * dm);
+      if (rm !== 1)       this.range     = Math.round(this.range    * rm);
+      if (cm !== 1)       this.fireRate  = Math.max(4, Math.round(this.fireRate * cm));
+      if (slowMult !== 1) this.slowFactor = Math.max(0.15, this.slowFactor * slowMult);
+    }
   }
 
-  // Called by game.js after roster lookup — overwrites generated name/id, applies career + equipment stats.
-  applyCareerData(defenderId, name, careerLevel, equipmentBonuses = null) {
+  // Called by game.js after roster lookup — overwrites generated name/id, applies career + equipment + talent stats.
+  applyCareerData(defenderId, name, careerLevel, equipmentBonuses = null, talentBonuses = null) {
     this.defenderId        = defenderId;
     this.name              = name;
     this._careerLevel      = careerLevel;
     this._equipmentBonuses = equipmentBonuses;
+    this._talentBonuses    = talentBonuses;
     this._applyLevel();
   }
 
