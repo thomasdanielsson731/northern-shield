@@ -6,7 +6,7 @@ import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
 import { Roster } from '../roster/roster.js';
-import { ROMAN, Defender, CAREER_XP } from '../roster/defender.js';
+import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
@@ -1190,8 +1190,16 @@ function updateWave() {
       // Clear previous MVP timers
       for (const t of towers) if (t) t.mvpTimer = 0;
       if (bestTower && bestScore > 0) {
-        bestTower.mvpTimer = 360; // show crown for ~6 seconds (60fps units used across code)
-        dmgFloaters.push({ x: bestTower.x, y: bestTower.y - 18, val: 'MVP', life: 140, maxLife: 140, color: '#ffd060', large: true, suffix: '' });
+        bestTower.mvpTimer = 480; // show crown for ~8 seconds (60fps units used across code)
+        const _mvpLabel = bestTower.name ? `⚔ ${bestTower.name}` : '⚔ MVP';
+        dmgFloaters.push({ x: bestTower.x, y: bestTower.y - 18, val: _mvpLabel, life: 200, maxLife: 200, color: '#ffd060', large: true, suffix: '' });
+        // Per-defender XP floaters — show battle contribution, rise from each deployed position
+        for (const t of towers) {
+          if (!t || !(t.killCount > 0)) continue;
+          const xpEarned = t.killCount * XP_PER_KILL + XP_PER_WAVE;
+          const floatC = t.glowRgb ? `rgba(${t.glowRgb},0.80)` : 'rgba(160,220,120,0.80)';
+          dmgFloaters.push({ x: t.x, y: t.y - 10, val: `+${xpEarned}`, life: 110, maxLife: 110, color: floatC, large: false, suffix: 'xp' });
+        }
         spawnParticles(bestTower.x, bestTower.y, '#f5d030', 16);
         try { sfxRune(); } catch (e) {}
       }
@@ -4107,7 +4115,8 @@ function drawRightPanel() {
     const rStatus = meanLvl >= 7 ? 'VETERAN' : meanLvl >= 4 ? 'BLOODED' : meanLvl >= 2 ? 'TRAINED' : 'GREEN';
     const rStatusC = meanLvl >= 7 ? '#ffd040' : meanLvl >= 4 ? '#e89040' : meanLvl >= 2 ? '#90c870' : '#8090c0';
 
-    _hdr(defC, '⚔', 'DEFENDERS', mvpLabel ? `MVP: ${mvpLabel}` : rStatus, mvpLabel ? '#ffd040' : rStatusC);
+    const _defRightTxt = mvpLabel ? `MVP: ${mvpLabel}` : `${towers.length} · ${rStatus}`;
+    _hdr(defC, '⚔', 'DEFENDERS', _defRightTxt, mvpLabel ? '#ffd040' : rStatusC);
 
     if (towers.length === 0) {
       _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
@@ -4119,10 +4128,11 @@ function drawRightPanel() {
         const tName  = t.name ?? TOWER_DEFS[t.type]?.label ?? t.type;
         const tLvl   = t._careerLevel > 0 ? ` [${ROMAN[t._careerLevel] ?? t._careerLevel}]` : '';
         const def    = _roster?.find(t.defenderId);
-        // Show battle kills during fight; fall back to career kills (marked ✦) at wave start
+        // Show battle kills during fight; fall back to career kills (marked ✦); then class as context
         const bKills = t.killCount || 0;
-        const killStr = bKills > 0 ? `${bKills}K`
-                      : def?.careerKills > 0 ? `${def.careerKills}K✦` : '';
+        const killStr = bKills > 0 ? `${bKills}K ☠`
+                      : def?.careerKills > 0 ? `${def.careerKills}K✦`
+                      : (TOWER_DEFS[t.type]?.label ?? '');
         const nameC  = isMvp
           ? `rgba(${t.glowRgb ?? '180,150,255'},0.95)`
           : 'rgba(185,165,130,0.72)';
@@ -4321,7 +4331,7 @@ function drawRightPanel() {
     ctx.shadowBlur = 0;
     ctx.textAlign = 'center'; ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
-    ctx.fillText('NEXT WAVE', bX + bW/2, bY + 17);
+    ctx.fillText('MARCH BEGINS', bX + bW/2, bY + 17);
     ctx.font = '11px monospace'; ctx.shadowBlur = 0;
     ctx.fillStyle = autoNextWave ? '#60ee80' : 'rgba(255,200,180,0.8)';
     ctx.fillText(autoNextWave ? 'AUTO ENGAGED' : '[Space]', bX + bW/2, bY + 32);
@@ -4381,7 +4391,10 @@ function drawTopBar() {
   const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
   const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
 
-  ctx.font        = 'bold 13px monospace';
+  // Dim battle number context above wave label
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,110,70,0.50)'; ctx.textAlign = 'center';
+  ctx.fillText(`BATTLE ${battlesCompleted + 1}`, midX - 30, cy - 7);
+  ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = wColor;
   ctx.shadowColor = wGlow;
   ctx.shadowBlur  = wIsBoss ? 10 : 6;
@@ -4537,7 +4550,7 @@ function drawBottomBuildBar() {
                     : 'rgba(55,95,140,0.55)';  // walls
     ctx.fillStyle   = _catColor;
     ctx.globalAlpha = affordable ? 1 : 0.45;
-    ctx.beginPath(); ctx.roundRect(btn.x + 3, btn.y + 3, btn.width - 6, 2, [1, 1, 0, 0]); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(btn.x + 3, btn.y + 3, btn.width - 6, 3, [1, 1, 0, 0]); ctx.fill();
     ctx.globalAlpha = 1;
 
     // Colored bottom accent strip — matches tower glow on the board
@@ -4640,11 +4653,13 @@ function drawBottomBuildBar() {
 
     const labelSz = btn.width < 60 ? 7 : 9;
 
-    // Row 1: name only (full width, no conflict with cost)
+    // Row 1: veteran name if roster member available, otherwise class name
+    const _vetCard = btn.mode === CELL.TOWER ? _roster?.defenders.find(d => d.type === btn.id && !d.deployed) : null;
+    const _cardLabel = (_vetCard?.name) ? _vetCard.name : btn.label;
     ctx.font      = `bold ${labelSz}px monospace`;
     ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#f0e8d0' : '#c0b090';
     ctx.textAlign = 'left';
-    ctx.fillText(btn.label, btn.x + 4, infoY + 9);
+    ctx.fillText(_cardLabel, btn.x + 4, infoY + 9);
 
     // Row 2: ability label (left) + cost (right)
     const abilityLabel = ABILITY_LABELS[btn.id];
@@ -5386,7 +5401,7 @@ function drawRuneForgeHint() {
   ctx.shadowBlur  = 0;
   ctx.font        = '9px monospace';
   ctx.fillStyle   = 'rgba(200,160,240,0.65)';
-  ctx.fillText('Upgrade your towers between waves', tx + tw / 2, ty + 27);
+  ctx.fillText('Arm your defenders between waves', tx + tw / 2, ty + 27);
   ctx.globalAlpha = 1;
   ctx.restore();
 }
