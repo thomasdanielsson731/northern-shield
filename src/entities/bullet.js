@@ -27,6 +27,7 @@ export class Bullet {
   }
 
   update(enemies = null) {
+    this.bossDmg = null;  // reset each tick; game.js reads this to trigger boss-hit effects
     if (!this.alive) return 0;
     if (!this.target || !this.target.alive || this.target.reached) {
       this.alive = false;
@@ -48,12 +49,16 @@ export class Bullet {
       this.target.hitFlashMax   = this.target.hitFlash;
       this.target.hitFlashColor = this.damage > 50 ? '255,136,32' : this.damage >= 15 ? '240,200,64' : '96,128,255';
 
+      const killed = this.target.hp <= 0;
+      if (this.target.isBoss && !killed) {
+        this.bossDmg = { x: this.target.x, y: this.target.y, dmg: actualDamage };
+      }
+
       if (this.slowDuration > 0) {
         this.target.slowTimer  = Math.max(this.target.slowTimer ?? 0, this.slowDuration);
         this.target.slowFactor = Math.min(this.target.slowFactor ?? 1, this.slowFactor);
       }
 
-      const killed = this.target.hp <= 0;
       let reward = 0;
       if (killed) {
         this.target.hp = 0;

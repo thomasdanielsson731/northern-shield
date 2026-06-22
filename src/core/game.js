@@ -602,6 +602,9 @@ function getTowerAtCell(col, row) {
 // Remove tower: clear all footprint cells, reroute, recalc path
 function removeTower(tower) {
   if (tower.rune) runeInventory[tower.rune] = (runeInventory[tower.rune] ?? 0) + 1;
+  // Return the defender to the undeployed roster pool so they can be re-placed this battle or recruited next
+  const def = _roster?.find(tower.defenderId);
+  if (def) def.deployed = false;
   const fp = tower.footprint;
   for (let dc = 0; dc < fp.w; dc++) {
     for (let dr = 0; dr < fp.h; dr++) {
@@ -803,9 +806,9 @@ function drawGoldCoins() {
     const my = Math.min(c.sy, hoardY) - Math.min(120, dist * 0.30);
     const bx = (1-t)*(1-t)*c.sx + 2*(1-t)*t*mx + t*t*hoardX;
     const by = (1-t)*(1-t)*c.sy + 2*(1-t)*t*my + t*t*hoardY;
-    const r  = Math.max(5.5 - t * 2.5, 2.5);
+    const r  = Math.max(5.5 * (1 - t * t * 0.88), 1.2);
     ctx.save();
-    ctx.globalAlpha = t > 0.90 ? (1 - t) / 0.10 : 1;
+    ctx.globalAlpha = t > 0.72 ? 1 - (t - 0.72) / 0.28 : 1;
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
     ctx.fillStyle   = '#f5d030';
@@ -1938,7 +1941,6 @@ function handleRightClickAt(mouseX, mouseY) {
     const anchorKey = `${t.col}_${t.row}`;
     if (pendingSell && pendingSell.key === anchorKey) {
       if (selectedTower === t) selectedTower = null;
-      gold += t.sellValue;
       sfxSell();
       removeTower(t);
       pendingSell = null;
@@ -2058,7 +2060,6 @@ window.addEventListener('keydown', e => {
   if (key === 'x' && selectedTower) {
     const anchorKey = `${selectedTower.col}_${selectedTower.row}`;
     if (pendingSell && pendingSell.key === anchorKey) {
-      gold += selectedTower.sellValue;
       sfxSell();
       removeTower(selectedTower);
       selectedTower = null;
@@ -2259,7 +2260,6 @@ canvas.addEventListener('mousedown', e => {
         mouseY >= panelSellBtn.y && mouseY <= panelSellBtn.y + panelSellBtn.h) {
       const anchorKey = `${selectedTower.col}_${selectedTower.row}`;
       if (pendingSell && pendingSell.key === anchorKey) {
-        gold += selectedTower.sellValue;
         sfxSell();
         removeTower(selectedTower);
         selectedTower = null;
@@ -2591,6 +2591,11 @@ function update() {
       b._pierceSfxDone = true;
       sfxChainKill();
     }
+    // Boss hit (not kill): strong impact ring + screen shake
+    if (b.bossDmg) {
+      screenShake = Math.max(screenShake, 9);
+      impactFlashes.push({ x: b.bossDmg.x, y: b.bossDmg.y, maxR: 32, life: 1, color: '#ff7030' });
+    }
     if (reward > 0) {
       slain++;
       waveSlainCount++;
@@ -2630,6 +2635,13 @@ function update() {
         if (_killType === ENEMY_TYPES.JOTUNN) {
           spawnParticles(killX, killY, '#ffffff', 6);
           impactFlashes.push({ x: killX, y: killY, maxR: 28, life: 1, color: '#ffffff' });
+        } else if (_killType === ENEMY_TYPES.MYLING) {
+          // Frost shatter: icy blue burst + soft frost ring
+          spawnParticles(killX, killY, '#a8d8ff', 5);
+          impactFlashes.push({ x: killX, y: killY, maxR: 18, life: 1, color: '#c4e8ff' });
+        } else if (_killType === ENEMY_TYPES.DRAUGR) {
+          // Bone dust: muted brown puff
+          spawnParticles(killX, killY, '#90603c', 4);
         }
         screenShake = Math.max(screenShake, _killType === ENEMY_TYPES.JOTUNN ? 6 : _killType === ENEMY_TYPES.MARA ? 2 : 1);
         const coinSpeed = (!firstKillDone) ? 0.006 : undefined;
@@ -2874,6 +2886,7 @@ function update() {
       goldCoins[i] = goldCoins[goldCoins.length - 1]; goldCoins.length--;
       hoardPulse = 10;
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 4);
+      impactFlashes.push({ x: hoardX - GRID_LEFT, y: hoardY - GRID_TOP, maxR: 10, life: 1, color: '#f5d030' });
     }
   }
   if (hoardPulse > 0) hoardPulse--;
@@ -4499,15 +4512,15 @@ function drawTowerPanel(tower) {
     ctx.fillText(`◆${tower.upgradeCost}`, upgX + upgW / 2, btnY + 23);
   }
 
-  // Sell button — first click shows CONFIRM?, second click sells
+  // Recall button — first click shows CONFIRM?, second click recalls defender to roster
   const isSellPending = pendingSell && pendingSell.key === `${tower.col}_${tower.row}`;
   drawFantasyPanel(sellX, btnY, sellW, btnH, isSellPending ? 'rgba(40,6,6,0.97)' : 'rgba(22,6,6,0.97)', isSellPending ? 0.85 : 0.55, 4);
   ctx.font      = 'bold 10px monospace';
   ctx.fillStyle = isSellPending ? '#ff4040' : '#ee6666';
-  ctx.fillText(isSellPending ? 'CONFIRM?' : 'Sell', sellX + sellW / 2, btnY + 12);
-  ctx.font      = '10px monospace';
-  ctx.fillStyle = 'rgba(200,160,80,0.70)';  // muted vs upgrade cost's bright gold
-  ctx.fillText(`◆${tower.sellValue}`, sellX + sellW / 2, btnY + 23);
+  ctx.fillText(isSellPending ? 'CONFIRM?' : 'Recall', sellX + sellW / 2, btnY + 12);
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = 'rgba(160,130,80,0.55)';
+  ctx.fillText('to roster', sellX + sellW / 2, btnY + 23);
 
   // ── Rune slot ───────────────────────────────────────────────────────────────
   const runeSecY = btnY + btnH + 4;
@@ -6718,12 +6731,13 @@ function drawPendingSell() {
   ctx.fillStyle = `rgba(255,200,180,${pulse})`;
   ctx.textAlign = 'center';
   const sellCountdown = Math.max(1, Math.ceil(pendingSell.timer / 30));
-  ctx.fillText(`SELL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 3);
   if (tower) {
+    ctx.fillText(`RECALL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 3);
     ctx.font      = '8px monospace';
-    ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
-    ctx.fillText(`Refund: ◆${tower.sellValue}`, vx + vsW / 2, vy + vsH / 2 + 9);
+    ctx.fillStyle = `rgba(160,200,160,${pulse * 0.8})`;
+    ctx.fillText('Returns to warband', vx + vsW / 2, vy + vsH / 2 + 9);
   } else {
+    ctx.fillText(`SELL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 3);
     ctx.font      = '8px monospace';
     ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
     ctx.fillText(`Refund: ◆${Math.floor(WALL_COST * 0.75)}`, vx + vsW / 2, vy + vsH / 2 + 9);
