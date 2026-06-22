@@ -45,6 +45,7 @@ export class Defender {
     this.deployed      = false;
     this.equipment     = [null, null]; // [weaponItemId|null, armorItemId|null]
     this.talents       = [];           // IDs of unlocked talents (auto-unlocked at milestones)
+    this.titles        = [];           // IDs of chronicle titles earned
   }
 
   // Returns { earned, newTalentIds } — newTalentIds is empty unless a milestone was crossed.
@@ -80,6 +81,7 @@ export class Defender {
       battlesPlayed: this.battlesPlayed,
       equipment:     this.equipment,
       talents:       this.talents,
+      titles:        this.titles,
     };
   }
 
@@ -92,6 +94,7 @@ export class Defender {
     d.battlesPlayed = data.battlesPlayed ?? 0;
     d.equipment     = data.equipment     ?? [null, null];
     d.talents       = data.talents       ?? [];
+    d.titles        = data.titles        ?? [];
     return d;
   }
 }

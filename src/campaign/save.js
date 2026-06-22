@@ -17,6 +17,7 @@ export function createNewCampaign() {
     equipmentInventory: [],
     achievements:       [],
     battleHistory:      [],
+    chronicle:          { battles: [], warbandName: '' },
   };
 }
 

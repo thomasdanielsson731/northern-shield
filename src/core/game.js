@@ -11,6 +11,7 @@ import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
 import { FORTRESS_DEFS, getFortressBonuses } from '../fortress/fortress.js';
+import { createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText } from '../chronicle/chronicle.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -221,6 +222,13 @@ let _betweenFadeIn      = 0;             // countdown for betweenBattles screen 
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
+
+// Chronicle event accumulators — reset each battle, consumed in recordBattleResult
+let _chronBossKills  = [];    // [{boss, killerName, killerId}]
+let _chronBreached   = false; // did any enemy reach the hoard this battle?
+let _chronLastStand  = null;  // {defenderName, defenderId, survived, ramparts} or null
+let _showChronicle   = false; // overlay showing full chronicle log
+let _chronicleScrollY = 0;    // scroll offset in chronicle overlay (px)
 
 // Map selection
 let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
@@ -437,7 +445,10 @@ function restartCombatState() {
   _displayGold  = gold;
   lives         = STARTING_LIVES;
   slain         = 0;
-  bossesDefeated = 0;
+  bossesDefeated    = 0;
+  _chronBossKills   = [];
+  _chronBreached    = false;
+  _chronLastStand   = null;
   gameOver      = false;
   victory       = false;
   waveLeak      = false;
@@ -612,10 +623,38 @@ function recordBattleResult(result) {
     wavesCleared:  waveNumber,
     enemiesSlain:  slain,
     goldEarned,
-    bossesKilled:  [],
+    bossesKilled:  _chronBossKills.map(bk => bk.boss),
     mvpDefenderId: mvpTower?.defenderId ?? null,
     timestamp:     Date.now(),
   });
+
+  // ── Chronicle — generate battle report and check for new titles ────────────
+  if (!_campaignState.chronicle) _campaignState.chronicle = { battles: [], warbandName: '' };
+  const _chron = _campaignState.chronicle;
+
+  const _chronicleBattleData = {
+    battleNumber:  battlesCompleted,
+    mapName:       _currentMapName,
+    result,
+    wavesCleared:  waveNumber,
+    enemiesSlain:  slain,
+    rampartsEnd:   lives,
+    rampartsStart: STARTING_LIVES,
+    breach:        _chronBreached,
+    mvpId:         mvpTower?.defenderId ?? null,
+    mvpName:       mvpTower?.name ?? null,
+    mvpKills:      mvpTower?.killCount ?? 0,
+    bossKills:     _chronBossKills.slice(),
+    lastStand:     _chronLastStand,
+    defenders:     towers.map(t => ({
+      defenderId: t.defenderId ?? null,
+      name:       t.name ?? TOWER_DEFS[t.type]?.label ?? t.type,
+      kills:      t.killCount ?? 0,
+    })),
+    prose: '',
+  };
+  _chronicleBattleData.prose = generateBattleReport(_chronicleBattleData, _chron);
+  _chron.battles.push(_chronicleBattleData);
 
   _reserveContrib = Math.floor(goldEarned * 0.25);
   goldReserve += _reserveContrib;
@@ -633,6 +672,16 @@ function recordBattleResult(result) {
     const d = _roster.find(prev.id);
     return d ? { name: prev.name, xpGained: d.xp - prev.xp, oldLevel: prev.level, newLevel: d.careerLevel } : null;
   }).filter(Boolean);
+
+  // Check and grant new titles to all defenders based on full chronicle
+  for (const def of _roster.defenders) {
+    const newTitles = checkTitles(def, _chron.battles);
+    if (newTitles.length > 0) {
+      if (!def.titles) def.titles = [];
+      def.titles.push(...newTitles);
+    }
+  }
+
   _rosterScrollOffset = 0;
 
   _roster.releaseAll();
@@ -1176,6 +1225,19 @@ function updateWave() {
     }
     waveLeak  = false;
     waveTimer = 0;
+
+    // --- Last Stand detection: single defender held the wave with ramparts at 1-2 ---
+    if (towers.length === 1 && lives <= 2 && !_chronLastStand) {
+      const solo = towers[0];
+      if (solo && (solo.killCount || 0) > 0) {
+        _chronLastStand = {
+          defenderName: solo.name ?? TOWER_DEFS[solo.type]?.label ?? solo.type,
+          defenderId:   solo.defenderId ?? null,
+          survived:     true,   // wave ended without defeat = survived
+          ramparts:     lives,
+        };
+      }
+    }
 
     // --- MVP tower selection: choose the tower that contributed most this wave ---
     try {
@@ -2359,6 +2421,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') {
+    if (_showChronicle)  { _showChronicle = false; return; }
     if (_renameState)    { _renameState  = null;  return; }
     if (showRunePicker) { showRunePicker = false; runePickerTower = null; return; }
     if (showRuneMenu)   { showRuneMenu  = false; return; }
@@ -2505,6 +2568,9 @@ canvas.addEventListener('mousedown', e => {
   // Between-battles summary screen
   if (gamePhase === 'betweenBattles') {
     if (e.button === 0) {
+      // Chronicle overlay intercepts all clicks while open
+      if (_showChronicle) { _showChronicle = false; return; }
+
       for (const btn of _betweenBtns) {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
@@ -2610,6 +2676,9 @@ canvas.addEventListener('mousedown', e => {
                 sfxFortressUpgrade();
               }
             }
+          } else if (btn.action === 'openChronicle') {
+            _showChronicle    = true;
+            _chronicleScrollY = 0;
           }
           return;
         }
@@ -2878,6 +2947,13 @@ canvas.addEventListener('mouseleave', () => {
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
+
+  // Chronicle overlay consumes wheel for scrolling
+  if (_showChronicle) {
+    _chronicleScrollY = Math.max(0, _chronicleScrollY + e.deltaY * 0.5);
+    return;
+  }
+
   const rect    = canvas.getBoundingClientRect();
   const screenX = e.clientX - rect.left;
   const screenY = e.clientY - rect.top;
@@ -3092,7 +3168,7 @@ function update() {
       dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: isCrit ? 70 : 52, maxLife: isCrit ? 70 : 52, color: isCrit ? '#ff8820' : valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44', large: isCrit });
       if (killBoss) {
         if (b.target && b.canPierce && b.alive) { /* boss killed mid-pierce — handled at deathTimer */ }
-        else if (b.target?.isBoss) onBossKilled(b.target);
+        else if (b.target?.isBoss) onBossKilled(b.target, b.source);
       } else {
         const _killType = (b.canPierce && b.alive) ? null : b.target?.type;
         const _killColor = (b.canPierce && b.alive) ? '#c0a060' : (b.target?.highlightColor ?? b.target?.color ?? '#c0a060');
@@ -3148,7 +3224,7 @@ function update() {
               if (b.source) b.source.damageDealt += b.splashDamage;
               dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: _splashVal >= 20 ? '#ff9040' : '#ffcc44' });
               if (enemy.isBoss) {
-                onBossKilled(enemy);
+                onBossKilled(enemy, b.source);
               } else {
                 spawnParticles(enemy.x, enemy.y, enemy.highlightColor, 5);
                 spawnGoldCoins(GRID_LEFT + gridPanX + gridZoom * enemy.x, GRID_TOP + gridPanY + gridZoom * enemy.y, enemy.reward);
@@ -3231,6 +3307,7 @@ function update() {
     }
     if (enemies[i].reached) {
       lives--;
+      _chronBreached = true;
       sfxLifeLost();
       waveLeak   = true;
       screenShake  = 16;
@@ -4137,6 +4214,14 @@ function drawRightPanel() {
           ? `rgba(${t.glowRgb ?? '180,150,255'},0.95)`
           : 'rgba(185,165,130,0.72)';
         _row(tName + tLvl, killStr, nameC);
+        const _pt = def ? getPrimaryTitle(def) : null;
+        if (_pt) {
+          ctx.font = '6px monospace'; ctx.textAlign = 'right';
+          ctx.fillStyle = 'rgba(160,130,200,0.52)';
+          ctx.fillText(`✦ ${_pt.label}`, dVX, ly + 6);
+          ctx.textAlign = 'left';
+          ly += 7;
+        }
       }
     }
     ly += GAP;
@@ -5301,9 +5386,15 @@ function onBossPhase25(boss) {
   }
 }
 
-function onBossKilled(boss) {
+function onBossKilled(boss, killerTower = null) {
   bossesDefeated++;
   stars         += 3;
+  // Log to chronicle
+  _chronBossKills.push({
+    boss:       boss.bossName ?? '',
+    killerName: killerTower?.name   ?? null,
+    killerId:   killerTower?.defenderId ?? null,
+  });
   unlockAchievement('firstBoss');
   sfxDie(true);
   screenShake    = Math.max(screenShake, 28);
@@ -6058,6 +6149,104 @@ function drawRuneMenu() {
   ctx.fillText('Equip runes on towers by selecting a tower  •  Esc / R to close', mx + menuW / 2, my + menuH - 10);
 }
 
+// ── Chronicle overlay — scrollable full-screen battle log ────────────────────
+
+function drawChronicleOverlay() {
+  const W = BASE_W, H = BASE_H;
+  const PAD = 24;
+  const CW = W - PAD * 2;
+
+  ctx.save();
+
+  // Dark background
+  ctx.fillStyle = 'rgba(4,2,12,0.95)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 13px monospace';
+  ctx.fillStyle = 'rgba(200,170,80,0.95)';
+  ctx.shadowColor = 'rgba(200,170,60,0.6)'; ctx.shadowBlur = 8;
+  ctx.fillText('THE CHRONICLE', W / 2, PAD + 16);
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = 'rgba(180,140,60,0.35)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(PAD, PAD + 26); ctx.lineTo(W - PAD, PAD + 26); ctx.stroke();
+
+  // Footer hint
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.40)';
+  ctx.fillText('CLICK OR ESC TO CLOSE  ·  SCROLL TO NAVIGATE', W / 2, H - 8);
+
+  const battles = _campaignState?.chronicle?.battles ?? [];
+  if (battles.length === 0) {
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)';
+    ctx.fillText('No battles recorded yet.', W / 2, H / 2);
+    ctx.restore();
+    return;
+  }
+
+  const listTop = PAD + 34;
+  const listH   = H - listTop - 20;
+
+  // Clip scrollable area
+  ctx.save();
+  ctx.beginPath(); ctx.rect(PAD, listTop, CW, listH); ctx.clip();
+
+  const LINE_H    = 9;
+  const HEADER_H  = 14;
+  const ENTRY_GAP = 12;
+
+  let y      = listTop - _chronicleScrollY;
+  let totalH = 0;
+
+  // Most recent battle first
+  const sorted = [...battles].reverse();
+  for (const battle of sorted) {
+    ctx.font = '8px monospace';
+    const proseLines = battle.prose ? wrapText(ctx, battle.prose, CW - 12) : [];
+    const entryH = HEADER_H + proseLines.length * LINE_H + ENTRY_GAP;
+
+    if (y + entryH > listTop && y < listTop + listH) {
+      const resultLabel = battle.result === 'victory' ? 'VICTORY' : 'DEFEAT';
+      const resultColor = battle.result === 'victory' ? '#60ee80' : '#e05030';
+      const mapLabel    = battle.mapName ?? 'UNKNOWN';
+
+      // Battle header
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = 'rgba(200,175,115,0.65)';
+      const hdrPrefix = `BATTLE ${battle.battleNumber}  ·  ${mapLabel}  ·  `;
+      ctx.fillText(hdrPrefix, PAD + 4, y + 10);
+      const prefixW = ctx.measureText(hdrPrefix).width;
+      ctx.fillStyle = resultColor;
+      ctx.fillText(resultLabel, PAD + 4 + prefixW, y + 10);
+
+      // Thin rule under header
+      ctx.strokeStyle = 'rgba(120,100,60,0.18)'; ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD + 4, y + HEADER_H);
+      ctx.lineTo(W - PAD - 4, y + HEADER_H);
+      ctx.stroke();
+
+      // Prose
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(190,165,115,0.75)';
+      for (let li = 0; li < proseLines.length; li++) {
+        ctx.fillText(proseLines[li], PAD + 4, y + HEADER_H + (li + 1) * LINE_H + 2);
+      }
+    }
+
+    y      += entryH;
+    totalH += entryH;
+  }
+
+  ctx.restore(); // remove clip
+
+  // Clamp scroll to actual content bounds
+  _chronicleScrollY = Math.min(_chronicleScrollY, Math.max(0, totalH - listH));
+
+  ctx.restore(); // outer save
+}
+
 // ── Between-battles summary screen ───────────────────────────────────────────
 
 let _betweenBtns = [];  // hit areas: [{x,y,w,h,action}, ...]
@@ -6212,6 +6401,43 @@ function drawBetweenBattles() {
 
   ctx.restore();
 
+  // ── Battle Report — Chronicle prose for this battle ───────────────────────
+  {
+    const _chron = _campaignState?.chronicle;
+    const _latestReport = _chron?.battles?.at(-1);
+    if (_latestReport?.prose) {
+      const reportAreaTop  = lpY + lpH - 162;
+      const reportAreaBot  = lpY + lpH - 52;
+      const reportAvailH   = reportAreaBot - reportAreaTop;
+
+      // Section separator + label
+      ctx.strokeStyle = 'rgba(140,110,60,0.28)'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(lpX + 12, reportAreaTop); ctx.lineTo(lpX + lpW - 12, reportAreaTop); ctx.stroke();
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,80,0.55)';
+      ctx.fillText('THE CHRONICLE', lcx, reportAreaTop + 12);
+
+      // Prose — word-wrapped at 8px monospace into the available width
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'left';
+      const _proseX   = lpX + 14;
+      const _proseW   = lpW - 28;
+      const _proseLines = wrapText(ctx, _latestReport.prose, _proseW);
+      const _lineH    = 12;
+      const _maxLines = Math.floor((reportAvailH - 18) / _lineH);
+      let _py = reportAreaTop + 23;
+      for (let _li = 0; _li < Math.min(_proseLines.length, _maxLines); _li++) {
+        const _isLast = _li === _proseLines.length - 1 || _li === _maxLines - 1;
+        ctx.fillStyle = _isLast ? 'rgba(190,165,115,0.55)' : 'rgba(190,165,115,0.75)';
+        ctx.fillText(_proseLines[_li], _proseX, _py);
+        _py += _lineH;
+      }
+      ctx.restore();
+    }
+  }
+
   // Buttons at bottom of left panel
   const btnW = 130, btnH = 34, btnGap = 10;
   const btnsY = lpY + lpH - 50;
@@ -6234,6 +6460,20 @@ function drawBetweenBattles() {
   ctx.fillText('MAP SELECT', b2x + btnW / 2, btnsY + 22);
   ctx.restore();
   _betweenBtns.push({ x: b2x, y: btnsY, w: btnW, h: btnH, action: 'mapSelect' });
+
+  // Chronicle button — small, below the two main buttons
+  const chronicleBtnH = 24, chronicleBtnW = btnW * 2 + btnGap;
+  const cbX = b1x, cbY = btnsY + btnH + 6;
+  const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
+  if (_hasChronicle) {
+    drawFantasyPanel(cbX, cbY, chronicleBtnW, chronicleBtnH, 'rgba(20,8,36,0.97)', 0.6, 4);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(180,140,220,0.80)';
+    ctx.fillText(`📜 THE CHRONICLE  (${_campaignState.chronicle.battles.length} ${_campaignState.chronicle.battles.length === 1 ? 'battle' : 'battles'})`, cbX + chronicleBtnW / 2, cbY + 16);
+    ctx.restore();
+    _betweenBtns.push({ x: cbX, y: cbY, w: chronicleBtnW, h: chronicleBtnH, action: 'openChronicle' });
+  }
 
   // ── RIGHT PANEL: Warband Roster ─────────────────────────────
   const rpX = 328, rpY = 12, rpW = W - 328 - 12, rpH = H - 24;
@@ -6322,9 +6562,14 @@ function drawBetweenBattles() {
     ctx.textAlign = 'left';
     _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
 
-    // Class label
-    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)';
-    ctx.fillText(tDef?.label ?? def.type, rix, ry + 26);
+    // Class label + optional primary title
+    const _rTitle = getPrimaryTitle(def);
+    const _classLine = _rTitle
+      ? `${tDef?.label ?? def.type}  ·  ✦ ${_rTitle.label}`
+      : (tDef?.label ?? def.type);
+    ctx.font = '9px monospace';
+    ctx.fillStyle = _rTitle ? 'rgba(160,130,200,0.65)' : 'rgba(160,140,100,0.55)';
+    ctx.fillText(_classLine, rix, ry + 26);
 
     // XP bar
     const nextXP = CAREER_XP[Math.min(def.careerLevel + 1, CAREER_XP.length - 1)];
@@ -6784,6 +7029,7 @@ function draw() {
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
     drawFrames();
+    if (_showChronicle) drawChronicleOverlay();
     ctx.restore();
     return;
   }
