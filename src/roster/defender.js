@@ -34,18 +34,21 @@ export const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'
 
 export class Defender {
   constructor({ defenderId, name, type }) {
-    this.defenderId    = defenderId;
-    this.name          = name;
-    this.type          = type;
-    this.xp            = 0;
-    this.careerLevel   = 0;
-    this.careerKills   = 0;
-    this.careerDamage  = 0;
-    this.battlesPlayed = 0;
-    this.deployed      = false;
-    this.equipment     = [null, null]; // [weaponItemId|null, armorItemId|null]
-    this.talents       = [];           // IDs of unlocked talents (auto-unlocked at milestones)
-    this.titles        = [];           // IDs of chronicle titles earned
+    this.defenderId      = defenderId;
+    this.name            = name;
+    this.type            = type;
+    this.xp              = 0;
+    this.careerLevel     = 0;
+    this.careerKills     = 0;
+    this.careerDamage    = 0;
+    this.battlesPlayed   = 0;
+    this.deployed        = false;
+    this.equipment       = [null, null]; // [weaponItemId|null, armorItemId|null]
+    this.talents         = [];           // IDs of unlocked talents (auto-unlocked at milestones)
+    this.titles          = [];           // IDs of chronicle titles earned
+    this.trait           = null;         // personality trait ID (assigned by roster.link / recruit)
+    this.scars           = [];           // IDs of battle scars earned
+    this.breachesDeployed = 0;           // times deployed when fortress was breached (for Rampart Wound)
   }
 
   // Returns { earned, newTalentIds } — newTalentIds is empty unless a milestone was crossed.
@@ -71,30 +74,36 @@ export class Defender {
 
   toJSON() {
     return {
-      defenderId:    this.defenderId,
-      name:          this.name,
-      type:          this.type,
-      xp:            this.xp,
-      careerLevel:   this.careerLevel,
-      careerKills:   this.careerKills,
-      careerDamage:  this.careerDamage,
-      battlesPlayed: this.battlesPlayed,
-      equipment:     this.equipment,
-      talents:       this.talents,
-      titles:        this.titles,
+      defenderId:       this.defenderId,
+      name:             this.name,
+      type:             this.type,
+      xp:               this.xp,
+      careerLevel:      this.careerLevel,
+      careerKills:      this.careerKills,
+      careerDamage:     this.careerDamage,
+      battlesPlayed:    this.battlesPlayed,
+      equipment:        this.equipment,
+      talents:          this.talents,
+      titles:           this.titles,
+      trait:            this.trait,
+      scars:            this.scars,
+      breachesDeployed: this.breachesDeployed,
     };
   }
 
   static fromJSON(data) {
     const d = new Defender(data);
-    d.xp            = data.xp            ?? 0;
-    d.careerLevel   = data.careerLevel   ?? 0;
-    d.careerKills   = data.careerKills   ?? 0;
-    d.careerDamage  = data.careerDamage  ?? 0;
-    d.battlesPlayed = data.battlesPlayed ?? 0;
-    d.equipment     = data.equipment     ?? [null, null];
-    d.talents       = data.talents       ?? [];
-    d.titles        = data.titles        ?? [];
+    d.xp               = data.xp               ?? 0;
+    d.careerLevel      = data.careerLevel       ?? 0;
+    d.careerKills      = data.careerKills       ?? 0;
+    d.careerDamage     = data.careerDamage      ?? 0;
+    d.battlesPlayed    = data.battlesPlayed      ?? 0;
+    d.equipment        = data.equipment         ?? [null, null];
+    d.talents          = data.talents           ?? [];
+    d.titles           = data.titles            ?? [];
+    d.trait            = data.trait             ?? null;
+    d.scars            = data.scars             ?? [];
+    d.breachesDeployed = data.breachesDeployed  ?? 0;
     return d;
   }
 }

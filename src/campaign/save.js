@@ -18,6 +18,11 @@ export function createNewCampaign() {
     achievements:       [],
     battleHistory:      [],
     chronicle:          { battles: [], warbandName: '' },
+    hallOfFallen:       [],
+    hallOfHonored:      [],
+    bonds:              [],
+    coDeployments:      {},
+    legacyBonuses:      {},
   };
 }
 

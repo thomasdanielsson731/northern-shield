@@ -11,7 +11,11 @@ import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
 import { FORTRESS_DEFS, getFortressBonuses } from '../fortress/fortress.js';
-import { createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText } from '../chronicle/chronicle.js';
+import {
+  createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText,
+  getRandomTrait, TRAIT_DEFS, SCAR_DEFS, checkScars, getRank, VETERAN_RANKS,
+  generateBio, generateEpitaph, generateBondName,
+} from '../chronicle/chronicle.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -230,6 +234,13 @@ let _chronLastStand  = null;  // {defenderName, defenderId, survived, ramparts} 
 let _showChronicle   = false; // overlay showing full chronicle log
 let _chronicleScrollY = 0;    // scroll offset in chronicle overlay (px)
 
+// Defender Legacy System state
+let _promotionQueue      = [];   // [{defenderName, rankLabel, text, type}] — cleared on next battle
+let _retirementCeremony  = null; // defender obj whose retirement ceremony is showing
+let _chronicleDefFilter  = null; // null=all, defenderId=filter chronicle to one defender
+let _showDefenderBio     = null; // defenderId whose bio overlay is open
+let _chronicleBtns       = [];   // hit regions in the chronicle overlay (filter chips)
+
 // Map selection
 let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
 let selectedMapIdx   = 0;
@@ -446,9 +457,12 @@ function restartCombatState() {
   lives         = STARTING_LIVES;
   slain         = 0;
   bossesDefeated    = 0;
-  _chronBossKills   = [];
-  _chronBreached    = false;
-  _chronLastStand   = null;
+  _chronBossKills      = [];
+  _chronBreached       = false;
+  _chronLastStand      = null;
+  _promotionQueue      = [];
+  _retirementCeremony  = null;
+  _showDefenderBio     = null;
   gameOver      = false;
   victory       = false;
   waveLeak      = false;
@@ -632,21 +646,29 @@ function recordBattleResult(result) {
   if (!_campaignState.chronicle) _campaignState.chronicle = { battles: [], warbandName: '' };
   const _chron = _campaignState.chronicle;
 
+  // Build trait map for trait-aware prose
+  const _defTraitMap = {};
+  for (const t of towers) {
+    const def = _roster.find(t.defenderId);
+    if (def?.trait && t.defenderId) _defTraitMap[t.defenderId] = def.trait;
+  }
+
   const _chronicleBattleData = {
-    battleNumber:  battlesCompleted,
-    mapName:       _currentMapName,
+    battleNumber:    battlesCompleted,
+    mapName:         _currentMapName,
     result,
-    wavesCleared:  waveNumber,
-    enemiesSlain:  slain,
-    rampartsEnd:   lives,
-    rampartsStart: STARTING_LIVES,
-    breach:        _chronBreached,
-    mvpId:         mvpTower?.defenderId ?? null,
-    mvpName:       mvpTower?.name ?? null,
-    mvpKills:      mvpTower?.killCount ?? 0,
-    bossKills:     _chronBossKills.slice(),
-    lastStand:     _chronLastStand,
-    defenders:     towers.map(t => ({
+    wavesCleared:    waveNumber,
+    enemiesSlain:    slain,
+    rampartsEnd:     lives,
+    rampartsStart:   STARTING_LIVES,
+    breach:          _chronBreached,
+    mvpId:           mvpTower?.defenderId ?? null,
+    mvpName:         mvpTower?.name ?? null,
+    mvpKills:        mvpTower?.killCount ?? 0,
+    bossKills:       _chronBossKills.slice(),
+    lastStand:       _chronLastStand,
+    defenderTraits:  _defTraitMap,
+    defenders:       towers.map(t => ({
       defenderId: t.defenderId ?? null,
       name:       t.name ?? TOWER_DEFS[t.type]?.label ?? t.type,
       kills:      t.killCount ?? 0,
@@ -661,10 +683,19 @@ function recordBattleResult(result) {
   _campaignState.goldReserve       = goldReserve;
   _campaignState.equipmentInventory = _equipmentInventory.slice();
 
+  // Capture pre-XP state including rank (for detecting rank promotions after XP)
   const _preXpState = towers.map(t => {
     const d = _roster.find(t.defenderId);
-    return d ? { id: d.defenderId, name: d.name, xp: d.xp, level: d.careerLevel } : null;
+    return d ? { id: d.defenderId, name: d.name, xp: d.xp, level: d.careerLevel, rankId: getRank(d).id } : null;
   }).filter(Boolean);
+
+  // Update breach counter for every deployed defender before XP
+  if (_chronBreached) {
+    for (const t of towers) {
+      const def = _roster.find(t.defenderId);
+      if (def) def.breachesDeployed = (def.breachesDeployed ?? 0) + 1;
+    }
+  }
 
   _newBattleTalentUnlocks = _roster.grantBattleXP(towers, waveNumber);
 
@@ -673,12 +704,88 @@ function recordBattleResult(result) {
     return d ? { name: prev.name, xpGained: d.xp - prev.xp, oldLevel: prev.level, newLevel: d.careerLevel } : null;
   }).filter(Boolean);
 
+  // Check scars for all deployed defenders
+  for (const t of towers) {
+    const def = _roster.find(t.defenderId);
+    if (!def) continue;
+    if (!def.scars) def.scars = [];
+    const newScars = checkScars(def, _chronicleBattleData, _chron.battles);
+    if (newScars.length > 0) {
+      def.scars.push(...newScars);
+      for (const scarId of newScars) {
+        _promotionQueue.push({
+          defenderName: def.name,
+          rankLabel: SCAR_DEFS[scarId]?.label ?? scarId,
+          text: `${def.name} has earned the ${SCAR_DEFS[scarId]?.label ?? scarId}.`,
+          type: 'scar',
+        });
+      }
+    }
+  }
+
   // Check and grant new titles to all defenders based on full chronicle
   for (const def of _roster.defenders) {
     const newTitles = checkTitles(def, _chron.battles);
     if (newTitles.length > 0) {
       if (!def.titles) def.titles = [];
       def.titles.push(...newTitles);
+      for (const titleId of newTitles) {
+        _promotionQueue.push({
+          defenderName: def.name,
+          rankLabel:    TITLE_DEFS[titleId]?.label ?? titleId,
+          text:         `${def.name} has earned the title of "${TITLE_DEFS[titleId]?.label ?? titleId}."`,
+          type:         'title',
+        });
+      }
+    }
+  }
+
+  // Check for rank promotions (compare pre-XP rank to post-XP rank)
+  for (const prev of _preXpState) {
+    const def = _roster.find(prev.id);
+    if (!def) continue;
+    const newRank = getRank(def);
+    if (newRank.id !== prev.rankId && newRank.id !== 'greenhorn') {
+      _promotionQueue.push({
+        defenderName: def.name,
+        rankLabel:    newRank.label,
+        text:         `${def.name} has been promoted to ${newRank.label}.`,
+        type:         'rank',
+      });
+    }
+  }
+
+  // Co-deployment tracking and bond formation
+  const _deployedIds = towers.map(t => t.defenderId).filter(Boolean);
+  if (!_campaignState.coDeployments) _campaignState.coDeployments = {};
+  if (!_campaignState.bonds) _campaignState.bonds = [];
+  for (let _ci = 0; _ci < _deployedIds.length; _ci++) {
+    for (let _cj = _ci + 1; _cj < _deployedIds.length; _cj++) {
+      const _bondKey = [_deployedIds[_ci], _deployedIds[_cj]].sort().join(':');
+      _campaignState.coDeployments[_bondKey] = (_campaignState.coDeployments[_bondKey] ?? 0) + 1;
+      const _count = _campaignState.coDeployments[_bondKey];
+      const _alreadyBonded = _campaignState.bonds.some(b =>
+        b.defenderIds.includes(_deployedIds[_ci]) && b.defenderIds.includes(_deployedIds[_cj])
+      );
+      if (!_alreadyBonded && _count >= 5) {
+        const _defA = _roster.find(_deployedIds[_ci]);
+        const _defB = _roster.find(_deployedIds[_cj]);
+        if (_defA && _defB) {
+          const _bondName = generateBondName(_defA, _defB);
+          _campaignState.bonds.push({
+            defenderIds: [_deployedIds[_ci], _deployedIds[_cj]].sort(),
+            name:        _bondName,
+            battleCount: _count,
+            formed:      battlesCompleted,
+          });
+          _promotionQueue.push({
+            defenderName: `${_defA.name} & ${_defB.name}`,
+            rankLabel:    'BOND FORMED',
+            text:         `"${_bondName}" — ${_defA.name} and ${_defB.name} have fought together ${_count} times.`,
+            type:         'bond',
+          });
+        }
+      }
     }
   }
 
@@ -2421,8 +2528,10 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') {
-    if (_showChronicle)  { _showChronicle = false; return; }
-    if (_renameState)    { _renameState  = null;  return; }
+    if (_showDefenderBio)    { _showDefenderBio    = null;  return; }
+    if (_retirementCeremony) { _retirementCeremony = null;  return; }
+    if (_showChronicle)      { _showChronicle = false; _chronicleDefFilter = null; return; }
+    if (_renameState)        { _renameState  = null;  return; }
     if (showRunePicker) { showRunePicker = false; runePickerTower = null; return; }
     if (showRuneMenu)   { showRuneMenu  = false; return; }
     if (selectedTower)  { selectedTower = null;  return; }
@@ -2568,8 +2677,22 @@ canvas.addEventListener('mousedown', e => {
   // Between-battles summary screen
   if (gamePhase === 'betweenBattles') {
     if (e.button === 0) {
-      // Chronicle overlay intercepts all clicks while open
-      if (_showChronicle) { _showChronicle = false; return; }
+      // Bio/ceremony/chronicle overlays intercept all clicks while open
+      if (_showDefenderBio)    { _showDefenderBio = null; return; }
+      if (_showChronicle) {
+        for (const _cb of _chronicleBtns) {
+          if (mouseX >= _cb.x && mouseX <= _cb.x + _cb.w &&
+              mouseY >= _cb.y && mouseY <= _cb.y + _cb.h) {
+            if (_cb.action === 'filterDef') {
+              _chronicleDefFilter = _chronicleDefFilter === _cb.defenderId ? null : _cb.defenderId;
+              _chronicleScrollY = 0;
+            }
+            return;
+          }
+        }
+        _showChronicle = false; _chronicleDefFilter = null; return;
+      }
+      if (_retirementCeremony) { /* handled by _betweenBtns retirement actions below */ }
 
       for (const btn of _betweenBtns) {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
@@ -2594,6 +2717,43 @@ canvas.addEventListener('mousedown', e => {
               for (const itemId of dismissDef.equipment) {
                 if (itemId) _equipmentInventory.push(itemId);
               }
+              // Add to Hall of Fallen if they had enough service
+              const _dRank = getRank(dismissDef);
+              if (['veteran','champion','ironguard','legend'].includes(_dRank.id) || (dismissDef.titles?.length ?? 0) > 0) {
+                if (!_campaignState.hallOfFallen) _campaignState.hallOfFallen = [];
+                _campaignState.hallOfFallen.push({
+                  name:         dismissDef.name,
+                  type:         dismissDef.type,
+                  rankLabel:    _dRank.label,
+                  battlesPlayed: dismissDef.battlesPlayed,
+                  careerKills:  dismissDef.careerKills,
+                  titles:       dismissDef.titles?.slice() ?? [],
+                  scars:        dismissDef.scars?.slice() ?? [],
+                  trait:        dismissDef.trait ?? null,
+                  epitaph:      generateEpitaph(dismissDef),
+                  at:           battlesCompleted,
+                  reason:       'dismissed',
+                });
+              }
+              // Bond grief — surviving bonded defender earns a scar
+              const _bonds = _campaignState.bonds ?? [];
+              for (const _bond of _bonds) {
+                if (_bond.defenderIds.includes(btn.defenderId)) {
+                  const _survivorId = _bond.defenderIds.find(id => id !== btn.defenderId);
+                  const _survivor   = _roster.find(_survivorId);
+                  if (_survivor && !_survivor.scars?.includes('bond_grief')) {
+                    if (!_survivor.scars) _survivor.scars = [];
+                    _survivor.scars.push('bond_grief');
+                    _promotionQueue.push({
+                      defenderName: _survivor.name,
+                      rankLabel:    'BOND GRIEF',
+                      text:         `${_survivor.name} has lost a bonded shield-brother. They carry the Bond Grief.`,
+                      type:         'scar',
+                    });
+                  }
+                }
+              }
+              _campaignState.bonds = _bonds.filter(b => !b.defenderIds.includes(btn.defenderId));
             }
             _roster.dismiss(btn.defenderId);
             _pendingDismiss = null;
@@ -2601,6 +2761,61 @@ canvas.addEventListener('mousedown', e => {
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { saveCampaign(_campaignState); } catch {}
             sfxDismiss();
+          } else if (btn.action === 'retireWithHonor') {
+            const _retDef = _roster.find(btn.defenderId);
+            if (_retDef) {
+              for (const itemId of _retDef.equipment) {
+                if (itemId) _equipmentInventory.push(itemId);
+              }
+              if (!_campaignState.hallOfHonored) _campaignState.hallOfHonored = [];
+              _campaignState.hallOfHonored.push({
+                name:          _retDef.name,
+                type:          _retDef.type,
+                rankLabel:     getRank(_retDef).label,
+                battlesPlayed: _retDef.battlesPlayed,
+                careerKills:   _retDef.careerKills,
+                titles:        _retDef.titles?.slice() ?? [],
+                scars:         _retDef.scars?.slice() ?? [],
+                trait:         _retDef.trait ?? null,
+                epitaph:       generateEpitaph(_retDef),
+                at:            battlesCompleted,
+                reason:        'retired',
+              });
+              // Legacy bonus for next recruit of same class
+              if (!_campaignState.legacyBonuses) _campaignState.legacyBonuses = {};
+              _campaignState.legacyBonuses[_retDef.type] = {
+                fromName: _retDef.name, fromRank: getRank(_retDef).label,
+              };
+              // Bond cleanup
+              const _retBonds = _campaignState.bonds ?? [];
+              for (const _bond of _retBonds) {
+                if (_bond.defenderIds.includes(_retDef.defenderId)) {
+                  const _survivorId = _bond.defenderIds.find(id => id !== _retDef.defenderId);
+                  const _survivor   = _roster.find(_survivorId);
+                  if (_survivor && !_survivor.scars?.includes('bond_grief')) {
+                    if (!_survivor.scars) _survivor.scars = [];
+                    _survivor.scars.push('bond_grief');
+                  }
+                }
+              }
+              _campaignState.bonds = _retBonds.filter(b => !b.defenderIds.includes(_retDef.defenderId));
+            }
+            _roster.dismiss(btn.defenderId);
+            _retirementCeremony = null;
+            _pendingDismiss = null;
+            _campaignState.defenders = _roster.toJSON();
+            _campaignState.equipmentInventory = _equipmentInventory.slice();
+            try { saveCampaign(_campaignState); } catch {}
+            sfxDismiss();
+          } else if (btn.action === 'cancelRetirement') {
+            _retirementCeremony = null;
+          } else if (btn.action === 'ackPromotion') {
+            _promotionQueue.shift();
+          } else if (btn.action === 'openBio') {
+            _showDefenderBio = btn.defenderId;
+          } else if (btn.action === 'openRetire') {
+            const retDef = _roster?.find(btn.defenderId);
+            if (retDef) _retirementCeremony = retDef;
           } else if (btn.action === 'startRename') {
             const def = _roster?.find(btn.defenderId);
             if (def) _renameState = { defenderId: def.defenderId, draft: def.name };
@@ -2646,6 +2861,10 @@ canvas.addEventListener('mousedown', e => {
               const id   = _generateId();
               const name = getDefenderName(_recruitType);
               const def  = new Defender({ defenderId: id, name, type: _recruitType });
+              def.trait  = getRandomTrait(_recruitType);
+              // Apply legacy bonus if one exists for this class
+              def._legacyBonus = (_campaignState.legacyBonuses ?? {})[_recruitType] ?? null;
+              delete (_campaignState.legacyBonuses ?? {})[_recruitType];
               _roster.defenders.push(def);
               goldReserve -= _effectiveRecruitCost;
               _campaignState.goldReserve = goldReserve;
@@ -6154,12 +6373,12 @@ function drawRuneMenu() {
 function drawChronicleOverlay() {
   const W = BASE_W, H = BASE_H;
   const PAD = 24;
-  const CW = W - PAD * 2;
+  const CW  = W - PAD * 2;
 
+  _chronicleBtns = [];
   ctx.save();
 
-  // Dark background
-  ctx.fillStyle = 'rgba(4,2,12,0.95)';
+  ctx.fillStyle = 'rgba(4,2,12,0.96)';
   ctx.fillRect(0, 0, W, H);
 
   // Header
@@ -6170,38 +6389,85 @@ function drawChronicleOverlay() {
   ctx.fillText('THE CHRONICLE', W / 2, PAD + 16);
   ctx.shadowBlur = 0;
 
-  ctx.strokeStyle = 'rgba(180,140,60,0.35)'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(PAD, PAD + 26); ctx.lineTo(W - PAD, PAD + 26); ctx.stroke();
-
-  // Footer hint
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.40)';
   ctx.fillText('CLICK OR ESC TO CLOSE  ·  SCROLL TO NAVIGATE', W / 2, H - 8);
 
-  const battles = _campaignState?.chronicle?.battles ?? [];
-  if (battles.length === 0) {
-    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)';
-    ctx.fillText('No battles recorded yet.', W / 2, H / 2);
-    ctx.restore();
-    return;
+  const battles   = _campaignState?.chronicle?.battles ?? [];
+  const hallH     = _campaignState?.hallOfHonored ?? [];
+  const hallF     = _campaignState?.hallOfFallen  ?? [];
+
+  // ── Defender filter chips ─────────────────────────────────────────────────
+  const uniqueDefs = [];
+  const _seenIds   = new Set();
+  for (const b of battles) {
+    for (const d of (b.defenders ?? [])) {
+      if (d.defenderId && !_seenIds.has(d.defenderId)) {
+        _seenIds.add(d.defenderId);
+        uniqueDefs.push({ id: d.defenderId, name: d.name });
+      }
+    }
+  }
+  const CHIP_H = 14, CHIP_GAP = 3;
+  let chipX = PAD;
+  const chipY = PAD + 28;
+  // "ALL" chip
+  {
+    const lbl = 'ALL';
+    ctx.font = '7px monospace';
+    const cw = ctx.measureText(lbl).width + 10;
+    const isActive = !_chronicleDefFilter;
+    ctx.fillStyle   = isActive ? 'rgba(200,170,60,0.25)' : 'rgba(30,20,10,0.5)';
+    ctx.strokeStyle = isActive ? 'rgba(200,170,60,0.7)' : 'rgba(80,60,30,0.3)';
+    ctx.lineWidth   = isActive ? 1 : 0.5;
+    ctx.beginPath(); ctx.roundRect(chipX, chipY, cw, CHIP_H, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isActive ? '#e8c040' : 'rgba(140,120,70,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, chipX + cw / 2, chipY + 10);
+    _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: null });
+    chipX += cw + CHIP_GAP;
+  }
+  for (const def of uniqueDefs.slice(0, 8)) {
+    ctx.font = '7px monospace';
+    const lbl = def.name.slice(0, 10);
+    const cw  = ctx.measureText(lbl).width + 10;
+    if (chipX + cw > W - PAD) break;
+    const isActive = _chronicleDefFilter === def.id;
+    ctx.fillStyle   = isActive ? 'rgba(160,130,200,0.25)' : 'rgba(30,20,10,0.5)';
+    ctx.strokeStyle = isActive ? 'rgba(160,130,200,0.7)'  : 'rgba(80,60,30,0.3)';
+    ctx.lineWidth   = isActive ? 1 : 0.5;
+    ctx.beginPath(); ctx.roundRect(chipX, chipY, cw, CHIP_H, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isActive ? '#c0a0ff' : 'rgba(140,120,70,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, chipX + cw / 2, chipY + 10);
+    _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: def.id });
+    chipX += cw + CHIP_GAP;
   }
 
-  const listTop = PAD + 34;
-  const listH   = H - listTop - 20;
+  ctx.strokeStyle = 'rgba(180,140,60,0.25)'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(PAD, chipY + CHIP_H + 4); ctx.lineTo(W - PAD, chipY + CHIP_H + 4); ctx.stroke();
 
-  // Clip scrollable area
+  const listTop = chipY + CHIP_H + 10;
+  const listH   = H - listTop - 18;
+
+  // ── Scrollable content ────────────────────────────────────────────────────
   ctx.save();
   ctx.beginPath(); ctx.rect(PAD, listTop, CW, listH); ctx.clip();
 
   const LINE_H    = 9;
   const HEADER_H  = 14;
-  const ENTRY_GAP = 12;
+  const ENTRY_GAP = 10;
 
   let y      = listTop - _chronicleScrollY;
   let totalH = 0;
 
-  // Most recent battle first
-  const sorted = [...battles].reverse();
-  for (const battle of sorted) {
+  const filteredBattles = _chronicleDefFilter
+    ? [...battles].reverse().filter(b => b.defenders?.some(d => d.defenderId === _chronicleDefFilter)
+        || b.mvpId === _chronicleDefFilter
+        || b.lastStand?.defenderId === _chronicleDefFilter
+        || b.bossKills?.some(bk => bk.killerId === _chronicleDefFilter))
+    : [...battles].reverse();
+
+  for (const battle of filteredBattles) {
     ctx.font = '8px monospace';
     const proseLines = battle.prose ? wrapText(ctx, battle.prose, CW - 12) : [];
     const entryH = HEADER_H + proseLines.length * LINE_H + ENTRY_GAP;
@@ -6211,7 +6477,6 @@ function drawChronicleOverlay() {
       const resultColor = battle.result === 'victory' ? '#60ee80' : '#e05030';
       const mapLabel    = battle.mapName ?? 'UNKNOWN';
 
-      // Battle header
       ctx.textAlign = 'left';
       ctx.font = 'bold 8px monospace';
       ctx.fillStyle = 'rgba(200,175,115,0.65)';
@@ -6221,30 +6486,220 @@ function drawChronicleOverlay() {
       ctx.fillStyle = resultColor;
       ctx.fillText(resultLabel, PAD + 4 + prefixW, y + 10);
 
-      // Thin rule under header
       ctx.strokeStyle = 'rgba(120,100,60,0.18)'; ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(PAD + 4, y + HEADER_H);
-      ctx.lineTo(W - PAD - 4, y + HEADER_H);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD + 4, y + HEADER_H); ctx.lineTo(W - PAD - 4, y + HEADER_H); ctx.stroke();
 
-      // Prose
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(190,165,115,0.75)';
       for (let li = 0; li < proseLines.length; li++) {
         ctx.fillText(proseLines[li], PAD + 4, y + HEADER_H + (li + 1) * LINE_H + 2);
       }
     }
-
     y      += entryH;
     totalH += entryH;
   }
 
+  // ── Hall of the Honored ───────────────────────────────────────────────────
+  const allHall = [
+    ...hallH.map(e => ({ ...e, honored: true })),
+    ...hallF.map(e => ({ ...e, honored: false })),
+  ];
+  if (allHall.length > 0) {
+    // Section separator + title
+    if (y + 30 > listTop && y < listTop + listH) {
+      ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(PAD + 4, y + 8); ctx.lineTo(W - PAD - 4, y + 8); ctx.stroke();
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,170,80,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText('HALL OF THE HONORED', W / 2, y + 20);
+      ctx.textAlign = 'left';
+    }
+    y      += 28;
+    totalH += 28;
+
+    for (const entry of allHall) {
+      const titlesStr = entry.titles?.length ? entry.titles.slice(0,2).map(id => TITLE_DEFS[id]?.label ?? id).join(' · ') : '';
+      const entryH = 36;
+
+      if (y + entryH > listTop && y < listTop + listH) {
+        const entryColor = entry.honored ? '#c0a0ff' : '#c8b060';
+        ctx.font = 'bold 8px monospace'; ctx.fillStyle = entryColor; ctx.textAlign = 'left';
+        ctx.fillText(`${entry.name}  ·  ${entry.rankLabel}  ·  ${entry.battlesPlayed ?? 0} battles  ·  ${entry.careerKills ?? 0}K`, PAD + 4, y + 10);
+        if (titlesStr) {
+          ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,160,100,0.50)';
+          ctx.fillText(`✦ ${titlesStr}`, PAD + 4, y + 21);
+        }
+        if (entry.epitaph) {
+          ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(190,165,115,0.60)';
+          ctx.fillText(`"${entry.epitaph}"`, PAD + 4, y + (titlesStr ? 32 : 23));
+        }
+      }
+      y      += entryH;
+      totalH += entryH;
+    }
+  }
+
   ctx.restore(); // remove clip
 
-  // Clamp scroll to actual content bounds
   _chronicleScrollY = Math.min(_chronicleScrollY, Math.max(0, totalH - listH));
+  ctx.restore();
+}
 
-  ctx.restore(); // outer save
+// ── Defender biography overlay ────────────────────────────────────────────────
+function drawDefenderBioOverlay(defenderId) {
+  const def = _roster?.find(defenderId);
+  if (!def) { _showDefenderBio = null; return; }
+
+  const W = BASE_W, H = BASE_H;
+  const PAD = 28;
+  const CW  = W - PAD * 2;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,2,12,0.96)';
+  ctx.fillRect(0, 0, W, H);
+
+  const rank  = getRank(def);
+  const tDef  = TOWER_DEFS[def.type];
+  const glow  = tDef?.glowRgb ?? '180,150,80';
+  const clsLbl = tDef?.label ?? def.type;
+
+  // Name + rank header
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillStyle = `rgba(${glow},0.95)`;
+  ctx.shadowColor = `rgba(${glow},0.5)`; ctx.shadowBlur = 8;
+  ctx.fillText(def.name, W / 2, PAD + 16);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '9px monospace'; ctx.fillStyle = rank.color ?? 'rgba(200,170,80,0.70)';
+  ctx.fillText(`${rank.label}  ·  ${clsLbl}  ·  ${def.battlesPlayed} battles  ·  ${def.careerKills}K`, W / 2, PAD + 30);
+
+  ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(PAD, PAD + 38); ctx.lineTo(W - PAD, PAD + 38); ctx.stroke();
+
+  // Bio prose
+  const bioText  = generateBio(def, _campaignState?.chronicle, clsLbl);
+  ctx.font = '8px monospace';
+  const bioLines = wrapText(ctx, bioText, CW - 8);
+  let bioY = PAD + 52;
+  ctx.fillStyle = 'rgba(190,165,115,0.80)'; ctx.textAlign = 'left';
+  for (const line of bioLines) { ctx.fillText(line, PAD + 4, bioY); bioY += 11; }
+
+  // Trait + scars
+  bioY += 6;
+  if (def.trait) {
+    const td = TRAIT_DEFS[def.trait];
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.65)';
+    ctx.fillText(`Trait: ${td?.label ?? def.trait}  —  ${td?.desc ?? ''}`, PAD + 4, bioY);
+    bioY += 13;
+  }
+  if (def.scars?.length) {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,140,80,0.65)';
+    const scarStr = def.scars.map(s => SCAR_DEFS[s]?.label ?? s).join('  ·  ');
+    ctx.fillText(`Scars: ${scarStr}`, PAD + 4, bioY);
+    bioY += 13;
+  }
+
+  // Bonds
+  const defBonds = (_campaignState?.bonds ?? []).filter(b => b.defenderIds.includes(def.defenderId));
+  if (defBonds.length) {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)';
+    ctx.fillText(`Bonds: ${defBonds.map(b => b.name).join(', ')}`, PAD + 4, bioY);
+    bioY += 13;
+  }
+
+  // Titles
+  if (def.titles?.length) {
+    bioY += 4;
+    ctx.strokeStyle = 'rgba(180,140,60,0.20)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(PAD, bioY); ctx.lineTo(W - PAD, bioY); ctx.stroke();
+    bioY += 10;
+    ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(200,170,80,0.55)';
+    ctx.fillText('TITLES', PAD + 4, bioY);
+    bioY += 10;
+    for (const titleId of def.titles) {
+      const td = TITLE_DEFS[titleId];
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,165,90,0.75)';
+      ctx.fillText(`✦ ${td?.label ?? titleId}`, PAD + 4, bioY);
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)';
+      ctx.fillText(td?.desc ?? '', PAD + 140, bioY);
+      bioY += 11;
+    }
+  }
+
+  // Epitaph
+  bioY += 8;
+  const epitaph = generateEpitaph(def);
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,100,0.50)'; ctx.textAlign = 'center';
+  ctx.fillText(`"${epitaph}"`, W / 2, bioY);
+
+  // Footer
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.35)';
+  ctx.fillText('CLICK OR ESC TO CLOSE', W / 2, H - 8);
+
+  ctx.restore();
+}
+
+// ── Retirement ceremony overlay ───────────────────────────────────────────────
+function drawRetirementCeremony(def) {
+  const W = BASE_W, H = BASE_H;
+  const PW = 320, PH = 220;
+  const px = (W - PW) / 2, py = (H - PH) / 2;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,2,12,0.85)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawFantasyPanel(px, py, PW, PH, 'rgba(10,6,24,0.99)', 0.9, 10);
+
+  const rank   = getRank(def);
+  const tDef   = TOWER_DEFS[def.type];
+  const glow   = tDef?.glowRgb ?? '180,150,80';
+  const clsLbl = tDef?.label ?? def.type;
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 11px monospace'; ctx.fillStyle = `rgba(${glow},0.95)`;
+  ctx.shadowColor = `rgba(${glow},0.5)`; ctx.shadowBlur = 6;
+  ctx.fillText(def.name, W / 2, py + 22);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '8px monospace'; ctx.fillStyle = rank.color ?? 'rgba(200,170,80,0.70)';
+  ctx.fillText(`${rank.label}  ·  ${clsLbl}  ·  ${def.battlesPlayed} battles`, W / 2, py + 36);
+
+  ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(px + 12, py + 44); ctx.lineTo(px + PW - 12, py + 44); ctx.stroke();
+
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(190,165,115,0.75)';
+  ctx.fillText(`After ${def.battlesPlayed} battles, ${def.name} has earned rest.`, W / 2, py + 58);
+
+  const epitaph = generateEpitaph(def);
+  const eLines  = wrapText(ctx, `"${epitaph}"`, PW - 32);
+  let ey = py + 72;
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,155,105,0.60)';
+  for (const el of eLines) { ctx.fillText(el, W / 2, ey); ey += 10; }
+
+  // Legacy bonus note
+  const hasLegacy = (_campaignState?.legacyBonuses ?? {})[def.type];
+  if (!hasLegacy) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
+    ctx.fillText(`The next ${clsLbl} recruit carries ${def.name}'s tradition.`, W / 2, py + 140);
+  }
+
+  // Buttons
+  const btnW = 120, btnH = 28, btnGap = 14;
+  const b1x = W / 2 - btnW - btnGap / 2, b2x = W / 2 + btnGap / 2;
+  const btnY = py + PH - 44;
+
+  drawFantasyPanel(b1x, btnY, btnW, btnH, 'rgba(20,8,36,0.97)', 0.7, 6);
+  ctx.font = 'bold 9px monospace'; ctx.fillStyle = 'rgba(180,140,220,0.85)';
+  ctx.fillText('RETIRE WITH HONOR', b1x + btnW / 2, btnY + 19);
+  _betweenBtns.push({ x: b1x, y: btnY, w: btnW, h: btnH, action: 'retireWithHonor', defenderId: def.defenderId });
+
+  drawFantasyPanel(b2x, btnY, btnW, btnH, 'rgba(12,8,20,0.97)', 0.5, 6);
+  ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.60)';
+  ctx.fillText('CONTINUE SERVICE', b2x + btnW / 2, btnY + 19);
+  _betweenBtns.push({ x: b2x, y: btnY, w: btnW, h: btnH, action: 'cancelRetirement' });
+
+  ctx.restore();
 }
 
 // ── Between-battles summary screen ───────────────────────────────────────────
@@ -6496,12 +6951,43 @@ function drawBetweenBattles() {
   ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
   ctx.beginPath(); ctx.moveTo(rpX + 6, rpY + 44); ctx.lineTo(rpX + rpW - 6, rpY + 44); ctx.stroke();
 
+  // Promotion banner — shown when _promotionQueue has pending items
+  let _promoBannerH = 0;
+  if (_promotionQueue.length > 0) {
+    _promoBannerH = 40;
+    const prom   = _promotionQueue[0];
+    const pbX    = rix - 2, pbY = rpY + 48, pbW = riW + 4, pbH = _promoBannerH - 4;
+    const pbCol  = prom.type === 'scar' ? 'rgba(200,80,30,0.18)' :
+                   prom.type === 'bond' ? 'rgba(130,90,200,0.18)' : 'rgba(60,130,60,0.18)';
+    const pbBdr  = prom.type === 'scar' ? 'rgba(200,100,50,0.55)' :
+                   prom.type === 'bond' ? 'rgba(140,100,220,0.55)' : 'rgba(100,200,100,0.55)';
+    ctx.fillStyle = pbCol; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.roundRect(pbX, pbY, pbW, pbH, 4); ctx.fill(); ctx.stroke();
+
+    ctx.font = 'bold 8px monospace';
+    ctx.fillStyle = prom.type === 'scar' ? '#e87050' : prom.type === 'bond' ? '#c0a0ff' : '#88dd80';
+    ctx.textAlign = 'left';
+    ctx.fillText(`⬆  ${prom.rankLabel}`, rix + 4, pbY + 13);
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,180,150,0.75)';
+    const _promText = prom.text ?? `${prom.defenderName}: ${prom.rankLabel}`;
+    ctx.fillText(_promText.length > 55 ? _promText.slice(0, 52) + '…' : _promText, rix + 4, pbY + 25);
+
+    const ackW = 56, ackH = 14;
+    const ackX = rpX + rpW - 12 - ackW, ackY = pbY + (pbH - ackH) / 2;
+    ctx.fillStyle = 'rgba(20,40,20,0.85)'; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.roundRect(ackX, ackY, ackW, ackH, 3); ctx.fill(); ctx.stroke();
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,220,160,0.8)'; ctx.textAlign = 'center';
+    ctx.fillText(`ACK  (${_promotionQueue.length})`, ackX + ackW / 2, ackY + 10);
+    ctx.textAlign = 'left';
+    _betweenBtns.push({ x: ackX, y: ackY, w: ackW, h: ackH, action: 'ackPromotion' });
+  }
+
   // Recruit section: 112px at the bottom
   const recruitH = 112;
-  const listTop  = rpY + 49;
+  const listTop  = rpY + 49 + _promoBannerH;
   const listBot  = rpY + rpH - recruitH - 4;
   const listH    = listBot - listTop;
-  const rowH     = 80;
+  const rowH     = 100;
   const maxRows  = Math.floor(listH / rowH);
 
   // Clamp scroll offset
@@ -6535,12 +7021,14 @@ function drawBetweenBattles() {
     ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
     ctx.fillRect(rpX + 4, ry, rpW - 8, rowH - 2);
 
-    const tDef   = TOWER_DEFS[def.type];
-    const glow   = tDef?.glowRgb ?? '180,150,80';
-    const lvlStr = def.careerLevel > 0 ? ` [${ROMAN[def.careerLevel] ?? '?'}]` : '';
+    const tDef    = TOWER_DEFS[def.type];
+    const glow    = tDef?.glowRgb ?? '180,150,80';
+    const lvlStr  = def.careerLevel > 0 ? ` [${ROMAN[def.careerLevel] ?? '?'}]` : '';
+    const defRank = getRank(def);
+    const isChampionPlus = ['champion','ironguard','legend'].includes(defRank.id);
 
-    // Name + level (or rename draft if active)
-    const isRenaming = _renameState?.defenderId === def.defenderId;
+    // Name + level
+    const isRenaming  = _renameState?.defenderId === def.defenderId;
     const displayName = isRenaming
       ? _renameState.draft + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
       : `${def.name}${lvlStr}`;
@@ -6550,8 +7038,19 @@ function drawBetweenBattles() {
     ctx.fillText(displayName, rix, ry + 14);
     ctx.shadowBlur = 0;
 
-    // ✏ rename button (small, top-right of name)
-    const rnW = 18, rnH = 12, rnX = rpX + rpW - 12 - rnW - 55, rnY = ry + 4;
+    // 📜 BIO button (far right, ry+4)
+    const bioW = 18, bioH = 12;
+    const bioX = rpX + rpW - 12 - bioW;
+    const bioY2 = ry + 4;
+    ctx.fillStyle = 'rgba(30,20,40,0.7)'; ctx.strokeStyle = 'rgba(120,90,180,0.35)'; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.roundRect(bioX, bioY2, bioW, bioH, 2); ctx.fill(); ctx.stroke();
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)'; ctx.textAlign = 'center';
+    ctx.fillText('📜', bioX + bioW / 2, bioY2 + 9);
+    ctx.textAlign = 'left';
+    _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
+
+    // ✏ rename button (to the left of BIO)
+    const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
     ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
     ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
     ctx.lineWidth   = 0.8;
@@ -6562,43 +7061,79 @@ function drawBetweenBattles() {
     ctx.textAlign = 'left';
     _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
 
-    // Class label + optional primary title
+    // Rank · class · title line (ry+26)
     const _rTitle = getPrimaryTitle(def);
-    const _classLine = _rTitle
-      ? `${tDef?.label ?? def.type}  ·  ✦ ${_rTitle.label}`
-      : (tDef?.label ?? def.type);
-    ctx.font = '9px monospace';
-    ctx.fillStyle = _rTitle ? 'rgba(160,130,200,0.65)' : 'rgba(160,140,100,0.55)';
-    ctx.fillText(_classLine, rix, ry + 26);
+    const _rankPart  = defRank.id !== 'greenhorn' ? `${defRank.label}  ·  ` : '';
+    const _classPart = tDef?.label ?? def.type;
+    const _titlePart = _rTitle ? `  ·  ✦ ${_rTitle.label}` : '';
+    ctx.font = '8px monospace';
+    ctx.fillStyle = _rTitle ? 'rgba(160,130,200,0.65)' : defRank.id !== 'greenhorn' ? (defRank.color ?? 'rgba(160,140,100,0.55)') : 'rgba(160,140,100,0.55)';
+    ctx.fillText(`${_rankPart}${_classPart}${_titlePart}`, rix, ry + 26);
 
-    // XP bar
+    // XP bar (ry+20)
     const nextXP = CAREER_XP[Math.min(def.careerLevel + 1, CAREER_XP.length - 1)];
     const prevXP = CAREER_XP[def.careerLevel] ?? 0;
     const frac   = nextXP > prevXP ? Math.min(1, (def.xp - prevXP) / (nextXP - prevXP)) : 1;
     const barX   = rix + 54;
-    const barW   = riW - 58;
+    const barW   = riW - 58 - 44;
     ctx.fillStyle = 'rgba(60,50,30,0.7)';
     ctx.fillRect(barX, ry + 20, barW, 5);
     ctx.fillStyle = def.careerLevel >= 10 ? '#f0d040' : `rgba(${glow},0.8)`;
     ctx.fillRect(barX, ry + 20, barW * frac, 5);
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)';
-    ctx.textAlign = 'left';
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)'; ctx.textAlign = 'left';
     ctx.fillText(def.careerLevel >= 10 ? 'MAX' : `${def.xp}/${nextXP}xp`, barX + barW + 3, ry + 25);
 
-    // Career stats — kills, battles, career damage
+    // DISMISS button (ry+14)
+    const isPendingDismiss = _pendingDismiss === def.defenderId;
+    const dW = 52, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;
+    ctx.fillStyle   = isPendingDismiss ? 'rgba(80,8,8,0.92)' : 'rgba(60,10,10,0.75)';
+    ctx.strokeStyle = isPendingDismiss ? 'rgba(255,60,60,0.8)' : 'rgba(160,50,50,0.5)';
+    ctx.lineWidth   = isPendingDismiss ? 1.2 : 0.8;
+    ctx.beginPath(); ctx.roundRect(dX, dY, dW, dH, 3); ctx.fill(); ctx.stroke();
+    ctx.font = '8px monospace'; ctx.fillStyle = isPendingDismiss ? '#ff5050' : 'rgba(200,80,80,0.85)';
+    ctx.textAlign = 'center';
+    ctx.fillText(isPendingDismiss ? 'CONFIRM?' : 'DISMISS', dX + dW / 2, dY + 11);
+    ctx.textAlign = 'left';
+    _betweenBtns.push({ x: dX, y: dY, w: dW, h: dH,
+      action: isPendingDismiss ? 'confirmDismiss' : 'pendingDismiss',
+      defenderId: def.defenderId });
+
+    // RETIRE button (ry+32) — CHAMPION+ only
+    if (isChampionPlus) {
+      const rtnX = dX, rtnY = ry + 32, rtnW = dW, rtnH = 14;
+      ctx.fillStyle   = 'rgba(20,10,36,0.85)'; ctx.strokeStyle = 'rgba(160,130,200,0.50)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.roundRect(rtnX, rtnY, rtnW, rtnH, 3); ctx.fill(); ctx.stroke();
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.75)'; ctx.textAlign = 'center';
+      ctx.fillText('RETIRE', rtnX + rtnW / 2, rtnY + 10);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: rtnX, y: rtnY, w: rtnW, h: rtnH, action: 'openRetire', defenderId: def.defenderId });
+    }
+
+    // Trait + scars row (ry+36)
+    const traitDef = def.trait ? TRAIT_DEFS[def.trait] : null;
+    const scarLabels = (def.scars ?? []).map(s => SCAR_DEFS[s]?.label ?? s);
+    if (traitDef || scarLabels.length) {
+      let traitLine = '';
+      if (traitDef) traitLine += traitDef.label;
+      if (scarLabels.length) traitLine += (traitDef ? '  ·  ' : '') + scarLabels.slice(0,2).join(' · ');
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.52)';
+      ctx.fillText(traitLine, rix, ry + 36);
+    }
+
+    // Career stats (ry+46)
     const cdmgStr = (def.careerDamage ?? 0) > 999
       ? `${Math.round((def.careerDamage ?? 0) / 1000)}k`
       : `${def.careerDamage ?? 0}`;
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,130,100,0.65)';
-    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}  ⚔${cdmgStr}`, rix, ry + 37);
+    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}  ⚔${cdmgStr}`, rix, ry + 46);
 
-    // Equipment chips: weapon (slot 0) | armor (slot 1)
+    // Equipment chips: weapon (slot 0) | armor (slot 1) (ry+52)
     const chipSlotW = Math.floor((riW - 6) / 2);
     [0, 1].forEach(slotIdx => {
       const itemId  = def.equipment[slotIdx];
       const itemDef = itemId ? ITEM_DEFS[itemId] : null;
       const cx2     = rix + slotIdx * (chipSlotW + 3);
-      const cy2     = ry + 42;
+      const cy2     = ry + 52;
       const cH      = itemDef?.desc ? 22 : 12;
       const rarCol  = itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null;
       const icon    = slotIdx === 0 ? '⚔' : '🛡';
@@ -6612,7 +7147,6 @@ function drawBetweenBattles() {
       const label   = itemDef ? `${icon} ${itemDef.name.slice(0, 10)}` : `${icon} —`;
       ctx.fillText(label, cx2 + 3, cy2 + 9);
       _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
-      // Item stat description inside chip
       if (itemDef?.desc) {
         ctx.font = '7px monospace'; ctx.fillStyle = rarCol ?? 'rgba(120,100,70,0.45)';
         ctx.globalAlpha = 0.65;
@@ -6621,8 +7155,8 @@ function drawBetweenBattles() {
       }
     });
 
-    // Talent row — up to 2 talent names (truncated), plus next milestone hint
-    const talY = ry + 72;
+    // Talent row (ry+82)
+    const talY = ry + 82;
     const nextTalLevel = [3, 5, 8, 10].find(lv => lv > def.careerLevel);
     const nextTalId    = nextTalLevel ? (CLASS_TALENTS[def.type]?.[nextTalLevel]) : null;
     const nextTalDef   = nextTalId ? TALENT_DEFS[nextTalId] : null;
@@ -6640,20 +7174,19 @@ function drawBetweenBattles() {
       ctx.fillText('✦ no talents yet', rix, talY);
     }
 
-    // DISMISS button (two-click confirm)
-    const isPendingDismiss = _pendingDismiss === def.defenderId;
-    const dW = 52, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;
-    ctx.fillStyle   = isPendingDismiss ? 'rgba(80,8,8,0.92)' : 'rgba(60,10,10,0.75)';
-    ctx.strokeStyle = isPendingDismiss ? 'rgba(255,60,60,0.8)' : 'rgba(160,50,50,0.5)';
-    ctx.lineWidth   = isPendingDismiss ? 1.2 : 0.8;
-    ctx.beginPath(); ctx.roundRect(dX, dY, dW, dH, 3); ctx.fill(); ctx.stroke();
-    ctx.font = '8px monospace'; ctx.fillStyle = isPendingDismiss ? '#ff5050' : 'rgba(200,80,80,0.85)';
-    ctx.textAlign = 'center';
-    ctx.fillText(isPendingDismiss ? 'CONFIRM?' : 'DISMISS', dX + dW / 2, dY + 11);
-    ctx.textAlign = 'left';
-    _betweenBtns.push({ x: dX, y: dY, w: dW, h: dH,
-      action: isPendingDismiss ? 'confirmDismiss' : 'pendingDismiss',
-      defenderId: def.defenderId });
+    // Bond indicator (ry+92)
+    const defBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
+    if (defBond) {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.55)';
+      ctx.fillText(`⚭ ${defBond.name}`, rix, ry + 93);
+    }
+
+    // Legacy bonus indicator
+    const _legBonus = (_campaignState?.legacyBonuses ?? {})[def.type];
+    if (_legBonus && def.battlesPlayed === 0) {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
+      ctx.fillText(`✦ ${_legBonus.fromName}'s tradition`, rix + 80, ry + 14);
+    }
   });
 
   if (totalDefs === 0) {
@@ -7029,7 +7562,9 @@ function draw() {
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
     drawFrames();
-    if (_showChronicle) drawChronicleOverlay();
+    if (_showChronicle)    drawChronicleOverlay();
+    if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
+    if (_retirementCeremony) drawRetirementCeremony(_retirementCeremony);
     ctx.restore();
     return;
   }
