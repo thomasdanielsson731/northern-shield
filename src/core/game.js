@@ -16,6 +16,7 @@ import {
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
   sfxRune, sfxSell, sfxSplash, sfxChainKill, sfxEmp, sfxWaveStart, sfxGameOver,
   sfxFlawless, sfxWaveDone, sfxEndlessStart, sfxEndlessMilestone,
+  sfxTalentUnlock, sfxLootDrop, sfxFortressUpgrade, sfxRecruit, sfxDismiss, sfxRename,
 } from './sounds.js';
 
 const COLS = 36;
@@ -213,6 +214,7 @@ let _recruitType        = null;          // currently selected class in recruit 
 let _betweenSubtab      = 'recruit';     // 'recruit' | 'fortress' — bottom section tab
 let _pendingDismiss     = null;          // defenderId awaiting dismiss confirm
 let _rosterScrollOffset = 0;            // how many defender rows scrolled past top
+let _renameState        = null;          // { defenderId, draft } while canvas rename is active
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
@@ -267,6 +269,7 @@ const WAVE_EVENTS = {
   23: { id: 'northernRelief',  label: '♥ NORTHERN RELIEF',  desc: '+1 life (up to max)',             special: 'life' },
   26: { id: 'mistSettles',     label: '🌫 MIST SETTLES',     desc: 'Enemies 10% slower',             speedMult: 0.90 },
   27: { id: 'mistSettles',     label: '🌫 MIST SETTLES',     desc: 'Enemies 10% slower',             speedMult: 0.90 },
+  29: { id: 'wargPack',         label: '🐺 WOLF PACK',         desc: '+8 Warg to wave',                bonus: { type: 'warg', count: 8 } },
   30: { id: 'berserkerRage',   label: '⚔ BERSERKER RAGE',   desc: '+30% enemy speed',               speedMult: 1.30 },
   35: { id: 'swarmWave',       label: '☠ SWARM',             desc: '+10 Myling to wave',             bonus: { type: 'myling', count: 10 } },
   40: { id: 'ironHide',        label: '⚔ IRON HIDE',        desc: '+30% HP, −15% speed',            hpMult: 1.30, speedMult: 0.85 },
@@ -274,6 +277,7 @@ const WAVE_EVENTS = {
   54: { id: 'mistThickens',    label: '🌫 MIST THICKENS',    desc: 'Towers −10% range this wave',    rangeMult: 0.90 },
   60: { id: 'frostStorm',      label: '❄ FROST STORM',      desc: '+30% HP, 20% slower',            hpMult: 1.30, speedMult: 0.80 },
   65: { id: 'blitz',           label: '⚡ BLITZ',             desc: '+40% speed',                     speedMult: 1.40 },
+  72: { id: 'shieldwall',      label: '🛡 SHIELD WALL',       desc: '+4 Einherjar to wave',           bonus: { type: 'einherjar', count: 4 } },
   80: { id: 'darkHarvest',     label: '☠ DARK HARVEST',     desc: '+40% HP, +4 Jötunn',             hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
   90: { id: 'ragnarok',        label: '⚔ THE PRELUDE',       desc: '+50% HP, +40% speed',            hpMult: 1.50, speedMult: 1.40 },
 };
@@ -467,6 +471,7 @@ function restartCombatState() {
   pendingSell        = null;
   _pendingDismiss    = null;
   _rosterScrollOffset = 0;
+  _renameState       = null;
   _battleXpData      = [];
   _reserveContrib    = 0;
   _bossLootBanner    = null;
@@ -632,6 +637,7 @@ function recordBattleResult(result) {
   _recruitType = null;
 
   try { saveCampaign(_campaignState); } catch {}
+  if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
   gamePhase = 'betweenBattles';
 }
 
@@ -884,10 +890,12 @@ function waveComposition(num) {
   // Jötunn and Mara caps rise to 20 in ch4 (wave 75+) for elite-heavy endgame
   const eliteCap  = n >= 75 ? 20 : 12;
   return {
-    draugr:  n <= 5 ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), draugrCap),
-    mylings: n >= 9  ? Math.min(Math.floor((n - 8) * 2.0), 32) : 0,
-    jotunn:  n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), eliteCap) : 0,
-    maras:   n >= 22 ? Math.min(Math.floor((n - 21) * 0.8), eliteCap) : 0,
+    draugr:    n <= 5  ? Math.min(8 + Math.floor(n * 2.5), 22) : Math.min(12 + Math.floor(n * 2.8), draugrCap),
+    mylings:   n >= 9  ? Math.min(Math.floor((n - 8) * 2.0), 32) : 0,
+    jotunn:    n >= 11 ? Math.min(Math.floor((n - 10) * 1.1), eliteCap) : 0,
+    maras:     n >= 22 ? Math.min(Math.floor((n - 21) * 0.8), eliteCap) : 0,
+    wargs:     n >= 15 ? Math.min(Math.floor((n - 14) * 1.2), 18) : 0,
+    einherjars: n >= 40 ? Math.min(Math.floor((n - 39) * 0.6), 10) : 0,
   };
 }
 
@@ -896,10 +904,10 @@ function buildWave(num) {
     // Boss wave: herald squad themed per boss, then the boss enters last
     let heraldTypes;
     if (num === 10)  heraldTypes = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
-    else if (num === 25) heraldTypes = [...Array(8).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-    else if (num === 50) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING)];
-    else if (num === 75) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
-    else               heraldTypes = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(3).fill(ENEMY_TYPES.MARA)];
+    else if (num === 25) heraldTypes = [...Array(5).fill(ENEMY_TYPES.DRAUGR), ...Array(3).fill(ENEMY_TYPES.WARG), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+    else if (num === 50) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.WARG)];
+    else if (num === 75) heraldTypes = [...Array(3).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN), ...Array(2).fill(ENEMY_TYPES.EINHERJAR)];
+    else               heraldTypes = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(2).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.EINHERJAR)];
     for (let i = heraldTypes.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [heraldTypes[i], heraldTypes[j]] = [heraldTypes[j], heraldTypes[i]];
@@ -913,18 +921,20 @@ function buildWave(num) {
   if (num === 1)  return Array(3).fill(ENEMY_TYPES.DRAUGR);
   if (num === 8)  return [...Array(2).fill(ENEMY_TYPES.MYLING)];
   if (num === 9)  return [...Array(2).fill(ENEMY_TYPES.JOTUNN)];
+  if (num === 14) return [...Array(5).fill(ENEMY_TYPES.WARG)];     // warg pack introduction
   if (num === 21) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
+  if (num === 38) return [...Array(3).fill(ENEMY_TYPES.EINHERJAR)]; // einherjar introduction
 
   // Rest waves — 2 easier waves after each boss (1st = very light, 2nd = moderate)
   if (num === 11 || num === 26 || num === 51 || num === 76 || num === 101) {
-    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(Math.min(num - 5, MAX_WAVES));
-    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re } = waveComposition(Math.min(num - 5, MAX_WAVES));
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
   }
   if (num === 27 || num === 52 || num === 77) {
-    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra } = waveComposition(Math.min(num - 3, MAX_WAVES));
-    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA)];
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re } = waveComposition(Math.min(num - 3, MAX_WAVES));
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
   }
@@ -944,12 +954,14 @@ function buildWave(num) {
     return q;
   }
 
-  const { draugr, mylings, jotunn, maras } = waveComposition(num);
+  const { draugr, mylings, jotunn, maras, wargs, einherjars } = waveComposition(num);
   const queue = [
     ...Array(draugr).fill(ENEMY_TYPES.DRAUGR),
     ...Array(mylings).fill(ENEMY_TYPES.MYLING),
     ...Array(jotunn).fill(ENEMY_TYPES.JOTUNN),
     ...Array(maras).fill(ENEMY_TYPES.MARA),
+    ...Array(wargs).fill(ENEMY_TYPES.WARG),
+    ...Array(einherjars).fill(ENEMY_TYPES.EINHERJAR),
   ];
   // Inject wave-event bonus enemies
   const ev = WAVE_EVENTS[num];
@@ -2019,6 +2031,34 @@ function handleRightClickAt(mouseX, mouseY) {
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
+  // Rename intercept — consume all input while renaming a defender
+  if (_renameState) {
+    e.preventDefault();
+    if (e.key === 'Escape') {
+      _renameState = null;
+      return;
+    }
+    if (e.key === 'Enter') {
+      const def = _roster?.find(_renameState.defenderId);
+      if (def && _renameState.draft.trim().length > 0) {
+        def.name = _renameState.draft.trim().slice(0, 16);
+        _campaignState.defenders = _roster.toJSON();
+        try { saveCampaign(_campaignState); } catch {}
+        sfxRename();
+      }
+      _renameState = null;
+      return;
+    }
+    if (e.key === 'Backspace') {
+      _renameState.draft = _renameState.draft.slice(0, -1);
+      return;
+    }
+    if (e.key.length === 1 && _renameState.draft.length < 16) {
+      _renameState.draft += e.key;
+    }
+    return;
+  }
+
   const key = e.key.toLowerCase();
 
   // Map select keyboard navigation
@@ -2039,6 +2079,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') {
+    if (_renameState)    { _renameState  = null;  return; }
     if (showRunePicker) { showRunePicker = false; runePickerTower = null; return; }
     if (showRuneMenu)   { showRuneMenu  = false; return; }
     if (selectedTower)  { selectedTower = null;  return; }
@@ -2188,6 +2229,7 @@ canvas.addEventListener('mousedown', e => {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
           if (!['pendingDismiss', 'confirmDismiss'].includes(btn.action)) _pendingDismiss = null;
+          if (!['startRename'].includes(btn.action)) _renameState = null;
           if (btn.action === 'fightAgain') {
             _betweenSubtab = 'recruit';
             initBattle(_currentBattlePreset);
@@ -2212,6 +2254,10 @@ canvas.addEventListener('mousedown', e => {
             _campaignState.defenders = _roster.toJSON();
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { saveCampaign(_campaignState); } catch {}
+            sfxDismiss();
+          } else if (btn.action === 'startRename') {
+            const def = _roster?.find(btn.defenderId);
+            if (def) _renameState = { defenderId: def.defenderId, draft: def.name };
           } else if (btn.action === 'scrollRoster') {
             _rosterScrollOffset = Math.max(0, _rosterScrollOffset + btn.dir);
           } else if (btn.action === 'cycleEquip') {
@@ -2259,6 +2305,7 @@ canvas.addEventListener('mousedown', e => {
               _campaignState.goldReserve = goldReserve;
               _campaignState.defenders   = _roster.toJSON();
               try { saveCampaign(_campaignState); } catch {}
+              sfxRecruit();
             }
           } else if (btn.action === 'switchTab') {
             _betweenSubtab = btn.tab;
@@ -2280,6 +2327,7 @@ canvas.addEventListener('mousedown', e => {
                 _effectiveRecruitCost = Math.max(10, 30 - _fortressBonuses.recruitCostReduction);
                 grid.setFortressUpgrades(upgrades);
                 try { saveCampaign(_campaignState); } catch {}
+                sfxFortressUpgrade();
               }
             }
           }
@@ -4969,6 +5017,7 @@ function onBossKilled(boss) {
     });
     impactFlashes.push({ x: boss.x, y: boss.y, maxR: 60, life: 1, color: rarCol });
     _bossLootBanner = { itemId, timer: 300 };
+    sfxLootDrop();
   }
 
   // One-time Rune Forge hint after first boss kill
@@ -5878,9 +5927,28 @@ function drawBetweenBattles() {
     const glow   = tDef?.glowRgb ?? '180,150,80';
     const lvlStr = def.careerLevel > 0 ? ` [${ROMAN[def.careerLevel] ?? '?'}]` : '';
 
-    // Name + level
-    ctx.font = 'bold 11px monospace'; ctx.fillStyle = `rgba(${glow},0.95)`;
-    ctx.fillText(`${def.name}${lvlStr}`, rix, ry + 14);
+    // Name + level (or rename draft if active)
+    const isRenaming = _renameState?.defenderId === def.defenderId;
+    const displayName = isRenaming
+      ? _renameState.draft + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
+      : `${def.name}${lvlStr}`;
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = isRenaming ? `rgba(255,220,100,0.95)` : `rgba(${glow},0.95)`;
+    if (isRenaming) { ctx.shadowColor = 'rgba(255,200,60,0.5)'; ctx.shadowBlur = 4; }
+    ctx.fillText(displayName, rix, ry + 14);
+    ctx.shadowBlur = 0;
+
+    // ✏ rename button (small, top-right of name)
+    const rnW = 18, rnH = 12, rnX = rpX + rpW - 12 - rnW - 55, rnY = ry + 4;
+    ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
+    ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
+    ctx.lineWidth   = 0.8;
+    ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
+    ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText('✏', rnX + rnW / 2, rnY + 9);
+    ctx.textAlign = 'left';
+    _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
 
     // Class label
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)';

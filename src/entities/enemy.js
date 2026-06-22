@@ -11,10 +11,12 @@ function angleToRow(angle) {
 }
 
 export const ENEMY_TYPES = {
-  DRAUGR: 'draugr',
-  MYLING: 'myling',
-  JOTUNN: 'jotunn',
-  MARA:   'mara'
+  DRAUGR:    'draugr',
+  MYLING:    'myling',
+  JOTUNN:    'jotunn',
+  MARA:      'mara',
+  WARG:      'warg',
+  EINHERJAR: 'einherjar',
 };
 
 export const ENEMY_DEFS = {
@@ -57,7 +59,27 @@ export const ENEMY_DEFS = {
     color:          '#5c4030',   // stone-brown — Norse earth giant
     highlightColor: '#ff9030',   // bright amber-orange volcanic heat
     flying:         false
-  }
+  },
+  warg: {
+    label:          'Warg',
+    speed:          1.85,
+    hp:             95,
+    radius:         6,
+    reward:         8,
+    color:          '#4a3828',   // dark grey-brown — Norse shadow wolf
+    highlightColor: '#e08830',   // amber eye-glow highlight
+    flying:         false
+  },
+  einherjar: {
+    label:          'Einherjar',
+    speed:          0.52,
+    hp:             460,
+    radius:         9,
+    reward:         28,
+    color:          '#58506a',   // iron grey with purple tint — armored fallen warrior
+    highlightColor: '#d4c090',   // weathered gold highlight
+    flying:         false
+  },
 };
 
 export class Enemy {
@@ -269,6 +291,10 @@ export class Enemy {
         this._drawGolem(ctx);
       } else if (this.type === ENEMY_TYPES.MARA) {
         this._drawBanshee(ctx);
+      } else if (this.type === ENEMY_TYPES.WARG) {
+        this._drawWarg(ctx);
+      } else if (this.type === ENEMY_TYPES.EINHERJAR) {
+        this._drawEinherjar(ctx);
       } else {
         this._drawGraveborn(ctx);
       }
@@ -896,6 +922,203 @@ export class Enemy {
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.restore();
+  }
+
+  // ── Warg: dark swift wolf ────────────────────────────────────────────────────
+  _drawWarg(ctx) {
+    const x = this.x, y = this.y;
+    const r = this.radius;
+    const t = performance.now() * 0.001;
+    // Gallop bob — faster than undead
+    const bob = Math.sin(t * 9.0) * 0.9;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y + r * 0.9 - bob, r * 1.4, r * 0.30, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body — low horizontal oval
+    ctx.shadowColor = 'rgba(60,30,0,0.55)';
+    ctx.shadowBlur  = 7;
+    ctx.fillStyle   = '#3a2c1c';
+    ctx.beginPath();
+    ctx.ellipse(x, y - bob * 0.4, r * 1.15, r * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Fur texture ridge along spine
+    ctx.fillStyle = '#4e3a22';
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.1, y - r * 0.22 - bob * 0.4, r * 0.75, r * 0.28, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head (forward — left when moving right, so at x - r * 0.7)
+    const hx = x - r * 0.65, hy = y - r * 0.35 - bob * 0.5;
+    ctx.fillStyle = '#3a2c1c';
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, r * 0.62, r * 0.50, -0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Snout
+    ctx.fillStyle = '#2a1c0e';
+    ctx.beginPath();
+    ctx.ellipse(hx - r * 0.42, hy + r * 0.05, r * 0.28, r * 0.22, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Amber eyes — glowing pair
+    const eyeFlicker = 0.72 + Math.sin(t * 3.4) * 0.18;
+    ctx.shadowColor = '#e07010';
+    ctx.shadowBlur  = 5 * eyeFlicker;
+    ctx.fillStyle   = `rgba(230,110,20,${eyeFlicker})`;
+    ctx.beginPath(); ctx.arc(hx - r * 0.12, hy - r * 0.12, r * 0.16, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx - r * 0.38, hy - r * 0.10, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Ears — two small triangles
+    ctx.fillStyle = '#2a1c0e';
+    ctx.beginPath();
+    ctx.moveTo(hx + r * 0.10, hy - r * 0.40);
+    ctx.lineTo(hx + r * 0.28, hy - r * 0.65);
+    ctx.lineTo(hx + r * 0.38, hy - r * 0.40);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.08, hy - r * 0.42);
+    ctx.lineTo(hx + r * 0.04, hy - r * 0.62);
+    ctx.lineTo(hx + r * 0.20, hy - r * 0.42);
+    ctx.closePath(); ctx.fill();
+
+    // Tail — curved upward
+    ctx.strokeStyle = '#3a2c1c';
+    ctx.lineWidth   = r * 0.28;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + r * 0.90, y - r * 0.10 - bob * 0.3);
+    ctx.quadraticCurveTo(x + r * 1.35, y - r * 0.60 - bob * 0.5, x + r * 1.10, y - r * 1.05 - bob * 0.5);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // Running legs — 4 sticks (paired, offset phase)
+    const leg1 = Math.sin(t * 9.0) * r * 0.55;
+    const leg2 = Math.sin(t * 9.0 + Math.PI) * r * 0.55;
+    ctx.strokeStyle = '#2a1c0e';
+    ctx.lineWidth   = r * 0.22;
+    ctx.lineCap     = 'round';
+    // Front pair
+    ctx.beginPath(); ctx.moveTo(x - r * 0.35, y + r * 0.30); ctx.lineTo(x - r * 0.35 + leg1 * 0.5, y + r * 0.85 + leg1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - r * 0.10, y + r * 0.30); ctx.lineTo(x - r * 0.10 + leg2 * 0.5, y + r * 0.85 + leg2); ctx.stroke();
+    // Back pair
+    ctx.beginPath(); ctx.moveTo(x + r * 0.40, y + r * 0.28); ctx.lineTo(x + r * 0.40 - leg1 * 0.4, y + r * 0.85 + leg1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + r * 0.65, y + r * 0.28); ctx.lineTo(x + r * 0.65 - leg2 * 0.4, y + r * 0.85 + leg2); ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
+  // ── Einherjar: armored fallen Viking warrior ──────────────────────────────────
+  _drawEinherjar(ctx) {
+    const x = this.x, y = this.y;
+    const r = this.radius;
+    const t = performance.now() * 0.001;
+    const march = Math.sin(t * 4.2) * 0.7; // slow heavy march
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(x + 2, y + r * 0.85, r * 1.25, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Kite shield (left side, slightly forward)
+    const shieldX = x - r * 0.65, shieldY = y - r * 0.10;
+    ctx.shadowColor = 'rgba(30,50,80,0.55)';
+    ctx.shadowBlur  = 6;
+    ctx.fillStyle   = '#1e2c48';
+    ctx.beginPath();
+    ctx.moveTo(shieldX, shieldY - r * 0.88);
+    ctx.lineTo(shieldX + r * 0.58, shieldY - r * 0.52);
+    ctx.lineTo(shieldX + r * 0.52, shieldY + r * 0.62);
+    ctx.lineTo(shieldX, shieldY + r * 0.92);
+    ctx.lineTo(shieldX - r * 0.52, shieldY + r * 0.62);
+    ctx.lineTo(shieldX - r * 0.58, shieldY - r * 0.52);
+    ctx.closePath(); ctx.fill();
+    // Shield boss (center stud)
+    ctx.fillStyle = '#a09060';
+    ctx.beginPath(); ctx.arc(shieldX, shieldY, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    // Shield rim highlight
+    ctx.strokeStyle = 'rgba(180,150,80,0.45)';
+    ctx.lineWidth   = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(shieldX, shieldY - r * 0.88);
+    ctx.lineTo(shieldX + r * 0.58, shieldY - r * 0.52);
+    ctx.lineTo(shieldX + r * 0.52, shieldY + r * 0.62);
+    ctx.lineTo(shieldX, shieldY + r * 0.92);
+    ctx.closePath(); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Body — iron plate armor (torso rectangle)
+    ctx.fillStyle = '#48445a';
+    ctx.fillRect(x - r * 0.40, y - r * 0.78 + march * 0.2, r * 0.85, r * 1.42);
+    // Armor highlight edge
+    ctx.fillStyle = 'rgba(200,190,160,0.18)';
+    ctx.fillRect(x - r * 0.40, y - r * 0.78 + march * 0.2, r * 0.18, r * 1.42);
+    // Plate lines (horizontal rivets)
+    ctx.strokeStyle = 'rgba(0,0,0,0.38)';
+    ctx.lineWidth   = 0.7;
+    for (let ri = 0; ri < 3; ri++) {
+      const ry = y - r * 0.30 + ri * r * 0.40 + march * 0.2;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.38, ry); ctx.lineTo(x + r * 0.43, ry); ctx.stroke();
+    }
+
+    // Axe (right side) — handle + blade silhouette
+    const axeX = x + r * 0.80, axeY = y - r * 0.55 + march * 0.3;
+    ctx.strokeStyle = '#2a1c0c';
+    ctx.lineWidth   = r * 0.22;
+    ctx.lineCap     = 'round';
+    ctx.beginPath(); ctx.moveTo(axeX, axeY + r * 1.0); ctx.lineTo(axeX, axeY - r * 0.55); ctx.stroke();
+    ctx.lineCap     = 'butt';
+    // Axe blade
+    ctx.fillStyle = '#787060';
+    ctx.beginPath();
+    ctx.moveTo(axeX, axeY - r * 0.55);
+    ctx.lineTo(axeX + r * 0.62, axeY - r * 0.20);
+    ctx.lineTo(axeX + r * 0.42, axeY + r * 0.30);
+    ctx.lineTo(axeX - r * 0.08, axeY + r * 0.10);
+    ctx.closePath(); ctx.fill();
+    // Axe edge glint
+    ctx.strokeStyle = 'rgba(210,200,160,0.55)';
+    ctx.lineWidth   = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(axeX + r * 0.62, axeY - r * 0.20);
+    ctx.lineTo(axeX + r * 0.42, axeY + r * 0.30);
+    ctx.stroke();
+
+    // Helmet — rounded iron cap with nasal guard
+    const hY = y - r * 0.82 + march * 0.15;
+    ctx.shadowColor = 'rgba(40,40,60,0.6)';
+    ctx.shadowBlur  = 5;
+    ctx.fillStyle   = '#585468';
+    ctx.beginPath();
+    ctx.ellipse(x + r * 0.05, hY, r * 0.52, r * 0.44, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    // Nasal guard
+    ctx.fillStyle = '#403e50';
+    ctx.fillRect(x - r * 0.06, hY - r * 0.05, r * 0.14, r * 0.42);
+    ctx.shadowBlur = 0;
+    // Helmet rim
+    ctx.strokeStyle = 'rgba(160,150,120,0.50)';
+    ctx.lineWidth   = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.50, hY);
+    ctx.lineTo(x + r * 0.58, hY);
+    ctx.stroke();
+
+    // Eyes (narrow battle slits)
+    ctx.fillStyle = 'rgba(210,175,60,0.65)';
+    ctx.fillRect(x - r * 0.32, hY - r * 0.18, r * 0.20, r * 0.12);
+    ctx.fillRect(x + r * 0.14, hY - r * 0.18, r * 0.20, r * 0.12);
+
+    // Legs
+    ctx.fillStyle = '#3c3848';
+    ctx.fillRect(x - r * 0.32, y + r * 0.65 + march, r * 0.30, r * 0.60);
+    ctx.fillRect(x + r * 0.04, y + r * 0.65 - march, r * 0.30, r * 0.60);
   }
 
   _drawHpBar(ctx) {

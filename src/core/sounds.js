@@ -105,6 +105,28 @@ export function sfxDie(isBoss = false, enemyType = '') {
     tone(330, 0.10, 0.09, 'square',   0.06);
     return;
   }
+  if (enemyType === 'warg') {
+    // Dying yelp: short descending whimper
+    const a = ac(); if (!a) return;
+    try {
+      const o = a.createOscillator(), g = a.createGain();
+      o.connect(g); g.connect(a.destination);
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520, a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(180, a.currentTime + 0.18);
+      g.gain.setValueAtTime(0.08, a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.20);
+      o.start(a.currentTime); o.stop(a.currentTime + 0.22);
+    } catch {}
+    return;
+  }
+  if (enemyType === 'einherjar') {
+    // Heavy armour crash + grunt: clank + low square
+    tone(180, 0.08, 0.15, 'square');
+    tone(120, 0.12, 0.12, 'square', 0.04);
+    tone(260, 0.05, 0.08, 'sawtooth', 0.02);
+    return;
+  }
   // draugr (default): bone rattle
   tone(160, 0.05, 0.09, 'square');
   tone(220, 0.04, 0.06, 'square', 0.03);
@@ -206,4 +228,45 @@ export function sfxEndlessStart() {
 export function sfxEndlessMilestone() {
   [330, 440, 550, 660, 880].forEach((f, i) => tone(f, 0.18, 0.11, 'sine', i * 0.07));
   tone(440, 0.30, 0.07, 'sawtooth', 0.42);
+}
+
+// ── RPG system SFX ────────────────────────────────────────────────────────────
+
+export function sfxTalentUnlock() {
+  // Triumphant ascending arpeggio with shimmer
+  [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, 0.11, 'sine', i * 0.07));
+  tone(1047, 0.22, 0.08, 'sawtooth', 0.32);
+}
+
+export function sfxLootDrop() {
+  // Mystical chime: high shimmer + resonant low note
+  tone(1760, 0.20, 0.10, 'sine');
+  tone(1320, 0.24, 0.08, 'sine',     0.06);
+  tone(880,  0.18, 0.07, 'sine',     0.14);
+  tone(440,  0.30, 0.10, 'sawtooth', 0.22);
+}
+
+export function sfxFortressUpgrade() {
+  // Heavy resonant construction chord
+  tone(110, 0.35, 0.14, 'square');
+  tone(165, 0.28, 0.10, 'square',   0.06);
+  tone(220, 0.22, 0.08, 'sawtooth', 0.12);
+  tone(440, 0.16, 0.07, 'sine',     0.24);
+}
+
+export function sfxRecruit() {
+  // Short martial fanfare
+  [330, 440, 550].forEach((f, i) => tone(f, 0.10, 0.11, 'sawtooth', i * 0.06));
+  tone(660, 0.18, 0.10, 'sine', 0.22);
+}
+
+export function sfxDismiss() {
+  // Somber descending phrase
+  [440, 330, 220, 165].forEach((f, i) => tone(f, 0.16, 0.09, 'sawtooth', i * 0.10));
+}
+
+export function sfxRename() {
+  // Quick bright confirmation ping
+  tone(880, 0.06, 0.08, 'sine');
+  tone(1100, 0.08, 0.07, 'sine', 0.05);
 }
