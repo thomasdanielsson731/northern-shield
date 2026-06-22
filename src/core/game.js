@@ -10,6 +10,7 @@ import { ROMAN, Defender, CAREER_XP } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import { TALENT_DEFS, getTalentBonuses } from '../roster/talents.js';
+import { FORTRESS_DEFS, getFortressBonuses } from '../fortress/fortress.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -202,9 +203,14 @@ let _currentBattlePreset = null;   // preset used for the current battle (for Fi
 let _roster              = new Roster();
 let _battleResult        = null;   // 'victory' | 'defeat' — set when battle ends
 let _newBattleTalentUnlocks = [];  // [{defName, talentId}] — talents unlocked at end of last battle
+let _fortressBonuses     = getFortressBonuses({});  // recomputed in initBattle
+let _effectiveWallCost   = 12;     // WALL_COST adjusted by Wallworks
+let _wallSlowFactor      = 0.65;   // adjusted by Wallworks; applied in enemy proximity-slow loop
+let _effectiveRecruitCost = 30;    // RECRUIT_COST adjusted by Barracks
 
 // Between-battles UI state
-let _recruitType  = null;   // currently selected class in recruit picker
+let _recruitType   = null;          // currently selected class in recruit picker
+let _betweenSubtab = 'recruit';     // 'recruit' | 'fortress' — bottom section tab
 
 // Map selection
 let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
@@ -415,8 +421,8 @@ function restartCombatState() {
   towers        = [];
   bullets       = [];
   particles     = [];
-  gold          = STARTING_GOLD;
-  _displayGold  = STARTING_GOLD;
+  gold          = STARTING_GOLD + (_fortressBonuses?.startingGoldBonus ?? 0);
+  _displayGold  = gold;
   lives         = STARTING_LIVES;
   slain         = 0;
   bossesDefeated = 0;
@@ -512,6 +518,13 @@ function restartCombatState() {
 // Set map geometry and start a battle without resetting campaign state.
 // Stars, runeInventory, and battlesCompleted are preserved.
 function initBattle(preset) {
+  // Recompute fortress bonuses from latest saved upgrades each battle
+  _fortressBonuses      = getFortressBonuses(_campaignState?.fortressUpgrades ?? {});
+  _effectiveWallCost    = Math.max(4, 12 - _fortressBonuses.wallCostReduction);
+  _wallSlowFactor       = Math.max(0.35, 0.65 - _fortressBonuses.wallSlowBonus);
+  _effectiveRecruitCost = Math.max(10, 30 - _fortressBonuses.recruitCostReduction);
+  _buildBtnsCache       = null;  // regenerate with updated wall cost
+
   SPAWN.col = preset.spawn.col;
   SPAWN.row = preset.spawn.row;
   GOAL.col  = preset.goal.col;
@@ -967,8 +980,8 @@ function startNextWave() {
   // Economy emergency valve — track poor waves (started with <25g = can't buy even a wall)
   if (gold < 25) poorWaveStreak++; else poorWaveStreak = 0;
   // Emergency gold floor: if player can't afford even a wall, grant minimum
-  if (gold < WALL_COST) {
-    const boost = WALL_COST * 3;
+  if (gold < _effectiveWallCost) {
+    const boost = _effectiveWallCost * 3;
     gold       += boost;
     goldEarned += boost;
     dmgFloaters.push({ x: GOAL.col * CELL_SIZE + CELL_SIZE / 2, y: GOAL.row * CELL_SIZE - 20, val: boost, life: 90, maxLife: 90, color: '#f5d030', large: false, suffix: 'g EMERGENCY' });
@@ -1708,6 +1721,7 @@ function getBuildButtons() {
   const btnY   = GRID_BOTTOM + 7;
   _buildBtnsCache = BUILD_ITEMS.map((item, i) => ({
     ...item,
+    cost:   item.id === 'wall' ? _effectiveWallCost : item.cost,
     x:      panelX + padX + i * (cardW + gap),
     y:      btnY,
     width:  cardW,
@@ -1859,7 +1873,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     }
   }
 
-  const cost = mode === CELL.WALL ? WALL_COST : TOWER_DEFS[towerType].cost;
+  const cost = mode === CELL.WALL ? _effectiveWallCost : TOWER_DEFS[towerType].cost;
   if (gold < cost) return false;
 
   // Mark all footprint cells
@@ -1903,9 +1917,14 @@ function tryPlaceAt(col, row, mode, towerType) {
     const t = new Tower(cx, cy, col, row, towerType);
     // Link to roster: reuse an existing veteran if available, otherwise register the new recruit.
     const def = _roster.link(towerType, t.defenderId, t.name);
-    const eqBonuses     = getItemBonuses(def.equipment);
+    const rawEq         = getItemBonuses(def.equipment);
+    const hasEquip      = def.equipment.some(Boolean);
+    const armoryMult    = _fortressBonuses.equipDmMult ?? 1;
+    const eqBonuses     = hasEquip && armoryMult !== 1
+      ? { dm: rawEq.dm * armoryMult, rm: rawEq.rm, cm: rawEq.cm }
+      : rawEq;
     const talentBonuses = getTalentBonuses(def.talents);
-    const hasBonus = def.careerLevel > 0 || def.equipment.some(Boolean) || def.talents.length > 0;
+    const hasBonus = def.careerLevel > 0 || hasEquip || def.talents.length > 0;
     if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses, talentBonuses);
     else { t.defenderId = def.defenderId; t.name = def.name; }
     towers.push(t);
@@ -1936,7 +1955,7 @@ function handleRightClickAt(mouseX, mouseY) {
     const wallKey = `w_${col}_${row}`;
     if (pendingSell && pendingSell.key === wallKey) {
       wallFrostDirty = true;
-      gold += Math.floor(WALL_COST * 0.75);
+      gold += Math.floor(_effectiveWallCost * 0.75);
       grid.setCell(col, row, CELL.EMPTY);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
       rerouteActiveEnemies();
@@ -2186,15 +2205,36 @@ canvas.addEventListener('mousedown', e => {
               }
             }
           } else if (btn.action === 'recruit') {
-            if (goldReserve >= RECRUIT_COST && _recruitType) {
+            if (goldReserve >= _effectiveRecruitCost && _recruitType) {
               const id   = _generateId();
               const name = getDefenderName(_recruitType);
               const def  = new Defender({ defenderId: id, name, type: _recruitType });
               _roster.defenders.push(def);
-              goldReserve -= RECRUIT_COST;
+              goldReserve -= _effectiveRecruitCost;
               _campaignState.goldReserve = goldReserve;
               _campaignState.defenders   = _roster.toJSON();
               try { saveCampaign(_campaignState); } catch {}
+            }
+          } else if (btn.action === 'switchTab') {
+            _betweenSubtab = btn.tab;
+          } else if (btn.action === 'upgradeFortress') {
+            const fDef = FORTRESS_DEFS[btn.key];
+            const upgrades = _campaignState.fortressUpgrades ?? {};
+            const lvl = upgrades[btn.key] ?? 0;
+            if (lvl < fDef.maxLevel) {
+              const cost = fDef.cost[lvl];
+              if (goldReserve >= cost) {
+                goldReserve -= cost;
+                upgrades[btn.key] = lvl + 1;
+                _campaignState.fortressUpgrades = upgrades;
+                _campaignState.goldReserve = goldReserve;
+                // Recompute fortress bonuses immediately so UI reflects new level
+                _fortressBonuses      = getFortressBonuses(upgrades);
+                _effectiveWallCost    = Math.max(4, 12 - _fortressBonuses.wallCostReduction);
+                _wallSlowFactor       = Math.max(0.35, 0.65 - _fortressBonuses.wallSlowBonus);
+                _effectiveRecruitCost = Math.max(10, 30 - _fortressBonuses.recruitCostReduction);
+                try { saveCampaign(_campaignState); } catch {}
+              }
             }
           }
           return;
@@ -2863,7 +2903,7 @@ function update() {
     for (const [ac, ar] of adj) {
       if (grid.getCell(ac, ar) === CELL.WALL) {
         enemy.slowTimer  = Math.max(enemy.slowTimer, 20);
-        if (0.65 < enemy.slowFactor) enemy.slowFactor = 0.65;  // don't override a stronger slow
+        if (_wallSlowFactor < enemy.slowFactor) enemy.slowFactor = _wallSlowFactor;
         break;
       }
     }
@@ -4963,6 +5003,15 @@ function drawWaveAnnouncement() {
   const nextW       = waveState === 'countdown' ? waveNumber : waveNumber + 1;
   const isBoss      = BOSS_WAVES.has(nextW);
   const nextEvent   = WAVE_EVENTS[nextW] ?? (endlessMode && nextW > 101 ? ENDLESS_FLAVOR_EVENTS[(nextW - 102) % 5] : null);
+  // Watchtower: peek ahead at events beyond nextW
+  const _epBonus    = _fortressBonuses?.eventPreviewBonus ?? 0;
+  const futureEvent = _epBonus > 0 ? (() => {
+    for (let w = nextW + 1; w <= nextW + _epBonus; w++) {
+      const ev = WAVE_EVENTS[w];
+      if (ev) return { wave: w, ev };
+    }
+    return null;
+  })() : null;
   const threatRatio = endlessMode ? 1.0 : Math.min(1, nextW / MAX_WAVES);
   const isClear     = waveState === 'break';
   const accentColor = isBoss ? '#ff3820' : isClear ? '#50d870' : '#e8c040';
@@ -4987,6 +5036,10 @@ function drawWaveAnnouncement() {
   } else {
     ctx.fillStyle = isBoss ? 'rgba(255,120,60,0.70)' : nextEvent ? 'rgba(255,200,60,0.68)' : 'rgba(180,160,100,0.55)';
     ctx.fillText(isBoss ? '☠ BOSS WAVE' : nextEvent ? `⚡ ${nextEvent.label}` : 'INCOMING', tx, bY + 12);
+    if (futureEvent) {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,170,80,0.45)';
+      ctx.fillText(`W${futureEvent.wave} ${futureEvent.ev.label}`, tx, bY + 20);
+    }
   }
   // Right of top line: AUTO badge or [Space] hint
   ctx.textAlign = 'right';
@@ -5742,55 +5795,129 @@ function drawBetweenBattles() {
   ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
   ctx.beginPath(); ctx.moveTo(rpX + 6, rsepY); ctx.lineTo(rpX + rpW - 6, rsepY); ctx.stroke();
 
-  // ── RECRUIT SECTION ──
-  const recY = rsepY + 6;
-  ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#c8b060';
-  ctx.fillText('RECRUIT', rix, recY + 12);
-  ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
-  ctx.fillText(`  costs ${RECRUIT_COST}g from reserve  (${goldReserve}g)`, rix + 54, recY + 12);
-
-  // Class picker: 5 chips per row, 2 rows
-  const allTypes = [
-    { type: 'berserk', short: 'Ber' }, { type: 'valkyrie', short: 'Val' },
-    { type: 'military', short: 'Arc' }, { type: 'catapult', short: 'Cat' },
-    { type: 'blondie', short: 'Blo' }, { type: 'piltorn', short: 'War' },
-    { type: 'hydda', short: 'Hea' }, { type: 'isjatten', short: 'Ice' },
-    { type: 'drakship', short: 'Dra' },
-  ];
-  const chipW = Math.floor((riW - 4) / 5);
-  const chipH = 20;
-  allTypes.forEach(({ type, short }, i) => {
-    const col = i % 5, row = Math.floor(i / 5);
-    const cx2 = rix + col * (chipW + 1), cy2 = recY + 18 + row * (chipH + 3);
-    const sel = _recruitType === type;
-    const tDef2 = TOWER_DEFS[type]; const glow2 = tDef2?.glowRgb ?? '180,150,80';
-    ctx.fillStyle   = sel ? `rgba(${glow2},0.25)` : 'rgba(30,25,15,0.7)';
-    ctx.strokeStyle = sel ? `rgba(${glow2},0.8)` : 'rgba(140,110,50,0.3)';
-    ctx.lineWidth   = sel ? 1.2 : 0.6;
-    ctx.beginPath(); ctx.roundRect(cx2, cy2, chipW - 1, chipH, 3); ctx.fill(); ctx.stroke();
+  // ── TAB BAR: RECRUIT | FORTRESS ──
+  const tabY   = rsepY + 5;
+  const tabH   = 17;
+  const tabW   = Math.floor(riW / 2) - 1;
+  ['recruit', 'fortress'].forEach((tab, i) => {
+    const tx2 = rix + i * (tabW + 2);
+    const sel  = _betweenSubtab === tab;
+    ctx.fillStyle   = sel ? 'rgba(200,170,60,0.18)' : 'rgba(20,16,10,0.5)';
+    ctx.strokeStyle = sel ? 'rgba(200,170,60,0.6)'  : 'rgba(100,80,40,0.3)';
+    ctx.lineWidth   = sel ? 1 : 0.5;
+    ctx.beginPath(); ctx.roundRect(tx2, tabY, tabW, tabH, 3); ctx.fill(); ctx.stroke();
     ctx.font = sel ? 'bold 9px monospace' : '9px monospace';
-    ctx.fillStyle = sel ? `rgba(${glow2},0.95)` : 'rgba(160,140,100,0.7)';
+    ctx.fillStyle = sel ? '#e8c040' : 'rgba(140,120,70,0.6)';
     ctx.textAlign = 'center';
-    ctx.fillText(short, cx2 + (chipW - 1) / 2, cy2 + 14);
+    ctx.fillText(tab === 'recruit' ? 'RECRUIT' : 'FORTRESS', tx2 + tabW / 2, tabY + 12);
     ctx.textAlign = 'left';
-    _betweenBtns.push({ x: cx2, y: cy2, w: chipW - 1, h: chipH, action: 'selectRecruitType', recruitType: type });
+    _betweenBtns.push({ x: tx2, y: tabY, w: tabW, h: tabH, action: 'switchTab', tab });
   });
 
-  // RECRUIT button
-  const rBtnY  = recY + 18 + 2 * (chipH + 3) + 4;
-  const rBtnH  = 26;
-  const canAfford = goldReserve >= RECRUIT_COST && _recruitType !== null;
-  drawFantasyPanel(rix, rBtnY, riW, rBtnH,
-    canAfford ? 'rgba(8,22,8,0.97)' : 'rgba(20,16,10,0.85)', canAfford ? 0.75 : 0.4, 4);
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillStyle = canAfford ? '#88ee66' : 'rgba(120,110,70,0.5)';
-  if (canAfford) { ctx.shadowColor = 'rgba(100,220,80,0.5)'; ctx.shadowBlur = 8; }
-  ctx.fillText(
-    _recruitType ? `RECRUIT  ${TOWER_DEFS[_recruitType]?.label ?? _recruitType}  (${RECRUIT_COST}g)` : 'SELECT CLASS TO RECRUIT',
-    rix + riW / 2, rBtnY + 18);
-  ctx.shadowBlur = 0; ctx.textAlign = 'left';
-  if (canAfford) _betweenBtns.push({ x: rix, y: rBtnY, w: riW, h: rBtnH, action: 'recruit' });
+  const recY = tabY + tabH + 3;
+
+  if (_betweenSubtab === 'recruit') {
+    // ── RECRUIT ────────────────────────────────────────────────────────────────
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
+    ctx.fillText(`◆ ${goldReserve}g reserve · ${_effectiveRecruitCost}g each`, rix, recY + 10);
+
+    const allTypes = [
+      { type: 'berserk', short: 'Ber' }, { type: 'valkyrie', short: 'Val' },
+      { type: 'military', short: 'Arc' }, { type: 'catapult', short: 'Cat' },
+      { type: 'blondie', short: 'Blo' }, { type: 'piltorn', short: 'War' },
+      { type: 'hydda', short: 'Hea' }, { type: 'isjatten', short: 'Ice' },
+      { type: 'drakship', short: 'Dra' },
+    ];
+    const chipW = Math.floor((riW - 4) / 5);
+    const chipH = 18;
+    allTypes.forEach(({ type, short }, i) => {
+      const col = i % 5, row = Math.floor(i / 5);
+      const cx2 = rix + col * (chipW + 1), cy2 = recY + 14 + row * (chipH + 3);
+      const sel = _recruitType === type;
+      const tDef2 = TOWER_DEFS[type]; const glow2 = tDef2?.glowRgb ?? '180,150,80';
+      ctx.fillStyle   = sel ? `rgba(${glow2},0.25)` : 'rgba(30,25,15,0.7)';
+      ctx.strokeStyle = sel ? `rgba(${glow2},0.8)`  : 'rgba(140,110,50,0.3)';
+      ctx.lineWidth   = sel ? 1.2 : 0.6;
+      ctx.beginPath(); ctx.roundRect(cx2, cy2, chipW - 1, chipH, 3); ctx.fill(); ctx.stroke();
+      ctx.font = sel ? 'bold 9px monospace' : '9px monospace';
+      ctx.fillStyle = sel ? `rgba(${glow2},0.95)` : 'rgba(160,140,100,0.7)';
+      ctx.textAlign = 'center';
+      ctx.fillText(short, cx2 + (chipW - 1) / 2, cy2 + 13);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: cx2, y: cy2, w: chipW - 1, h: chipH, action: 'selectRecruitType', recruitType: type });
+    });
+
+    const rBtnY  = recY + 14 + 2 * (chipH + 3) + 3;
+    const rBtnH  = 24;
+    const canAfford = goldReserve >= _effectiveRecruitCost && _recruitType !== null;
+    drawFantasyPanel(rix, rBtnY, riW, rBtnH,
+      canAfford ? 'rgba(8,22,8,0.97)' : 'rgba(20,16,10,0.85)', canAfford ? 0.75 : 0.4, 4);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillStyle = canAfford ? '#88ee66' : 'rgba(120,110,70,0.5)';
+    if (canAfford) { ctx.shadowColor = 'rgba(100,220,80,0.5)'; ctx.shadowBlur = 8; }
+    ctx.fillText(
+      _recruitType ? `RECRUIT  ${TOWER_DEFS[_recruitType]?.label ?? _recruitType}  (${_effectiveRecruitCost}g)` : 'SELECT CLASS TO RECRUIT',
+      rix + riW / 2, rBtnY + 16);
+    ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    if (canAfford) _betweenBtns.push({ x: rix, y: rBtnY, w: riW, h: rBtnH, action: 'recruit' });
+
+  } else {
+    // ── FORTRESS ───────────────────────────────────────────────────────────────
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
+    ctx.fillText(`◆ ${goldReserve}g reserve`, rix, recY + 10);
+
+    const upgrades  = _campaignState?.fortressUpgrades ?? {};
+    const nodeKeys  = ['barracks', 'armory', 'watchtower', 'wallworks'];
+    const nodeRowH  = 22;
+    nodeKeys.forEach((key, i) => {
+      const def    = FORTRESS_DEFS[key];
+      const lvl    = upgrades[key] ?? 0;
+      const maxed  = lvl >= def.maxLevel;
+      const cost   = maxed ? 0 : def.cost[lvl];
+      const ry2    = recY + 14 + i * nodeRowH;
+
+      // Row background
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
+      ctx.fillRect(rix, ry2, riW, nodeRowH - 2);
+
+      // Icon + label + level
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = maxed ? '#f0d040' : '#c8b060';
+      ctx.fillText(`${def.icon} ${def.label}`, rix, ry2 + 14);
+
+      const lvlStr = `Lv ${lvl}/${def.maxLevel}`;
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.6)';
+      ctx.textAlign = 'right';
+      if (!maxed) {
+        const descIdx = lvl; // levelDesc[0] = what lv1 gives, etc.
+        ctx.fillText(`${def.levelDesc[descIdx] ?? ''}`, rix + riW - 52, ry2 + 14);
+      }
+      ctx.textAlign = 'left';
+
+      // Level badge
+      ctx.font = '8px monospace';
+      ctx.fillStyle = maxed ? 'rgba(240,200,60,0.7)' : 'rgba(160,140,100,0.5)';
+      const lvlBadgeX = rix + riW - 50;
+      ctx.fillText(maxed ? 'MAX' : lvlStr, lvlBadgeX, ry2 + 14);
+
+      // UPGRADE button (right side)
+      if (!maxed) {
+        const btnW2 = 38, btnH2 = 14, btnX = rpX + rpW - 12 - btnW2, btnY2 = ry2 + 3;
+        const canBuy = goldReserve >= cost;
+        ctx.fillStyle   = canBuy ? 'rgba(8,22,8,0.9)'  : 'rgba(20,16,10,0.6)';
+        ctx.strokeStyle = canBuy ? 'rgba(80,200,80,0.5)' : 'rgba(80,60,30,0.3)';
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath(); ctx.roundRect(btnX, btnY2, btnW2, btnH2, 3); ctx.fill(); ctx.stroke();
+        ctx.font = '7px monospace';
+        ctx.fillStyle = canBuy ? '#88ee66' : 'rgba(120,110,70,0.4)';
+        ctx.textAlign = 'center';
+        ctx.fillText(`+  ${cost}g`, btnX + btnW2 / 2, btnY2 + 10);
+        ctx.textAlign = 'left';
+        if (canBuy) _betweenBtns.push({ x: btnX, y: btnY2, w: btnW2, h: btnH2, action: 'upgradeFortress', key });
+      }
+    });
+  }
 
   ctx.restore();
 }
@@ -6870,7 +6997,7 @@ function drawPendingSell() {
     ctx.fillText(`SELL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 3);
     ctx.font      = '8px monospace';
     ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
-    ctx.fillText(`Refund: ◆${Math.floor(WALL_COST * 0.75)}`, vx + vsW / 2, vy + vsH / 2 + 9);
+    ctx.fillText(`Refund: ◆${Math.floor(_effectiveWallCost * 0.75)}`, vx + vsW / 2, vy + vsH / 2 + 9);
   }
   ctx.restore();
 }
