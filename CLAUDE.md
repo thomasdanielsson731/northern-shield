@@ -42,9 +42,13 @@ src/
     bullet.js          — Bullet class; homing projectiles (orb/spear/rock/stun/arrow shapes)
   grid/
     grid.js            — Grid class, CELL enum, BFS pathfinding, cell drawing
-  [roster/]            — planned: Defender class, Roster, XP, talents, equipment (Phase 3+)
-  [fortress/]          — planned: Fortress upgrades, structures (Phase 6+)
-  [campaign/]          — planned: save/load, campaign state, battle history (Phase 2+)
+  roster/
+    names.js           — Viking name pools (8 names × 9 defender classes); getDefenderName(type)
+    defender.js        — Defender class (career XP, careerLevel, career stats); XP/level table; careerBonusForLevel()
+    roster.js          — Roster class: link() veteran to a Tower, grantBattleXP(), releaseAll(), load/toJSON
+  campaign/
+    save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
+  [fortress/]          — planned: Fortress upgrades, structures (Phase 6)
 assets/
   towers/              — sprite PNGs for all 9 tower types
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
@@ -56,6 +60,8 @@ tests/
   enemy.unit.test.js
   bullet.unit.test.js
   pathing.functional.test.js
+  campaign.unit.test.js
+  roster.unit.test.js
 ```
 
 ### Key facts about game.js
@@ -136,7 +142,7 @@ Towers upgrade to level 10: +25% damage, +8% range, −5% cooldown per level. Se
 
 ### Rune system
 
-Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars persist for the run and reset on restart. Press `R` between waves to open the Rune Forge overlay (`showRuneMenu`).
+Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars now persist across battles as part of campaign state (`_campaignState.stars`). Press `R` between waves to open the Rune Forge overlay (`showRuneMenu`).
 
 Five rune types defined in `RUNE_DEFS`:
 
@@ -162,9 +168,17 @@ Pairs of adjacent towers activate automatic stat boosts (detected each tick, app
 
 Active synergies are shown in the tower detail panel and rendered as a colored glow ring. `tower._synergy` is null or one of the three keys; `tower._synergyDmgBoost` is set to 1.15 (or 1) by game.js before each tower's `update()` call.
 
-### Map selection and game phases
+### Campaign boundary and game phases
 
-`gamePhase` is either `'mapSelect'` or `'playing'`. On load (and after death/restart), the game shows a map select screen with three preset maps:
+`gamePhase` is `'mapSelect' | 'playing' | 'betweenBattles'`. Campaign state (`stars`, `runeInventory`, `battlesCompleted`, the Roster) persists across the boundary; combat state resets.
+
+Key functions:
+- `initCampaign(preset)` — loads `ns-campaign-v2` save (or migrates legacy), restores stars/runes/roster, calls `initBattle`
+- `initBattle(preset)` — sets map geometry, calls `restartCombatState()`, sets `gamePhase = 'playing'`
+- `restartCombatState()` — clears enemies/towers/bullets/gold; returns equipped runes to inventory; does NOT touch stars or roster
+- `recordBattleResult(result)` — grants defender XP, serializes roster into campaign save, increments `battlesCompleted`, transitions to `betweenBattles`
+
+On load (and after `betweenBattles → MAP SELECT`), the game shows a map select screen with three preset maps:
 
 | Name | Spawn | Goal | Description |
 |---|---|---|---|
@@ -172,7 +186,7 @@ Active synergies are shown in the tower detail panel and rendered as a colored g
 | BIFROST PASS | col 0, row 5 | col 35, row 16 | Off-center lanes |
 | NIDHOGG'S RUN | col 0, row 1 | col 35, row 20 | Corner crossing |
 
-Auto-starts in 10 s (`MAP_AUTO_DELAY`) if the player doesn't pick. `initGame(map)` applies the chosen spawn/goal and resets all state.
+Auto-starts in 10 s (`MAP_AUTO_DELAY`) if the player doesn't pick. `initGame(map)` calls `initCampaign(map)` which is the campaign entry point.
 
 ### Wave events
 
@@ -204,10 +218,6 @@ Five achievements defined in `ACH_DEFS`, persisted to `localStorage` under key `
 | `wave100` | SHIELD ETERNAL | Clear all 100 waves |
 | `flawless5` | GHOST WALKER | 5 flawless waves in one run |
 
-### Endless mode
-
-After wave 100 is cleared: `endlessMode` flips to `true`, a victory banner plays, the run score is saved, and the game continues beyond `MAX_WAVES` with escalating difficulty. Waves past 100 still earn stars and gold.
-
 ### Wave threat coloring
 
 The wave status line in the HUD is colored by threat: boss waves are red (`#ff4020`), waves > 80% through the 100-wave arc are orange (`#ff7020`), > 50% are yellow (`#e8c040`), and earlier waves are green (`#60ee80`). The same colors are used for the progress bar and wave announcement banner.
@@ -224,15 +234,27 @@ For code work, the relevant constraints:
 
 **Non-negotiable rules:**
 - **Path validity** — BFS check before every placement. Never bypass this.
-- **Battle vs. campaign separation** — `initGame()` will eventually split into `initBattle()` and `initCampaign()`. Do not add cross-battle state to `initGame()` without a plan for this split.
+- **Battle vs. campaign separation** — `initBattle()` resets only combat state; `initCampaign()` resets everything. Never add cross-battle state to `restartCombatState()`.
 - **No implicit roguelite resets** — do not silently discard defender state. If state resets, it must be explicit and intentional.
 
-**Coding standards for RPG systems (when building new layers):**
+**Coding standards for RPG systems:**
 - New systems go in new files under new subdirectories (`src/roster/`, `src/fortress/`, `src/campaign/`). `game.js` calls into them; it does not absorb them.
 - `saveCampaign()` must never be called synchronously inside `requestAnimationFrame` or the game tick — localStorage serialization blocks the main thread.
-- Defender progression state (XP, career level, talents, equipment) lives on the `Defender` entity, not on the `Tower` placement instance.
-- The `Tower` class is a **combat instance**; the `Defender` class (planned) is a **character entity**. Keep these separate even though they reference the same class template (`TOWER_DEFS`).
+- Defender progression state (XP, career level, talents, equipment) lives on the `Defender` entity (`src/roster/defender.js`). The `Tower` class mirrors only what it needs for combat (`_careerLevel`, `name`, `defenderId`).
+- The `Tower` class is a **combat instance**; `Defender` is a **character entity**. Keep them separate — `Tower` holds position/firestate; `Defender` holds career/XP.
 - `localStorage` writes use the `ns-campaign-v2` schema (see ARCHITECTURE.md §3.3). Include a `version` field. Provide a migration path from v1 keys.
+
+### Roster and career system
+
+When a Tower is placed, `game.js` calls `_roster.link(type, id, name)`:
+- If an undeployed `Defender` of that class exists in the roster, that veteran is reused (their name/id/careerLevel are applied to the Tower via `tower.applyCareerData()`).
+- Otherwise a new `Defender` is registered.
+
+After battle ends, `recordBattleResult()` calls `_roster.grantBattleXP(towers, waveNumber)` then serializes the roster into `_campaignState.defenders`.
+
+Career level thresholds (XP): `[0, 50, 150, 350, 700, 1200, 1800, 2500, 3500, 4800, 6500]` (levels 0–10).
+Stat bonuses at milestones: level 3 = +10% dmg; level 5 = +15% dmg/+5% range; level 8 = +25% dmg/+8% range/−7% cooldown; level 10 = +40% dmg/+12% range/−12% cooldown.
+Career level shown in tower panel as Roman numeral: `"Ulfr  [III]"`.
 
 **Defender identity:**
 - `glowRgb`, per-tower stats (`damageDealt`, `killCount`, `goldGenerated`), and MVP tracking serve the goal of making defenders feel distinct.

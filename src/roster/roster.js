@@ -29,6 +29,10 @@ export class Roster {
     return this.defenders.find(d => d.defenderId === defenderId) ?? null;
   }
 
+  dismiss(defenderId) {
+    this.defenders = this.defenders.filter(d => d.defenderId !== defenderId);
+  }
+
   releaseAll() {
     for (const d of this.defenders) d.deployed = false;
   }
