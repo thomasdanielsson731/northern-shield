@@ -4064,7 +4064,8 @@ function drawRightPanel() {
       _row('Enemies:', `${onField} ∙ ${parts.join(' ')}`, tColor);
     }
     if (nextBossW) {
-      _row('Next Boss:', `☠ Wave ${nextBossW}`, '#d05828');
+      const _nbName = BOSS_CONFIGS[nextBossW]?.name ?? `Wave ${nextBossW}`;
+      _row('Next Threat:', `☠ ${_nbName}`, '#d05828');
     } else if (curEv) {
       _row('Event:', `⚡ ${curEv.label}`, curEv.id === 'ancestralAid' ? '#80d8ff' : '#e8c040');
     }
@@ -4084,34 +4085,50 @@ function drawRightPanel() {
     _hdr('#5882c8', '♜', 'FORTRESS', stat, statC);
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 
-    _row('Lives:', `${lives} / ${STARTING_LIVES}`, effC);
+    _row('Ramparts:', `${lives} / ${STARTING_LIVES}`, effC);
     _bar(lives / STARTING_LIVES, effC);
-    _row('Towers:', `${towers.length}`, '#90a8c8');
+    _row('Deployed:', `${towers.length}`, '#90a8c8');
     ly += GAP;
   }
 
   // ── 3. DEFENDERS ─────────────────────────────────────────────────────────────
   {
     const defC  = '#9070d8';
-    const mvpT  = towers.length ? towers.reduce((best, t) => {
-      const sc = (t.damageDealt||0) + (t.killCount||0)*32 + (t.goldGenerated||0)*1.5;
-      const bs = (best.damageDealt||0) + (best.killCount||0)*32 + (best.goldGenerated||0)*1.5;
-      return sc > bs ? t : best;
-    }) : null;
-    const totalDmg  = towers.reduce((s,t) => s + (t.damageDealt||0), 0);
-    const totalKill = towers.reduce((s,t) => s + (t.killCount||0), 0);
-    const mvpLabel  = mvpT && mvpT.mvpTimer > 0 ? (mvpT.name ?? TOWER_DEFS[mvpT.type]?.label) : null;
+    const scored = towers.map(t => ({
+      t,
+      score: (t.damageDealt||0) + (t.killCount||0)*32 + (t.goldGenerated||0)*1.5,
+    })).sort((a, b) => b.score - a.score);
+    const mvpT     = scored.length ? scored[0].t : null;
+    const mvpLabel = mvpT?.mvpTimer > 0 ? (mvpT.name ?? TOWER_DEFS[mvpT.type]?.label) : null;
 
-    _hdr(defC, '⚔', 'DEFENDERS', mvpLabel ? `MVP: ${mvpLabel}` : '', '#ffd040');
+    // Roster status word based on mean career level of deployed defenders
+    const meanLvl = towers.length
+      ? towers.reduce((s, t) => s + (t._careerLevel || 0), 0) / towers.length : 0;
+    const rStatus = meanLvl >= 7 ? 'VETERAN' : meanLvl >= 4 ? 'BLOODED' : meanLvl >= 2 ? 'TRAINED' : 'GREEN';
+    const rStatusC = meanLvl >= 7 ? '#ffd040' : meanLvl >= 4 ? '#e89040' : meanLvl >= 2 ? '#90c870' : '#8090c0';
 
-    if (mvpT) {
-      const mName = mvpT.name ?? TOWER_DEFS[mvpT.type]?.label ?? mvpT.type;
-      const mCareer = mvpT._careerLevel > 0 ? `  [${ROMAN[mvpT._careerLevel] ?? mvpT._careerLevel}]` : '';
-      _row('Champion:', mName + mCareer, `rgba(${mvpT.glowRgb ?? '180,150,255'},0.95)`);
+    _hdr(defC, '⚔', 'DEFENDERS', mvpLabel ? `MVP: ${mvpLabel}` : rStatus, mvpLabel ? '#ffd040' : rStatusC);
+
+    if (towers.length === 0) {
+      _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
+    } else {
+      const show = Math.min(scored.length, 5);
+      for (let i = 0; i < show; i++) {
+        const { t } = scored[i];
+        const isMvp  = i === 0;
+        const tName  = t.name ?? TOWER_DEFS[t.type]?.label ?? t.type;
+        const tLvl   = t._careerLevel > 0 ? ` [${ROMAN[t._careerLevel] ?? t._careerLevel}]` : '';
+        const def    = _roster?.find(t.defenderId);
+        // Show battle kills during fight; fall back to career kills (marked ✦) at wave start
+        const bKills = t.killCount || 0;
+        const killStr = bKills > 0 ? `${bKills}K`
+                      : def?.careerKills > 0 ? `${def.careerKills}K✦` : '';
+        const nameC  = isMvp
+          ? `rgba(${t.glowRgb ?? '180,150,255'},0.95)`
+          : 'rgba(185,165,130,0.72)';
+        _row(tName + tLvl, killStr, nameC);
+      }
     }
-    _rowDual('',
-      `DMG  ${totalDmg.toLocaleString()}`, '#c8903c',
-      `Kills  ${totalKill}`,               '#c07038');
     ly += GAP;
   }
 
@@ -4137,7 +4154,7 @@ function drawRightPanel() {
     ctx.shadowBlur = 0; ctx.textAlign = 'left';
     ly += 12;
 
-    _row('Income / sec:', `${incEst}g`, '#c89828');
+    _row('Gold / sec:', `${incEst}g`, '#c89828');
 
     const hFrac = hG >= 5000 ? 1.0 : hG >= 1000 ? 0.80 : hG >= 500 ? 0.60 : hG >= 100 ? 0.35 : Math.min(0.20, hG/100);
     _bar(hFrac, hColor);
@@ -4154,7 +4171,7 @@ function drawRightPanel() {
     _hdr(campC, '✦', 'CAMPAIGN', `✦ ${stars}`, 'rgba(230,200,80,0.80)');
     _row('Wave Progress:', endlessMode ? `${dispW} / ∞` : `${dispW} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
     _bar(progress, bColor);
-    _row('Bosses Defeated:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
+    _row('Chieftains Slain:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
       bossesDefeated >= BOSS_WAVES.size ? '#ffd040' : 'rgba(200,180,130,0.80)');
     _row('Reserve:', `◆ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
     {
@@ -4454,25 +4471,23 @@ function drawTopBar() {
   ctx.fillStyle = showHelp ? 'rgba(240,200,80,0.85)' : 'rgba(140,110,60,0.75)';
   ctx.fillText('[?]', FT + pw - 6, cy);
 
-  // Sprite scale indicator (experimental visual tuning) — high-contrast pill
-  try {
-    const sc = getSpriteScale();
-    const pillW = 74, pillH = 20;
-    const pillX = FT + pw - pillW - 12; // place left of help hint
-    const pillY = barMid - pillH / 2;
-    ctx.save();
-    ctx.globalAlpha = 0.92;
-    ctx.fillStyle = 'rgba(10,10,12,0.78)';
-    ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.roundRect(pillX + 0.5, pillY + 0.5, pillW - 1, pillH - 1, 6); ctx.stroke();
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#f0f0f8';
-    ctx.fillText(`Scale ${sc.toFixed(2)}`, pillX + pillW / 2, pillY + pillH / 2 + 4);
-    ctx.restore();
-  } catch (err) {
-    // ignore if config missing
+  // Sprite scale pill — only shown when help overlay is open
+  if (showHelp) {
+    try {
+      const sc = getSpriteScale();
+      const pillW = 74, pillH = 20;
+      const pillX = FT + pw - pillW - 12;
+      const pillY = barMid - pillH / 2;
+      ctx.save();
+      ctx.globalAlpha = 0.70;
+      ctx.fillStyle = 'rgba(10,10,12,0.78)';
+      ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 6); ctx.fill();
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#a0a0b0';
+      ctx.fillText(`Scale ${sc.toFixed(2)}`, pillX + pillW / 2, pillY + pillH / 2 + 3);
+      ctx.restore();
+    } catch (err) { /* ignore */ }
   }
 
   ctx.restore();
@@ -4507,7 +4522,10 @@ function drawBottomBuildBar() {
       : buildMode === CELL.TOWER && selectedTowerType === btn.id;
     const affordable = gold >= btn.cost;
 
-    const fillStyle   = isSelected ? 'rgba(70,40,10,0.97)' : 'rgba(18,9,28,0.92)';
+    const isWall      = btn.mode === CELL.WALL;
+    const fillStyle   = isSelected
+      ? (isWall ? 'rgba(20,34,50,0.97)' : 'rgba(70,40,10,0.97)')
+      : (isWall ? 'rgba(8,14,22,0.92)'  : 'rgba(18,9,28,0.92)');
     const borderAlpha = isSelected ? 0.90 : 0.35;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
 
@@ -4648,13 +4666,14 @@ function drawBottomBuildBar() {
       ctx.shadowColor = 'rgba(240,190,20,0.7)'; ctx.shadowBlur = 8;
       ctx.fillText('🔒', cx2, cy - 2);
       ctx.shadowBlur = 0;
-      // Stars: current / required
+      // Unit name + star requirement
       ctx.font = `bold ${labelSz}px monospace`;
       ctx.fillStyle = '#f0d040';
       ctx.fillText(`✦ ${stars} / ${gate}`, cx2, cy + 13);
       ctx.font = `${labelSz - 1}px monospace`;
       ctx.fillStyle = 'rgba(220,180,80,0.65)';
-      ctx.fillText(`need ${gate - stars} more ★`, cx2, cy + 24);
+      const _lockLabel = TOWER_DEFS[btn.id]?.label ?? btn.label;
+      ctx.fillText(`${_lockLabel} · ${gate} ✦`, cx2, cy + 24);
       ctx.restore();
     }
 

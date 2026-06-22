@@ -46,9 +46,12 @@ src/
     names.js           — Viking name pools (8 names × 9 defender classes); getDefenderName(type)
     defender.js        — Defender class (career XP, careerLevel, career stats); XP/level table; careerBonusForLevel()
     roster.js          — Roster class: link() veteran to a Tower, grantBattleXP(), releaseAll(), load/toJSON
+    items.js           — ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses(); equipment slots: 'weapon' | 'armor'
+    talents.js         — TALENT_DEFS, CLASS_TALENTS, getTalentBonuses(); 4 talents per class, auto-unlocked at career levels 3/5/8/10
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
-  [fortress/]          — planned: Fortress upgrades, structures (Phase 6)
+  fortress/
+    fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
 assets/
   towers/              — sprite PNGs for all 9 tower types
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
@@ -259,6 +262,38 @@ Career level shown in tower panel as Roman numeral: `"Ulfr  [III]"`.
 **Defender identity:**
 - `glowRgb`, per-tower stats (`damageDealt`, `killCount`, `goldGenerated`), and MVP tracking serve the goal of making defenders feel distinct.
 - Speed and reaction time are not the skill expression. Strategic roster decisions and placement are.
+
+### Equipment system
+
+10 equipment items in `src/roster/items.js`. Each defender has two slots: `weapon` and `armor`. Items are dropped by bosses (`BOSS_DROP_TABLE`, keyed by wave number) and go into the campaign `equipmentInventory`. Players equip items from the Roster screen; bonuses apply when the defender is deployed.
+
+| Rarity | Color | Examples |
+|---|---|---|
+| common | `#a8a8a8` | Frost Crystal (+12% dmg), Iron Mantle (+10% dmg, −4% cd) |
+| rare | `#4090ff` | Skaði's Blade (+25% dmg), Eagle Eye Lens (+22% rng), Warcry Torc, Storm Cloak |
+| epic | `#cc44ff` | Runebane (+35% dmg, −10% cd), Frostborn Shield |
+| legendary | `#ff9020` | Surtr's Shard (+50% dmg, −12% cd), Valkyrja Wings (+25% rng, −15% cd) |
+
+`getItemBonuses(itemIds)` → `{ dm, rm, cm }` — multiplicative, stacked on top of career bonuses. The Armory fortress upgrade amplifies `dm` on all items.
+
+Boss drop schedule: wave 10 → common, wave 25 → rare, wave 50 → rare, wave 75 → epic, wave 100 → legendary (one of two options chosen at random per drop).
+
+### Talent system
+
+`src/roster/talents.js` defines 4 talents per defender class (36 total), keyed by `CLASS_TALENTS[class][level]`. Talents auto-unlock when a defender reaches career levels 3, 5, 8, or 10. All bonuses are multiplicative (`dm`, `rm`, `cm`); slow-centric classes (blondie, isjatten) also have a `slowMult` field (lower = deeper slow).
+
+`getTalentBonuses(talentIds)` → `{ dm, rm, cm, slowMult }` — combined from all unlocked talents. Applies on top of career level bonuses and item bonuses.
+
+### Fortress upgrades
+
+`src/fortress/fortress.js` — 4 upgrade nodes, each 3 levels. Purchased between battles with `goldReserve`. `getFortressBonuses(upgrades)` returns the combined effect object consumed by `initBattle()`.
+
+| Node | Bonus | Max |
+|---|---|---|
+| Barracks | Recruit cost −5/10/15g, +20/40/60g starting gold | level 3 |
+| Armory | Equipment damage multiplier ×1.08/1.13/1.20 | level 3 |
+| Watchtower | Wave event preview +1/2/3 waves ahead | level 3 |
+| Wallworks | Wall cost −1/2/3g, adjacent slow +4/7/10% | level 3 |
 
 ## Art direction
 
