@@ -9,7 +9,7 @@ import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
-import { TALENT_DEFS, getTalentBonuses } from '../roster/talents.js';
+import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
 import { FORTRESS_DEFS, getFortressBonuses } from '../fortress/fortress.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
@@ -209,8 +209,13 @@ let _wallSlowFactor      = 0.65;   // adjusted by Wallworks; applied in enemy pr
 let _effectiveRecruitCost = 30;    // RECRUIT_COST adjusted by Barracks
 
 // Between-battles UI state
-let _recruitType   = null;          // currently selected class in recruit picker
-let _betweenSubtab = 'recruit';     // 'recruit' | 'fortress' — bottom section tab
+let _recruitType        = null;          // currently selected class in recruit picker
+let _betweenSubtab      = 'recruit';     // 'recruit' | 'fortress' — bottom section tab
+let _pendingDismiss     = null;          // defenderId awaiting dismiss confirm
+let _rosterScrollOffset = 0;            // how many defender rows scrolled past top
+let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
+let _reserveContrib     = 0;            // gold added to reserve this battle (20% of goldEarned)
+let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
 
 // Map selection
 let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
@@ -459,7 +464,12 @@ function restartCombatState() {
   maraEmpWarningTimer = 0;
   jotunnWarningTimer  = 0;
   dragItem           = null;
-  pendingSell       = null;
+  pendingSell        = null;
+  _pendingDismiss    = null;
+  _rosterScrollOffset = 0;
+  _battleXpData      = [];
+  _reserveContrib    = 0;
+  _bossLootBanner    = null;
   gridZoom          = 1.0;
   gridPanX          = 0;
   gridPanY          = 0;
@@ -535,6 +545,18 @@ function initBattle(preset) {
   _currentBattlePreset = preset;
   gamePhase = 'playing';
   restartCombatState();
+
+  // Show Barracks starting-gold bonus as a floater at the spawn portal
+  const sgBonus = _fortressBonuses?.startingGoldBonus ?? 0;
+  if (sgBonus > 0) {
+    const spawnPx = GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2;
+    const spawnPy = GRID_TOP  + SPAWN.row * CELL_SIZE + CELL_SIZE / 2;
+    dmgFloaters.push({
+      x: spawnPx, y: spawnPy - 18,
+      val: `+${sgBonus}g (Barracks)`, life: 150, maxLife: 150,
+      color: '#88ee66', large: false, raw: true,
+    });
+  }
 }
 
 // Load or create the campaign save, restore campaign state, then start the first battle.
@@ -584,11 +606,24 @@ function recordBattleResult(result) {
     timestamp:     Date.now(),
   });
 
-  goldReserve += Math.floor(goldEarned * 0.20);
+  _reserveContrib = Math.floor(goldEarned * 0.20);
+  goldReserve += _reserveContrib;
   _campaignState.goldReserve       = goldReserve;
   _campaignState.equipmentInventory = _equipmentInventory.slice();
 
+  const _preXpState = towers.map(t => {
+    const d = _roster.find(t.defenderId);
+    return d ? { id: d.defenderId, name: d.name, xp: d.xp, level: d.careerLevel } : null;
+  }).filter(Boolean);
+
   _newBattleTalentUnlocks = _roster.grantBattleXP(towers, waveNumber);
+
+  _battleXpData = _preXpState.map(prev => {
+    const d = _roster.find(prev.id);
+    return d ? { name: prev.name, xpGained: d.xp - prev.xp, oldLevel: prev.level, newLevel: d.careerLevel } : null;
+  }).filter(Boolean);
+  _rosterScrollOffset = 0;
+
   _roster.releaseAll();
   _campaignState.defenders = _roster.toJSON();
 
@@ -2150,15 +2185,20 @@ canvas.addEventListener('mousedown', e => {
       for (const btn of _betweenBtns) {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (!['pendingDismiss', 'confirmDismiss'].includes(btn.action)) _pendingDismiss = null;
           if (btn.action === 'fightAgain') {
+            _betweenSubtab = 'recruit';
             initBattle(_currentBattlePreset);
           } else if (btn.action === 'mapSelect') {
             gamePhase = 'mapSelect';
             mapAutoTimerStart = performance.now();
             selectedMapIdx = 0;
+            _betweenSubtab = 'recruit';
           } else if (btn.action === 'selectRecruitType') {
             _recruitType = _recruitType === btn.recruitType ? null : btn.recruitType;
-          } else if (btn.action === 'dismiss') {
+          } else if (btn.action === 'pendingDismiss') {
+            _pendingDismiss = _pendingDismiss === btn.defenderId ? null : btn.defenderId;
+          } else if (btn.action === 'confirmDismiss') {
             const dismissDef = _roster.find(btn.defenderId);
             if (dismissDef) {
               for (const itemId of dismissDef.equipment) {
@@ -2166,9 +2206,12 @@ canvas.addEventListener('mousedown', e => {
               }
             }
             _roster.dismiss(btn.defenderId);
+            _pendingDismiss = null;
             _campaignState.defenders = _roster.toJSON();
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { saveCampaign(_campaignState); } catch {}
+          } else if (btn.action === 'scrollRoster') {
+            _rosterScrollOffset = Math.max(0, _rosterScrollOffset + btn.dir);
           } else if (btn.action === 'cycleEquip') {
             const def = _roster.find(btn.defenderId);
             if (def) {
@@ -3738,7 +3781,8 @@ function drawRightPanel() {
 
     if (mvpT) {
       const mName = mvpT.name ?? TOWER_DEFS[mvpT.type]?.label ?? mvpT.type;
-      _row('Champion:', mName, `rgba(${mvpT.glowRgb ?? '180,150,255'},0.95)`);
+      const mCareer = mvpT._careerLevel > 0 ? `  [${ROMAN[mvpT._careerLevel] ?? mvpT._careerLevel}]` : '';
+      _row('Champion:', mName + mCareer, `rgba(${mvpT.glowRgb ?? '180,150,255'},0.95)`);
     }
     _rowDual('',
       `DMG  ${totalDmg.toLocaleString()}`, '#c8903c',
@@ -3787,6 +3831,16 @@ function drawRightPanel() {
     _bar(progress, bColor);
     _row('Bosses Defeated:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
       bossesDefeated >= BOSS_WAVES.size ? '#ffd040' : 'rgba(200,180,130,0.80)');
+    _row('Reserve:', `◆ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
+    {
+      const fb = _fortressBonuses;
+      const fParts = [];
+      if ((fb.startingGoldBonus   ?? 0) > 0) fParts.push(`+${fb.startingGoldBonus}g`);
+      if ((fb.recruitCostReduction ?? 0) > 0) fParts.push(`−${fb.recruitCostReduction}g recruit`);
+      if ((fb.wallCostReduction   ?? 0) > 0) fParts.push(`−${fb.wallCostReduction}g wall`);
+      if ((fb.equipDmMult         ?? 1) > 1) fParts.push(`+${Math.round((fb.equipDmMult - 1) * 100)}%eq`);
+      if (fParts.length > 0) _row('Fortress:', fParts.join(' · '), 'rgba(140,180,140,0.65)');
+    }
     ly += GAP;
   }
 
@@ -3968,8 +4022,12 @@ function drawTopBar() {
   ctx.shadowColor = 'rgba(220,170,40,0.7)';
   ctx.shadowBlur  = 8;
   ctx.textAlign   = 'left';
-  ctx.fillText('NORTHERN SHIELD', avX + avR + 5, cy);
+  ctx.fillText('NORTHERN SHIELD', avX + avR + 5, cy - 4);
   ctx.shadowBlur  = 0;
+  if (_currentMapName) {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,80,0.55)';
+    ctx.fillText(_currentMapName, avX + avR + 5, cy + 7);
+  }
 
   // ── CENTER: wave label + timer ───────────────────────────────────────────────
   const midX = Math.round(BASE_W / 2);
@@ -4207,6 +4265,16 @@ function drawBottomBuildBar() {
     ctx.textAlign = 'left';
     ctx.fillText(`[${btn.key}]`, btn.x + 4, btn.y + 11);
 
+    // ── Veteran indicator top-right ─────────────────────────────────────────────
+    if (btn.mode === CELL.TOWER) {
+      const vet = _roster?.defenders.find(d => d.type === btn.id && !d.deployed);
+      if (vet && vet.careerLevel > 0) {
+        ctx.font = '7px monospace'; ctx.textAlign = 'right';
+        ctx.fillStyle = `rgba(${TOWER_DEFS[btn.id]?.glowRgb ?? '220,180,60'},0.80)`;
+        ctx.fillText(`V.${ROMAN[vet.careerLevel] ?? vet.careerLevel}`, btn.x + btn.width - 3, btn.y + 10);
+      }
+    }
+
     // ── Info strip (bottom 26px) ────────────────────────────────────────────────
     const infoY = btn.y + btn.height - INFO_H;
 
@@ -4255,15 +4323,13 @@ function drawBottomBuildBar() {
       ctx.shadowColor = 'rgba(240,190,20,0.7)'; ctx.shadowBlur = 8;
       ctx.fillText('🔒', cx2, cy - 2);
       ctx.shadowBlur = 0;
-      // Stars needed
+      // Stars: current / required
       ctx.font = `bold ${labelSz}px monospace`;
       ctx.fillStyle = '#f0d040';
-      ctx.fillText(`✦ ${gate} ★`, cx2, cy + 13);
-      // How many more
-      const need = gate - stars;
+      ctx.fillText(`✦ ${stars} / ${gate}`, cx2, cy + 13);
       ctx.font = `${labelSz - 1}px monospace`;
       ctx.fillStyle = 'rgba(220,180,80,0.65)';
-      ctx.fillText(`need ${need} more`, cx2, cy + 24);
+      ctx.fillText(`need ${gate - stars} more ★`, cx2, cy + 24);
       ctx.restore();
     }
 
@@ -4434,7 +4500,7 @@ function drawHud() {
       ctx.font      = '12px monospace';
       ctx.fillStyle = '#f0d040';
       ctx.shadowColor = 'rgba(240,190,20,0.6)'; ctx.shadowBlur = 6;
-      ctx.fillText(`✦ ${stars} stars earned this run`, cx, cy + 54);
+      ctx.fillText(`✦ ${stars} campaign stars total`, cx, cy + 54);
       ctx.shadowBlur = 0;
     }
     if (bestWave.wave > 0) {
@@ -4490,7 +4556,16 @@ function drawHud() {
 
 function drawTowerPanel(tower) {
   const panelW = 162;
-  const panelH = tower.maxed ? 146 : 160;
+  const tb = tower._talentBonuses;
+  const hasTalents = !!(tb && (
+    (tb.dm ?? 1) !== 1 || (tb.rm ?? 1) !== 1 ||
+    (tb.cm ?? 1) !== 1 || (tb.slowMult ?? 1) !== 1
+  ));
+  const talentExtraH = hasTalents ? 13 : 0;
+  const defForPanel = _roster?.find(tower.defenderId);
+  const hasItems = !!(defForPanel && (defForPanel.equipment[0] || defForPanel.equipment[1]));
+  const itemsExtraH = hasItems ? 14 : 0;
+  const panelH = (tower.maxed ? 146 : 160) + talentExtraH + itemsExtraH;
   panelRuneBtn = null;
   const { width, height } = getViewSize();
 
@@ -4569,8 +4644,19 @@ function drawTowerPanel(tower) {
   }
   ctx.textAlign = 'left';
 
+  // Talent bonuses row
+  if (hasTalents) {
+    const talParts = [];
+    if ((tb.dm  ?? 1) !== 1) talParts.push(`+${Math.round((tb.dm  - 1) * 100)}%dmg`);
+    if ((tb.rm  ?? 1) !== 1) talParts.push(`+${Math.round((tb.rm  - 1) * 100)}%rng`);
+    if ((tb.cm  ?? 1) !== 1) talParts.push(`−${Math.round((1 - tb.cm)  * 100)}%cd`);
+    if ((tb.slowMult ?? 1) !== 1) talParts.push(`−${Math.round((1 - tb.slowMult) * 100)}%slow`);
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(240,200,60,0.75)';
+    ctx.fillText(`✦ ${talParts.join(' · ')}`, px + 10, killRow + 13);
+  }
+
   // Divider
-  const divY = tower.maxed ? py + 65 : py + 78;
+  const divY = (tower.maxed ? py + 65 : py + 78) + talentExtraH;
   ctx.strokeStyle = 'rgba(210,160,40,0.2)';
   ctx.lineWidth   = 0.5;
   ctx.beginPath();
@@ -4578,7 +4664,7 @@ function drawTowerPanel(tower) {
   ctx.stroke();
 
   // Upgrade button
-  const btnY  = tower.maxed ? py + 72 : py + 86;
+  const btnY  = (tower.maxed ? py + 72 : py + 86) + talentExtraH;
   const btnH  = 28;
   const upgW  = 94;
   const sellW = 52;
@@ -4647,6 +4733,24 @@ function drawTowerPanel(tower) {
     ctx.fillStyle = rbtnActive ? '#c0a0ff' : (hasFreeRune || runeDef) ? '#88ee60' : '#504030';
     ctx.fillText(runeDef ? 'CHANGE' : 'EQUIP', rbtnX + rbtnW / 2, rbtnY + rbtnH / 2 + 3);
     panelRuneBtn = { x: rbtnX, y: rbtnY, w: rbtnW, h: rbtnH, tower };
+  }
+
+  // ── Equipped items ───────────────────────────────────────────────────────────
+  if (hasItems) {
+    const itemSecY = runeSecY + (runeDef ? 30 : 20);
+    ctx.strokeStyle = 'rgba(180,140,60,0.15)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(px + 8, itemSecY); ctx.lineTo(px + panelW - 8, itemSecY); ctx.stroke();
+    ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(110,90,55,0.65)';
+    ctx.fillText('ITEMS', px + 10, itemSecY + 10);
+    [0, 1].forEach(si => {
+      const iid = defForPanel.equipment[si];
+      if (!iid) return;
+      const iDef = ITEM_DEFS[iid];
+      if (!iDef) return;
+      const ec = RARITY_COLOR[iDef.rarity] ?? '#aaa';
+      ctx.font = '8px monospace'; ctx.fillStyle = ec; ctx.textAlign = 'left';
+      ctx.fillText(`${si === 0 ? '⚔' : '🛡'} ${iDef.name.slice(0, 12)}`, px + 36 + si * 62, itemSecY + 10);
+    });
   }
 
   ctx.restore();
@@ -4857,10 +4961,11 @@ function onBossKilled(boss) {
     const rarCol  = RARITY_COLOR[itemDef.rarity] ?? '#fff';
     dmgFloaters.push({
       x: boss.x - 40, y: boss.y - 50,
-      val: `⚔ ${itemDef.name}`, life: 180, maxLife: 180,
+      val: `⚔ ${itemDef.name}`, life: 240, maxLife: 240,
       color: rarCol, large: true, raw: true,
     });
     impactFlashes.push({ x: boss.x, y: boss.y, maxR: 60, life: 1, color: rarCol });
+    _bossLootBanner = { itemId, timer: 300 };
   }
 
   // One-time Rune Forge hint after first boss kill
@@ -5171,6 +5276,31 @@ function drawBossHpBar() {
   ctx.fillText((cfg?.name ?? boss.bossName) + (enraged ? ' ⚡' : '') + '  ' + Math.ceil(boss.hp).toLocaleString() + ' HP', barX + 2, barY - 3);
   ctx.globalAlpha = 1;
   ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawBossLootBanner() {
+  if (!_bossLootBanner || _bossLootBanner.timer <= 0) return;
+  _bossLootBanner.timer--;
+  const { timer, itemId } = _bossLootBanner;
+  const alpha = Math.min(1, timer / 30) * (timer < 60 ? timer / 60 : 1);
+  const iDef  = ITEM_DEFS[itemId];
+  if (!iDef) return;
+  const rarCol = RARITY_COLOR[iDef.rarity] ?? '#fff';
+  const bw = 220, bh = 40;
+  const bx = GRID_LEFT + (COLS * CELL_SIZE - bw) / 2;
+  const by = GRID_TOP + ROWS * CELL_SIZE - bh - 8;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawFantasyPanel(bx, by, bw, bh, 'rgba(4,2,14,0.97)', 0.85, 6);
+  ctx.textAlign = 'center';
+  const cx = bx + bw / 2;
+  ctx.font = 'bold 10px monospace'; ctx.fillStyle = rarCol;
+  ctx.shadowColor = rarCol; ctx.shadowBlur = 8;
+  ctx.fillText(`◈ LOOT DROPPED`, cx, by + 14);
+  ctx.shadowBlur = 0;
+  ctx.font = '10px monospace'; ctx.fillStyle = rarCol;
+  ctx.fillText(`${iDef.slot === 'weapon' ? '⚔' : '🛡'} ${iDef.name}`, cx, by + 28);
   ctx.restore();
 }
 
@@ -5569,13 +5699,13 @@ function drawBetweenBattles() {
   ctx.fillText(`Waves cleared: ${waveNumber}`, lcx, lpY + 80);
   ctx.fillStyle = 'rgba(200,170,100,0.8)';
   ctx.fillText(`Enemies slain: ${slain}`, lcx, lpY + 95);
-  ctx.fillText(`Gold earned: +${goldEarned}g`, lcx, lpY + 110);
+  ctx.fillText(`Gold earned: +${goldEarned}g  (+${_reserveContrib}g reserve)`, lcx, lpY + 110);
 
   ctx.font        = '12px monospace';
   ctx.fillStyle   = '#f0d040';
   ctx.shadowColor = 'rgba(240,190,20,0.6)';
   ctx.shadowBlur  = 6;
-  ctx.fillText(`✦ ${stars} stars  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 129);
+  ctx.fillText(`✦ ${stars} campaign stars  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 129);
   ctx.shadowBlur = 0;
 
   lpSep(lpY + 139);
@@ -5609,8 +5739,11 @@ function drawBetweenBattles() {
   }
 
   // Talent unlocks earned this battle
+  let postTop3Y = lpY + 170 + top3.length * 22 + 14;
+  if (top3.length > 0 && top3[0]) postTop3Y += 11; // extra for class label on first entry
+
   if (_newBattleTalentUnlocks.length > 0) {
-    const tlY0 = lpY + 170 + top3.length * 22 + 14;
+    const tlY0 = postTop3Y;
     ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(lpX + 12, tlY0); ctx.lineTo(lpX + lpW - 12, tlY0); ctx.stroke();
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.6)';
@@ -5626,6 +5759,31 @@ function drawBetweenBattles() {
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,140,80,0.6)';
       ctx.fillText(tDef2.desc, lcx, entryY + 10);
     });
+    postTop3Y = tlY0 + 27 + _newBattleTalentUnlocks.length * 18 + 6;
+  }
+
+  // Per-defender XP progress
+  if (_battleXpData.length > 0) {
+    const xpY0 = postTop3Y + 4;
+    const btnsTopLimit = lpY + lpH - 56;
+    if (xpY0 + 24 < btnsTopLimit) {
+      ctx.strokeStyle = 'rgba(180,140,60,0.18)'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(lpX + 12, xpY0); ctx.lineTo(lpX + lpW - 12, xpY0); ctx.stroke();
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,120,90,0.55)';
+      ctx.fillText('DEFENDER XP', lcx, xpY0 + 12);
+      let ey = xpY0 + 25;
+      for (const { name, xpGained, oldLevel, newLevel } of _battleXpData) {
+        if (ey + 12 > btnsTopLimit) break;
+        const leveled  = newLevel > oldLevel;
+        const lvlStr   = leveled ? `  ▲ Lv ${ROMAN[newLevel] ?? newLevel}` : '';
+        ctx.font = leveled ? 'bold 9px monospace' : '9px monospace';
+        ctx.fillStyle = leveled ? '#f0d060' : 'rgba(180,160,110,0.65)';
+        if (leveled) { ctx.shadowColor = 'rgba(240,200,60,0.45)'; ctx.shadowBlur = 4; }
+        ctx.fillText(`${name}  +${xpGained}xp${lvlStr}`, lcx, ey);
+        ctx.shadowBlur = 0;
+        ey += 13;
+      }
+    }
   }
 
   ctx.restore();
@@ -5679,8 +5837,26 @@ function drawBetweenBattles() {
   const listTop  = rpY + 49;
   const listBot  = rpY + rpH - recruitH - 4;
   const listH    = listBot - listTop;
-  const rowH     = 70;
+  const rowH     = 80;
   const maxRows  = Math.floor(listH / rowH);
+
+  // Clamp scroll offset
+  const totalDefs = _roster.defenders.length;
+  _rosterScrollOffset = Math.max(0, Math.min(_rosterScrollOffset, Math.max(0, totalDefs - maxRows)));
+
+  // Scroll arrows (drawn outside clip region)
+  if (_rosterScrollOffset > 0) {
+    const arY = listTop - 1;
+    ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,170,80,0.65)';
+    ctx.fillText('▲', rpX + rpW - 16, arY + 10);
+    _betweenBtns.push({ x: rpX + rpW - 26, y: arY, w: 22, h: 14, action: 'scrollRoster', dir: -1 });
+  }
+  if (_rosterScrollOffset + maxRows < totalDefs) {
+    const arY = listBot - 13;
+    ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,170,80,0.65)';
+    ctx.fillText('▼', rpX + rpW - 16, arY + 10);
+    _betweenBtns.push({ x: rpX + rpW - 26, y: arY, w: 22, h: 14, action: 'scrollRoster', dir: 1 });
+  }
 
   // Roster list (clip to avoid overflow)
   ctx.save();
@@ -5688,7 +5864,9 @@ function drawBetweenBattles() {
   ctx.rect(rpX + 4, listTop, rpW - 8, listH);
   ctx.clip();
 
-  _roster.defenders.slice(0, maxRows).forEach((def, i) => {
+  const _RARITY_BG = { common: 'rgba(168,168,168,0.14)', rare: 'rgba(64,144,255,0.14)', epic: 'rgba(204,68,255,0.14)', legendary: 'rgba(255,144,32,0.14)' };
+
+  _roster.defenders.slice(_rosterScrollOffset, _rosterScrollOffset + maxRows).forEach((def, i) => {
     const ry = listTop + i * rowH;
     ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
     ctx.fillRect(rpX + 4, ry, rpW - 8, rowH - 2);
@@ -5710,27 +5888,30 @@ function drawBetweenBattles() {
     const prevXP = CAREER_XP[def.careerLevel] ?? 0;
     const frac   = nextXP > prevXP ? Math.min(1, (def.xp - prevXP) / (nextXP - prevXP)) : 1;
     const barX   = rix + 54;
-    const barW   = 78;
+    const barW   = riW - 58;
     ctx.fillStyle = 'rgba(60,50,30,0.7)';
     ctx.fillRect(barX, ry + 20, barW, 5);
     ctx.fillStyle = def.careerLevel >= 10 ? '#f0d040' : `rgba(${glow},0.8)`;
     ctx.fillRect(barX, ry + 20, barW * frac, 5);
     ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)';
+    ctx.textAlign = 'left';
     ctx.fillText(def.careerLevel >= 10 ? 'MAX' : `${def.xp}/${nextXP}xp`, barX + barW + 3, ry + 25);
 
-    // Career stats
+    // Career stats — kills, battles, career damage
+    const cdmgStr = (def.careerDamage ?? 0) > 999
+      ? `${Math.round((def.careerDamage ?? 0) / 1000)}k`
+      : `${def.careerDamage ?? 0}`;
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,130,100,0.65)';
-    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}`, rix, ry + 37);
+    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}  ⚔${cdmgStr}`, rix, ry + 37);
 
     // Equipment chips: weapon (slot 0) | armor (slot 1)
-    const _RARITY_BG = { common: 'rgba(168,168,168,0.14)', rare: 'rgba(64,144,255,0.14)', epic: 'rgba(204,68,255,0.14)', legendary: 'rgba(255,144,32,0.14)' };
     const chipSlotW = Math.floor((riW - 6) / 2);
     [0, 1].forEach(slotIdx => {
       const itemId  = def.equipment[slotIdx];
       const itemDef = itemId ? ITEM_DEFS[itemId] : null;
       const cx2     = rix + slotIdx * (chipSlotW + 3);
-      const cy2     = ry + 41;
-      const cH      = 12;
+      const cy2     = ry + 42;
+      const cH      = itemDef?.desc ? 22 : 12;
       const rarCol  = itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null;
       const icon    = slotIdx === 0 ? '⚔' : '🛡';
       ctx.fillStyle   = itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : 'rgba(30,20,10,0.5)';
@@ -5740,43 +5921,62 @@ function drawBetweenBattles() {
       ctx.font      = '7px monospace';
       ctx.fillStyle = rarCol ?? 'rgba(100,80,50,0.45)';
       ctx.textAlign = 'left';
-      const label   = itemDef ? `${icon} ${itemDef.name.slice(0, 11)}` : `${icon} —`;
+      const label   = itemDef ? `${icon} ${itemDef.name.slice(0, 10)}` : `${icon} —`;
       ctx.fillText(label, cx2 + 3, cy2 + 9);
       _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
+      // Item stat description inside chip
+      if (itemDef?.desc) {
+        ctx.font = '7px monospace'; ctx.fillStyle = rarCol ?? 'rgba(120,100,70,0.45)';
+        ctx.globalAlpha = 0.65;
+        ctx.fillText(itemDef.desc, cx2 + 3, cy2 + 18);
+        ctx.globalAlpha = 1;
+      }
     });
 
-    // Talent row — unlocked talents listed at the bottom of the card
-    const talY = ry + 56;
+    // Talent row — up to 2 talent names (truncated), plus next milestone hint
+    const talY = ry + 72;
+    const nextTalLevel = [3, 5, 8, 10].find(lv => lv > def.careerLevel);
+    const nextTalId    = nextTalLevel ? (CLASS_TALENTS[def.type]?.[nextTalLevel]) : null;
+    const nextTalDef   = nextTalId ? TALENT_DEFS[nextTalId] : null;
+
     if (def.talents.length > 0) {
-      const names = def.talents.map(id => TALENT_DEFS[id]?.name ?? id).join(' · ');
+      const talNames = def.talents.map(id => TALENT_DEFS[id]?.name ?? id);
+      const display  = talNames.length > 2 ? talNames.slice(0, 2).join(' · ') + ' …' : talNames.join(' · ');
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(240,200,60,0.55)';
-      ctx.fillText(`✦ ${names}`, rix, talY + 8);
+      ctx.fillText(`✦ ${display}`, rix, talY);
+    } else if (nextTalDef) {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(130,110,60,0.40)';
+      ctx.fillText(`✦ → Lv ${ROMAN[nextTalLevel] ?? nextTalLevel}: ${nextTalDef.name}`, rix, talY);
     } else {
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(100,80,50,0.35)';
-      ctx.fillText('✦ no talents yet', rix, talY + 8);
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(100,80,50,0.30)';
+      ctx.fillText('✦ no talents yet', rix, talY);
     }
 
-    // DISMISS button
-    const dW = 46, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;
-    ctx.fillStyle = 'rgba(60,10,10,0.75)';
-    ctx.strokeStyle = 'rgba(160,50,50,0.5)'; ctx.lineWidth = 0.8;
+    // DISMISS button (two-click confirm)
+    const isPendingDismiss = _pendingDismiss === def.defenderId;
+    const dW = 52, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;
+    ctx.fillStyle   = isPendingDismiss ? 'rgba(80,8,8,0.92)' : 'rgba(60,10,10,0.75)';
+    ctx.strokeStyle = isPendingDismiss ? 'rgba(255,60,60,0.8)' : 'rgba(160,50,50,0.5)';
+    ctx.lineWidth   = isPendingDismiss ? 1.2 : 0.8;
     ctx.beginPath(); ctx.roundRect(dX, dY, dW, dH, 3); ctx.fill(); ctx.stroke();
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,80,80,0.85)';
+    ctx.font = '8px monospace'; ctx.fillStyle = isPendingDismiss ? '#ff5050' : 'rgba(200,80,80,0.85)';
     ctx.textAlign = 'center';
-    ctx.fillText('DISMISS', dX + dW / 2, dY + 11);
+    ctx.fillText(isPendingDismiss ? 'CONFIRM?' : 'DISMISS', dX + dW / 2, dY + 11);
     ctx.textAlign = 'left';
-    _betweenBtns.push({ x: dX, y: dY, w: dW, h: dH, action: 'dismiss', defenderId: def.defenderId });
+    _betweenBtns.push({ x: dX, y: dY, w: dW, h: dH,
+      action: isPendingDismiss ? 'confirmDismiss' : 'pendingDismiss',
+      defenderId: def.defenderId });
   });
 
-  if (_roster.defenders.length === 0) {
+  if (totalDefs === 0) {
     ctx.textAlign = 'center';
     ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(120,100,70,0.45)';
     ctx.fillText('No defenders in warband yet', rpX + rpW / 2, listTop + 30);
     ctx.textAlign = 'left';
-  } else if (_roster.defenders.length > maxRows) {
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(120,100,70,0.45)';
+  } else if (totalDefs > maxRows) {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,70,0.5)';
     ctx.textAlign = 'center';
-    ctx.fillText(`+${_roster.defenders.length - maxRows} more`, rpX + rpW / 2, listBot - 4);
+    ctx.fillText(`${_rosterScrollOffset + 1}–${Math.min(_rosterScrollOffset + maxRows, totalDefs)} of ${totalDefs}`, rpX + rpW / 2, listBot - 4);
     ctx.textAlign = 'left';
   }
 
@@ -5917,10 +6117,38 @@ function drawBetweenBattles() {
         if (canBuy) _betweenBtns.push({ x: btnX, y: btnY2, w: btnW2, h: btnH2, action: 'upgradeFortress', key });
       }
     });
+
+    // Active bonuses summary
+    const fb = getFortressBonuses(upgrades);
+    const fbParts = [];
+    if ((fb.startingGoldBonus   ?? 0) > 0) fbParts.push(`+${fb.startingGoldBonus}g start`);
+    if ((fb.recruitCostReduction ?? 0) > 0) fbParts.push(`−${fb.recruitCostReduction}g recruit`);
+    if ((fb.wallCostReduction   ?? 0) > 0) fbParts.push(`wall −${fb.wallCostReduction}g`);
+    if ((fb.equipDmMult         ?? 1) > 1) fbParts.push(`items +${Math.round((fb.equipDmMult - 1) * 100)}%`);
+    if ((fb.eventPreviewBonus   ?? 0) > 0) fbParts.push(`${1 + fb.eventPreviewBonus} waves ahead`);
+    if ((fb.wallSlowBonus       ?? 0) > 0) fbParts.push(`slow +${Math.round(fb.wallSlowBonus * 100)}%`);
+    if (fbParts.length > 0) {
+      const summY = recY + 14 + nodeKeys.length * nodeRowH + 8;
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(120,200,120,0.65)';
+      ctx.fillText(`Active: ${fbParts.join(' · ')}`, rix, summY);
+    }
   }
 
   ctx.restore();
 }
+
+const MAP_SELECT_FLAVOR = [
+  'The first scouts have been spotted. Your warband stands ready.',
+  'They have learned your walls. Expect them to come in greater numbers.',
+  'Three battles behind you. The jarl\'s name spreads fear in the north.',
+  'Word has reached the outer holds — the shield line holds.',
+  'A rival warlord has joined the siege. Their banners have been sighted.',
+  'Your veterans remember every wave. The enemy will not surprise them.',
+  'The fortress grows stronger with each campaign. Hold the line.',
+  'Seven battles. The warband speaks of this place as home.',
+  'Runners report a great host gathering beyond the ridge.',
+  'The saga will remember this stand for a thousand winters.',
+];
 
 function drawMapSelect() {
   mapSelectBtns = [];
@@ -5933,7 +6161,7 @@ function drawMapSelect() {
   const gap   = 20;
   const totalW = cardW * 3 + gap * 2;
   const startX = Math.round((W - totalW) / 2);
-  const startY = 108;
+  const startY = 118;
 
   // Title
   ctx.textAlign  = 'center';
@@ -5945,7 +6173,20 @@ function drawMapSelect() {
   ctx.shadowBlur = 0;
   ctx.font       = '12px monospace';
   ctx.fillStyle  = '#907050';
-  ctx.fillText('— SELECT YOUR MAP —', W / 2, 88);
+  ctx.fillText('— SELECT YOUR MAP —', W / 2, 84);
+
+  // Campaign context: battle count + warband size
+  if (battlesCompleted > 0 || _roster.defenders.length > 0) {
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(150,130,80,0.65)';
+    const warbandStr = _roster.defenders.length > 0 ? `  ·  ${_roster.defenders.length} in warband` : '';
+    ctx.fillText(`Battle ${battlesCompleted + 1}${warbandStr}`, W / 2, 98);
+  }
+
+  // Flavor text — escalates with battlesCompleted
+  const flavorIdx  = Math.min(battlesCompleted, MAP_SELECT_FLAVOR.length - 1);
+  const flavorText = MAP_SELECT_FLAVOR[flavorIdx];
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(120,100,65,0.55)';
+  ctx.fillText(flavorText, W / 2, 110);
 
   PRESET_MAPS.forEach((map, idx) => {
     const cx = startX + idx * (cardW + gap);
@@ -6782,6 +7023,7 @@ function draw() {
   drawGoldCoins();
   drawBossWarning();
   drawBossDefeat();
+  drawBossLootBanner();
   drawRuneForgeHint();
   drawWaveAnnouncement();
   drawChapterBanner();
