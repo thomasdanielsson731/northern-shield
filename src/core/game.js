@@ -8,6 +8,7 @@ import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
+import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import {
   ensureAudio, setMuted, sfxShoot, sfxNova, sfxDie,
   sfxPlace, sfxLifeLost, sfxHeal, sfxUpgrade, sfxBossPhase,
@@ -195,6 +196,7 @@ let flawlessTimer   = 0;        // countdown for "+1 ★ FLAWLESS!" text (frames
 let _campaignState       = null;   // ns-campaign-v2 object
 let battlesCompleted     = 0;
 let goldReserve          = 0;      // between-battle treasury (persists across battles)
+let _equipmentInventory  = [];     // array of item IDs available to equip
 let _currentBattlePreset = null;   // preset used for the current battle (for Fight Again)
 let _roster              = new Roster();
 let _battleResult        = null;   // 'victory' | 'defeat' — set when battle ends
@@ -525,7 +527,8 @@ function initCampaign(preset) {
   _campaignState   = migrateLegacySaves();
   battlesCompleted = _campaignState.battlesCompleted ?? 0;
   stars            = _campaignState.stars ?? 0;
-  goldReserve      = _campaignState.goldReserve ?? 0;
+  goldReserve         = _campaignState.goldReserve ?? 0;
+  _equipmentInventory = (_campaignState.equipmentInventory ?? []).slice();
   runeInventory    = Object.assign(
     { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 },
     _campaignState.runeInventory ?? {}
@@ -566,7 +569,8 @@ function recordBattleResult(result) {
   });
 
   goldReserve += Math.floor(goldEarned * 0.20);
-  _campaignState.goldReserve = goldReserve;
+  _campaignState.goldReserve       = goldReserve;
+  _campaignState.equipmentInventory = _equipmentInventory.slice();
 
   _roster.grantBattleXP(towers, waveNumber);
   _roster.releaseAll();
@@ -1896,7 +1900,9 @@ function tryPlaceAt(col, row, mode, towerType) {
     const t = new Tower(cx, cy, col, row, towerType);
     // Link to roster: reuse an existing veteran if available, otherwise register the new recruit.
     const def = _roster.link(towerType, t.defenderId, t.name);
-    if (def.careerLevel > 0) t.applyCareerData(def.defenderId, def.name, def.careerLevel);
+    const eqBonuses = getItemBonuses(def.equipment);
+    const hasBonus  = def.careerLevel > 0 || def.equipment.some(Boolean);
+    if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses);
     else { t.defenderId = def.defenderId; t.name = def.name; }
     towers.push(t);
     _synergyDirty = true;
@@ -2130,9 +2136,51 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'selectRecruitType') {
             _recruitType = _recruitType === btn.recruitType ? null : btn.recruitType;
           } else if (btn.action === 'dismiss') {
+            const dismissDef = _roster.find(btn.defenderId);
+            if (dismissDef) {
+              for (const itemId of dismissDef.equipment) {
+                if (itemId) _equipmentInventory.push(itemId);
+              }
+            }
             _roster.dismiss(btn.defenderId);
             _campaignState.defenders = _roster.toJSON();
+            _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { saveCampaign(_campaignState); } catch {}
+          } else if (btn.action === 'cycleEquip') {
+            const def = _roster.find(btn.defenderId);
+            if (def) {
+              const slotIdx  = btn.slotIdx;
+              const slotType = slotIdx === 0 ? 'weapon' : 'armor';
+              const currentId = def.equipment[slotIdx];
+              const equippedByOthers = new Set(
+                _roster.defenders
+                  .filter(d => d.defenderId !== def.defenderId)
+                  .flatMap(d => d.equipment)
+                  .filter(Boolean)
+              );
+              const freeInInv = _equipmentInventory.filter(id =>
+                ITEM_DEFS[id]?.slot === slotType && !equippedByOthers.has(id)
+              );
+              const allAccessible = [...freeInInv];
+              if (currentId && !allAccessible.includes(currentId)) allAccessible.push(currentId);
+              allAccessible.sort();
+              const cycle = [null, ...allAccessible];
+              if (cycle.length > 1) {
+                const curIdx = cycle.indexOf(currentId ?? null);
+                const nextId = cycle[(curIdx + 1) % cycle.length];
+                if (nextId !== currentId) {
+                  if (currentId) _equipmentInventory.push(currentId);
+                  if (nextId) {
+                    const pos = _equipmentInventory.indexOf(nextId);
+                    if (pos !== -1) _equipmentInventory.splice(pos, 1);
+                  }
+                  def.equipment[slotIdx] = nextId ?? null;
+                  _campaignState.defenders = _roster.toJSON();
+                  _campaignState.equipmentInventory = _equipmentInventory.slice();
+                  try { saveCampaign(_campaignState); } catch {}
+                }
+              }
+            }
           } else if (btn.action === 'recruit') {
             if (goldReserve >= RECRUIT_COST && _recruitType) {
               const id   = _generateId();
@@ -4755,6 +4803,22 @@ function onBossKilled(boss) {
     bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * (4 + ri * 3), life: 40 + ri * 8, maxLife: 40 + ri * 8, color: ri === 0 ? '#ffd040' : ri === 1 ? boss.highlightColor : '#ffffff' });
   }
 
+  // Equipment drop — each boss wave drops one item from its pool
+  const dropPool = BOSS_DROP_TABLE[waveNumber];
+  if (dropPool) {
+    const itemId  = dropPool[Math.floor(Math.random() * dropPool.length)];
+    const itemDef = ITEM_DEFS[itemId];
+    _equipmentInventory.push(itemId);
+    _campaignState.equipmentInventory = _equipmentInventory.slice();
+    const rarCol  = RARITY_COLOR[itemDef.rarity] ?? '#fff';
+    dmgFloaters.push({
+      x: boss.x - 40, y: boss.y - 50,
+      val: `⚔ ${itemDef.name}`, life: 180, maxLife: 180,
+      color: rarCol, large: true, raw: true,
+    });
+    impactFlashes.push({ x: boss.x, y: boss.y, maxR: 60, life: 1, color: rarCol });
+  }
+
   // One-time Rune Forge hint after first boss kill
   if (_runeForgeHintTimer === 0) _runeForgeHintTimer = 360;
 }
@@ -5538,7 +5602,7 @@ function drawBetweenBattles() {
   const listTop  = rpY + 49;
   const listBot  = rpY + rpH - recruitH - 4;
   const listH    = listBot - listTop;
-  const rowH     = 44;
+  const rowH     = 56;
   const maxRows  = Math.floor(listH / rowH);
 
   // Roster list (clip to avoid overflow)
@@ -5569,7 +5633,7 @@ function drawBetweenBattles() {
     const prevXP = CAREER_XP[def.careerLevel] ?? 0;
     const frac   = nextXP > prevXP ? Math.min(1, (def.xp - prevXP) / (nextXP - prevXP)) : 1;
     const barX   = rix + 54;
-    const barW   = 88;
+    const barW   = 78;
     ctx.fillStyle = 'rgba(60,50,30,0.7)';
     ctx.fillRect(barX, ry + 20, barW, 5);
     ctx.fillStyle = def.careerLevel >= 10 ? '#f0d040' : `rgba(${glow},0.8)`;
@@ -5579,7 +5643,30 @@ function drawBetweenBattles() {
 
     // Career stats
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,130,100,0.65)';
-    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}`, rix, ry + 38);
+    ctx.fillText(`☠${def.careerKills}  ×${def.battlesPlayed}`, rix, ry + 37);
+
+    // Equipment chips: weapon (slot 0) | armor (slot 1)
+    const _RARITY_BG = { common: 'rgba(168,168,168,0.14)', rare: 'rgba(64,144,255,0.14)', epic: 'rgba(204,68,255,0.14)', legendary: 'rgba(255,144,32,0.14)' };
+    const chipSlotW = Math.floor((riW - 6) / 2);
+    [0, 1].forEach(slotIdx => {
+      const itemId  = def.equipment[slotIdx];
+      const itemDef = itemId ? ITEM_DEFS[itemId] : null;
+      const cx2     = rix + slotIdx * (chipSlotW + 3);
+      const cy2     = ry + 41;
+      const cH      = 12;
+      const rarCol  = itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null;
+      const icon    = slotIdx === 0 ? '⚔' : '🛡';
+      ctx.fillStyle   = itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : 'rgba(30,20,10,0.5)';
+      ctx.strokeStyle = rarCol ?? 'rgba(80,60,30,0.3)';
+      ctx.lineWidth   = rarCol ? 0.8 : 0.5;
+      ctx.beginPath(); ctx.roundRect(cx2, cy2, chipSlotW, cH, 2); ctx.fill(); ctx.stroke();
+      ctx.font      = '7px monospace';
+      ctx.fillStyle = rarCol ?? 'rgba(100,80,50,0.45)';
+      ctx.textAlign = 'left';
+      const label   = itemDef ? `${icon} ${itemDef.name.slice(0, 11)}` : `${icon} —`;
+      ctx.fillText(label, cx2 + 3, cy2 + 9);
+      _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
+    });
 
     // DISMISS button
     const dW = 46, dH = 16, dX = rpX + rpW - 12 - dW, dY = ry + 14;
@@ -5606,6 +5693,14 @@ function drawBetweenBattles() {
   }
 
   ctx.restore(); // remove clip
+
+  // Inventory count line between list and separator
+  const freeItemCount = _equipmentInventory.length;
+  if (freeItemCount > 0) {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,60,0.6)';
+    ctx.textAlign = 'left';
+    ctx.fillText(`◈ ${freeItemCount} item${freeItemCount !== 1 ? 's' : ''} in stash — click slot chips to equip`, rix, listBot + 10);
+  }
 
   // Separator before recruit section
   const rsepY = rpY + rpH - recruitH - 2;

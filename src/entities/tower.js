@@ -281,13 +281,20 @@ export class Tower {
       this.range    = Math.round(this.range    * rm);
       this.fireRate = Math.max(4, Math.round(this.fireRate * cm));
     }
+    if (this._equipmentBonuses) {
+      const { dm, rm, cm } = this._equipmentBonuses;
+      if (dm !== 1) this.damage   = Math.round(this.damage   * dm);
+      if (rm !== 1) this.range    = Math.round(this.range    * rm);
+      if (cm !== 1) this.fireRate = Math.max(4, Math.round(this.fireRate * cm));
+    }
   }
 
-  // Called by game.js after roster lookup — overwrites generated name/id, applies career stats.
-  applyCareerData(defenderId, name, careerLevel) {
-    this.defenderId   = defenderId;
-    this.name         = name;
-    this._careerLevel = careerLevel;
+  // Called by game.js after roster lookup — overwrites generated name/id, applies career + equipment stats.
+  applyCareerData(defenderId, name, careerLevel, equipmentBonuses = null) {
+    this.defenderId        = defenderId;
+    this.name              = name;
+    this._careerLevel      = careerLevel;
+    this._equipmentBonuses = equipmentBonuses;
     this._applyLevel();
   }
 

@@ -41,6 +41,7 @@ export class Defender {
     this.careerDamage  = 0;
     this.battlesPlayed = 0;
     this.deployed      = false;
+    this.equipment     = [null, null]; // [weaponItemId|null, armorItemId|null]
   }
 
   grantBattleXP(kills, wavesCleared) {
@@ -62,6 +63,7 @@ export class Defender {
       careerKills:   this.careerKills,
       careerDamage:  this.careerDamage,
       battlesPlayed: this.battlesPlayed,
+      equipment:     this.equipment,
     };
   }
 
@@ -72,6 +74,7 @@ export class Defender {
     d.careerKills   = data.careerKills   ?? 0;
     d.careerDamage  = data.careerDamage  ?? 0;
     d.battlesPlayed = data.battlesPlayed ?? 0;
+    d.equipment     = data.equipment     ?? [null, null];
     return d;
   }
 }
