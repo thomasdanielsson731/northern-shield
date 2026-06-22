@@ -55,6 +55,7 @@ export class Grid {
     this.gold            = 0;  // set by game.js each frame: current gold
     this.hoardPulse      = 0;  // set by game.js each frame: coin-landing bounce
     this.fortressUpgrades = {}; // set by game.js: { barracks, armory, watchtower, wallworks } levels
+    this.bannerWaveBoost = 0;  // set by game.js on wave clear, decays each drawn frame
   }
 
   setFortressUpgrades(upgrades) {
@@ -432,13 +433,18 @@ export class Grid {
         }
       };
 
+      // Decay banner wave boost each frame
+    if (this.bannerWaveBoost > 0) this.bannerWaveBoost = Math.max(0, this.bannerWaveBoost - 1 / 90);
+
       // Helper — draw a banner pole with hanging flag
       const drawBannerPole = (px, py, ph, flagColor) => {
         // Pole
         ctx.fillStyle = 'rgba(60,35,12,0.85)';
         ctx.fillRect(px - 0.8, py - ph, 1.6, ph);
-        // Flag (triangular pennant, animated wave)
-        const wave = Math.sin(time * 2.8 + px * 0.02) * cs * 0.18;
+        // Flag (triangular pennant, animated wave — amplified on wave clear)
+        const waveAmp = cs * (0.18 + this.bannerWaveBoost * 0.55);
+        const waveFreq = 2.8 + this.bannerWaveBoost * 5.0;
+        const wave = Math.sin(time * waveFreq + px * 0.02) * waveAmp;
         ctx.fillStyle = flagColor;
         ctx.beginPath();
         ctx.moveTo(px, py - ph);
@@ -641,6 +647,166 @@ export class Grid {
       ctx.beginPath();
       ctx.arc(cx, cy, cs * 0.78, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // ── Treasury room geometry — structural floor/walls that grow with gold ──────
+    {
+      const g = this.gold || 0;
+      if (g >= 10) {
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        // Stone floor slab under the hoard (always present from stage 1)
+        const slabW = cs * (2.2 + (g >= 500 ? 1.6 : g >= 100 ? 0.8 : 0));
+        const slabH = cs * (1.0 + (g >= 500 ? 0.5 : g >= 100 ? 0.25 : 0));
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(cx - slabW / 2 + 2, cy - slabH / 2 + 3, slabW, slabH);
+        // Stone floor
+        const floorGrad = ctx.createLinearGradient(cx, cy - slabH / 2, cx, cy + slabH / 2);
+        floorGrad.addColorStop(0, '#1e1810');
+        floorGrad.addColorStop(1, '#16120a');
+        ctx.fillStyle = floorGrad;
+        ctx.fillRect(cx - slabW / 2, cy - slabH / 2, slabW, slabH);
+        // Stone tile lines
+        ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - slabW / 2, cy); ctx.lineTo(cx + slabW / 2, cy);
+        ctx.moveTo(cx, cy - slabH / 2); ctx.lineTo(cx, cy + slabH / 2);
+        ctx.stroke();
+        // Slab edge highlight
+        ctx.strokeStyle = 'rgba(100,80,40,0.35)'; ctx.lineWidth = 0.8;
+        ctx.strokeRect(cx - slabW / 2, cy - slabH / 2, slabW, slabH);
+
+        // Stage 2+ (g >= 100): iron wall brackets with candle flames
+        if (g >= 100) {
+          const candleFlicker = 0.55 + Math.sin(time * 8.1) * 0.28;
+          for (const bx2 of [cx - slabW / 2 - cs * 0.4, cx + slabW / 2 + cs * 0.4]) {
+            const by2 = cy - slabH * 0.15;
+            // Bracket
+            ctx.fillStyle = '#3a3028';
+            ctx.fillRect(bx2 - 1, by2 - cs * 0.35, 2, cs * 0.35);
+            ctx.fillRect(bx2 - 2, by2 - cs * 0.38, 4, 3);
+            // Candle flame
+            ctx.shadowColor = `rgba(255,160,40,${candleFlicker * 0.8})`;
+            ctx.shadowBlur  = 4 * candleFlicker;
+            const cGrad = ctx.createRadialGradient(bx2, by2 - cs * 0.5, 0, bx2, by2 - cs * 0.5, 3.5);
+            cGrad.addColorStop(0,   `rgba(255,240,160,${candleFlicker * 0.9})`);
+            cGrad.addColorStop(0.5, `rgba(255,130,25,${candleFlicker * 0.65})`);
+            cGrad.addColorStop(1,   'rgba(200,60,0,0)');
+            ctx.fillStyle = cGrad;
+            ctx.beginPath();
+            ctx.ellipse(bx2, by2 - cs * 0.54, 2 * candleFlicker, 3.5 * candleFlicker, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        // Stage 3+ (g >= 500): stone arch doorway frame behind the pile
+        if (g >= 500) {
+          const archW = slabW * 0.7, archH = cs * 1.2;
+          const archX = cx - archW / 2, archY = cy - slabH / 2 - archH;
+          // Door pillars
+          ctx.fillStyle = '#2a2018';
+          ctx.fillRect(archX, archY, cs * 0.28, archH + cs * 0.12);
+          ctx.fillRect(archX + archW - cs * 0.28, archY, cs * 0.28, archH + cs * 0.12);
+          // Arch curve
+          ctx.strokeStyle = '#2a2018'; ctx.lineWidth = cs * 0.28;
+          ctx.beginPath();
+          ctx.arc(cx, archY + cs * 0.05, archW / 2 - cs * 0.14, Math.PI, 0);
+          ctx.stroke();
+          // Keystone
+          ctx.fillStyle = '#362a1c';
+          ctx.beginPath();
+          ctx.moveTo(cx - cs * 0.18, archY - cs * 0.05);
+          ctx.lineTo(cx, archY - cs * 0.32);
+          ctx.lineTo(cx + cs * 0.18, archY - cs * 0.05);
+          ctx.closePath(); ctx.fill();
+          // Pillar highlight
+          ctx.fillStyle = 'rgba(160,130,70,0.18)';
+          ctx.fillRect(archX, archY, 1.5, archH + cs * 0.12);
+        }
+
+        // Stage 4+ (g >= 1000): four vault corner pillars + chain gate
+        if (g >= 1000) {
+          const vaultR = cs * 1.8;
+          const pillR = 3.0;
+          const pillH = cs * 0.9;
+          for (const [px2, py2] of [
+            [cx - vaultR, cy - vaultR * 0.55],
+            [cx + vaultR, cy - vaultR * 0.55],
+            [cx - vaultR, cy + vaultR * 0.40],
+            [cx + vaultR, cy + vaultR * 0.40],
+          ]) {
+            // Pillar shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.40)';
+            ctx.beginPath(); ctx.arc(px2 + 1.5, py2 + 2, pillR, 0, Math.PI * 2); ctx.fill();
+            // Pillar body
+            ctx.fillStyle = '#2e2418';
+            ctx.fillRect(px2 - pillR, py2 - pillH, pillR * 2, pillH);
+            ctx.beginPath(); ctx.arc(px2, py2, pillR, 0, Math.PI * 2); ctx.fill();
+            // Capital
+            ctx.fillStyle = '#3e3222';
+            ctx.fillRect(px2 - pillR - 0.5, py2 - pillH - 2, pillR * 2 + 1, 3);
+            ctx.fillRect(px2 - pillR - 0.5, py2 - pillH, pillR * 2 + 1, 2);
+          }
+          // Chain between left pillars
+          const chainAlpha = 0.45 + Math.sin(time * 1.4) * 0.08;
+          ctx.strokeStyle = `rgba(80,65,40,${chainAlpha})`; ctx.lineWidth = 0.8;
+          ctx.setLineDash([2, 2.5]);
+          ctx.beginPath();
+          ctx.moveTo(cx - vaultR, cy + vaultR * 0.40 - pillH * 0.5);
+          ctx.lineTo(cx + vaultR, cy + vaultR * 0.40 - pillH * 0.5);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Stage 5 (g >= 5000): dragon skull arch + scattered bones
+        if (g >= 5000) {
+          // Dragon skull silhouette above the arch
+          const skX = cx, skY = cy - slabH / 2 - cs * 2.4;
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.beginPath(); ctx.ellipse(skX + 1.5, skY + 2, cs * 0.9, cs * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#2e2c1e';
+          ctx.beginPath(); ctx.ellipse(skX, skY, cs * 0.9, cs * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+          // Snout
+          ctx.fillStyle = '#2a2818';
+          ctx.beginPath(); ctx.ellipse(skX, skY + cs * 0.38, cs * 0.45, cs * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+          // Eye sockets
+          for (const ex of [skX - cs * 0.28, skX + cs * 0.28]) {
+            ctx.fillStyle = '#100e06';
+            ctx.beginPath(); ctx.ellipse(ex, skY - cs * 0.06, cs * 0.14, cs * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+            const eyeGlow = 0.35 + Math.sin(time * 3.5 + ex) * 0.20;
+            ctx.fillStyle = `rgba(255,80,10,${eyeGlow})`;
+            ctx.beginPath(); ctx.ellipse(ex, skY - cs * 0.06, cs * 0.06, cs * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+          }
+          // Teeth
+          ctx.fillStyle = '#1c1a10';
+          for (let t = 0; t < 5; t++) {
+            const tx2 = skX - cs * 0.32 + t * cs * 0.16;
+            ctx.beginPath();
+            ctx.moveTo(tx2 - cs * 0.045, skY + cs * 0.50);
+            ctx.lineTo(tx2, skY + cs * 0.72);
+            ctx.lineTo(tx2 + cs * 0.045, skY + cs * 0.50);
+            ctx.closePath(); ctx.fill();
+          }
+          // Scattered bones on the floor
+          ctx.strokeStyle = 'rgba(55,50,34,0.62)'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+          for (const [bx3, by3, ba] of [
+            [cx - cs * 1.4, cy + cs * 0.35, 0.4],
+            [cx + cs * 1.5, cy + cs * 0.45, -0.3],
+            [cx - cs * 0.6, cy + cs * 0.65, 1.1],
+          ]) {
+            ctx.save(); ctx.translate(bx3, by3); ctx.rotate(ba);
+            ctx.beginPath(); ctx.moveTo(-cs * 0.35, 0); ctx.lineTo(cs * 0.35, 0); ctx.stroke();
+            ctx.beginPath(); ctx.arc(-cs * 0.35, 0, cs * 0.08, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cs * 0.35, 0, cs * 0.08, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+          }
+          ctx.lineCap = 'butt';
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
     }
 
     // ── Warm hoard aura — drawn BEFORE the gold so it glows behind ───────────────

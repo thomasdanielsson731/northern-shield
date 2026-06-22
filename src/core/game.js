@@ -1141,6 +1141,7 @@ function updateWave() {
       flawlessStreak++;
       if (flawlessCount >= 5) unlockAchievement('flawless5');
       screenShake = Math.max(screenShake, 6);  // exhale — gentle shake on wave-clear
+      grid.bannerWaveBoost = 1.0;  // fortress banners celebrate
       spawnParticles(hoardX - GRID_LEFT, hoardY - GRID_TOP, '#f5d030', 24);
       spawnParticles(SPAWN.col * CELL_SIZE + CELL_SIZE / 2, SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#a07830', 10);
       sfxFlawless();
@@ -1150,6 +1151,7 @@ function updateWave() {
       sfxWaveDone();
       flawlessStreak = 0;
       hoardPulse = 18;
+      grid.bannerWaveBoost = 0.45;  // subdued banner wave even on a leak
     }
     // Hoard interest — flat 10g (avoids rich-get-richer feedback from percentage scaling)
     const interest = gold > 0 ? 10 : 0;
@@ -1167,6 +1169,10 @@ function updateWave() {
       const fx = hoardX - GRID_LEFT;
       const fy = GOAL.row * CELL_SIZE + CELL_SIZE / 2 - 54;
       dmgFloaters.push({ x: fx, y: fy, val: waveGoldTotal, life: 120, maxLife: 120, color: '#f5d030', large: true, suffix: 'g' });
+      // Battle cumulative total — shown above the wave floater, dimmer
+      if (goldEarned > waveGoldTotal) {
+        dmgFloaters.push({ x: fx, y: fy - 18, val: goldEarned, life: 110, maxLife: 110, color: '#c89820', large: false, suffix: 'g earned' });
+      }
     }
     waveLeak  = false;
     waveTimer = 0;
@@ -1688,6 +1694,253 @@ function initTerrain() {
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   tc.fillStyle = glow;
   tc.fillRect(0, 0, W, H);
+
+  // ── Named battlefield landmarks — fixed-position Norse world-building ────────
+  // Drawn last so they sit on top of the darkened terrain base.
+  {
+    const lm = tc;
+
+    // ── 1. Standing rune monolith — top-left clearing ───────────────────────────
+    {
+      const mx = cs * 5 + cs / 2, my = cs * 3 + cs / 2;
+      const sw = Math.round(cs * 0.38), sh = Math.round(cs * 0.88);
+      const lean = 0.06;
+      lm.save();
+      lm.translate(mx, my);
+      lm.rotate(lean);
+      // Drop shadow
+      lm.fillStyle = 'rgba(0,0,0,0.55)';
+      lm.fillRect(-sw / 2 + 2, -sh / 2 + 2, sw, sh);
+      // Stone body
+      const sg = 62;
+      const mGrad = lm.createLinearGradient(-sw / 2, 0, sw / 2, 0);
+      mGrad.addColorStop(0,    `rgb(${sg + 28},${sg + 25},${sg + 32})`);
+      mGrad.addColorStop(0.45, `rgb(${sg},${sg - 2},${sg + 5})`);
+      mGrad.addColorStop(1,    `rgb(${sg - 16},${sg - 18},${sg - 12})`);
+      lm.fillStyle = mGrad;
+      lm.fillRect(-sw / 2, -sh / 2, sw, sh);
+      // Top facet (lighter)
+      lm.fillStyle = `rgba(${sg + 52},${sg + 48},${sg + 58},0.60)`;
+      lm.fillRect(-sw / 2, -sh / 2, sw, Math.round(sh * 0.12));
+      // Carved rune lines
+      lm.strokeStyle = 'rgba(140,80,200,0.58)'; lm.lineWidth = 0.7;
+      lm.beginPath();
+      lm.moveTo(0, -sh * 0.32); lm.lineTo(0, sh * 0.28);
+      lm.moveTo(-sw * 0.32, -sh * 0.08); lm.lineTo(sw * 0.32, -sh * 0.08);
+      lm.moveTo(-sw * 0.30, -sh * 0.24); lm.lineTo(sw * 0.30, sh * 0.06);
+      lm.moveTo(sw * 0.30, -sh * 0.24); lm.lineTo(-sw * 0.30, sh * 0.06);
+      lm.stroke();
+      // Rune glow halo
+      lm.shadowColor = 'rgba(130,70,210,0.55)'; lm.shadowBlur = 5;
+      lm.strokeStyle = 'rgba(160,100,240,0.28)'; lm.lineWidth = 1.5;
+      lm.strokeRect(-sw / 2 - 2, -sh / 2 - 2, sw + 4, sh + 4);
+      lm.shadowBlur = 0;
+      // Ground scatter
+      lm.fillStyle = 'rgba(35,26,12,0.48)';
+      lm.beginPath(); lm.ellipse(0, sh / 2 + 1, sw * 1.2, sh * 0.14, 0, 0, Math.PI * 2); lm.fill();
+      lm.restore();
+    }
+
+    // ── 2. Sacred tree — ancient gnarled oak, top centre ────────────────────────
+    {
+      const tx2 = cs * 14 + cs / 2, ty2 = cs * 3 + cs / 2;
+      lm.save();
+      lm.translate(tx2, ty2);
+      // Ground shadow
+      lm.fillStyle = 'rgba(0,0,0,0.40)';
+      lm.beginPath(); lm.ellipse(2, cs * 0.6, cs * 0.55, cs * 0.18, 0, 0, Math.PI * 2); lm.fill();
+      // Trunk
+      const trunkW = Math.round(cs * 0.24);
+      const trunkH = Math.round(cs * 0.72);
+      lm.fillStyle = '#2a1808';
+      lm.fillRect(-trunkW / 2, -trunkH / 2, trunkW, trunkH + trunkW / 2);
+      // Trunk highlight
+      lm.fillStyle = 'rgba(80,48,18,0.45)';
+      lm.fillRect(-trunkW / 2, -trunkH / 2, Math.round(trunkW * 0.3), trunkH);
+      // Root flares
+      for (const [ra, rl] of [[-0.9, cs * 0.32], [0.0, cs * 0.28], [0.9, cs * 0.32], [-1.8, cs * 0.22]]) {
+        lm.strokeStyle = 'rgba(28,16,6,0.65)'; lm.lineWidth = 1.4; lm.lineCap = 'round';
+        lm.beginPath();
+        lm.moveTo(0, trunkH / 2 + 1);
+        lm.lineTo(Math.sin(ra) * rl, trunkH / 2 + Math.cos(ra) * rl * 0.5 + rl * 0.2);
+        lm.stroke();
+      }
+      lm.lineCap = 'butt';
+      // Main branches (bare, gnarled)
+      const branches = [
+        { a: -1.25, l: cs * 0.62, sub: [{ da: 0.55, fl: 0.55 }, { da: -0.45, fl: 0.48 }] },
+        { a:  0.20, l: cs * 0.55, sub: [{ da: 0.48, fl: 0.52 }, { da: -0.52, fl: 0.44 }] },
+        { a: -0.55, l: cs * 0.48, sub: [{ da: 0.60, fl: 0.50 }] },
+        { a:  1.30, l: cs * 0.42, sub: [{ da: -0.38, fl: 0.46 }] },
+      ];
+      const drawBranch = (x, y, angle, len, thick) => {
+        const ex = x + Math.cos(angle - Math.PI / 2) * len;
+        const ey = y + Math.sin(angle - Math.PI / 2) * len;
+        lm.strokeStyle = `rgba(28,16,6,${0.55 + thick * 0.35})`; lm.lineWidth = Math.max(0.6, thick * 2.2); lm.lineCap = 'round';
+        lm.beginPath(); lm.moveTo(x, y); lm.lineTo(ex, ey); lm.stroke();
+        lm.lineCap = 'butt';
+        return [ex, ey];
+      };
+      for (const { a, l, sub } of branches) {
+        const [bx2, by2] = drawBranch(0, -trunkH / 2, a, l, 0.55);
+        for (const { da, fl } of sub) {
+          drawBranch(bx2, by2, a + da, l * fl, 0.32);
+        }
+      }
+      // Amber rune glyph burned into trunk
+      lm.strokeStyle = 'rgba(200,140,30,0.55)'; lm.lineWidth = 0.55;
+      lm.beginPath();
+      lm.moveTo(0, -trunkH * 0.22); lm.lineTo(0, trunkH * 0.12);
+      lm.moveTo(-trunkW * 0.3, -trunkH * 0.06); lm.lineTo(trunkW * 0.3, -trunkH * 0.06);
+      lm.stroke();
+      lm.restore();
+    }
+
+    // ── 3. Viking grave mound — bottom right, with sword marker ─────────────────
+    {
+      const gx2 = cs * 27 + cs / 2, gy2 = cs * 18 + cs / 2;
+      lm.save();
+      lm.translate(gx2, gy2);
+      // Mound base shadow
+      lm.fillStyle = 'rgba(0,0,0,0.48)';
+      lm.beginPath(); lm.ellipse(2, cs * 0.12, cs * 0.82, cs * 0.28, 0, 0, Math.PI * 2); lm.fill();
+      // Earth mound body
+      const mGrad2 = lm.createRadialGradient(-cs * 0.15, -cs * 0.22, 0, 0, 0, cs * 0.65);
+      mGrad2.addColorStop(0,    'rgba(38,30,16,0.88)');
+      mGrad2.addColorStop(0.55, 'rgba(22,16,8,0.72)');
+      mGrad2.addColorStop(1,    'rgba(10,7,3,0)');
+      lm.fillStyle = mGrad2;
+      lm.beginPath(); lm.ellipse(0, 0, cs * 0.65, cs * 0.22, 0, 0, Math.PI * 2); lm.fill();
+      // Grass turf on mound
+      lm.fillStyle = 'rgba(20,42,14,0.62)';
+      lm.beginPath(); lm.ellipse(0, -cs * 0.05, cs * 0.48, cs * 0.14, 0, 0, Math.PI * 2); lm.fill();
+      // Stone ring outline around base
+      lm.strokeStyle = 'rgba(55,45,28,0.55)'; lm.lineWidth = 0.6;
+      lm.setLineDash([1.5, 2.5]);
+      lm.beginPath(); lm.ellipse(0, cs * 0.04, cs * 0.70, cs * 0.24, 0, 0, Math.PI * 2); lm.stroke();
+      lm.setLineDash([]);
+      // Sword marker (blade + crossguard + pommel)
+      const swX = 0, swY = -cs * 0.22;
+      lm.fillStyle = 'rgba(0,0,0,0.40)';
+      lm.fillRect(swX + 1, swY - cs * 0.52 + 1, 2, cs * 0.52);
+      lm.fillStyle = '#4a4438';
+      lm.fillRect(swX - 1, swY - cs * 0.52, 2, cs * 0.52);
+      lm.fillStyle = 'rgba(160,140,90,0.55)';
+      lm.fillRect(swX - 1, swY - cs * 0.52, 1, cs * 0.52 * 0.6);
+      // Crossguard
+      lm.fillStyle = '#3c3428';
+      lm.fillRect(swX - cs * 0.18, swY - cs * 0.08, cs * 0.36, Math.round(cs * 0.06));
+      // Pommel circle
+      lm.fillStyle = '#4a4438';
+      lm.beginPath(); lm.arc(swX, swY, cs * 0.08, 0, Math.PI * 2); lm.fill();
+      lm.restore();
+    }
+
+    // ── 4. Broken wagon — bottom left, shattered wheel and spilled goods ─────────
+    {
+      const wx = cs * 7 + cs / 2, wy = cs * 17 + cs / 2;
+      lm.save();
+      lm.translate(wx, wy);
+      lm.rotate(-0.22);
+      // Ground shadow
+      lm.fillStyle = 'rgba(0,0,0,0.38)';
+      lm.beginPath(); lm.ellipse(2, cs * 0.3, cs * 0.92, cs * 0.22, 0, 0, Math.PI * 2); lm.fill();
+      // Wagon bed (tilted)
+      lm.fillStyle = '#2c1a08';
+      lm.fillRect(-cs * 0.72, -cs * 0.12, cs * 1.44, cs * 0.30);
+      // Side boards
+      lm.fillStyle = '#381e0a';
+      lm.fillRect(-cs * 0.72, -cs * 0.22, cs * 1.44, cs * 0.12);
+      lm.fillRect(-cs * 0.72, cs * 0.18, cs * 1.44, cs * 0.12);
+      // Plank lines
+      lm.strokeStyle = 'rgba(0,0,0,0.38)'; lm.lineWidth = 0.5;
+      for (let pi = 1; pi < 5; pi++) {
+        const lx2 = -cs * 0.72 + pi * cs * 1.44 / 5;
+        lm.beginPath(); lm.moveTo(lx2, -cs * 0.12); lm.lineTo(lx2, cs * 0.18); lm.stroke();
+      }
+      // Front axle (snapped)
+      lm.strokeStyle = '#3a2010'; lm.lineWidth = 2.5; lm.lineCap = 'round';
+      lm.beginPath(); lm.moveTo(-cs * 0.72, cs * 0.18); lm.lineTo(-cs * 0.40, cs * 0.38); lm.stroke();
+      // Intact back wheel (right)
+      const drawWheel = (wX2, wY2, wr, broken) => {
+        lm.strokeStyle = '#2c1806'; lm.lineWidth = 2.2;
+        lm.beginPath(); lm.arc(wX2, wY2, wr, 0, Math.PI * 2); lm.stroke();
+        lm.strokeStyle = broken ? 'rgba(55,30,10,0.55)' : '#3a2010'; lm.lineWidth = 1.0;
+        const spokes = broken ? 4 : 6;
+        for (let sp = 0; sp < spokes; sp++) {
+          const sa = (sp / spokes) * Math.PI * 2;
+          const endR = broken && sp > 2 ? wr * 0.55 : wr;
+          lm.beginPath(); lm.moveTo(wX2, wY2); lm.lineTo(wX2 + Math.cos(sa) * endR, wY2 + Math.sin(sa) * endR); lm.stroke();
+        }
+        lm.fillStyle = '#2c1806';
+        lm.beginPath(); lm.arc(wX2, wY2, wr * 0.18, 0, Math.PI * 2); lm.fill();
+      };
+      lm.lineCap = 'butt';
+      drawWheel(cs * 0.58, cs * 0.30, cs * 0.32, false);
+      // Broken front wheel (left — shattered arc)
+      drawWheel(-cs * 0.58, cs * 0.35, cs * 0.28, true);
+      // Spilled crate fragment
+      lm.fillStyle = '#2e1a08';
+      lm.fillRect(cs * 0.62, -cs * 0.10, cs * 0.30, cs * 0.25);
+      lm.strokeStyle = 'rgba(0,0,0,0.35)'; lm.lineWidth = 0.5;
+      lm.strokeRect(cs * 0.62, -cs * 0.10, cs * 0.30, cs * 0.25);
+      // Spilled apples/cargo dots
+      for (const [ax, ay] of [[cs * 0.70, cs * 0.22],[cs * 0.88, cs * 0.16],[cs * 0.80, cs * 0.32]]) {
+        lm.fillStyle = '#6a1810';
+        lm.beginPath(); lm.arc(ax, ay, 1.6, 0, Math.PI * 2); lm.fill();
+      }
+      lm.lineCap = 'butt';
+      lm.restore();
+    }
+
+    // ── 5. Frozen pond — bottom centre, icy reflective pool ─────────────────────
+    {
+      const px2 = cs * 18 + cs / 2, py2 = cs * 18 + cs / 2;
+      const prX = cs * 0.82, prY = cs * 0.35;
+      lm.save();
+      lm.translate(px2, py2);
+      lm.rotate(0.18);
+      // Outer mud rim
+      lm.fillStyle = 'rgba(14,10,4,0.62)';
+      lm.beginPath(); lm.ellipse(0, 0, prX + 3.5, prY + 2.0, 0, 0, Math.PI * 2); lm.fill();
+      // Ice surface gradient
+      const iceGrad = lm.createRadialGradient(-prX * 0.20, -prY * 0.30, 0, 0, 0, prX);
+      iceGrad.addColorStop(0,    'rgba(185,215,245,0.72)');
+      iceGrad.addColorStop(0.45, 'rgba(120,170,210,0.55)');
+      iceGrad.addColorStop(0.80, 'rgba(70,110,165,0.42)');
+      iceGrad.addColorStop(1,    'rgba(18,28,55,0.62)');
+      lm.fillStyle = iceGrad;
+      lm.beginPath(); lm.ellipse(0, 0, prX, prY, 0, 0, Math.PI * 2); lm.fill();
+      // Ice crack lines
+      lm.strokeStyle = 'rgba(200,230,255,0.40)'; lm.lineWidth = 0.55;
+      for (const [ca, cl] of [[0.3, prX * 0.62], [-1.1, prX * 0.45], [2.2, prX * 0.38], [-2.8, prX * 0.52]]) {
+        const cx3 = Math.cos(ca) * prX * 0.22, cy3 = Math.sin(ca) * prY * 0.22;
+        lm.beginPath(); lm.moveTo(cx3, cy3); lm.lineTo(cx3 + Math.cos(ca) * cl, cy3 + Math.sin(ca) * cl * (prY / prX)); lm.stroke();
+        // Branch crack
+        lm.beginPath();
+        lm.moveTo(cx3 + Math.cos(ca) * cl * 0.6, cy3 + Math.sin(ca) * cl * 0.6 * (prY / prX));
+        lm.lineTo(cx3 + Math.cos(ca + 0.7) * cl * 0.38, cy3 + Math.sin(ca + 0.7) * cl * 0.38 * (prY / prX));
+        lm.stroke();
+      }
+      // Highlight shimmer ellipse
+      lm.fillStyle = 'rgba(235,248,255,0.28)';
+      lm.beginPath(); lm.ellipse(-prX * 0.28, -prY * 0.42, prX * 0.32, prY * 0.22, -0.5, 0, Math.PI * 2); lm.fill();
+      // Dark water edge (depth at rim)
+      lm.strokeStyle = 'rgba(8,14,28,0.55)'; lm.lineWidth = 1.0;
+      lm.beginPath(); lm.ellipse(0, 0, prX - 0.5, prY - 0.5, 0, 0, Math.PI * 2); lm.stroke();
+      // Small embedded reeds at edge
+      lm.strokeStyle = 'rgba(38,58,22,0.65)'; lm.lineWidth = 0.7; lm.lineCap = 'round';
+      for (const [rx2, ry2, rl] of [
+        [prX * 0.72, -prY * 0.30, prY * 0.55],
+        [-prX * 0.68, prY * 0.25, prY * 0.48],
+        [prX * 0.45, prY * 0.60, prY * 0.44],
+      ]) {
+        lm.beginPath(); lm.moveTo(rx2, ry2); lm.lineTo(rx2 + (Math.random() - 0.5) * 2, ry2 - rl); lm.stroke();
+      }
+      lm.lineCap = 'butt';
+      lm.restore();
+    }
+  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
