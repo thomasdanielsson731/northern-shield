@@ -62,9 +62,16 @@ let panStartOffX      = 0, panStartOffY  = 0;
 let rightClickDragged = false;
 let rightClickSaved   = null;
 
-const BUILD_ITEMS = [
-  { id: 'wall', label: 'Shield Wall', key: '1', color: '#6e5038', cost: WALL_COST, mode: CELL.WALL, category: 'walls' },
-  ...Object.values(TOWER_TYPES).map(type => ({
+// TOWER items: static siege/defensive structures
+const TOWER_BUILD_ITEMS = [
+  { id: 'wall',    label: 'Shield Wall', key: '1', color: '#6e5038', cost: WALL_COST, mode: CELL.WALL, category: 'walls' },
+  { id: 'piltorn',  ...TOWER_DEFS['piltorn'],  mode: CELL.TOWER, category: 'siege' },
+  { id: 'catapult', ...TOWER_DEFS['catapult'], mode: CELL.TOWER, category: 'siege' },
+  { id: 'drakship', ...TOWER_DEFS['drakship'], mode: CELL.TOWER, category: 'siege' },
+];
+// HERO items: warband characters with roster identity
+const HERO_BUILD_ITEMS = [
+  ...['berserk', 'valkyrie', 'military', 'hydda', 'blondie', 'isjatten'].map(type => ({
     id:       type,
     label:    TOWER_DEFS[type].label,
     key:      TOWER_DEFS[type].key,
@@ -72,12 +79,11 @@ const BUILD_ITEMS = [
     glowRgb:  TOWER_DEFS[type].glowRgb,
     cost:     TOWER_DEFS[type].cost,
     mode:     CELL.TOWER,
-    category: (['berserk', 'valkyrie', 'military'].includes(type)) ? 'warriors'
-             : (['catapult', 'drakship', 'piltorn'].includes(type)) ? 'siege'
-             : (['blondie', 'hydda', 'isjatten'].includes(type))    ? 'mystic'
-             : 'warriors',
-  }))
+    category: (['berserk', 'valkyrie', 'military'].includes(type)) ? 'warriors' : 'mystic',
+    isHero:   true,
+  })),
 ];
+const BUILD_ITEMS = [...TOWER_BUILD_ITEMS, ...HERO_BUILD_ITEMS];
 
 const STARTING_GOLD  = 120;
 const RECRUIT_COST   = 30;    // goldReserve cost to recruit a new defender between battles
@@ -476,15 +482,36 @@ function restartCombatState() {
   _extraSpawns = [];
   if (_currentBattlePreset?.multiPortal) {
     const _potentialPortals = [
-      { col: COLS - 1,  row: GOAL.row,  activateWave: 11, dir: 'EAST'  },
-      { col: GOAL.col,  row: 0,          activateWave: 21, dir: 'NORTH' },
-      { col: GOAL.col,  row: ROWS - 1,   activateWave: 41, dir: 'SOUTH' },
-      { col: 0,         row: 0,          activateWave: 71, dir: 'NW'    },
+      { col: COLS - 1,  row: GOAL.row,  activateWave: 11, dir: 'EAST',  name: 'EAST FEN'    },
+      { col: GOAL.col,  row: 0,          activateWave: 21, dir: 'NORTH', name: 'NORTH ROAD'  },
+      { col: GOAL.col,  row: ROWS - 1,   activateWave: 41, dir: 'SOUTH', name: 'SOUTH WATCH' },
+      { col: 0,         row: 0,          activateWave: 71, dir: 'NW',    name: 'DARK GATE'   },
     ];
     for (const _pp of _potentialPortals) {
       grid.setCell(_pp.col, _pp.row, CELL.SPAWN);
-      _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false, activateWave: _pp.activateWave, dir: _pp.dir });
+      _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false, activateWave: _pp.activateWave, dir: _pp.dir, name: _pp.name });
     }
+  }
+
+  // Pre-place fortress ring walls around GOAL for multiPortal maps
+  if (_currentBattlePreset?.multiPortal) {
+    const _R = 5;  // Chebyshev ring radius
+    for (let _rc = GOAL.col - _R; _rc <= GOAL.col + _R; _rc++) {
+      for (let _rr = GOAL.row - _R; _rr <= GOAL.row + _R; _rr++) {
+        if (_rc < 0 || _rc >= COLS || _rr < 0 || _rr >= ROWS) continue;
+        if (Math.max(Math.abs(_rc - GOAL.col), Math.abs(_rr - GOAL.row)) !== _R) continue;
+        // 2-cell wide gaps at N/S/E/W for the four main paths
+        const _onVAxis = Math.abs(_rc - GOAL.col) <= 1;
+        const _onHAxis = Math.abs(_rr - GOAL.row) <= 1;
+        const _isNS = _onVAxis && (_rr === GOAL.row - _R || _rr === GOAL.row + _R);
+        const _isEW = _onHAxis && (_rc === GOAL.col - _R || _rc === GOAL.col + _R);
+        if (_isNS || _isEW) continue;
+        if (grid.getCell(_rc, _rr) !== CELL.EMPTY) continue;
+        grid.setCell(_rc, _rr, CELL.WALL);
+        wallData[`${_rc}_${_rr}`] = { level: 0, hp: WALL_BASE_HP, maxHp: WALL_BASE_HP };
+      }
+    }
+    wallFrostDirty = true;
   }
 
   currentPath   = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
@@ -2331,23 +2358,53 @@ function drawFantasyPanel(x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) 
 // ── build buttons ─────────────────────────────────────────────────────────────
 
 let _buildBtnsCache = null;
+
+// Layout constants for the two-panel build bar
+const _TOWER_PANEL_FRAC = 0.36;  // fraction of build bar width for TOWERS panel
+
+function _computeSplitButtons() {
+  const panelX  = GRID_LEFT + 2;
+  const panelW  = COLS * CELL_SIZE - 4;
+  const padX    = 4;
+  const gap     = 3;
+  const divider = 10;
+  const btnY    = GRID_BOTTOM + 18;  // shifted down to leave room for section labels
+
+  const tPanelW = Math.floor(panelW * _TOWER_PANEL_FRAC) - divider / 2;
+  const hPanelW = panelW - tPanelW - divider;
+  const tPanelX = panelX;
+  const hPanelX = panelX + tPanelW + divider;
+
+  const nT   = TOWER_BUILD_ITEMS.length;
+  const nH   = HERO_BUILD_ITEMS.length;
+  const tcW  = nT > 0 ? Math.floor((tPanelW - 2 * padX - (nT - 1) * gap) / nT) : 0;
+  const hcW  = nH > 0 ? Math.floor((hPanelW - 2 * padX - (nH - 1) * gap) / nH) : 0;
+  const cardH = BUILD_BTN.h;
+
+  const tBtns = TOWER_BUILD_ITEMS.map((item, i) => ({
+    ...item,
+    cost:  item.id === 'wall' ? _effectiveWallCost : item.cost,
+    x:     tPanelX + padX + i * (tcW + gap),
+    y:     btnY,
+    width: tcW,
+    height: cardH,
+    panelId: 'towers',
+  }));
+  const hBtns = HERO_BUILD_ITEMS.map((item, i) => ({
+    ...item,
+    x:     hPanelX + padX + i * (hcW + gap),
+    y:     btnY,
+    width: hcW,
+    height: cardH,
+    panelId: 'heroes',
+  }));
+  return { tBtns, hBtns, tPanelX, tPanelW, hPanelX, hPanelW, btnY };
+}
+
 function getBuildButtons() {
   if (_buildBtnsCache) return _buildBtnsCache;
-  const nBtn   = BUILD_ITEMS.length;
-  const panelX = GRID_LEFT + 2;
-  const panelW = COLS * CELL_SIZE - 4;
-  const padX   = 4;
-  const gap    = 3;
-  const cardW  = nBtn > 0 ? Math.floor((panelW - 2 * padX - (nBtn - 1) * gap) / nBtn) : 0;
-  const btnY   = GRID_BOTTOM + 7;
-  _buildBtnsCache = BUILD_ITEMS.map((item, i) => ({
-    ...item,
-    cost:   item.id === 'wall' ? _effectiveWallCost : item.cost,
-    x:      panelX + padX + i * (cardW + gap),
-    y:      btnY,
-    width:  cardW,
-    height: BUILD_BTN.h
-  }));
+  const { tBtns, hBtns } = _computeSplitButtons();
+  _buildBtnsCache = [...tBtns, ...hBtns];
   return _buildBtnsCache;
 }
 
@@ -4263,6 +4320,30 @@ function drawExtraPortalPaths() {
   if (_extraSpawns.length === 0) return;
   const t = performance.now() * 0.001;
   ctx.save();
+
+  // WEST GATE label on main SPAWN portal
+  {
+    const _pulse = 0.5 + Math.sin(t * 2.5) * 0.5;
+    const _wpx = SPAWN.col * CELL_SIZE + CELL_SIZE / 2;
+    const _wpy = SPAWN.row * CELL_SIZE + CELL_SIZE / 2;
+    const _wlx = _wpx + CELL_SIZE * 2.0, _wly = _wpy - CELL_SIZE * 1.5;
+    ctx.save();
+    ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const _ww = ctx.measureText('WEST GATE').width + 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.70)';
+    ctx.beginPath(); ctx.roundRect(_wlx - _ww / 2, _wly - 5, _ww, 10, 2); ctx.fill();
+    ctx.fillStyle = `rgba(220,170,255,0.85)`;
+    ctx.fillText('WEST GATE', _wlx, _wly);
+    if (waveState === 'active' && spawnQueue.length > 0) {
+      const _si = waveNumber <= 10 ? 16 : SPAWN_FRAMES;
+      const _cd = Math.max(0, Math.ceil((_si - spawnTimer) / 30));
+      ctx.font = '5px monospace';
+      ctx.fillStyle = `rgba(255,200,100,${0.7 + _pulse * 0.2})`;
+      ctx.fillText(`${_cd}s ☠`, _wlx, _wly + 8);
+    }
+    ctx.restore();
+  }
+
   for (const es of _extraSpawns) {
     if (!es.path || es.path.length < 2) continue;
     const pulse = 0.5 + Math.sin(t * 2.5 + (es.col + es.row) * 0.4) * 0.5;
@@ -4293,12 +4374,37 @@ function drawExtraPortalPaths() {
     ctx.beginPath();
     ctx.arc(px, py, CELL_SIZE * 0.45, 0, Math.PI * 2);
     ctx.stroke();
-    if (!es.active) {
-      ctx.font = '5px monospace'; ctx.fillStyle = 'rgba(140,100,200,0.55)'; ctx.textAlign = 'center';
-      ctx.fillText(es.activateWave ? `W${es.activateWave}` : '?', px, py + 2);
-    }
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
+
+    // Portal name label
+    const _pName = es.name ?? es.dir;
+    const _labelAlpha = es.active ? 0.85 : 0.45;
+    const _bgAlpha    = es.active ? 0.70 : 0.38;
+    // Position label offset based on direction
+    const _lOffX = (es.dir === 'EAST') ? -CELL_SIZE * 0.5 : (es.dir === 'NW') ? CELL_SIZE * 0.5 : 0;
+    const _lOffY = (es.dir === 'NORTH') ? CELL_SIZE * 2.2 : (es.dir === 'SOUTH') ? -CELL_SIZE * 1.4 : (es.dir === 'EAST') ? -CELL_SIZE * 1.8 : (es.dir === 'NW') ? CELL_SIZE * 1.4 : -CELL_SIZE * 1.5;
+    const _lx = px + _lOffX, _ly = py + _lOffY;
+    ctx.save();
+    ctx.font = `bold 6px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const _tw = ctx.measureText(_pName).width + 6;
+    ctx.fillStyle = `rgba(0,0,0,${_bgAlpha})`;
+    ctx.beginPath(); ctx.roundRect(_lx - _tw / 2, _ly - 5, _tw, 10, 2); ctx.fill();
+    ctx.fillStyle = es.active ? `rgba(220,170,255,${_labelAlpha})` : `rgba(140,100,180,${_labelAlpha})`;
+    ctx.fillText(_pName, _lx, _ly);
+    // Status line: countdown if active, wave number if dormant
+    ctx.font = '5px monospace';
+    if (es.active && waveState === 'active' && spawnQueue.length > 0) {
+      const _si = waveNumber <= 10 ? 16 : SPAWN_FRAMES;
+      const _cd = Math.max(0, Math.ceil((_si - spawnTimer) / 30));
+      ctx.fillStyle = `rgba(255,200,100,${_labelAlpha})`;
+      ctx.fillText(`${_cd}s ☠`, _lx, _ly + 8);
+    } else if (!es.active) {
+      ctx.fillStyle = `rgba(160,120,220,${_labelAlpha * 0.8})`;
+      ctx.fillText(`opens W${es.activateWave}`, _lx, _ly + 8);
+    }
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -4942,6 +5048,34 @@ function drawRightPanel() {
     ly += ROW;
     _bar(lives / STARTING_LIVES, effC);
     _row('Deployed:', `${towers.length} unit${towers.length !== 1 ? 's' : ''}`, '#90a8c8');
+
+    // Wall status row
+    const _wallEntries = Object.values(wallData);
+    if (_wallEntries.length > 0) {
+      const _maxLvl   = Math.max(..._wallEntries.map(w => w.level));
+      const _damaged  = _wallEntries.filter(w => w.hp < w.maxHp).length;
+      const _lvlNames = ['', 'I', 'II', 'III', 'IV'];
+      const _wLvlStr  = _maxLvl > 0 ? `Lv ${_lvlNames[_maxLvl]}` : 'Base';
+      const _wallRightTxt = _damaged > 0 ? `${_damaged} damaged` : 'intact';
+      const _wallRightC   = _damaged > 0 ? '#e8c040' : '#70c870';
+      _row(`Walls (${_wLvlStr}):`, _wallRightTxt, _wallRightC);
+    }
+
+    // Selected wall info (pendingSell on a wall)
+    if (pendingSell && !getTowerAtCell(pendingSell.col, pendingSell.row)) {
+      const _swd = wallData[`${pendingSell.col}_${pendingSell.row}`];
+      if (_swd) {
+        const _lvlNames = ['Base', 'I', 'II', 'III', 'IV'];
+        const _hpPct = Math.round(_swd.hp / _swd.maxHp * 100);
+        const _hpC   = _hpPct > 60 ? '#70c870' : _hpPct > 25 ? '#e8c040' : '#e84040';
+        _row(`  Selected Lv ${_lvlNames[_swd.level]}:`, `${_hpPct}% HP`, _hpC);
+        if (_swd.level < WALL_MAX_LEVEL) {
+          const _upgCost = WALL_UPGRADE_COST[_swd.level];
+          const _lvlUp   = _lvlNames[_swd.level + 1];
+          _row('  [U] Upgrade→' + _lvlUp + ':', `◆${_upgCost}`, gold >= _upgCost ? '#90d870' : '#a06040');
+        }
+      }
+    }
     ly += GAP;
   }
 
@@ -5477,12 +5611,21 @@ function drawBottomBuildBar() {
   const buildPanelH = BUILD_BTN.h + 22;
   drawFantasyPanel(buildPanelX, buildPanelY, buildPanelW, buildPanelH, 'rgba(42,22,6,0.97)');
 
-  // Panel identity label — reads as warband roster, not tower build menu
+  // ── Two sub-panels: TOWERS (left) and HEROES (right) ──────────────────────
+  const { tPanelX, tPanelW, hPanelX, hPanelW } = _computeSplitButtons();
+  // TOWERS sub-panel
+  drawFantasyPanel(tPanelX, buildPanelY, tPanelW, buildPanelH, 'rgba(28,18,8,0.90)', 0.28, 5);
   ctx.save();
-  ctx.font      = 'bold 7px monospace';
-  ctx.fillStyle = 'rgba(200,155,80,0.50)';
-  ctx.textAlign = 'left';
-  ctx.fillText('WARBAND', buildPanelX + 8, buildPanelY + 11);
+  ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(140,115,75,0.80)';
+  ctx.fillText('⚙ TOWERS', tPanelX + 7, buildPanelY + 11);
+  ctx.restore();
+  // HEROES sub-panel
+  drawFantasyPanel(hPanelX, buildPanelY, hPanelW, buildPanelH, 'rgba(28,14,38,0.90)', 0.28, 5);
+  ctx.save();
+  ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(160,120,200,0.80)';
+  ctx.fillText('⚔ HEROES', hPanelX + 7, buildPanelY + 11);
   ctx.restore();
 
   const anyTowerSelected = buildMode === CELL.TOWER && selectedTowerType;
