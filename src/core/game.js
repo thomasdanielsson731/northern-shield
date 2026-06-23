@@ -3899,21 +3899,22 @@ function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1) {
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
 }
 
-/** Rampart hearts — mockup-style lives readout. */
+/** Rampart segment bars — lives readout as filled/empty pixel bars. */
 function drawRampartHearts(x, y, current, max, filledColor) {
-  const heartW = 7;
+  const segW = 6, segH = 5, segGap = 1;
   for (let i = 0; i < max; i++) {
-    const hx = x + i * (heartW + 1);
+    const sx = x + i * (segW + segGap);
     const full = i < current;
     ctx.fillStyle = full ? filledColor : 'rgba(40,28,22,0.65)';
-    ctx.font = '7px monospace';
-    ctx.fillText(full ? '♥' : '♡', hx, y);
+    ctx.globalAlpha = full ? 0.90 : 0.40;
+    ctx.beginPath(); ctx.roundRect(sx, y - segH, segW, segH, 1); ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
 /** Mockup-style defender row in the right panel. */
 function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false } = {}) {
-  const CARD_H = 30;
+  const CARD_H = 32;
   const rgb    = defenderGlowRgb(tower);
   const tName  = tower.name ?? TOWER_DEFS[tower.type]?.label ?? tower.type;
   const classLbl = TOWER_DEFS[tower.type]?.label ?? tower.type;
@@ -3928,41 +3929,47 @@ function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isField
   ctx.lineWidth = isFieldSelected ? 1.4 : 0.7;
   ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w - 1, CARD_H - 1, 4); ctx.stroke();
 
-  const avX = x + 14;
+  // Rank-colored left stripe
+  const _sRank = def ? getRank(def) : null;
+  ctx.fillStyle = _sRank?.color ?? `rgba(${rgb},0.70)`; ctx.globalAlpha = 0.60;
+  ctx.beginPath(); ctx.roundRect(x, y, 3, CARD_H, [4,0,0,4]); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  const avX = x + 15;
   const avY = y + CARD_H / 2;
   drawMiniDefenderPortrait(avX, avY, tower.type, 11);
 
   ctx.textAlign = 'left';
-  ctx.font = 'bold 7.5px monospace';
+  ctx.font = 'bold 8px monospace';
   drawDefenderName(
     tName.length > 10 ? tName.slice(0, 9) + '…' : tName,
-    x + 28, y + 10, tower, 1,
+    x + 30, y + 12, tower, 1,
   );
-  ctx.font = '6px monospace';
+  ctx.font = '6.5px monospace';
   ctx.fillStyle = `rgba(${rgb},0.55)`;
-  ctx.fillText(`${classLbl}${tLvl}`, x + 28, y + 20);
+  ctx.fillText(`${classLbl}${tLvl}`, x + 30, y + 22);
 
   // Battle contribution chip
   ctx.font = 'bold 7px monospace'; ctx.textAlign = 'right';
   if (tower.type === 'hydda') {
     ctx.fillStyle = '#70e8a0';
-    ctx.fillText('♥ HEAL', rightX, y + 11);
+    ctx.fillText('♥ HEAL', rightX, y + 13);
   } else if (dmg > 0 || kills > 0) {
     ctx.fillStyle = kills > 0 ? '#90e8a0' : `rgba(${rgb},0.75)`;
-    ctx.fillText(`⚔${formatBattleStat(dmg)}`, rightX, y + 11);
+    ctx.fillText(`⚔${formatBattleStat(dmg)}`, rightX, y + 13);
     if (kills > 0) {
-      ctx.font = '6px monospace';
+      ctx.font = '6.5px monospace';
       ctx.fillStyle = 'rgba(160,200,160,0.65)';
-      ctx.fillText(`☠${kills}`, rightX, y + 21);
+      ctx.fillText(`☠${kills}`, rightX, y + 24);
     }
   } else if (def?.careerKills > 0) {
     ctx.fillStyle = 'rgba(170,150,120,0.55)';
-    ctx.fillText(`${def.careerKills}✦`, rightX, y + 12);
+    ctx.fillText(`${def.careerKills}✦`, rightX, y + 13);
   }
 
   const _pt = def ? getPrimaryTitle(def) : null;
   if (_pt) {
-    ctx.font = '5.5px monospace';
+    ctx.font = '6px monospace';
     ctx.fillStyle = 'rgba(160,130,200,0.55)';
     ctx.fillText(`✦${_pt.label}`, rightX, y + CARD_H - 3);
   }
@@ -3997,14 +4004,14 @@ function drawDefenderDossier() {
   const col3 = panelX + Math.floor(panelW * 0.62);
   const col4 = panelX + Math.floor(panelW * 0.82);
 
-  ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(140,120,90,0.55)';
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.65)';
   ctx.fillText('DEFENDER', col1, panelY + 10);
   ctx.fillText('TRAIT', col2, panelY + 10);
   ctx.fillText('BATTLE', col3, panelY + 10);
   ctx.fillText('GEAR', col4, panelY + 10);
 
   const tName = t.name ?? TOWER_DEFS[t.type]?.label ?? t.type;
-  ctx.font = 'bold 9px monospace';
+  ctx.font = 'bold 10px monospace';
   drawDefenderName(tName, col1, panelY + 22, t, 1);
   ctx.font = '7px monospace';
   ctx.fillStyle = `rgba(${rgb},0.65)`;
@@ -4047,7 +4054,7 @@ function drawDefenderDossier() {
       ctx.strokeStyle = RARITY_COLOR[iDef.rarity] ?? '#aaa';
       ctx.lineWidth = 1;
       ctx.strokeRect(gx + 0.5, panelY + 14.5, slotW - 1, 21);
-      ctx.font = '5.5px monospace'; ctx.fillStyle = RARITY_COLOR[iDef.rarity] ?? '#ccc';
+      ctx.font = '6.5px monospace'; ctx.fillStyle = RARITY_COLOR[iDef.rarity] ?? '#ccc';
       ctx.fillText(iDef.name.slice(0, 5), gx + 2, panelY + 26);
     } else {
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(80,70,60,0.4)';
@@ -4566,14 +4573,14 @@ function drawRightPanel() {
     ctx.fillStyle = 'rgba(0,0,0,0.38)';
     ctx.beginPath(); ctx.roundRect(sX, ly, sW, HDR, [3,3,0,0]); ctx.fill();
     ctx.fillStyle = color; ctx.globalAlpha = 0.82;
-    ctx.fillRect(sX, ly, 3, HDR);
+    ctx.fillRect(sX, ly, 4, HDR);
     ctx.globalAlpha = 1;
     ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
     ctx.fillStyle = color;
-    ctx.fillText(icon, sX + 8, ly + HDR - 2);
-    ctx.font = 'bold 6.5px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(icon, sX + 9, ly + HDR - 2);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'left';
     ctx.fillStyle = color; ctx.globalAlpha = 0.88;
-    ctx.fillText(label, sX + 17, ly + HDR - 2);
+    ctx.fillText(label, sX + 18, ly + HDR - 2);
     ctx.globalAlpha = 1;
     if (rightTxt) {
       ctx.font = 'bold 7px monospace'; ctx.textAlign = 'right';
@@ -4588,8 +4595,8 @@ function drawRightPanel() {
 
   // Data row: label left (muted) + value right (bold)
   function _row(label, value, valColor) {
-    ctx.font = '6px monospace'; ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.60)';
     ctx.fillText(label, dLX, ly + ROW - 2);
     ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
     ctx.fillStyle = valColor ?? 'rgba(225,205,165,0.88)';
@@ -4602,8 +4609,8 @@ function drawRightPanel() {
   // Dual-value row: label + v1 at mid-right + v2 at far right
   function _rowDual(label, v1, v1c, v2, v2c) {
     const midX = sX + Math.floor(sW * 0.52);
-    ctx.font = '6px monospace'; ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.60)';
     ctx.fillText(label, dLX, ly + ROW - 2);
     ctx.font = 'bold 7.5px monospace';
     ctx.fillStyle = v1c ?? 'rgba(225,205,165,0.88)'; ctx.textAlign = 'right';
@@ -4634,11 +4641,13 @@ function drawRightPanel() {
       const isFull  = i < filled;
       const isWarn  = i >= total - 2;
       ctx.fillStyle = isFull ? (isWarn ? warnColor : color) : 'rgba(50,40,28,0.55)';
-      ctx.globalAlpha = isFull ? 0.88 : 0.40;
-      ctx.beginPath(); ctx.roundRect(sx, ly, sw, 5, 1); ctx.fill();
+      ctx.globalAlpha = isFull ? 0.90 : 0.40;
+      if (isFull) { ctx.shadowColor = isWarn ? warnColor : color; ctx.shadowBlur = 2; }
+      ctx.beginPath(); ctx.roundRect(sx, ly, sw, 6, 1); ctx.fill();
+      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
-    ly += 7;
+    ly += 8;
   }
 
   // ── 1. THREAT (active only — wave banner covers this during break) ────────────
@@ -4664,7 +4673,7 @@ function drawRightPanel() {
     }
     if (nextBossW) {
       const _nbName = BOSS_CONFIGS[nextBossW]?.name ?? `Wave ${nextBossW}`;
-      _row('Next Threat:', `☠ ${_nbName}`, '#d05828');
+      _row('Next Threat:', `☠ ${_nbName}`, '#ff4020');
     } else if (curEv) {
       _row('Event:', `⚡ ${curEv.label}`, curEv.id === 'ancestralAid' ? '#80d8ff' : '#e8c040');
     }
@@ -4681,11 +4690,11 @@ function drawRightPanel() {
 
     if (flash > 0) { ctx.shadowColor = effC; ctx.shadowBlur = 8; }
     ctx.globalAlpha = flash > 0 ? 0.85 + flash * 0.15 : 1;
-    _hdr('#5882c8', '♜', 'FORTRESS', stat, statC);
+    _hdr('#5882c8', '⚑', 'FORTRESS', stat, statC);
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 
-    ctx.font = '6px monospace'; ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.60)';
     ctx.fillText('Ramparts:', dLX, ly + ROW - 2);
     drawRampartHearts(dLX + 52, ly + ROW - 2, lives, STARTING_LIVES, effC);
     ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
@@ -4694,7 +4703,7 @@ function drawRightPanel() {
     ctx.textAlign = 'left';
     ly += ROW;
     _bar(lives / STARTING_LIVES, effC);
-    _row('Deployed:', `${towers.length}`, '#90a8c8');
+    _row('Deployed:', `${towers.length} unit${towers.length !== 1 ? 's' : ''}`, '#90a8c8');
     ly += GAP;
   }
 
@@ -4708,14 +4717,8 @@ function drawRightPanel() {
     const mvpT     = scored.length ? scored[0].t : null;
     const mvpLabel = mvpT?.mvpTimer > 0 ? (mvpT.name ?? TOWER_DEFS[mvpT.type]?.label) : null;
 
-    // Roster status word based on mean career level of deployed defenders
-    const meanLvl = towers.length
-      ? towers.reduce((s, t) => s + (t._careerLevel || 0), 0) / towers.length : 0;
-    const rStatus = meanLvl >= 7 ? 'VETERAN' : meanLvl >= 4 ? 'BLOODED' : meanLvl >= 2 ? 'TRAINED' : 'GREEN';
-    const rStatusC = meanLvl >= 7 ? '#ffd040' : meanLvl >= 4 ? '#e89040' : meanLvl >= 2 ? '#90c870' : '#8090c0';
-
-    const _defRightTxt = mvpLabel ? `MVP: ${mvpLabel}` : `${towers.length} · ${rStatus}`;
-    _hdr(defC, '⚔', 'DEFENDERS', _defRightTxt, mvpLabel ? '#ffd040' : rStatusC);
+    const _defRightTxt = mvpLabel ? `MVP: ${mvpLabel}` : `${towers.length} DEPLOYED`;
+    _hdr(defC, '⚔', 'DEFENDERS', _defRightTxt, mvpLabel ? '#ffd040' : 'rgba(160,140,120,0.75)');
 
     if (towers.length === 0) {
       _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
@@ -4756,7 +4759,7 @@ function drawRightPanel() {
       ctx.shadowBlur = 0; ctx.textAlign = 'left';
       ly += 12;
     } else {
-      _row('Status:', hoard.name, hColor);
+      _row('Gold:', `${Math.floor(gold)}g`, hColor);
     }
 
     if (incEst > 0) _row('Gold / sec:', `${incEst}g`, '#c89828');
@@ -4780,8 +4783,20 @@ function drawRightPanel() {
     }
     _row('Chieftains Slain:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
       bossesDefeated >= BOSS_WAVES.size ? '#ffd040' : 'rgba(200,180,130,0.80)');
+    {
+      const pipW = Math.floor((bW - (BOSS_WAVES.size - 1) * 2) / BOSS_WAVES.size);
+      for (let _bi = 0; _bi < BOSS_WAVES.size; _bi++) {
+        const _px = bX + _bi * (pipW + 2);
+        const _done = _bi < bossesDefeated;
+        ctx.fillStyle = _done ? '#ffd040' : 'rgba(60,50,30,0.50)';
+        ctx.globalAlpha = _done ? 0.88 : 0.40;
+        ctx.beginPath(); ctx.roundRect(_px, ly, pipW, 3, 1); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ly += 5;
+    }
     if (goldReserve > 0 || waveState !== 'active') {
-      _row('Reserve:', `◆ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
+      _row('Reserve:', `◈ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
     }
     {
       const fb = _fortressBonuses;
@@ -6366,13 +6381,17 @@ function drawWaveAnnouncement() {
     mainColor = '#ff5030';
   } else {
     const comp  = waveComposition(nextW);
-    const parts = [comp.draugr      > 0 && `${comp.draugr}D`,
-                   comp.mylings     > 0 && `${comp.mylings}M`,
-                   comp.jotunn      > 0 && `${comp.jotunn}J`,
-                   comp.maras       > 0 && `${comp.maras}X`,
-                   (comp.wargs ?? 0)      > 0 && `${comp.wargs}W`,
-                   (comp.einherjars ?? 0) > 0 && `${comp.einherjars}E`].filter(Boolean);
-    mainText  = `W${nextW}  —  ${parts.join(' · ')}`;
+    const _ets = [
+      ['Draugr', comp.draugr || 0], ['Myling', comp.mylings || 0],
+      ['Jötunn', comp.jotunn || 0], ['Mara', comp.maras || 0],
+      ['Warg', comp.wargs || 0], ['Einherjar', comp.einherjars || 0],
+    ].filter(([,n]) => n > 0).sort(([,a],[,b]) => b - a);
+    const _etTotal = _ets.reduce((s,[,n]) => s + n, 0);
+    const _ABBR = { Draugr:'Dra', Myling:'Myl', Jötunn:'Jöt', Mara:'Mar', Warg:'Wg', Einherjar:'Ein' };
+    const _comp = _ets.length === 1 ? `${_ets[0][1]} ${_ets[0][0]}`
+      : _ets.length === 2 ? `${_ets[0][1]}${_ABBR[_ets[0][0]]} · ${_ets[1][1]}${_ABBR[_ets[1][0]]}`
+      : `${_etTotal} total`;
+    mainText  = `W${nextW}  —  ${_comp}`;
     mainColor = accentColor;
   }
   ctx.font = 'bold 11px monospace';
