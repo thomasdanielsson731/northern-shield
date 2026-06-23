@@ -89,7 +89,9 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 | Bottom build bar | below grid, h=62 (`BUILD_BTN.h`) |
 | Ornamental frame | 32 px thick (`FRAME_THICK`), drawn last (on top of everything) |
 
-Key constants: `COLS=36, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:35, row:11}`, `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
+Key constants: `COLS=48, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:24, row:11}` (center — fortress at center design), `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants.
+
+**Multi-portal system:** MIDGARD preset has `multiPortal:true`. Three extra portals reserved at game start as `CELL.SPAWN` (east col:47,row:11; north col:24,row:0; south col:24,row:21) — towers can never be placed there. `_extraSpawns[]` tracks them with `active` flag. Portals activate at: W11 east, W21 north, W41 south, W71 NW corner. `spawnEnemy()` distributes enemies across all active portals. ALL portal paths are BFS-validated on every tower/wall placement.
 
 ### Render order (each frame)
 

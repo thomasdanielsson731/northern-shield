@@ -466,16 +466,18 @@ function restartCombatState() {
   grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
 
   // Multi-portal maps: reserve extra spawn cells so towers can't block future portals
+  // Activation schedule per design doc: W11 east, W21 north, W41 south, W71 NW corner
   _extraSpawns = [];
   if (_currentBattlePreset?.multiPortal) {
     const _potentialPortals = [
-      { col: COLS - 1,  row: GOAL.row },   // east
-      { col: GOAL.col,  row: 0 },           // north
-      { col: GOAL.col,  row: ROWS - 1 },    // south
+      { col: COLS - 1,  row: GOAL.row,  activateWave: 11, dir: 'EAST'  },
+      { col: GOAL.col,  row: 0,          activateWave: 21, dir: 'NORTH' },
+      { col: GOAL.col,  row: ROWS - 1,   activateWave: 41, dir: 'SOUTH' },
+      { col: 0,         row: 0,          activateWave: 71, dir: 'NW'    },
     ];
     for (const _pp of _potentialPortals) {
       grid.setCell(_pp.col, _pp.row, CELL.SPAWN);
-      _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false });
+      _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false, activateWave: _pp.activateWave, dir: _pp.dir });
     }
   }
 
@@ -1247,21 +1249,15 @@ function startNextWave() {
       }
     }
   }
-  // Multi-portal activation: open new gates at wave thresholds
+  // Multi-portal activation: open new gates at wave thresholds (W11/W21/W41/W71)
   for (const _es of _extraSpawns) {
-    if (!_es.active) {
-      const _shouldActivate =
-        (_es.col === COLS - 1                        && waveNumber === 21) ||  // east gate at W21
-        ((_es.row === 0 || _es.row === ROWS - 1)    && waveNumber === 31);    // north+south at W31
-      if (_shouldActivate) {
-        _es.active = true;
-        const _gateDir = _es.col === COLS - 1 ? 'EAST' : _es.row === 0 ? 'NORTH' : 'SOUTH';
-        dmgFloaters.push({
-          x: GOAL.col * CELL_SIZE + CELL_SIZE / 2, y: GOAL.row * CELL_SIZE - 20,
-          val: `⚠ ${_gateDir} GATE OPENS`, life: 180, maxLife: 180,
-          color: '#ff6040', large: true, suffix: '', vy: 0, raw: true,
-        });
-      }
+    if (!_es.active && _es.activateWave && waveNumber === _es.activateWave) {
+      _es.active = true;
+      dmgFloaters.push({
+        x: GOAL.col * CELL_SIZE + CELL_SIZE / 2, y: GOAL.row * CELL_SIZE - 20,
+        val: `⚠ ${_es.dir} GATE OPENS`, life: 180, maxLife: 180,
+        color: '#ff6040', large: true, suffix: '', vy: 0, raw: true,
+      });
     }
   }
 
@@ -2461,10 +2457,24 @@ function hasEnemyInCell(col, row) {
   });
 }
 
+// Placement zone: max Chebyshev distance from GOAL allowed for towers/walls on multiPortal maps
+const FORTRESS_ZONE_RADIUS = 10;
+
+function isInFortressZone(col, row) {
+  if (!_currentBattlePreset?.multiPortal) return true;
+  return Math.max(Math.abs(col - GOAL.col), Math.abs(row - GOAL.row)) <= FORTRESS_ZONE_RADIUS;
+}
+
 function tryPlaceAt(col, row, mode, towerType) {
   // Check star gate for locked towers
   const gate = TOWER_STAR_GATES[towerType];
   if (mode === CELL.TOWER && gate && stars < gate) return false;
+
+  // Fortress zone restriction: on multiPortal maps towers/walls must be near the center fortress
+  if (!isInFortressZone(col, row)) {
+    pathBlockFlash = { col, row, timer: 70, type: 'zone' };
+    return false;
+  }
 
   const fp = (mode === CELL.TOWER) ? (TOWER_DEFS[towerType]?.footprint ?? {w:1,h:1}) : {w:1,h:1};
 
@@ -4213,8 +4223,7 @@ function drawExtraPortalPaths() {
     ctx.stroke();
     if (!es.active) {
       ctx.font = '5px monospace'; ctx.fillStyle = 'rgba(140,100,200,0.55)'; ctx.textAlign = 'center';
-      const _aw = es.col === COLS - 1 ? 'W21' : 'W31';
-      ctx.fillText(_aw, px, py + 2);
+      ctx.fillText(es.activateWave ? `W${es.activateWave}` : '?', px, py + 2);
     }
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
@@ -9180,30 +9189,33 @@ function drawPathBlockFlash() {
   pathBlockFlash.timer--;
   if (pathBlockFlash.timer <= 0) { pathBlockFlash = null; return; }
   const { col, row, timer, type } = pathBlockFlash;
-  const occupied = type === 'occupied';
-  const alpha = Math.min(1, timer / 20) * (timer % 8 < 4 ? 1 : 0.4); // strobe flash
+  const occupied  = type === 'occupied';
+  const zoneBlock = type === 'zone';
+  const alpha = Math.min(1, timer / 20) * (timer % 8 < 4 ? 1 : 0.4);
   const vx = GRID_LEFT + gridPanX + col * CELL_SIZE * gridZoom;
   const vy = GRID_TOP  + gridPanY + row * CELL_SIZE * gridZoom;
   const vs = CELL_SIZE * gridZoom;
+  const fillC   = occupied ? '#e8b040' : zoneBlock ? '#4060e8' : '#e84040';
+  const strokeC = occupied ? '#ffd040' : zoneBlock ? '#8090ff' : '#ff4040';
+  const labelC  = occupied ? '#ffe080' : zoneBlock ? '#c0d0ff' : '#ff8080';
+  const shadowC = occupied ? 'rgba(220,160,0,0.8)' : zoneBlock ? 'rgba(80,100,240,0.8)' : 'rgba(220,0,0,0.8)';
+  const label   = occupied ? 'OCCUPIED' : zoneBlock ? 'FORTRESS ZONE ONLY' : 'PATH BLOCKED';
   ctx.save();
   ctx.globalAlpha  = alpha * 0.55;
-  ctx.fillStyle    = occupied ? '#e8b040' : '#e84040';
+  ctx.fillStyle    = fillC;
   ctx.fillRect(vx, vy, vs, vs);
   ctx.globalAlpha  = alpha * 0.9;
-  ctx.strokeStyle  = occupied ? '#ffd040' : '#ff4040';
+  ctx.strokeStyle  = strokeC;
   ctx.lineWidth    = 2;
   ctx.strokeRect(vx + 1, vy + 1, vs - 2, vs - 2);
   ctx.globalAlpha  = Math.min(1, timer / 20) * 0.92;
   ctx.font         = 'bold 14px monospace';
-  ctx.fillStyle    = occupied ? '#ffe080' : '#ff8080';
+  ctx.fillStyle    = labelC;
   ctx.textAlign    = 'center';
-  ctx.shadowColor  = occupied ? 'rgba(220,160,0,0.8)' : 'rgba(220,0,0,0.8)';
+  ctx.shadowColor  = shadowC;
   ctx.shadowBlur   = 10;
-  ctx.fillText(occupied ? 'OCCUPIED' : 'PATH BLOCKED', vx + vs / 2, vy - 4);
-  // Also show center-screen label so it's visible at any zoom
-  ctx.font      = 'bold 14px monospace';
-  ctx.fillStyle = occupied ? '#ffe080' : '#ff4040';
-  ctx.fillText(occupied ? 'OCCUPIED' : 'PATH BLOCKED', GRID_LEFT + COLS * CELL_SIZE / 2, GRID_TOP + ROWS * CELL_SIZE / 2);
+  ctx.fillText(label, vx + vs / 2, vy - 4);
+  ctx.fillText(label, GRID_LEFT + COLS * CELL_SIZE / 2, GRID_TOP + ROWS * CELL_SIZE / 2);
   ctx.shadowBlur   = 0;
   ctx.restore();
 }
@@ -9264,6 +9276,7 @@ function drawDragGhost() {
 
     // Check all footprint cells
     let canPlace = gold >= dragItem.cost;
+    if (canPlace && !isInFortressZone(col, row)) canPlace = false;
     if (canPlace) {
       for (let dc = 0; dc < fp.w && canPlace; dc++) {
         for (let dr = 0; dr < fp.h && canPlace; dr++) {
