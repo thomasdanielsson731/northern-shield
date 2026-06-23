@@ -49,6 +49,7 @@ export class Defender {
     this.trait           = null;         // personality trait ID (assigned by roster.link / recruit)
     this.scars           = [];           // IDs of battle scars earned
     this.breachesDeployed = 0;           // times deployed when fortress was breached (for Rampart Wound)
+    this.legacyBonus     = null;         // { fromName, fromRank, stat, value } from a retired predecessor
   }
 
   // Returns { earned, newTalentIds } — newTalentIds is empty unless a milestone was crossed.
@@ -88,6 +89,7 @@ export class Defender {
       trait:            this.trait,
       scars:            this.scars,
       breachesDeployed: this.breachesDeployed,
+      legacyBonus:      this.legacyBonus,
     };
   }
 
@@ -104,6 +106,7 @@ export class Defender {
     d.trait            = data.trait             ?? null;
     d.scars            = data.scars             ?? [];
     d.breachesDeployed = data.breachesDeployed  ?? 0;
+    d.legacyBonus      = data.legacyBonus       ?? null;
     return d;
   }
 }

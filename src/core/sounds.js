@@ -255,10 +255,18 @@ export function sfxFortressUpgrade() {
   tone(440, 0.16, 0.07, 'sine',     0.24);
 }
 
-export function sfxRecruit() {
-  // Short martial fanfare
-  [330, 440, 550].forEach((f, i) => tone(f, 0.10, 0.11, 'sawtooth', i * 0.06));
-  tone(660, 0.18, 0.10, 'sine', 0.22);
+export function sfxRecruit(type = '') {
+  if (['hydda', 'blondie', 'isjatten'].includes(type)) {
+    // Ascending ethereal sine tones — mystic classes
+    [440, 523, 659, 880].forEach((f, i) => tone(f, 0.12, 0.10, 'sine', i * 0.07));
+  } else if (['catapult', 'drakship', 'piltorn'].includes(type)) {
+    // Deep mechanical square wave — siege classes
+    [220, 330, 440, 550].forEach((f, i) => tone(f, 0.12, 0.10, 'square', i * 0.06));
+  } else {
+    // Bold sawtooth fanfare — warrior classes (default)
+    [330, 550, 660].forEach((f, i) => tone(f, 0.12, 0.11, 'sawtooth', i * 0.06));
+    tone(880, 0.16, 0.09, 'sine', 0.22);
+  }
 }
 
 export function sfxDismiss(short = false) {

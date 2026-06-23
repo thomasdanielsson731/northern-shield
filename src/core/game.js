@@ -223,6 +223,7 @@ let _renameState        = null;          // { defenderId, draft } while canvas r
 let _enemyIntroSeen     = new Set();     // enemy types shown intro banner this campaign
 let _enemyIntroBanner   = null;          // { type, timer, label, hint } for first-encounter tooltip
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
+let _campaignVictoryScreen = false;     // true after W100 victory, until dismissed
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
@@ -480,6 +481,7 @@ function restartCombatState() {
   _promoBannerTimer    = 0;
   _retirementCeremony  = null;
   _showDefenderBio     = null;
+  _campaignVictoryScreen = false;
   gameOver      = false;
   victory       = false;
   waveLeak      = false;
@@ -772,6 +774,24 @@ function recordBattleResult(result) {
     }
   }
 
+  // Approaching rank milestone banners (fires at 5 or 1 battle from next rank's battles threshold)
+  for (const t of towers) {
+    const _mDef = _roster.find(t.defenderId);
+    if (!_mDef || _mDef.battlesPlayed === 0) continue;
+    const _mRankIdx = VETERAN_RANKS.findIndex(r => r.id === getRank(_mDef).id);
+    if (_mRankIdx <= 0) continue; // already legend
+    const _mNextRank = VETERAN_RANKS[_mRankIdx - 1];
+    const _mBGap = _mNextRank.minBattles - _mDef.battlesPlayed;
+    if (_mBGap === 5 || _mBGap === 1) {
+      _promotionQueue.push({
+        defenderName: _mDef.name,
+        rankLabel:    _mBGap === 1 ? 'ONE BATTLE' : '5 BATTLES',
+        text:         `${_mDef.name} — ${_mBGap === 1 ? 'one battle' : '5 battles'} from ${_mNextRank.label}`,
+        type:         'milestone',
+      });
+    }
+  }
+
   // Co-deployment tracking and bond formation
   const _deployedIds = towers.map(t => t.defenderId).filter(Boolean);
   if (!_campaignState.coDeployments) _campaignState.coDeployments = {};
@@ -806,6 +826,17 @@ function recordBattleResult(result) {
     }
   }
 
+  // Cap promotion queue at 6 items — group overflow into a summary entry
+  if (_promotionQueue.length > 6) {
+    const _overflow = _promotionQueue.splice(6);
+    _promotionQueue.push({
+      defenderName: 'Warband',
+      rankLabel:    `+${_overflow.length} MORE`,
+      text:         `${_overflow.length} more event${_overflow.length !== 1 ? 's' : ''} recorded in the Chronicle.`,
+      type:         'milestone',
+    });
+  }
+
   _rosterScrollOffset = 0;
 
   _roster.releaseAll();
@@ -817,6 +848,7 @@ function recordBattleResult(result) {
   if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
   // Defeat: immediate (no fade — abruptness communicates loss); victory: gentle reveal
   _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
+  if (result === 'victory' && waveNumber >= MAX_WAVES) _campaignVictoryScreen = true;
   gamePhase = 'betweenBattles';
 }
 
@@ -2452,8 +2484,9 @@ function tryPlaceAt(col, row, mode, towerType) {
       ? { dm: rawEq.dm * armoryMult, rm: rawEq.rm, cm: rawEq.cm }
       : rawEq;
     const talentBonuses = getTalentBonuses(def.talents);
-    const hasBonus = def.careerLevel > 0 || hasEquip || def.talents.length > 0;
-    if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses, talentBonuses);
+    const legacyBonus   = def.legacyBonus ?? null;
+    const hasBonus = def.careerLevel > 0 || hasEquip || def.talents.length > 0 || !!legacyBonus;
+    if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses, talentBonuses, legacyBonus);
     else { t.defenderId = def.defenderId; t.name = def.name; }
     towers.push(t);
     _synergyDirty = true;
@@ -2707,10 +2740,20 @@ canvas.addEventListener('mousedown', e => {
   // Between-battles summary screen
   if (gamePhase === 'betweenBattles') {
     if (e.button === 0) {
+      // Campaign victory overlay — dismiss on click
+      if (_campaignVictoryScreen) { _campaignVictoryScreen = false; return; }
       // Skip fade-in on any click
       if (_betweenFadeIn > 0) { _betweenFadeIn = 0; return; }
       // Bio/ceremony/chronicle overlays intercept all clicks while open
-      if (_showDefenderBio)    { _showDefenderBio = null; return; }
+      if (_showDefenderBio) {
+        const _bio = _showDefenderBio;
+        if (_bio.bioText && _bio.revealChars < _bio.bioText.length) {
+          _bio.revealChars = _bio.bioText.length; // skip to end
+        } else {
+          _showDefenderBio = null; // close
+        }
+        return;
+      }
       if (_showChronicle) {
         for (const _cb of _chronicleBtns) {
           if (mouseX >= _cb.x && mouseX <= _cb.x + _cb.w &&
@@ -2824,8 +2867,14 @@ canvas.addEventListener('mousedown', e => {
                 _campaignState.legacyBonuses[_retDef.type] = _old ? [_old] : [];
               }
               if (_campaignState.legacyBonuses[_retDef.type].length < 3) {
+                const _lStat = ['hydda', 'blondie', 'isjatten'].includes(_retDef.type)
+                  ? { stat: 'cm', value: 0.93 }
+                  : _retDef.type === 'piltorn'
+                  ? { stat: 'rm', value: 1.08 }
+                  : { stat: 'dm', value: 1.08 };
                 _campaignState.legacyBonuses[_retDef.type].push({
                   fromName: _retDef.name, fromRank: getRank(_retDef).label,
+                  stat: _lStat.stat, value: _lStat.value,
                 });
               }
               // Bond cleanup
@@ -2855,7 +2904,7 @@ canvas.addEventListener('mousedown', e => {
             _promotionQueue.shift();
             _promoBannerTimer = 0;
           } else if (btn.action === 'openBio') {
-            _showDefenderBio = { defenderId: btn.defenderId, bioText: null };
+            _showDefenderBio = { defenderId: btn.defenderId, bioText: null, revealChars: 0 };
             sfxRune();
           } else if (btn.action === 'openRetire') {
             const retDef = _roster?.find(btn.defenderId);
@@ -2908,14 +2957,14 @@ canvas.addEventListener('mousedown', e => {
               def.trait  = getRandomTrait(_recruitType);
               // Apply legacy bonus if one exists for this class (pop oldest from array)
               const _legArr = (_campaignState.legacyBonuses ?? {})[_recruitType];
-              def._legacyBonus = Array.isArray(_legArr) ? (_legArr.shift() ?? null) : (_legArr ?? null);
+              def.legacyBonus = Array.isArray(_legArr) ? (_legArr.shift() ?? null) : (_legArr ?? null);
               if (Array.isArray(_legArr) && _legArr.length === 0) delete (_campaignState.legacyBonuses ?? {})[_recruitType];
               _roster.defenders.push(def);
               goldReserve -= _effectiveRecruitCost;
               _campaignState.goldReserve = goldReserve;
               _campaignState.defenders   = _roster.toJSON();
               try { saveCampaign(_campaignState); } catch {}
-              sfxRecruit();
+              sfxRecruit(_recruitType);
             }
           } else if (btn.action === 'switchTab') {
             _betweenSubtab = btn.tab;
@@ -2941,8 +2990,8 @@ canvas.addEventListener('mousedown', e => {
               }
             }
           } else if (btn.action === 'openChronicle') {
-            _showChronicle    = true;
-            _chronicleScrollY = 0;
+            _showChronicle = true;
+            // Preserve scroll position — player should return to where they were
           }
           return;
         }
@@ -4636,16 +4685,17 @@ function drawRightPanel() {
   // Segmented threat bar — N colored squares
   function _segBar(filled, total, color, warnColor) {
     const sw = Math.floor((bW - (total - 1) * 2) / total);
+    if (filled > 0) { ctx.shadowColor = color; ctx.shadowBlur = 2; }
     for (let i = 0; i < total; i++) {
       const sx      = bX + i * (sw + 2);
       const isFull  = i < filled;
       const isWarn  = i >= total - 2;
-      ctx.fillStyle = isFull ? (isWarn ? warnColor : color) : 'rgba(50,40,28,0.55)';
+      ctx.fillStyle   = isFull ? (isWarn ? warnColor : color) : 'rgba(50,40,28,0.55)';
       ctx.globalAlpha = isFull ? 0.90 : 0.40;
-      if (isFull) { ctx.shadowColor = isWarn ? warnColor : color; ctx.shadowBlur = 2; }
+      if (isFull && isWarn) ctx.shadowColor = warnColor;
       ctx.beginPath(); ctx.roundRect(sx, ly, sw, 6, 1); ctx.fill();
-      ctx.shadowBlur = 0;
     }
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
     ly += 8;
   }
@@ -6976,9 +7026,12 @@ function drawDefenderBioOverlay(bioState) {
 
   // Bio prose (cached — generateBio is expensive, only run once per open)
   if (!bioState.bioText) bioState.bioText = generateBio(def, _campaignState?.chronicle, clsLbl);
-  const bioText  = bioState.bioText;
+  const bioText = bioState.bioText;
+  if (bioState.revealChars === undefined) bioState.revealChars = 0;
+  if (bioState.revealChars < bioText.length) bioState.revealChars = Math.min(bioText.length, bioState.revealChars + 4);
+  const displayText = bioText.slice(0, bioState.revealChars);
   ctx.font = '8px monospace';
-  const bioLines = wrapText(ctx, bioText, CW - 8);
+  const bioLines = wrapText(ctx, displayText, CW - 8);
   let bioY = PAD + 62;
   ctx.fillStyle = 'rgba(190,165,115,0.80)'; ctx.textAlign = 'left';
   for (const line of bioLines) { ctx.fillText(line, PAD + 4, bioY); bioY += 11; }
@@ -7033,8 +7086,9 @@ function drawDefenderBioOverlay(bioState) {
   ctx.fillText(`"${epitaph}"`, W / 2, bioY);
 
   // Footer
+  const _bioRevealing = bioState.revealChars < bioText.length;
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.50)';
-  ctx.fillText('[ESC to close]', W / 2, H - 8);
+  ctx.fillText(_bioRevealing ? '[click to reveal · ESC cancel]' : '[ESC to close]', W / 2, H - 8);
 
   ctx.restore();
 }
@@ -7096,6 +7150,14 @@ function drawRetirementCeremony(def) {
   const b1x = W / 2 - btnW - btnGap / 2, b2x = W / 2 + btnGap / 2;
   const btnY = py + PH - 44;
 
+  // Bond grief warning (if retiring defender has a bond)
+  const _retBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
+  if (_retBond) {
+    const _retBondedId = _retBond.defenderIds.find(id => id !== def.defenderId);
+    const _retBonded   = _roster?.find(_retBondedId);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.65)'; ctx.textAlign = 'center';
+    ctx.fillText(`⚠ ${_retBonded?.name ?? '?'} will carry Bond Grief`, b1x + btnW / 2, btnY - 22);
+  }
   // "This is permanent." warning above confirm button
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.75)'; ctx.textAlign = 'center';
   ctx.fillText('This is permanent.', b1x + btnW / 2, btnY - 5);
@@ -7118,9 +7180,49 @@ function drawRetirementCeremony(def) {
 
 let _betweenBtns = [];  // hit areas: [{x,y,w,h,action}, ...]
 
+function drawCampaignVictoryOverlay() {
+  const W = BASE_W, H = BASE_H;
+  ctx.fillStyle = 'rgba(4,2,12,0.97)';
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H / 2;
+  ctx.textAlign = 'center';
+
+  ctx.font = 'bold 18px monospace'; ctx.fillStyle = '#ffe890';
+  ctx.shadowColor = 'rgba(255,200,80,0.6)'; ctx.shadowBlur = 14;
+  ctx.fillText('NORTHERN SHIELD STANDS', cx, cy - 60);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,90,0.65)';
+  ctx.fillText('All 100 waves repelled. Surtr falls. The shield holds.', cx, cy - 42);
+
+  const _bb = battlesCompleted;
+  const _bs = (_campaignState?.chronicle?.battles ?? []).flatMap(b => b.bossKills ?? []).length;
+  const _bd = (_campaignState?.bonds ?? []).length;
+  const _st = _campaignState?.stars ?? 0;
+
+  ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(200,180,120,0.80)';
+  ctx.fillText(`${_bb} battles  ·  ${_bs} chieftains slain  ·  ${_bd} bonds formed  ·  ★${_st}`, cx, cy - 22);
+
+  if (_roster.defenders.length > 0) {
+    const _mvpDef = _roster.defenders.reduce((a, b) => (a.careerKills ?? 0) >= (b.careerKills ?? 0) ? a : b);
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(200,175,100,0.70)';
+    ctx.fillText(`Champion: ${_mvpDef.name}  ·  ${_mvpDef.careerKills} kills  ·  ${_mvpDef.battlesPlayed} battles`, cx, cy - 4);
+  }
+
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)';
+  ctx.fillText('[click to continue]', cx, cy + 18);
+}
+
 function drawBetweenBattles() {
   _betweenBtns = [];
   const W = BASE_W, H = BASE_H;
+
+  // W100 Campaign Victory overlay — shown once, dismissed by click
+  if (_campaignVictoryScreen) {
+    drawCampaignVictoryOverlay();
+    return;
+  }
 
   // Fade-in on screen entry
   const fadeAlpha = _betweenFadeIn > 0
@@ -7138,6 +7240,20 @@ function drawBetweenBattles() {
     ctx.beginPath();
     ctx.arc(sx, sy, s.r, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(200,210,255,${alpha})`;
+    ctx.fill();
+  }
+
+  // Ambient drifting particles — snow flakes and ember sparks
+  for (let _p = 0; _p < 24; _p++) {
+    const _seed = _p * 2.39996;
+    const _speed = 0.035 + (_p % 4) * 0.015;
+    const _px = (Math.cos(_seed * 3.7) * 0.5 + 0.5) * W;
+    const _py = ((Math.sin(_seed * 2.1) * 0.5 + 0.5 + t * _speed) % 1.0) * H;
+    const _alpha = 0.12 + Math.sin(t * 0.5 + _seed) * 0.08;
+    const _isEmber = _p % 6 === 0;
+    ctx.beginPath();
+    ctx.arc(_px, _py, _isEmber ? 1.8 : 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = _isEmber ? `rgba(240,140,60,${_alpha})` : `rgba(200,220,255,${_alpha})`;
     ctx.fill();
   }
 
@@ -7393,10 +7509,12 @@ function drawBetweenBattles() {
       _promoBannerH = 40;
       const prom   = _promotionQueue[0];
       const pbX    = rix - 2, pbY = rpY + 48, pbW = riW + 4, pbH = _promoBannerH - 4;
-      const pbCol  = prom.type === 'scar' ? 'rgba(200,80,30,0.18)' :
-                     prom.type === 'bond' ? 'rgba(130,90,200,0.18)' : 'rgba(60,130,60,0.18)';
-      const pbBdr  = prom.type === 'scar' ? 'rgba(200,100,50,0.55)' :
-                     prom.type === 'bond' ? 'rgba(140,100,220,0.55)' : 'rgba(100,200,100,0.55)';
+      const pbCol  = prom.type === 'scar'      ? 'rgba(200,80,30,0.18)'   :
+                     prom.type === 'bond'      ? 'rgba(130,90,200,0.18)'  :
+                     prom.type === 'milestone' ? 'rgba(60,60,80,0.12)'    : 'rgba(60,130,60,0.18)';
+      const pbBdr  = prom.type === 'scar'      ? 'rgba(200,100,50,0.55)'  :
+                     prom.type === 'bond'      ? 'rgba(140,100,220,0.55)' :
+                     prom.type === 'milestone' ? 'rgba(140,130,80,0.38)'  : 'rgba(100,200,100,0.55)';
       ctx.fillStyle = pbCol; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.8;
       ctx.beginPath(); ctx.roundRect(pbX, pbY, pbW, pbH, 4); ctx.fill(); ctx.stroke();
 
@@ -7406,15 +7524,19 @@ function drawBetweenBattles() {
       ctx.fillRect(pbX + 2, pbY + pbH - 3, (pbW - 4) * _cdFrac, 2);
 
       // Left accent bar (3px) — color per type
-      const _accentColor = prom.type === 'scar' ? 'rgba(200,100,60,0.8)' :
-                           prom.type === 'bond' ? 'rgba(160,100,220,0.8)' : 'rgba(80,180,80,0.8)';
+      const _accentColor = prom.type === 'scar'      ? 'rgba(200,100,60,0.8)'  :
+                           prom.type === 'bond'      ? 'rgba(160,100,220,0.8)' :
+                           prom.type === 'milestone' ? 'rgba(140,130,80,0.6)'  : 'rgba(80,180,80,0.8)';
       ctx.fillStyle = _accentColor;
       ctx.fillRect(pbX, pbY, 3, pbH);
 
       ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = prom.type === 'scar' ? '#e87050' : prom.type === 'bond' ? '#c0a0ff' : '#88dd80';
+      ctx.fillStyle = prom.type === 'scar'      ? '#e87050'  :
+                      prom.type === 'bond'      ? '#c0a0ff'  :
+                      prom.type === 'milestone' ? '#b8a870'  : '#88dd80';
       ctx.textAlign = 'left';
-      ctx.fillText(`⬆  ${prom.rankLabel}`, rix + 4, pbY + 13);
+      const _promIcon = prom.type === 'milestone' ? '◆' : '⬆';
+      ctx.fillText(`${_promIcon}  ${prom.rankLabel}`, rix + 4, pbY + 13);
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,180,150,0.75)';
       const _promText = prom.text ?? `${prom.defenderName}: ${prom.rankLabel}`;
       ctx.fillText(_promText.length > 55 ? _promText.slice(0, 52) + '…' : _promText, rix + 4, pbY + 25);
@@ -7581,10 +7703,15 @@ function drawBetweenBattles() {
       _betweenBtns.push({ x: rtnX, y: rtnY, w: rtnW, h: rtnH, action: 'openRetire', defenderId: def.defenderId });
     }
 
-    // Trait + scars row (ry+36)
+    // Trait + scars row (ry+36) — replaced by bond grief warning when dismiss is pending
+    const _defBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
     const traitDef = def.trait ? TRAIT_DEFS[def.trait] : null;
     const scarLabels = (def.scars ?? []).map(s => SCAR_DEFS[s]?.label ?? s);
-    if (traitDef || scarLabels.length) {
+    if (isPendingDismiss && _defBond) {
+      const _bonded = _roster?.find(_defBond.defenderIds.find(id => id !== def.defenderId));
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.82)';
+      ctx.fillText(`⚠ ${_bonded?.name ?? '?'} carries Bond Grief`, rix, ry + 36);
+    } else if (traitDef || scarLabels.length) {
       const _traitColors = {
         reckless:'#e08060', steadfast:'#80b0e0', brooding:'#9090c0',
         serene:'#80d0c0',  methodical:'#b0d080', impulsive:'#e0c040',
@@ -7661,21 +7788,38 @@ function drawBetweenBattles() {
       ctx.fillText('✦ no talents yet', rix, talY);
     }
 
-    // Bond indicator (ry+92)
-    const defBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
-    if (defBond) {
+    // Bond / co-deployment indicator (ry+92)
+    if (_defBond) {
       ctx.font = 'italic 7px monospace'; ctx.fillStyle = '#c0b080';
-      ctx.fillText(`⚭ ${defBond.name}`, rix, ry + 93);
+      ctx.fillText(`∞ ${_defBond.name}`, rix, ry + 93);
       ctx.font = '7px monospace';
+    } else {
+      // Show co-deployment progress if approaching bond (3-4/5)
+      const _coDeps = _campaignState?.coDeployments ?? {};
+      let _coDepBest = null;
+      for (const [key, count] of Object.entries(_coDeps)) {
+        if (count < 3) continue;
+        const [_idA, _idB] = key.split(':');
+        if (_idA !== def.defenderId && _idB !== def.defenderId) continue;
+        const _pid = _idA === def.defenderId ? _idB : _idA;
+        const _partner = _roster?.find(_pid);
+        if (!_partner) continue;
+        if (!_coDepBest || count > _coDepBest.count) _coDepBest = { name: _partner.name, count };
+      }
+      if (_coDepBest) {
+        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,190,0.60)';
+        ctx.fillText(`∞ ${_coDepBest.name}: ${_coDepBest.count}/5`, rix, ry + 93);
+      }
     }
 
-    // Legacy bonus indicator
+    // Legacy bonus indicator — shown on undeployed new recruits with a pending bonus
     const _legArr2 = (_campaignState?.legacyBonuses ?? {})[def.type];
-    const _legBonus = Array.isArray(_legArr2) ? _legArr2[0] : _legArr2;
-    if (_legBonus && def.battlesPlayed === 0) {
-      const _extraLeg = Array.isArray(_legArr2) ? _legArr2.length - 1 : 0;
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
-      ctx.fillText(`✦ ${_legBonus.fromName}'s tradition${_extraLeg > 0 ? ` +${_extraLeg}` : ''}`, rix + 80, ry + 14);
+    const _legBonus2 = def.legacyBonus ?? (Array.isArray(_legArr2) ? _legArr2[0] : _legArr2);
+    if (_legBonus2 && def.battlesPlayed === 0) {
+      const _statLabel = _legBonus2.stat === 'dm' ? '+8% DMG' : _legBonus2.stat === 'rm' ? '+8% RNG' : '−7% CD';
+      const _extraLeg = Array.isArray(_legArr2) && !def.legacyBonus ? _legArr2.length - 1 : 0;
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.65)';
+      ctx.fillText(`✦ ${_legBonus2.fromName}'s Legacy (${_statLabel})${_extraLeg > 0 ? ` +${_extraLeg}` : ''}`, rix + 80, ry + 14);
     }
   });
 

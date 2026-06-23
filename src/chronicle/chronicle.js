@@ -68,6 +68,7 @@ export const SCAR_DEFS = {
   draugen_scar:   { id: 'draugen_scar',   label: 'Scar of the Draugen-Jarl', desc: 'Survived three Draugen-Jarl assaults' },
   jotunn_scar:    { id: 'jotunn_scar',    label: 'Scar of the Jötun',         desc: 'Survived three Jötunhelm Walker assaults' },
   fenrir_brand:   { id: 'fenrir_brand',   label: "Fenrir's Brand",            desc: 'Survived a Fenrir wave' },
+  surtr_brand:    { id: 'surtr_brand',    label: "Surtr's Brand",             desc: 'Survived the World Fire' },
   bond_grief:     { id: 'bond_grief',     label: 'Bond Grief',                desc: 'Lost a bonded shield-brother' },
 };
 const MAX_SCARS = 4;
@@ -105,8 +106,10 @@ export function checkScars(defender, battleData, allBattles) {
     if (n >= 3) earned.push('jotunn_scar');
   }
   if (!has('fenrir_brand')) {
-    const hadFenrir = myBattles.some(b => b.bossKills?.some(bk => bk.boss === 'FENRIR'));
-    if (hadFenrir) earned.push('fenrir_brand');
+    if (myBattles.some(b => (b.wavesCleared ?? 0) >= 75)) earned.push('fenrir_brand');
+  }
+  if (!has('surtr_brand')) {
+    if (myBattles.some(b => (b.wavesCleared ?? 0) >= 100)) earned.push('surtr_brand');
   }
 
   return earned.slice(0, cap);
@@ -298,7 +301,9 @@ export function generateBio(defender, chronicle, classLabel) {
   } else if (scar) {
     lines.push(`${n} carries the ${scar.label}.`);
   } else if (lvl >= 5) {
-    lines.push(`${n} has reached career level ${lvl > 0 ? ['I','II','III','IV','V','VI','VII','VIII','IX','X'][lvl-1] ?? lvl : 0}.`);
+    const _lvlRoman = ['I','II','III','IV','V','VI','VII','VIII','IX','X'][lvl-1] ?? `${lvl}`;
+    const _campNote = lvl > 1 ? `, the mark of a veteran over many campaigns` : `, earned through sustained service`;
+    lines.push(`${n} carries rank ${_lvlRoman}${_campNote}.`);
   }
 
   // Line 3: Notable deeds

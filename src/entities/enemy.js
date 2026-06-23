@@ -1129,12 +1129,18 @@ export class Enemy {
       ctx.fillStyle = fillColor;
       ctx.fillRect(barX, barY, barW * pct, barH);
 
-      // Phase-50 marker line
+      // Phase marker lines — 50% (gold) and 25% (red, triggers phase ability)
+      ctx.lineWidth = 0.7;
       ctx.strokeStyle = 'rgba(255,200,60,0.55)';
-      ctx.lineWidth   = 0.7;
       ctx.beginPath();
       ctx.moveTo(barX + barW * 0.5, barY);
       ctx.lineTo(barX + barW * 0.5, barY + barH);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,80,40,0.80)';
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      ctx.moveTo(barX + barW * 0.25, barY);
+      ctx.lineTo(barX + barW * 0.25, barY + barH);
       ctx.stroke();
 
       // Name plate

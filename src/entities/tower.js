@@ -248,6 +248,7 @@ export class Tower {
     this.targetLineTimer = 0;
     this.rune            = null;
     this._talentBonuses  = null;
+    this._legacyBonus    = null;
 
     // MVP marker timer (frames); when >0 the tower is highlighted as MVP
     this.mvpTimer = 0;
@@ -296,15 +297,22 @@ export class Tower {
       if (cm !== 1)       this.fireRate  = Math.max(4, Math.round(this.fireRate * cm));
       if (slowMult !== 1) this.slowFactor = Math.max(0.15, this.slowFactor * slowMult);
     }
+    if (this._legacyBonus?.stat) {
+      const { stat, value } = this._legacyBonus;
+      if (stat === 'dm')      this.damage   = Math.round(this.damage   * value);
+      else if (stat === 'rm') this.range    = Math.round(this.range    * value);
+      else if (stat === 'cm') this.fireRate = Math.max(4, Math.round(this.fireRate * value));
+    }
   }
 
-  // Called by game.js after roster lookup — overwrites generated name/id, applies career + equipment + talent stats.
-  applyCareerData(defenderId, name, careerLevel, equipmentBonuses = null, talentBonuses = null) {
+  // Called by game.js after roster lookup — overwrites generated name/id, applies career + equipment + talent + legacy stats.
+  applyCareerData(defenderId, name, careerLevel, equipmentBonuses = null, talentBonuses = null, legacyBonus = null) {
     this.defenderId        = defenderId;
     this.name              = name;
     this._careerLevel      = careerLevel;
     this._equipmentBonuses = equipmentBonuses;
     this._talentBonuses    = talentBonuses;
+    this._legacyBonus      = legacyBonus;
     this._applyLevel();
   }
 
