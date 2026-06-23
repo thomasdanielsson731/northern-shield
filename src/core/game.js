@@ -24,7 +24,7 @@ import {
   sfxTalentUnlock, sfxLootDrop, sfxFortressUpgrade, sfxRecruit, sfxDismiss, sfxRename,
 } from './sounds.js';
 
-const COLS = 36;
+const COLS = 48;
 const ROWS = 22;
 const CELL_SIZE = 14;
 
@@ -34,8 +34,8 @@ const GRID_LEFT      = FRAME_THICK;
 const GRID_TOP       = 64;
 const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 
-const SPAWN = { col: 0,        row: 11 };
-const GOAL  = { col: COLS - 1, row: 11 };
+const SPAWN = { col: 0,                    row: 11 };
+const GOAL  = { col: Math.floor(COLS / 2), row: Math.floor(ROWS / 2) };
 
 const WALL_COST = 12;
 
@@ -82,7 +82,8 @@ const grid = new Grid(COLS, ROWS, CELL_SIZE);
 grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
 grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
 
-let currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+let currentPath  = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+let _extraSpawns = [];  // [{col, row, path, active}] – additional portals for multiPortal maps
 let enemies  = [];
 let towers   = [];
 let bullets  = [];
@@ -278,9 +279,9 @@ const DEFENDER_SPRITE_KEYS = {
 };
 
 const PRESET_MAPS = [
-  { name: 'MIDGARD',        desc: 'Classic fortress',   spawn: {col:0,  row:11}, goal: {col:35, row:11} },
-  { name: 'BIFROST PASS',   desc: 'Off-center lanes',   spawn: {col:0,  row:5},  goal: {col:35, row:16} },
-  { name: "NIDHOGG'S RUN",  desc: 'Corner crossing',    spawn: {col:0,  row:1},  goal: {col:35, row:20} },
+  { name: 'MIDGARD',       desc: 'Fortress at center',  spawn: {col:0, row:11}, goal: {col:24, row:11}, multiPortal: true },
+  { name: 'BIFROST PASS',  desc: 'Off-center lanes',    spawn: {col:0, row:5},  goal: {col:47, row:16} },
+  { name: "NIDHOGG'S RUN", desc: 'Corner crossing',     spawn: {col:0, row:1},  goal: {col:47, row:20} },
 ];
 
 const RUNE_DEFS = [
@@ -464,7 +465,25 @@ function restartCombatState() {
   grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
   grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
 
+  // Multi-portal maps: reserve extra spawn cells so towers can't block future portals
+  _extraSpawns = [];
+  if (_currentBattlePreset?.multiPortal) {
+    const _potentialPortals = [
+      { col: COLS - 1,  row: GOAL.row },   // east
+      { col: GOAL.col,  row: 0 },           // north
+      { col: GOAL.col,  row: ROWS - 1 },    // south
+    ];
+    for (const _pp of _potentialPortals) {
+      grid.setCell(_pp.col, _pp.row, CELL.SPAWN);
+      _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false });
+    }
+  }
+
   currentPath   = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+  // Compute initial paths for extra portals
+  for (const _es of _extraSpawns) {
+    _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+  }
   enemies       = [];
   towers        = [];
   bullets       = [];
@@ -887,6 +906,9 @@ function removeTower(tower) {
   }
   towers      = towers.filter(t => t !== tower);
   currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+  for (const _es of _extraSpawns) {
+    _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row) ?? _es.path;
+  }
   pathDirty      = true;
   _synergyDirty  = true;
   rerouteActiveEnemies();
@@ -1225,6 +1247,24 @@ function startNextWave() {
       }
     }
   }
+  // Multi-portal activation: open new gates at wave thresholds
+  for (const _es of _extraSpawns) {
+    if (!_es.active) {
+      const _shouldActivate =
+        (_es.col === COLS - 1                        && waveNumber === 21) ||  // east gate at W21
+        ((_es.row === 0 || _es.row === ROWS - 1)    && waveNumber === 31);    // north+south at W31
+      if (_shouldActivate) {
+        _es.active = true;
+        const _gateDir = _es.col === COLS - 1 ? 'EAST' : _es.row === 0 ? 'NORTH' : 'SOUTH';
+        dmgFloaters.push({
+          x: GOAL.col * CELL_SIZE + CELL_SIZE / 2, y: GOAL.row * CELL_SIZE - 20,
+          val: `⚠ ${_gateDir} GATE OPENS`, life: 180, maxLife: 180,
+          color: '#ff6040', large: true, suffix: '', vy: 0, raw: true,
+        });
+      }
+    }
+  }
+
   spawnQueue  = buildWave(waveNumber);
   waveTotal   = spawnQueue.length;
   spawnTimer  = 0;
@@ -2297,11 +2337,20 @@ function getBuildButtonAt(mx, my) {
 function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   if (!currentPath || gameOver) return;
 
+  // Multi-portal: randomly pick from active spawn points
+  const _activeExtras = _extraSpawns.filter(es => es.active && es.path);
+  let _spawnCol = SPAWN.col, _spawnRow = SPAWN.row, _spawnPath = currentPath;
+  if (_activeExtras.length > 0) {
+    const _all = [{ col: SPAWN.col, row: SPAWN.row, path: currentPath }, ..._activeExtras];
+    const _pick = _all[Math.floor(Math.random() * _all.length)];
+    _spawnCol = _pick.col; _spawnRow = _pick.row; _spawnPath = _pick.path;
+  }
+
   let path;
   if (ENEMY_DEFS[type].flying) {
-    path = [grid.cellCenter(SPAWN.col, SPAWN.row), grid.cellCenter(GOAL.col, GOAL.row)];
+    path = [grid.cellCenter(_spawnCol, _spawnRow), grid.cellCenter(GOAL.col, GOAL.row)];
   } else {
-    path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+    path = _spawnPath.map(({ col, row }) => grid.cellCenter(col, row));
   }
 
   if (type === ENEMY_TYPES.JOTUNN) {
@@ -2443,7 +2492,16 @@ function tryPlaceAt(col, row, mode, towerType) {
     }
   }
   const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  if (!newPath) {
+  let _extraPathsOk = true;
+  const _newExtraPaths = [];
+  if (newPath) {
+    for (const _es of _extraSpawns) {
+      const _ep = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+      if (!_ep) { _extraPathsOk = false; break; }
+      _newExtraPaths.push(_ep);
+    }
+  }
+  if (!newPath || !_extraPathsOk) {
     for (let dc = 0; dc < fp.w; dc++) {
       for (let dr = 0; dr < fp.h; dr++) {
         grid.setCell(col + dc, row + dr, CELL.EMPTY);
@@ -2454,6 +2512,9 @@ function tryPlaceAt(col, row, mode, towerType) {
   }
 
   currentPath = newPath;
+  for (let i = 0; i < _extraSpawns.length; i++) {
+    if (_newExtraPaths[i]) _extraSpawns[i].path = _newExtraPaths[i];
+  }
   pathDirty   = true;
   rerouteActiveEnemies();
   goldSpent += cost;
@@ -4115,6 +4176,52 @@ function drawDefenderDossier() {
   ctx.restore();
 }
 
+// Draw extra portal paths as dashed stone roads (lighter than primary path)
+function drawExtraPortalPaths() {
+  if (_extraSpawns.length === 0) return;
+  const t = performance.now() * 0.001;
+  ctx.save();
+  for (const es of _extraSpawns) {
+    if (!es.path || es.path.length < 2) continue;
+    const pulse = 0.5 + Math.sin(t * 2.5 + (es.col + es.row) * 0.4) * 0.5;
+    const alpha = es.active ? (0.45 + pulse * 0.15) : (0.12 + pulse * 0.06);
+
+    // Dashed path line
+    const pts = es.path.map(({ col, row }) => grid.cellCenter(col, row));
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = es.active ? 'rgba(200,140,60,0.9)' : 'rgba(120,80,40,0.7)';
+    ctx.lineWidth   = es.active ? 4 : 2;
+    ctx.setLineDash(es.active ? [5, 3] : [3, 5]);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // Portal indicator at the extra spawn cell
+    const px = es.col * CELL_SIZE + CELL_SIZE / 2;
+    const py = es.row * CELL_SIZE + CELL_SIZE / 2;
+    ctx.globalAlpha = es.active ? (0.7 + pulse * 0.3) : (0.18 + pulse * 0.08);
+    ctx.shadowColor = es.active ? `rgba(160,80,255,${0.8 + pulse * 0.2})` : 'rgba(80,40,120,0.5)';
+    ctx.shadowBlur  = es.active ? 14 * pulse : 4;
+    ctx.strokeStyle = es.active ? `rgba(200,120,255,${0.7 + pulse * 0.3})` : 'rgba(100,60,140,0.4)';
+    ctx.lineWidth   = es.active ? 1.5 : 0.8;
+    ctx.beginPath();
+    ctx.arc(px, py, CELL_SIZE * 0.45, 0, Math.PI * 2);
+    ctx.stroke();
+    if (!es.active) {
+      ctx.font = '5px monospace'; ctx.fillStyle = 'rgba(140,100,200,0.55)'; ctx.textAlign = 'center';
+      const _aw = es.col === COLS - 1 ? 'W21' : 'W31';
+      ctx.fillText(_aw, px, py + 2);
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
 
@@ -4862,13 +4969,11 @@ function drawRightPanel() {
 
   // ── HOARD VISUAL — coin pile in gap above bottom dock ─────────────────────────
   const DOCK_MARCH_H = 36;
-  const DOCK_CTRL_H  = 18;
   const DOCK_GAP     = 3;
   const DOCK_RUNE_H  = (!gameOver && waveState !== 'active' && showRuneMenu) ? 118 : 0;
   const DOCK_RUNE_BAR_H = (!gameOver && waveState !== 'active' && !showRuneMenu && stars > 0) ? 15 : 0;
   const dockMarchY = panelBot - DOCK_MARCH_H - 4;
-  const dockCtrlY  = dockMarchY - DOCK_CTRL_H - DOCK_GAP;
-  const dockRuneY  = dockCtrlY - DOCK_RUNE_H - (showRuneMenu ? DOCK_GAP : 0);
+  const dockRuneY  = dockMarchY - DOCK_RUNE_H - (showRuneMenu ? DOCK_GAP : 0);
   const dockRuneBarY = dockRuneY - DOCK_RUNE_BAR_H - (DOCK_RUNE_BAR_H ? DOCK_GAP : 0);
   const dockTopY   = dockRuneBarY;
 
@@ -4901,46 +5006,11 @@ function drawRightPanel() {
     }
   }
 
-  // ── BOTTOM DOCK (break/countdown): rune cartridge → controls → march ─────────
+  // ── BOTTOM DOCK (break/countdown): rune cartridge → march ───────────────────
+  // Speed × Auto are now in the top HUD (pill buttons); no dock duplicates.
   if (!gameOver && waveState !== 'active') {
     const dockX = px + 6;
     const dockW = pw - 12;
-    const halfW = Math.floor((dockW - 4) / 2);
-
-    // Compact speed + auto — side by side above march button
-    speedBtns = [];
-    {
-      const spX = dockX, spY = dockCtrlY, spW = halfW, spH = DOCK_CTRL_H;
-      const sp      = gameSpeed;
-      const _spIdle = waveState === 'active' && sp === 1;
-      const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : _spIdle ? 'rgba(14,30,12,0.90)' : 'rgba(30,60,22,0.97)';
-      const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : _spIdle ? 'rgba(40,90,38,0.45)' : 'rgba(80,200,80,0.80)';
-      const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : _spIdle ? '#507050' : '#a0f080';
-      ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 4);
-      ctx.fillStyle = spFill; ctx.fill();
-      ctx.strokeStyle = spBord; ctx.lineWidth = 1; ctx.stroke();
-      drawSpeedTriangles(spX + spW * 0.32, spY + spH * 0.52, sp === 1 ? 1 : sp === 2 ? 2 : 4, triCol, 3.5);
-      ctx.font = 'bold 8px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'left';
-      ctx.fillText(`×${sp}`, spX + spW * 0.52, spY + spH - 4);
-      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(160,120,60,0.55)'; ctx.textAlign = 'right';
-      ctx.fillText('F', spX + spW - 3, spY + spH - 4);
-      ctx.textAlign = 'left';
-      speedBtns.push({ x: spX, y: spY, w: spW, h: spH });
-    }
-
-    {
-      const aX = dockX + halfW + 4, aY = dockCtrlY, aW = halfW, aH = DOCK_CTRL_H;
-      drawFantasyPanel(aX, aY, aW, aH,
-        autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)',
-        autoNextWave ? 0.75 : 0.22, 4);
-      ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-      ctx.fillStyle = autoNextWave ? '#8af090' : 'rgba(190,190,210,0.70)';
-      ctx.fillText(autoNextWave ? 'AUTO ON' : 'AUTO', aX + aW / 2, aY + 12);
-      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(150,130,80,0.55)';
-      ctx.fillText('A', aX + aW / 2, aY + aH - 2);
-      ctx.textAlign = 'left';
-      autoNextBtn = { x: aX, y: aY, w: aW, h: aH };
-    }
 
     // Rune Carver — inline sidebar panel (replaces fullscreen overlay)
     runeForgeBtn = null;
@@ -4982,28 +5052,13 @@ function drawRightPanel() {
       nextWaveBtn = { x: bX, y: bY, w: bW, h: bH };
     }
   } else if (!gameOver) {
-    // Active combat — speed control only (compact, bottom of panel)
-    const spX = px + 6, spY = panelBot - DOCK_CTRL_H - 4, spW = pw - 12, spH = DOCK_CTRL_H;
-    const sp      = gameSpeed;
-    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
-    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
-    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
-    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 4);
-    ctx.fillStyle = spFill; ctx.fill();
-    ctx.strokeStyle = spBord; ctx.lineWidth = 1; ctx.stroke();
-    drawSpeedTriangles(spX + spW * 0.42, spY + spH * 0.52, sp === 1 ? 1 : sp === 2 ? 2 : 4, triCol, 3.5);
-    ctx.font = 'bold 8px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'center';
-    ctx.fillText(`×${sp}  [F]`, spX + spW / 2, spY + spH - 4);
-    ctx.textAlign = 'left';
-    speedBtns.push({ x: spX, y: spY, w: spW, h: spH });
-    autoNextBtn = null;
+    // Speed/Auto are in the top HUD — no right-panel speed button during active combat.
+    autoNextBtn  = null;
     runeForgeBtn = null;
-    nextWaveBtn = null;
+    nextWaveBtn  = null;
   } else {
-    speedBtns = [];
-    autoNextBtn = null;
     runeForgeBtn = null;
-    nextWaveBtn = null;
+    nextWaveBtn  = null;
   }
 
   ctx.restore();
@@ -5249,24 +5304,53 @@ function drawTopBar() {
     rx -= ctx.measureText(`✦ ${stars}`).width + 14;
   }
 
-  // Mute + auto-next indicators (far left after title)
-  ctx.font      = '10px monospace';
+  // ── Compact pill buttons: speed × auto × mute ──────────────────────────────
+  ctx.font      = 'bold 9px monospace';
   ctx.textAlign = 'left';
   let lx2 = avX + avR * 2 + ctx.measureText('NORTHERN SHIELD').width + 20;
-  if (autoNextWave) {
-    ctx.fillStyle = '#60ee80';
-    ctx.fillText('AUTO', lx2, cy);
-    lx2 += ctx.measureText('AUTO').width + 10;
-  }
+  const _btnH = 15;
+  const _btnY = barMid - _btnH / 2;
+
+  // Speed pill — cycles ×1→×2→×4→×1 on click
   {
-    ctx.fillStyle   = gameSpeed >= 4 ? '#ff8040' : gameSpeed >= 2 ? '#f0c840' : 'rgba(100,130,80,0.65)';
-    ctx.shadowColor = gameSpeed >= 4 ? 'rgba(255,100,20,0.6)' : gameSpeed >= 2 ? 'rgba(240,180,20,0.4)' : 'transparent';
-    ctx.shadowBlur  = gameSpeed >= 2 ? 4 : 0;
-    ctx.fillText(`×${gameSpeed}`, lx2, cy);
+    const _spStr = `×${gameSpeed}`;
+    const _spTW  = ctx.measureText(_spStr).width;
+    const _spBW  = _spTW + 12;
+    const _spFill   = gameSpeed >= 4 ? 'rgba(190,44,14,0.92)' : gameSpeed >= 2 ? 'rgba(180,110,14,0.92)' : 'rgba(22,52,16,0.80)';
+    const _spBorder = gameSpeed >= 4 ? 'rgba(255,110,50,0.85)' : gameSpeed >= 2 ? 'rgba(255,180,50,0.75)' : 'rgba(70,180,70,0.55)';
+    const _spTxt    = gameSpeed >= 4 ? '#ffb080' : gameSpeed >= 2 ? '#ffe090' : '#90d070';
+    ctx.fillStyle = _spFill;
+    ctx.beginPath(); ctx.roundRect(lx2, _btnY, _spBW, _btnH, 3); ctx.fill();
+    ctx.strokeStyle = _spBorder; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.fillStyle = _spTxt;
+    if (gameSpeed >= 2) { ctx.shadowColor = _spTxt; ctx.shadowBlur = 3; }
+    ctx.textAlign = 'center';
+    ctx.fillText(_spStr, lx2 + _spBW / 2, barMid + 3);
     ctx.shadowBlur = 0;
-    lx2 += ctx.measureText(`×${gameSpeed}`).width + 10;
+    speedBtns.push({ x: lx2, y: _btnY, w: _spBW, h: _btnH });
+    lx2 += _spBW + 3;
   }
-  ctx.fillStyle = isMuted ? '#ff6060' : '#506050';
+
+  // Auto pill — toggles auto-next-wave on click
+  {
+    const _aFill = autoNextWave ? 'rgba(14,48,16,0.92)' : 'rgba(14,14,24,0.70)';
+    const _aBord = autoNextWave ? 'rgba(70,200,70,0.70)' : 'rgba(55,55,75,0.40)';
+    const _aBW   = 30;
+    ctx.fillStyle = _aFill;
+    ctx.beginPath(); ctx.roundRect(lx2, _btnY, _aBW, _btnH, 3); ctx.fill();
+    ctx.strokeStyle = _aBord; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.fillStyle = autoNextWave ? '#80f090' : 'rgba(110,110,130,0.65)';
+    if (autoNextWave) { ctx.shadowColor = '#80f090'; ctx.shadowBlur = 3; }
+    ctx.textAlign = 'center';
+    ctx.fillText('AUTO', lx2 + _aBW / 2, barMid + 3);
+    ctx.shadowBlur = 0;
+    autoNextBtn = { x: lx2, y: _btnY, w: _aBW, h: _btnH };
+    lx2 += _aBW + 6;
+  }
+
+  // Mute indicator (text only — toggled by M key)
+  ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = isMuted ? '#ff6060' : 'rgba(70,85,65,0.70)';
   ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx2, cy);
 
   // Help hint — far right, muted (? key)
@@ -8306,6 +8390,7 @@ function draw() {
     : 0;
   grid.draw(ctx, time, _gridAlpha);
   drawPath();
+  drawExtraPortalPaths();
 
   // Grid cell hover highlight
   if (!dragItem && hoverCol >= 0 && hoverRow >= 0 && !gameOver) {
@@ -9192,7 +9277,13 @@ function drawDragGhost() {
       for (let dc = 0; dc < fp.w; dc++)
         for (let dr = 0; dr < fp.h; dr++)
           grid.setCell(col + dc, row + dr, dragItem.mode);
-      if (!grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row)) canPlace = false;
+      {
+        const _testPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+        if (!_testPath) canPlace = false;
+        else for (const _tes of _extraSpawns) {
+          if (!grid.findPath(_tes.col, _tes.row, GOAL.col, GOAL.row)) { canPlace = false; break; }
+        }
+      }
       for (let dc = 0; dc < fp.w; dc++)
         for (let dr = 0; dr < fp.h; dr++)
           grid.setCell(col + dc, row + dr, CELL.EMPTY);
