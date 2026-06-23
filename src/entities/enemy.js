@@ -77,7 +77,7 @@ export const ENEMY_DEFS = {
     radius:         9,
     reward:         28,
     color:          '#58506a',   // iron grey with purple tint — armored fallen warrior
-    highlightColor: '#d4c090',   // weathered gold highlight
+    highlightColor: '#8090b8',   // steel-blue armour sheen
     flying:         false
   },
 };
@@ -930,7 +930,7 @@ export class Enemy {
     const r = this.radius;
     const t = performance.now() * 0.001;
     // Gallop bob — faster than undead
-    const bob = Math.sin(t * 9.0) * 0.9;
+    const bob = Math.sin(t * 9.0 + (this.id ?? 0) * 1.37) * r * 0.25;
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
@@ -968,11 +968,11 @@ export class Enemy {
 
     // Amber eyes — glowing pair
     const eyeFlicker = 0.72 + Math.sin(t * 3.4) * 0.18;
-    ctx.shadowColor = '#e07010';
-    ctx.shadowBlur  = 5 * eyeFlicker;
+    ctx.shadowColor = '#ffb020';
+    ctx.shadowBlur  = 3;
     ctx.fillStyle   = `rgba(230,110,20,${eyeFlicker})`;
-    ctx.beginPath(); ctx.arc(hx - r * 0.12, hy - r * 0.12, r * 0.16, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(hx - r * 0.38, hy - r * 0.10, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx - r * 0.12, hy - r * 0.12, r * 0.18, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx - r * 0.38, hy - r * 0.10, r * 0.18, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
 
     // Ears — two small triangles
@@ -1026,32 +1026,17 @@ export class Enemy {
     ctx.ellipse(x + 2, y + r * 0.85, r * 1.25, r * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Kite shield (left side, slightly forward)
-    const shieldX = x - r * 0.65, shieldY = y - r * 0.10;
-    ctx.shadowColor = 'rgba(30,50,80,0.55)';
-    ctx.shadowBlur  = 6;
-    ctx.fillStyle   = '#1e2c48';
-    ctx.beginPath();
-    ctx.moveTo(shieldX, shieldY - r * 0.88);
-    ctx.lineTo(shieldX + r * 0.58, shieldY - r * 0.52);
-    ctx.lineTo(shieldX + r * 0.52, shieldY + r * 0.62);
-    ctx.lineTo(shieldX, shieldY + r * 0.92);
-    ctx.lineTo(shieldX - r * 0.52, shieldY + r * 0.62);
-    ctx.lineTo(shieldX - r * 0.58, shieldY - r * 0.52);
-    ctx.closePath(); ctx.fill();
-    // Shield boss (center stud)
+    // Shield — large flat block for clear silhouette readability
+    ctx.fillStyle = '#3a4460';
+    ctx.fillRect(x - r * 1.10, y - r * 0.70, r * 0.90, r * 1.40);
+    ctx.fillStyle = 'rgba(100,120,160,0.45)';
+    ctx.fillRect(x - r * 1.10, y - r * 0.70, r * 0.12, r * 1.40);
+    ctx.strokeStyle = 'rgba(80,100,150,0.60)';
+    ctx.lineWidth   = 0.8;
+    ctx.strokeRect(x - r * 1.10, y - r * 0.70, r * 0.90, r * 1.40);
+    // Shield boss
     ctx.fillStyle = '#a09060';
-    ctx.beginPath(); ctx.arc(shieldX, shieldY, r * 0.22, 0, Math.PI * 2); ctx.fill();
-    // Shield rim highlight
-    ctx.strokeStyle = 'rgba(180,150,80,0.45)';
-    ctx.lineWidth   = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(shieldX, shieldY - r * 0.88);
-    ctx.lineTo(shieldX + r * 0.58, shieldY - r * 0.52);
-    ctx.lineTo(shieldX + r * 0.52, shieldY + r * 0.62);
-    ctx.lineTo(shieldX, shieldY + r * 0.92);
-    ctx.closePath(); ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(x - r * 0.65, y + r * 0.0, r * 0.18, 0, Math.PI * 2); ctx.fill();
 
     // Body — iron plate armor (torso rectangle)
     ctx.fillStyle = '#48445a';

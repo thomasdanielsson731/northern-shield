@@ -433,8 +433,11 @@ export class Grid {
         }
       };
 
-      // Decay banner wave boost each frame
-    if (this.bannerWaveBoost > 0) this.bannerWaveBoost = Math.max(0, this.bannerWaveBoost - 1 / 90);
+      // Decay banner wave boost each frame — exponential so it lingers then snaps to zero
+    if (this.bannerWaveBoost > 0) {
+      this.bannerWaveBoost *= 0.94;
+      if (this.bannerWaveBoost < 0.005) this.bannerWaveBoost = 0;
+    }
 
       // Helper — draw a banner pole with hanging flag
       const drawBannerPole = (px, py, ph, flagColor) => {
@@ -685,18 +688,16 @@ export class Grid {
             ctx.fillStyle = '#3a3028';
             ctx.fillRect(bx2 - 1, by2 - cs * 0.35, 2, cs * 0.35);
             ctx.fillRect(bx2 - 2, by2 - cs * 0.38, 4, 3);
-            // Candle flame
-            ctx.shadowColor = `rgba(255,160,40,${candleFlicker * 0.8})`;
-            ctx.shadowBlur  = 4 * candleFlicker;
-            const cGrad = ctx.createRadialGradient(bx2, by2 - cs * 0.5, 0, bx2, by2 - cs * 0.5, 3.5);
-            cGrad.addColorStop(0,   `rgba(255,240,160,${candleFlicker * 0.9})`);
-            cGrad.addColorStop(0.5, `rgba(255,130,25,${candleFlicker * 0.65})`);
-            cGrad.addColorStop(1,   'rgba(200,60,0,0)');
+            // Candle flame — radial gradient only, no shadowBlur
+            const cGrad = ctx.createRadialGradient(bx2, by2 - cs * 0.5, 0, bx2, by2 - cs * 0.5, 5);
+            cGrad.addColorStop(0,   `rgba(255,240,160,${candleFlicker * 0.95})`);
+            cGrad.addColorStop(0.4, `rgba(255,130,25,${candleFlicker * 0.70})`);
+            cGrad.addColorStop(0.7, `rgba(220,70,10,${candleFlicker * 0.35})`);
+            cGrad.addColorStop(1,   'rgba(180,40,0,0)');
             ctx.fillStyle = cGrad;
             ctx.beginPath();
-            ctx.ellipse(bx2, by2 - cs * 0.54, 2 * candleFlicker, 3.5 * candleFlicker, 0, 0, Math.PI * 2);
+            ctx.ellipse(bx2, by2 - cs * 0.54, 2.5 * candleFlicker, 4.5 * candleFlicker, 0, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowBlur = 0;
           }
         }
 

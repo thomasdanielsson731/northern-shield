@@ -35,10 +35,10 @@ export const TALENT_DEFS = {
   pil_fortify:          { name: 'Fortify',          class: 'piltorn',  level: 8,  dm: 1.15, rm: 1.08, cm: 1.00, desc: '+15% dmg, +8% rng' },
   pil_iron_watch:       { name: 'Iron Watch',      class: 'piltorn',  level: 10, dm: 1.20, rm: 1.15, cm: 0.90, desc: '+20% dmg, +15% rng, -10% cd' },
   // ── Healer (hydda) ─────────────────────────────────────────────────────────
-  hyd_natures_touch:    { name: "Nature's Touch",  class: 'hydda',    level: 3,  dm: 1.00, rm: 1.10, cm: 0.90, desc: '+10% aura rng, -10% cd' },
-  hyd_mending_herbs:    { name: 'Mending Herbs',   class: 'hydda',    level: 5,  dm: 1.00, rm: 1.12, cm: 0.88, desc: '+12% rng, -12% cd' },
-  hyd_runic_ward:       { name: 'Runic Ward',      class: 'hydda',    level: 8,  dm: 1.00, rm: 1.15, cm: 0.85, desc: '+15% rng, -15% cd' },
-  hyd_living_fortress:  { name: 'Living Fortress', class: 'hydda',    level: 10, dm: 1.00, rm: 1.20, cm: 0.80, desc: '+20% rng, -20% cd' },
+  hyd_natures_touch:    { name: "Nature's Touch",  class: 'hydda',    level: 3,  dm: 1.00, rm: 1.06, cm: 0.90, desc: '+6% aura rng, -10% cd' },
+  hyd_mending_herbs:    { name: 'Mending Herbs',   class: 'hydda',    level: 5,  dm: 1.00, rm: 1.07, cm: 0.88, desc: '+7% rng, -12% cd' },
+  hyd_runic_ward:       { name: 'Runic Ward',      class: 'hydda',    level: 8,  dm: 1.00, rm: 1.08, cm: 0.85, desc: '+8% rng, -15% cd' },
+  hyd_living_fortress:  { name: 'Living Fortress', class: 'hydda',    level: 10, dm: 1.00, rm: 1.10, cm: 0.80, desc: '+10% rng, -20% cd' },
   // ── Ice Giant (isjatten) ───────────────────────────────────────────────────
   ice_frost_aura:       { name: 'Frost Aura',      class: 'isjatten', level: 3,  dm: 1.10, rm: 1.00, cm: 1.00, slowMult: 0.95, desc: '+10% dmg, deeper slow' },
   ice_ice_nova:         { name: 'Ice Nova',        class: 'isjatten', level: 5,  dm: 1.00, rm: 1.12, cm: 0.92, slowMult: 0.92, desc: '+12% rng, -8% cd, deeper slow' },

@@ -106,7 +106,7 @@ export function sfxDie(isBoss = false, enemyType = '') {
     return;
   }
   if (enemyType === 'warg') {
-    // Dying yelp: short descending whimper
+    // Dying yelp: short descending whimper + heavy thud
     const a = ac(); if (!a) return;
     try {
       const o = a.createOscillator(), g = a.createGain();
@@ -118,6 +118,7 @@ export function sfxDie(isBoss = false, enemyType = '') {
       g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.20);
       o.start(a.currentTime); o.stop(a.currentTime + 0.22);
     } catch {}
+    tone(80, 0.06, 0.08, 'square', 0.18);
     return;
   }
   if (enemyType === 'einherjar') {
@@ -260,8 +261,14 @@ export function sfxRecruit() {
   tone(660, 0.18, 0.10, 'sine', 0.22);
 }
 
-export function sfxDismiss() {
-  // Somber descending phrase
+export function sfxDismiss(short = false) {
+  if (short) {
+    // 2-note neutral blip for level-0 dismissals
+    tone(330, 0.08, 0.07, 'sine');
+    tone(280, 0.10, 0.06, 'sine', 0.07);
+    return;
+  }
+  // Somber descending phrase for veterans
   [440, 330, 220, 165].forEach((f, i) => tone(f, 0.16, 0.09, 'sawtooth', i * 0.10));
 }
 
@@ -269,4 +276,12 @@ export function sfxRename() {
   // Quick bright confirmation ping
   tone(880, 0.06, 0.08, 'sine');
   tone(1100, 0.08, 0.07, 'sine', 0.05);
+}
+
+export function sfxBond() {
+  // Harmonic resonance — two defenders finding each other
+  tone(330, 0.20, 0.08, 'sine');
+  tone(440, 0.20, 0.08, 'sine', 0.04);
+  tone(660, 0.14, 0.07, 'sine', 0.10);
+  tone(330, 0.18, 0.05, 'sine', 0.22);
 }
