@@ -155,7 +155,7 @@ let waveGoldStart     = 0;      // goldEarned at wave start (delta = wave earnin
 // Stars & Rune system
 let stars           = 0;        // earned in current run (flawless waves + boss kills)
 let runeInventory   = { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 };
-let showRuneMenu    = false;    // Rune Forge overlay (buy runes)
+let showRuneMenu    = false;    // Rune Carver panel open (inline right panel)
 let runeMenuBtns    = [];       // hit areas for rune buy buttons
 let showRunePicker  = false;    // per-tower rune equip overlay
 let runePickerTower = null;     // tower currently being outfitted
@@ -236,9 +236,11 @@ let _chronicleScrollY = 0;    // scroll offset in chronicle overlay (px)
 
 // Defender Legacy System state
 let _promotionQueue      = [];   // [{defenderName, rankLabel, text, type}] — cleared on next battle
+let _promoBannerTimer    = 0;   // auto-dismiss countdown (600 frames = 10s at 60fps)
 let _retirementCeremony  = null; // defender obj whose retirement ceremony is showing
+let _retireCeremonyFade  = 0;   // fade-in counter (30 → 0)
 let _chronicleDefFilter  = null; // null=all, defenderId=filter chronicle to one defender
-let _showDefenderBio     = null; // defenderId whose bio overlay is open
+let _showDefenderBio     = null; // { defenderId, bioText } or null; bioText cached on first draw
 let _chronicleBtns       = [];   // hit regions in the chronicle overlay (filter chips)
 
 // Map selection
@@ -257,9 +259,21 @@ const ABILITY_LABELS = {
   blondie:  '60% SLOW',
   piltorn:  'PIERCE ×4',
   warden:   'PIERCE ×4',
-  hydda:    'HEAL LIFE',
+  hydda:    'HEAL',
   isjatten: 'NOVA',
   drakship: 'VOLLEY',
+};
+
+const DEFENDER_SPRITE_KEYS = {
+  [TOWER_TYPES.BERSERK]:  'berserker',
+  [TOWER_TYPES.VALKYRIE]: 'valkyrie',
+  [TOWER_TYPES.MILITARY]: 'archer',
+  [TOWER_TYPES.CATAPULT]: 'catapult',
+  [TOWER_TYPES.BLONDIE]:  'blondie',
+  [TOWER_TYPES.PILTORN]:  'piltorn',
+  [TOWER_TYPES.HYDDA]:    'hydda',
+  [TOWER_TYPES.ISJATTEN]: 'isjatten',
+  [TOWER_TYPES.DRAKSHIP]: 'drakship',
 };
 
 const PRESET_MAPS = [
@@ -294,12 +308,14 @@ const WAVE_EVENTS = {
   29: { id: 'wargPack',         label: '🐺 WOLF PACK',         desc: '+8 Warg to wave',                bonus: { type: 'warg', count: 8 } },
   30: { id: 'berserkerRage',   label: '⚔ BERSERKER RAGE',   desc: '+30% enemy speed',               speedMult: 1.30 },
   35: { id: 'swarmWave',       label: '☠ SWARM',             desc: '+10 Myling to wave',             bonus: { type: 'myling', count: 10 } },
+  39: { id: 'shieldRest',      label: '♥ SHIELD REST',       desc: '+1 life (up to max)',             special: 'life' },
   40: { id: 'ironHide',        label: '⚔ IRON HIDE',        desc: '+30% HP, −15% speed',            hpMult: 1.30, speedMult: 0.85 },
   48: { id: 'wraithHunt',      label: '👁 WRAITH HUNT',      desc: 'Extra Myling pack +8',           bonus: { type: 'myling', count: 8 } },
   54: { id: 'mistThickens',    label: '🌫 MIST THICKENS',    desc: 'Towers −10% range this wave',    rangeMult: 0.90 },
+  55: { id: 'shieldwall',      label: '⚔ SHIELD WALL',      desc: '+4 Einherjar to wave',           bonus: { type: 'einherjar', count: 4 } },
   60: { id: 'frostStorm',      label: '❄ FROST STORM',      desc: '+30% HP, 20% slower',            hpMult: 1.30, speedMult: 0.80 },
   65: { id: 'blitz',           label: '⚡ BLITZ',             desc: '+40% speed',                     speedMult: 1.40 },
-  72: { id: 'shieldwall',      label: '🛡 SHIELD WALL',       desc: '+4 Einherjar to wave',           bonus: { type: 'einherjar', count: 4 } },
+  72: { id: 'ragnarokEcho',    label: '⚔ RAGNAROK ECHO',    desc: '+20% HP, +20% speed',            hpMult: 1.20, speedMult: 1.20 },
   80: { id: 'darkHarvest',     label: '☠ DARK HARVEST',     desc: '+40% HP, +4 Jötunn',             hpMult: 1.40, bonus: { type: 'jotunn', count: 4 } },
   90: { id: 'ragnarok',        label: '⚔ THE PRELUDE',       desc: '+50% HP, +40% speed',            hpMult: 1.50, speedMult: 1.40 },
 };
@@ -461,6 +477,7 @@ function restartCombatState() {
   _chronBreached       = false;
   _chronLastStand      = null;
   _promotionQueue      = [];
+  _promoBannerTimer    = 0;
   _retirementCeremony  = null;
   _showDefenderBio     = null;
   gameOver      = false;
@@ -781,7 +798,7 @@ function recordBattleResult(result) {
           _promotionQueue.push({
             defenderName: `${_defA.name} & ${_defB.name}`,
             rankLabel:    'BOND FORMED',
-            text:         `"${_bondName}" — ${_defA.name} and ${_defB.name} have fought together ${_count} times.`,
+            text:         `${_bondName} — ${_defA.name} & ${_defB.name}  (${_count} battles together)`,
             type:         'bond',
           });
         }
@@ -798,7 +815,8 @@ function recordBattleResult(result) {
 
   try { saveCampaign(_campaignState); } catch {}
   if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
-  _betweenFadeIn = 30;
+  // Defeat: immediate (no fade — abruptness communicates loss); victory: gentle reveal
+  _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
   gamePhase = 'betweenBattles';
 }
 
@@ -1067,7 +1085,7 @@ function buildWave(num) {
     if (num === 10)  heraldTypes = [...Array(6).fill(ENEMY_TYPES.DRAUGR), ...Array(2).fill(ENEMY_TYPES.MYLING)];
     else if (num === 25) heraldTypes = [...Array(5).fill(ENEMY_TYPES.DRAUGR), ...Array(3).fill(ENEMY_TYPES.WARG), ...Array(2).fill(ENEMY_TYPES.JOTUNN)];
     else if (num === 50) heraldTypes = [...Array(4).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.WARG)];
-    else if (num === 75) heraldTypes = [...Array(3).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN), ...Array(2).fill(ENEMY_TYPES.EINHERJAR)];
+    else if (num === 75) heraldTypes = [...Array(3).fill(ENEMY_TYPES.MYLING), ...Array(2).fill(ENEMY_TYPES.JOTUNN), ...Array(4).fill(ENEMY_TYPES.WARG)];
     else               heraldTypes = [...Array(3).fill(ENEMY_TYPES.JOTUNN),  ...Array(2).fill(ENEMY_TYPES.MARA), ...Array(2).fill(ENEMY_TYPES.EINHERJAR)];
     for (let i = heraldTypes.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -1185,6 +1203,25 @@ function startNextWave() {
   waveGoldStart  = goldEarned;
   waveStartTick  = performance.now();
   if (waveNumber === 1) pathChevronsTimer = Math.max(pathChevronsTimer, 480);
+
+  // Enemy intro banner — fire at wave start so player reads it before combat, not during
+  {
+    const _INTRO_TYPES = {
+      [ENEMY_TYPES.WARG]:      { label: '⚡ NEW: WARG',      hint: 'Fast wolf pack — use splash or slowing towers to handle them' },
+      [ENEMY_TYPES.EINHERJAR]: { label: '⚔ NEW: EINHERJAR', hint: 'Armored Viking — very tough, slow. Outlast with sustained DPS or wall it' },
+      [ENEMY_TYPES.MYLING]:    { label: '★ NEW: MYLING',     hint: 'Spectral flier — ignores walls; use ranged defenders' },
+      [ENEMY_TYPES.JOTUNN]:    { label: '★ NEW: JÖTUNN',     hint: 'Earth giant — massive HP but very slow; early upgrade focus' },
+      [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves' },
+    };
+    const waveTypes = new Set(spawnQueue.map(e => e.__herald ? e.type : e).filter(t => typeof t === 'string'));
+    for (const [t, info] of Object.entries(_INTRO_TYPES)) {
+      if (waveTypes.has(t) && !_enemyIntroSeen.has(t)) {
+        _enemyIntroSeen.add(t);
+        _enemyIntroBanner = { label: info.label, hint: info.hint, timer: 210, maxTimer: 210 };
+        break; // show one banner at a time
+      }
+    }
+  }
   screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
 
   // Economy emergency valve — track poor waves (started with <25g = can't buy even a wall)
@@ -1420,8 +1457,8 @@ function initTerrain() {
   {
     terrainUsesSprite = false;
 
-    // Dark tundra base — kept deep so units read against it
-    tc.fillStyle = '#111f0b';
+    // Dark tundra base — lifted midtones so buildable ground reads against UI chrome
+    tc.fillStyle = '#1c3014';
     tc.fillRect(0, 0, W, H);
 
     // Per-cell micro-variation — breaks up the flat base
@@ -2061,9 +2098,10 @@ function initTerrain() {
       lm.fillRect(cs * 0.62, -cs * 0.10, cs * 0.30, cs * 0.25);
       lm.strokeStyle = 'rgba(0,0,0,0.35)'; lm.lineWidth = 0.5;
       lm.strokeRect(cs * 0.62, -cs * 0.10, cs * 0.30, cs * 0.25);
-      // Spilled apples/cargo dots
-      for (const [ax, ay] of [[cs * 0.70, cs * 0.22],[cs * 0.88, cs * 0.16],[cs * 0.80, cs * 0.32]]) {
-        lm.fillStyle = '#6a1810';
+      // Spilled cargo — fur bales (brown) and ingot (gold)
+      const _cargoColors = ['#7a5830', '#8a6238', '#c89828'];
+      for (const [[ax, ay], ci] of [[[cs * 0.70, cs * 0.22],0],[[cs * 0.88, cs * 0.16],2],[[cs * 0.80, cs * 0.32],1]]) {
+        lm.fillStyle = _cargoColors[ci];
         lm.beginPath(); lm.arc(ax, ay, 1.6, 0, Math.PI * 2); lm.fill();
       }
       lm.lineCap = 'butt';
@@ -2248,6 +2286,9 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   if (type === ENEMY_TYPES.MARA && !newEnemy.isBoss) {
     newEnemy.reward += Math.min(20, Math.floor(waveNumber / 15) * 3);
   }
+  if (type === ENEMY_TYPES.EINHERJAR && !newEnemy.isBoss) {
+    newEnemy.reward += Math.min(18, Math.floor(waveNumber / 10) * 3);
+  }
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
 
@@ -2264,19 +2305,8 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
     newEnemy.eliteLabel     = 'ELITE ' + (ENEMY_DEFS[type]?.label?.toUpperCase() ?? type.toUpperCase());
   }
 
-  // First-encounter intro banner for new enemy types
-  const _INTRO_HINTS = {
-    [ENEMY_TYPES.WARG]:      { label: '⚡ NEW: WARG',      hint: 'Fast wolf pack — kite shield them; splash towers shine here' },
-    [ENEMY_TYPES.EINHERJAR]: { label: '🛡 NEW: EINHERJAR', hint: 'Armored Viking — slow but very tanky; focus burst damage' },
-    [ENEMY_TYPES.MYLING]:    { label: '★ NEW: MYLING',     hint: 'Spectral flier — ignores walls; use ranged defenders' },
-    [ENEMY_TYPES.JOTUNN]:    { label: '★ NEW: JÖTUNN',     hint: 'Earth giant — massive HP but very slow; early upgrade focus' },
-    [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves' },
-  };
-  if (!_enemyIntroSeen.has(type) && _INTRO_HINTS[type]) {
-    _enemyIntroSeen.add(type);
-    const { label, hint } = _INTRO_HINTS[type];
-    _enemyIntroBanner = { label, hint, timer: 210, maxTimer: 210 };
-  }
+  // Einherjar hit flash: steel-blue to match armor palette
+  if (type === ENEMY_TYPES.EINHERJAR) newEnemy.hitFlashColor = '128,144,184';
 
   enemies.push(newEnemy);
   return newEnemy;
@@ -2677,6 +2707,8 @@ canvas.addEventListener('mousedown', e => {
   // Between-battles summary screen
   if (gamePhase === 'betweenBattles') {
     if (e.button === 0) {
+      // Skip fade-in on any click
+      if (_betweenFadeIn > 0) { _betweenFadeIn = 0; return; }
       // Bio/ceremony/chronicle overlays intercept all clicks while open
       if (_showDefenderBio)    { _showDefenderBio = null; return; }
       if (_showChronicle) {
@@ -2744,6 +2776,7 @@ canvas.addEventListener('mousedown', e => {
                   if (_survivor && !_survivor.scars?.includes('bond_grief')) {
                     if (!_survivor.scars) _survivor.scars = [];
                     _survivor.scars.push('bond_grief');
+                    sfxDismiss();
                     _promotionQueue.push({
                       defenderName: _survivor.name,
                       rankLabel:    'BOND GRIEF',
@@ -2768,6 +2801,7 @@ canvas.addEventListener('mousedown', e => {
                 if (itemId) _equipmentInventory.push(itemId);
               }
               if (!_campaignState.hallOfHonored) _campaignState.hallOfHonored = [];
+              const _clsLbl = TOWER_DEFS[_retDef.type]?.label ?? _retDef.type;
               _campaignState.hallOfHonored.push({
                 name:          _retDef.name,
                 type:          _retDef.type,
@@ -2778,14 +2812,22 @@ canvas.addEventListener('mousedown', e => {
                 scars:         _retDef.scars?.slice() ?? [],
                 trait:         _retDef.trait ?? null,
                 epitaph:       generateEpitaph(_retDef),
+                legacyNote:    `Legacy lives on in the next ${_clsLbl}`,
                 at:            battlesCompleted,
                 reason:        'retired',
               });
-              // Legacy bonus for next recruit of same class
+              // Legacy bonus — stacks per class (array), capped at 3
               if (!_campaignState.legacyBonuses) _campaignState.legacyBonuses = {};
-              _campaignState.legacyBonuses[_retDef.type] = {
-                fromName: _retDef.name, fromRank: getRank(_retDef).label,
-              };
+              if (!Array.isArray(_campaignState.legacyBonuses[_retDef.type])) {
+                // Migrate old scalar value to array
+                const _old = _campaignState.legacyBonuses[_retDef.type];
+                _campaignState.legacyBonuses[_retDef.type] = _old ? [_old] : [];
+              }
+              if (_campaignState.legacyBonuses[_retDef.type].length < 3) {
+                _campaignState.legacyBonuses[_retDef.type].push({
+                  fromName: _retDef.name, fromRank: getRank(_retDef).label,
+                });
+              }
               // Bond cleanup
               const _retBonds = _campaignState.bonds ?? [];
               for (const _bond of _retBonds) {
@@ -2811,14 +2853,16 @@ canvas.addEventListener('mousedown', e => {
             _retirementCeremony = null;
           } else if (btn.action === 'ackPromotion') {
             _promotionQueue.shift();
+            _promoBannerTimer = 0;
           } else if (btn.action === 'openBio') {
-            _showDefenderBio = btn.defenderId;
+            _showDefenderBio = { defenderId: btn.defenderId, bioText: null };
+            sfxRune();
           } else if (btn.action === 'openRetire') {
             const retDef = _roster?.find(btn.defenderId);
-            if (retDef) _retirementCeremony = retDef;
+            if (retDef) { _retirementCeremony = retDef; _retireCeremonyFade = 30; sfxFlawless(); }
           } else if (btn.action === 'startRename') {
             const def = _roster?.find(btn.defenderId);
-            if (def) _renameState = { defenderId: def.defenderId, draft: def.name };
+            if (def && def.careerLevel >= 1) _renameState = { defenderId: def.defenderId, draft: def.name };
           } else if (btn.action === 'scrollRoster') {
             _rosterScrollOffset = Math.max(0, _rosterScrollOffset + btn.dir);
           } else if (btn.action === 'cycleEquip') {
@@ -2862,9 +2906,10 @@ canvas.addEventListener('mousedown', e => {
               const name = getDefenderName(_recruitType);
               const def  = new Defender({ defenderId: id, name, type: _recruitType });
               def.trait  = getRandomTrait(_recruitType);
-              // Apply legacy bonus if one exists for this class
-              def._legacyBonus = (_campaignState.legacyBonuses ?? {})[_recruitType] ?? null;
-              delete (_campaignState.legacyBonuses ?? {})[_recruitType];
+              // Apply legacy bonus if one exists for this class (pop oldest from array)
+              const _legArr = (_campaignState.legacyBonuses ?? {})[_recruitType];
+              def._legacyBonus = Array.isArray(_legArr) ? (_legArr.shift() ?? null) : (_legArr ?? null);
+              if (Array.isArray(_legArr) && _legArr.length === 0) delete (_campaignState.legacyBonuses ?? {})[_recruitType];
               _roster.defenders.push(def);
               goldReserve -= _effectiveRecruitCost;
               _campaignState.goldReserve = goldReserve;
@@ -2925,12 +2970,16 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // Rune menu buy buttons (shown during break/countdown)
+  // Rune cartridge buy / close (inline panel — does not block other UI)
   if (e.button === 0 && showRuneMenu) {
     for (const rb of runeMenuBtns) {
       if (mouseX >= rb.x && mouseX <= rb.x + rb.w &&
           mouseY >= rb.y && mouseY <= rb.y + rb.h) {
-        const def  = RUNE_DEFS[rb.idx];
+        if (rb.close) {
+          showRuneMenu = false;
+          return;
+        }
+        const def   = RUNE_DEFS[rb.idx];
         const owned = runeInventory[def.id] ?? 0;
         if (owned < def.maxOwned && stars >= def.cost) {
           stars -= def.cost;
@@ -2940,9 +2989,6 @@ canvas.addEventListener('mousedown', e => {
         return;
       }
     }
-    // Click outside rune menu closes it
-    showRuneMenu = false;
-    return;
   }
 
   // Build-mode button row — left-click starts a drag
@@ -3757,6 +3803,260 @@ function _bakePathCanvas(pts, segs) {
       pc.restore();
     }
   }
+  // Worn center stripe + faint outer glow — path lane readable at wave 1
+  mkPath(); pc.strokeStyle = 'rgba(88,70,46,0.62)';  pc.lineWidth = cs * 0.24; pc.stroke();
+  mkPath(); pc.strokeStyle = 'rgba(128,102,68,0.38)'; pc.lineWidth = cs * 0.11; pc.stroke();
+  mkPath(); pc.strokeStyle = 'rgba(70,52,32,0.16)';   pc.lineWidth = cs * 1.18; pc.stroke();
+}
+
+function getHoardStage(g) {
+  if (g >= 5000) return { level: 5, label: 'HOARD V',  name: 'LEGENDARY' };
+  if (g >= 1000) return { level: 4, label: 'HOARD IV', name: 'WEALTHY' };
+  if (g >= 500)  return { level: 3, label: 'HOARD III', name: 'PROSPEROUS' };
+  if (g >= 100)  return { level: 2, label: 'HOARD II', name: 'TREASURY' };
+  return { level: 1, label: 'HOARD I', name: 'SPARSE' };
+}
+
+function formatWaveEnemyComp(comp) {
+  const parts = [];
+  if (comp.draugr > 0)      parts.push(`${comp.draugr} Draugr`);
+  if (comp.mylings > 0)     parts.push(`${comp.mylings} Myling`);
+  if (comp.jotunn > 0)      parts.push(`${comp.jotunn} Jötunn`);
+  if (comp.maras > 0)       parts.push(`${comp.maras} Mara`);
+  if ((comp.wargs ?? 0) > 0)      parts.push(`${comp.wargs} Warg`);
+  if ((comp.einherjars ?? 0) > 0) parts.push(`${comp.einherjars} Einherjar`);
+  return parts.join(', ');
+}
+
+/** Signature glow RGB — tower instance, class key, or raw "r,g,b" string. */
+function defenderGlowRgb(source) {
+  if (!source) return '255,190,80';
+  if (typeof source === 'string') {
+    if (/^\d+\s*,\s*\d+\s*,\s*\d+$/.test(source)) return source;
+    return TOWER_DEFS[source]?.glowRgb ?? '255,190,80';
+  }
+  return source.glowRgb ?? TOWER_DEFS[source.type]?.glowRgb ?? '255,190,80';
+}
+
+/** Draw defender name in class glow color (field + cards). */
+function drawDefenderName(text, x, y, source, alpha = 1) {
+  applyDefenderNameStyle(source, alpha);
+  ctx.fillText(text, x, y);
+  clearDefenderNameStyle();
+}
+
+/** Radial pool behind portrait — matches field tower light pools. */
+function drawDefenderPortraitGlow(cx, cy, glowRgb, coreRadius, strength = 1) {
+  const rgb   = defenderGlowRgb(glowRgb);
+  const poolR = coreRadius * 2.8;
+  const g     = ctx.createRadialGradient(cx, cy + 1, 0, cx, cy + 1, poolR);
+  g.addColorStop(0,    `rgba(${rgb},${0.20 * strength})`);
+  g.addColorStop(0.50, `rgba(${rgb},${0.08 * strength})`);
+  g.addColorStop(1,    'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, poolR, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Name text style — matches field nameplate pills. */
+function applyDefenderNameStyle(glowRgb, alpha = 1) {
+  const rgb = defenderGlowRgb(glowRgb);
+  ctx.fillStyle   = `rgba(${rgb},${alpha})`;
+  ctx.shadowColor = `rgba(${rgb},0.70)`;
+  ctx.shadowBlur  = 4;
+}
+
+function clearDefenderNameStyle() {
+  ctx.shadowBlur = 0;
+}
+
+function formatBattleStat(n) {
+  const v = Math.round(n || 0);
+  if (v >= 10000) return `${Math.round(v / 1000)}k`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
+  return String(v);
+}
+
+/** Small portrait + glow — sidebar list and dossier. */
+function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1) {
+  const rgb = defenderGlowRgb(towerType);
+  drawDefenderPortraitGlow(cx, cy, towerType, r, strength);
+  const key = DEFENDER_SPRITE_KEYS[towerType];
+  const sp  = key ? SPRITES[key] : null;
+  if (sp?.img?.complete && sp.img.naturalWidth > 0) {
+    ctx.save();
+    ctx.globalAlpha = strength;
+    const sz = r * 2.15;
+    ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - sz / 2, cy - sz / 2, sz, sz);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = `rgba(${rgb},${0.35 * strength})`;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.strokeStyle = `rgba(${rgb},${0.80 * strength})`;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+}
+
+/** Rampart hearts — mockup-style lives readout. */
+function drawRampartHearts(x, y, current, max, filledColor) {
+  const heartW = 7;
+  for (let i = 0; i < max; i++) {
+    const hx = x + i * (heartW + 1);
+    const full = i < current;
+    ctx.fillStyle = full ? filledColor : 'rgba(40,28,22,0.65)';
+    ctx.font = '7px monospace';
+    ctx.fillText(full ? '♥' : '♡', hx, y);
+  }
+}
+
+/** Mockup-style defender row in the right panel. */
+function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false } = {}) {
+  const CARD_H = 30;
+  const rgb    = defenderGlowRgb(tower);
+  const tName  = tower.name ?? TOWER_DEFS[tower.type]?.label ?? tower.type;
+  const classLbl = TOWER_DEFS[tower.type]?.label ?? tower.type;
+  const tLvl   = tower._careerLevel > 0 ? ` ${ROMAN[tower._careerLevel] ?? tower._careerLevel}` : '';
+  const def    = _roster?.find(tower.defenderId);
+  const dmg    = tower.damageDealt || 0;
+  const kills  = tower.killCount || 0;
+
+  ctx.fillStyle = isFieldSelected ? `rgba(${rgb},0.18)` : isMvp ? `rgba(${rgb},0.12)` : 'rgba(0,0,0,0.34)';
+  ctx.beginPath(); ctx.roundRect(x, y, w, CARD_H, 4); ctx.fill();
+  ctx.strokeStyle = isFieldSelected ? `rgba(${rgb},0.90)` : isMvp ? `rgba(${rgb},0.50)` : `rgba(${rgb},0.22)`;
+  ctx.lineWidth = isFieldSelected ? 1.4 : 0.7;
+  ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w - 1, CARD_H - 1, 4); ctx.stroke();
+
+  const avX = x + 14;
+  const avY = y + CARD_H / 2;
+  drawMiniDefenderPortrait(avX, avY, tower.type, 11);
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 7.5px monospace';
+  drawDefenderName(
+    tName.length > 10 ? tName.slice(0, 9) + '…' : tName,
+    x + 28, y + 10, tower, 1,
+  );
+  ctx.font = '6px monospace';
+  ctx.fillStyle = `rgba(${rgb},0.55)`;
+  ctx.fillText(`${classLbl}${tLvl}`, x + 28, y + 20);
+
+  // Battle contribution chip
+  ctx.font = 'bold 7px monospace'; ctx.textAlign = 'right';
+  if (tower.type === 'hydda') {
+    ctx.fillStyle = '#70e8a0';
+    ctx.fillText('♥ HEAL', rightX, y + 11);
+  } else if (dmg > 0 || kills > 0) {
+    ctx.fillStyle = kills > 0 ? '#90e8a0' : `rgba(${rgb},0.75)`;
+    ctx.fillText(`⚔${formatBattleStat(dmg)}`, rightX, y + 11);
+    if (kills > 0) {
+      ctx.font = '6px monospace';
+      ctx.fillStyle = 'rgba(160,200,160,0.65)';
+      ctx.fillText(`☠${kills}`, rightX, y + 21);
+    }
+  } else if (def?.careerKills > 0) {
+    ctx.fillStyle = 'rgba(170,150,120,0.55)';
+    ctx.fillText(`${def.careerKills}✦`, rightX, y + 12);
+  }
+
+  const _pt = def ? getPrimaryTitle(def) : null;
+  if (_pt) {
+    ctx.font = '5.5px monospace';
+    ctx.fillStyle = 'rgba(160,130,200,0.55)';
+    ctx.fillText(`✦${_pt.label}`, rightX, y + CARD_H - 3);
+  }
+  ctx.textAlign = 'left';
+  return CARD_H + 3;
+}
+
+/** Dossier strip above warband bar when a field defender is selected. */
+function drawDefenderDossier() {
+  if (!selectedTower || gameOver || gamePhase !== 'playing') return;
+
+  const t     = selectedTower;
+  const def   = _roster?.find(t.defenderId);
+  const rgb   = defenderGlowRgb(t);
+  const panelW = COLS * CELL_SIZE - 4;
+  const panelH = 46;
+  const panelX = GRID_LEFT + 2;
+  const panelY = GRID_BOTTOM - panelH - 2;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(${rgb},0.06)`;
+  drawFantasyPanel(panelX, panelY, panelW, panelH, 'rgba(8,4,16,0.94)', 0.72, 6);
+  ctx.fillStyle = `rgba(${rgb},0.10)`;
+  ctx.fillRect(panelX, panelY, 3, panelH);
+
+  const px = panelX + 10;
+  const py = panelY + panelH / 2;
+  drawMiniDefenderPortrait(px + 14, py, t.type, 16);
+
+  const col1 = panelX + 38;
+  const col2 = panelX + Math.floor(panelW * 0.38);
+  const col3 = panelX + Math.floor(panelW * 0.62);
+  const col4 = panelX + Math.floor(panelW * 0.82);
+
+  ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(140,120,90,0.55)';
+  ctx.fillText('DEFENDER', col1, panelY + 10);
+  ctx.fillText('TRAIT', col2, panelY + 10);
+  ctx.fillText('BATTLE', col3, panelY + 10);
+  ctx.fillText('GEAR', col4, panelY + 10);
+
+  const tName = t.name ?? TOWER_DEFS[t.type]?.label ?? t.type;
+  ctx.font = 'bold 9px monospace';
+  drawDefenderName(tName, col1, panelY + 22, t, 1);
+  ctx.font = '7px monospace';
+  ctx.fillStyle = `rgba(${rgb},0.65)`;
+  const rank = def ? getRank(def) : null;
+  ctx.fillText(
+    `${TOWER_DEFS[t.type]?.label ?? t.type}${t._careerLevel > 0 ? ` · ${ROMAN[t._careerLevel]}` : ''}${rank && rank.id !== 'greenhorn' ? ` · ${rank.label}` : ''}`,
+    col1, panelY + 33,
+  );
+
+  const traitLbl = def?.trait ? (TRAIT_DEFS[def.trait]?.label ?? def.trait) : '—';
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,200,170,0.75)';
+  ctx.fillText(traitLbl.length > 14 ? traitLbl.slice(0, 13) + '…' : traitLbl, col2, panelY + 22);
+  if (def?.scars?.length) {
+    ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(200,120,90,0.55)';
+    ctx.fillText(`${def.scars.length} scar${def.scars.length > 1 ? 's' : ''}`, col2, panelY + 33);
+  }
+
+  ctx.font = 'bold 8px monospace';
+  if (t.type === 'hydda') {
+    ctx.fillStyle = '#70e8a0';
+    ctx.fillText('SUPPORT', col3, panelY + 22);
+    ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(140,180,140,0.6)';
+    ctx.fillText(`${t.goldGenerated || 0}g aided`, col3, panelY + 33);
+  } else {
+    ctx.fillStyle = '#90d0a0';
+    ctx.fillText(`⚔ ${formatBattleStat(t.damageDealt || 0)}`, col3, panelY + 22);
+    ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(140,180,140,0.6)';
+    ctx.fillText(`☠ ${t.killCount || 0}  ·  Lv ${t.level}`, col3, panelY + 33);
+  }
+
+  const slots = ['weapon', 'armor'];
+  let gx = col4;
+  for (const slot of slots) {
+    const itemId = def?.equipment?.[slot];
+    const iDef   = itemId ? ITEM_DEFS[itemId] : null;
+    const slotW  = 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(gx, panelY + 14, slotW, 22, 2); ctx.fill();
+    if (iDef) {
+      ctx.strokeStyle = RARITY_COLOR[iDef.rarity] ?? '#aaa';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(gx + 0.5, panelY + 14.5, slotW - 1, 21);
+      ctx.font = '5.5px monospace'; ctx.fillStyle = RARITY_COLOR[iDef.rarity] ?? '#ccc';
+      ctx.fillText(iDef.name.slice(0, 5), gx + 2, panelY + 26);
+    } else {
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(80,70,60,0.4)';
+      ctx.fillText(slot === 'weapon' ? '⚔' : '🛡', gx + 7, panelY + 28);
+    }
+    gx += slotW + 4;
+  }
+
+  ctx.restore();
 }
 
 function drawPath() {
@@ -4269,9 +4569,8 @@ function drawRightPanel() {
     ctx.fillRect(sX, ly, 3, HDR);
     ctx.globalAlpha = 1;
     ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 4;
+    ctx.fillStyle = color;
     ctx.fillText(icon, sX + 8, ly + HDR - 2);
-    ctx.shadowBlur = 0;
     ctx.font = 'bold 6.5px monospace'; ctx.textAlign = 'left';
     ctx.fillStyle = color; ctx.globalAlpha = 0.88;
     ctx.fillText(label, sX + 17, ly + HDR - 2);
@@ -4359,13 +4658,9 @@ function drawRightPanel() {
       _row('Enemies:', '☠ BOSS ACTIVE', '#ff5030');
     } else {
       const comp  = waveComposition(dispW);
-      const parts = [comp.draugr      > 0 && `${comp.draugr}D`,
-                     comp.mylings     > 0 && `${comp.mylings}M`,
-                     comp.jotunn      > 0 && `${comp.jotunn}J`,
-                     comp.maras       > 0 && `${comp.maras}X`,
-                     (comp.wargs ?? 0)      > 0 && `${comp.wargs}W`,
-                     (comp.einherjars ?? 0) > 0 && `${comp.einherjars}E`].filter(Boolean);
-      _row('Enemies:', `${onField} ∙ ${parts.join(' ')}`, tColor);
+      const compStr = formatWaveEnemyComp(comp);
+      const enemyVal = compStr.length > 22 ? `${onField} on field` : `${onField} · ${compStr}`;
+      _row('Enemies:', enemyVal, tColor);
     }
     if (nextBossW) {
       const _nbName = BOSS_CONFIGS[nextBossW]?.name ?? `Wave ${nextBossW}`;
@@ -4389,7 +4684,15 @@ function drawRightPanel() {
     _hdr('#5882c8', '♜', 'FORTRESS', stat, statC);
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 
-    _row('Ramparts:', `${lives} / ${STARTING_LIVES}`, effC);
+    ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,155,105,0.55)';
+    ctx.fillText('Ramparts:', dLX, ly + ROW - 2);
+    drawRampartHearts(dLX + 52, ly + ROW - 2, lives, STARTING_LIVES, effC);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = effC;
+    ctx.fillText(`${lives}/${STARTING_LIVES}`, dVX, ly + ROW - 2);
+    ctx.textAlign = 'left';
+    ly += ROW;
     _bar(lives / STARTING_LIVES, effC);
     _row('Deployed:', `${towers.length}`, '#90a8c8');
     ly += GAP;
@@ -4417,30 +4720,13 @@ function drawRightPanel() {
     if (towers.length === 0) {
       _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
     } else {
-      const show = Math.min(scored.length, 5);
+      const show = Math.min(scored.length, 4);
       for (let i = 0; i < show; i++) {
         const { t } = scored[i];
-        const isMvp  = i === 0;
-        const tName  = t.name ?? TOWER_DEFS[t.type]?.label ?? t.type;
-        const tLvl   = t._careerLevel > 0 ? ` [${ROMAN[t._careerLevel] ?? t._careerLevel}]` : '';
-        const def    = _roster?.find(t.defenderId);
-        // Show battle kills during fight; fall back to career kills (marked ✦); then class as context
-        const bKills = t.killCount || 0;
-        const killStr = bKills > 0 ? `${bKills}K ☠`
-                      : def?.careerKills > 0 ? `${def.careerKills}K✦`
-                      : (TOWER_DEFS[t.type]?.label ?? '');
-        const nameC  = isMvp
-          ? `rgba(${t.glowRgb ?? '180,150,255'},0.95)`
-          : 'rgba(185,165,130,0.72)';
-        _row(tName + tLvl, killStr, nameC);
-        const _pt = def ? getPrimaryTitle(def) : null;
-        if (_pt) {
-          ctx.font = '6px monospace'; ctx.textAlign = 'right';
-          ctx.fillStyle = 'rgba(160,130,200,0.52)';
-          ctx.fillText(`✦ ${_pt.label}`, dVX, ly + 6);
-          ctx.textAlign = 'left';
-          ly += 7;
-        }
+        ly += drawDefenderSidebarRow(sX, ly, sW, dVX, t, {
+          isMvp: i === 0 && mvpT?.mvpTimer > 0,
+          isFieldSelected: selectedTower != null && selectedTower.defenderId === t.defenderId,
+        });
       }
     }
     ly += GAP;
@@ -4449,28 +4735,33 @@ function drawRightPanel() {
   // ── 4. TREASURY ──────────────────────────────────────────────────────────────
   {
     const hG      = gold;
-    const hLevel  = hG >= 5000 ? 'LEGENDARY' : hG >= 1000 ? 'WEALTHY' : hG >= 500 ? 'PROSPEROUS' : hG >= 100 ? 'TREASURY' : 'SPARSE';
+    const hoard   = getHoardStage(hG);
     const hColor  = hG >= 5000 ? '#ffd040' : hG >= 1000 ? '#f0a030' : hG >= 500 ? '#c08020' : hG >= 100 ? '#c89828' : '#786040';
     const pulse   = hoardPulse > 0;
     const lastInc = goldEarned - waveGoldStart;
     const incEst  = lastWaveTimeSec > 0 ? Math.ceil(lastInc / Math.max(1, lastWaveTimeSec)) : 0;
+    const inFight = waveState === 'active';
 
-    _hdr('#c89828', '◆', 'TREASURY', hLevel, hColor);
+    const _stageBadge = ['', '⬥ HOARD I', '⬥ HOARD II', '⬥ HOARD III', '⬥ VAULT', '⬛ DRAGON HOARD'][hoard.level] ?? '';
+    _hdr('#c89828', '◆', 'TREASURY', `${_stageBadge}`, hColor);
 
-    // Gold — hero-sized value
-    ctx.font = '6px monospace'; ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(180,155,105,0.55)';
-    ctx.fillText('Gold:', dLX, ly + 10);
-    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right';
-    ctx.fillStyle = pulse ? '#fff8a0' : '#f0c840';
-    if (pulse) { ctx.shadowColor = '#ffffa0'; ctx.shadowBlur = 10; }
-    ctx.fillText(`${Math.floor(_displayGold)}g`, dVX, ly + 10);
-    ctx.shadowBlur = 0; ctx.textAlign = 'left';
-    ly += 12;
+    if (!inFight) {
+      ctx.font = '6px monospace'; ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(180,155,105,0.55)';
+      ctx.fillText('Gold:', dLX, ly + 10);
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right';
+      ctx.fillStyle = pulse ? '#fff8a0' : '#f0c840';
+      if (pulse) { ctx.shadowColor = '#ffffa0'; ctx.shadowBlur = 8; }
+      ctx.fillText(`${Math.floor(_displayGold)}g`, dVX, ly + 10);
+      ctx.shadowBlur = 0; ctx.textAlign = 'left';
+      ly += 12;
+    } else {
+      _row('Status:', hoard.name, hColor);
+    }
 
-    _row('Gold / sec:', `${incEst}g`, '#c89828');
+    if (incEst > 0) _row('Gold / sec:', `${incEst}g`, '#c89828');
 
-    const hFrac = hG >= 5000 ? 1.0 : hG >= 1000 ? 0.80 : hG >= 500 ? 0.60 : hG >= 100 ? 0.35 : Math.min(0.20, hG/100);
+    const hFrac = hG >= 5000 ? 1.0 : hG >= 1000 ? 0.80 : hG >= 500 ? 0.60 : hG >= 100 ? 0.35 : Math.min(0.20, hG / 100);
     _bar(hFrac, hColor);
     ly += GAP;
   }
@@ -4483,11 +4774,15 @@ function drawRightPanel() {
     const campC    = 'rgba(130,130,195,0.90)';
 
     _hdr(campC, '✦', 'CAMPAIGN', `✦ ${stars}`, 'rgba(230,200,80,0.80)');
-    _row('Wave Progress:', endlessMode ? `${dispW} / ∞` : `${dispW} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
-    _bar(progress, bColor);
+    if (waveState !== 'active') {
+      _row('Wave Progress:', endlessMode ? `${dispW} / ∞` : `${dispW} / ${MAX_WAVES}`, 'rgba(210,195,160,0.90)');
+      _bar(progress, bColor);
+    }
     _row('Chieftains Slain:', `${bossesDefeated} / ${BOSS_WAVES.size}`,
       bossesDefeated >= BOSS_WAVES.size ? '#ffd040' : 'rgba(200,180,130,0.80)');
-    _row('Reserve:', `◆ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
+    if (goldReserve > 0 || waveState !== 'active') {
+      _row('Reserve:', `◆ ${goldReserve}g`, 'rgba(190,170,100,0.70)');
+    }
     {
       const fb = _fortressBonuses;
       const fParts = [];
@@ -4500,10 +4795,20 @@ function drawRightPanel() {
     ly += GAP;
   }
 
-  // ── HOARD VISUAL — coin pile in gap between sections and speed button ─────────
+  // ── HOARD VISUAL — coin pile in gap above bottom dock ─────────────────────────
+  const DOCK_MARCH_H = 36;
+  const DOCK_CTRL_H  = 18;
+  const DOCK_GAP     = 3;
+  const DOCK_RUNE_H  = (!gameOver && waveState !== 'active' && showRuneMenu) ? 118 : 0;
+  const DOCK_RUNE_BAR_H = (!gameOver && waveState !== 'active' && !showRuneMenu && stars > 0) ? 15 : 0;
+  const dockMarchY = panelBot - DOCK_MARCH_H - 4;
+  const dockCtrlY  = dockMarchY - DOCK_CTRL_H - DOCK_GAP;
+  const dockRuneY  = dockCtrlY - DOCK_RUNE_H - (showRuneMenu ? DOCK_GAP : 0);
+  const dockRuneBarY = dockRuneY - DOCK_RUNE_BAR_H - (DOCK_RUNE_BAR_H ? DOCK_GAP : 0);
+  const dockTopY   = dockRuneBarY;
+
   {
-    const spY     = panelBot - 152;   // speed button top
-    const hoarGap = spY - ly - 4;
+    const hoarGap = dockTopY - ly - 4;
     if (waveState !== 'active' && hoarGap >= 20) {
       const hcx    = px + pw * 0.5;
       const hcy    = ly + hoarGap * 0.52;
@@ -4531,121 +4836,230 @@ function drawRightPanel() {
     }
   }
 
-  // ── SPEED CONTROL ─────────────────────────────────────────────────────────────
-  {
-    const spH = 24, spY = panelBot - 152, spX = px + 6, spW = pw - 12;
-    speedBtns = [];
+  // ── BOTTOM DOCK (break/countdown): rune cartridge → controls → march ─────────
+  if (!gameOver && waveState !== 'active') {
+    const dockX = px + 6;
+    const dockW = pw - 12;
+    const halfW = Math.floor((dockW - 4) / 2);
 
-    function drawSpeedTriangles(cx, cy, n, color, size = 5) {
-      const gap = 3.5, total = n * size + (n-1) * gap;
-      let tx = cx - total/2;
-      ctx.fillStyle = color;
-      for (let i = 0; i < n; i++) {
-        let ox = tx, oy = cy;
-        if (n === 4) {
-          const col = i%2, rr = Math.floor(i/2), g2=3, t2=2*size+g2;
-          ox = cx - t2/2 + col*(size+g2); oy = cy + (rr===0 ? -3.5 : 3.5);
-        }
-        ctx.beginPath();
-        ctx.moveTo(ox, oy-size*0.6); ctx.lineTo(ox+size, oy); ctx.lineTo(ox, oy+size*0.6);
-        ctx.closePath(); ctx.fill();
-        if (n !== 4) tx += size + gap;
+    // Compact speed + auto — side by side above march button
+    speedBtns = [];
+    {
+      const spX = dockX, spY = dockCtrlY, spW = halfW, spH = DOCK_CTRL_H;
+      const sp      = gameSpeed;
+      const _spIdle = waveState === 'active' && sp === 1;
+      const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : _spIdle ? 'rgba(14,30,12,0.90)' : 'rgba(30,60,22,0.97)';
+      const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : _spIdle ? 'rgba(40,90,38,0.45)' : 'rgba(80,200,80,0.80)';
+      const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : _spIdle ? '#507050' : '#a0f080';
+      ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 4);
+      ctx.fillStyle = spFill; ctx.fill();
+      ctx.strokeStyle = spBord; ctx.lineWidth = 1; ctx.stroke();
+      drawSpeedTriangles(spX + spW * 0.32, spY + spH * 0.52, sp === 1 ? 1 : sp === 2 ? 2 : 4, triCol, 3.5);
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'left';
+      ctx.fillText(`×${sp}`, spX + spW * 0.52, spY + spH - 4);
+      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(160,120,60,0.55)'; ctx.textAlign = 'right';
+      ctx.fillText('F', spX + spW - 3, spY + spH - 4);
+      ctx.textAlign = 'left';
+      speedBtns.push({ x: spX, y: spY, w: spW, h: spH });
+    }
+
+    {
+      const aX = dockX + halfW + 4, aY = dockCtrlY, aW = halfW, aH = DOCK_CTRL_H;
+      drawFantasyPanel(aX, aY, aW, aH,
+        autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)',
+        autoNextWave ? 0.75 : 0.22, 4);
+      ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = autoNextWave ? '#8af090' : 'rgba(190,190,210,0.70)';
+      ctx.fillText(autoNextWave ? 'AUTO ON' : 'AUTO', aX + aW / 2, aY + 12);
+      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(150,130,80,0.55)';
+      ctx.fillText('A', aX + aW / 2, aY + aH - 2);
+      ctx.textAlign = 'left';
+      autoNextBtn = { x: aX, y: aY, w: aW, h: aH };
+    }
+
+    // Rune Carver — inline sidebar panel (replaces fullscreen overlay)
+    runeForgeBtn = null;
+    if (stars > 0 || showRuneMenu) {
+      if (showRuneMenu) {
+        drawRuneCartridge(dockX, dockRuneY, dockW, DOCK_RUNE_H);
+      } else {
+        const rfY = dockRuneBarY, rfH = DOCK_RUNE_BAR_H;
+        const rfPulse = 0.65 + Math.sin(_now * 0.004) * 0.35;
+        ctx.save();
+        if (stars > 0) { ctx.shadowColor = `rgba(160,110,240,${rfPulse * 0.45})`; ctx.shadowBlur = 6; }
+        drawFantasyPanel(dockX, rfY, dockW, rfH, 'rgba(16,8,36,0.96)', stars > 0 ? 0.45 : 0.2, 4);
+        ctx.shadowBlur = 0;
+        ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = stars > 0 ? `rgba(180,140,255,${0.65 + rfPulse * 0.35})` : '#504060';
+        ctx.fillText('✦ RUNE CARVER', dockX + 8, rfY + 10);
+        ctx.font = '7px monospace'; ctx.textAlign = 'right';
+        ctx.fillStyle = stars > 0 ? '#f0d040' : 'rgba(120,100,60,0.45)';
+        ctx.fillText(stars > 0 ? `${stars} ✦  [R]` : 'earn ✦', dockX + dockW - 6, rfY + 10);
+        ctx.textAlign = 'left';
+        ctx.restore();
+        runeForgeBtn = { x: dockX, y: rfY, w: dockW, h: rfH };
       }
     }
 
+    // March begins
+    {
+      const bX = dockX, bY = dockMarchY, bW = dockW, bH = DOCK_MARCH_H;
+      ctx.shadowColor = 'rgba(200,30,20,0.7)'; ctx.shadowBlur = 8;
+      drawFantasyPanel(bX, bY, bW, bH, 'rgba(140,18,18,0.97)', 0.88, 5);
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.6)'; ctx.shadowBlur = 6;
+      ctx.fillText('MARCH BEGINS', bX + bW / 2, bY + 15);
+      ctx.font = '7px monospace'; ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,200,180,0.65)';
+      ctx.fillText('Space', bX + bW / 2, bY + 27);
+      ctx.textAlign = 'left';
+      nextWaveBtn = { x: bX, y: bY, w: bW, h: bH };
+    }
+  } else if (!gameOver) {
+    // Active combat — speed control only (compact, bottom of panel)
+    const spX = px + 6, spY = panelBot - DOCK_CTRL_H - 4, spW = pw - 12, spH = DOCK_CTRL_H;
     const sp      = gameSpeed;
-    const _spIdle = waveState === 'active' && sp === 1;
-    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : _spIdle ? 'rgba(14,30,12,0.90)' : 'rgba(30,60,22,0.97)';
-    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : _spIdle ? 'rgba(40,90,38,0.45)' : 'rgba(80,200,80,0.80)';
-    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : _spIdle ? '#507050' : '#a0f080';
-    const nextSp  = sp >= 4 ? 1 : sp >= 2 ? 4 : 2;
-
-    ctx.save();
-    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5);
+    const spFill  = sp >= 4 ? 'rgba(200,55,18,0.97)' : sp >= 2 ? 'rgba(190,120,18,0.97)' : 'rgba(30,60,22,0.97)';
+    const spBord  = sp >= 4 ? 'rgba(255,110,50,0.95)' : sp >= 2 ? 'rgba(255,180,50,0.88)' : 'rgba(80,200,80,0.80)';
+    const triCol  = sp >= 4 ? '#ffb080' : sp >= 2 ? '#ffe090' : '#a0f080';
+    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 4);
     ctx.fillStyle = spFill; ctx.fill();
-    ctx.strokeStyle = spBord; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.shadowColor = spBord; ctx.shadowBlur = _spIdle ? 2 : 8;
-    ctx.beginPath(); ctx.roundRect(spX, spY, spW, spH, 5); ctx.stroke();
-    ctx.shadowBlur = 0; ctx.restore();
-
-    drawSpeedTriangles(spX + spW*0.38, spY + spH*0.42, sp===1?1:sp===2?2:4, triCol, 4.5);
-    ctx.font = 'bold 9px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'left';
-    ctx.fillText(`×${sp}`, spX + spW*0.60, spY + spH - 4);
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,140,80,0.55)'; ctx.textAlign = 'right';
-    ctx.fillText(`→ ×${nextSp}`, spX + spW - 4, spY + spH - 4);
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,120,60,0.70)'; ctx.textAlign = 'center';
-    ctx.fillText('[F] speed', spX + spW/2, spY + spH + 8);
+    ctx.strokeStyle = spBord; ctx.lineWidth = 1; ctx.stroke();
+    drawSpeedTriangles(spX + spW * 0.42, spY + spH * 0.52, sp === 1 ? 1 : sp === 2 ? 2 : 4, triCol, 3.5);
+    ctx.font = 'bold 8px monospace'; ctx.fillStyle = triCol; ctx.textAlign = 'center';
+    ctx.fillText(`×${sp}  [F]`, spX + spW / 2, spY + spH - 4);
     ctx.textAlign = 'left';
     speedBtns.push({ x: spX, y: spY, w: spW, h: spH });
-  }
-
-  // ── RUNE FORGE (break/countdown only) ─────────────────────────────────────────
-  if (!gameOver && waveState !== 'active') {
-    const rfH = 34, rfY = panelBot - 116, rfX = px + 6, rfW = pw - 12;
-    const rfActive = showRuneMenu, hasStars = stars > 0;
-    const rfPulse  = hasStars ? 0.65 + Math.sin(_now * 0.004) * 0.35 : 0;
-    ctx.globalAlpha = hasStars ? 1 : 0.38;
-    ctx.save();
-    if (hasStars && !rfActive) { ctx.shadowColor = `rgba(180,120,255,${rfPulse*0.6})`; ctx.shadowBlur = 12; }
-    drawFantasyPanel(rfX, rfY, rfW, rfH, rfActive ? 'rgba(28,14,52,0.98)' : 'rgba(16,8,36,0.96)',
-      rfActive ? 0.88 : (hasStars ? 0.55 : 0.2), 6);
-    ctx.shadowBlur = 0;
-    const iX = rfX+14, iY = rfY+rfH/2;
-    ctx.fillStyle = rfActive ? '#c0a0ff' : (hasStars ? `rgba(160,120,220,${0.5+rfPulse*0.5})` : '#403050');
-    ctx.fillRect(iX-6, iY-4, 12, 4); ctx.fillRect(iX-4, iY, 8, 4);
-    ctx.save(); ctx.translate(iX+1, iY-8); ctx.rotate(-0.5);
-    ctx.fillStyle = rfActive ? '#e0d0ff' : (hasStars ? `rgba(200,180,255,${0.4+rfPulse*0.5})` : '#503860');
-    ctx.fillRect(-1,0,2,7); ctx.fillRect(-3,-3,6,3); ctx.restore();
-    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left';
-    ctx.fillStyle = rfActive ? '#d0b0ff' : (hasStars ? `rgba(180,140,255,${0.6+rfPulse*0.4})` : '#504060');
-    ctx.shadowColor = rfActive ? 'rgba(180,120,255,0.7)' : 'rgba(140,80,220,0.4)';
-    ctx.shadowBlur  = rfActive ? 10 : (hasStars ? rfPulse*8 : 0);
-    ctx.fillText('RUNE FORGE', rfX+28, rfY+14);
-    ctx.shadowBlur = 0;
-    ctx.font = '8px monospace';
-    ctx.fillStyle = hasStars ? '#f0d040' : 'rgba(160,130,60,0.4)';
-    ctx.fillText(hasStars ? `✦ ${stars} stars  [R]` : 'earn ✦ via flawless waves', rfX+28, rfY+26);
-    ctx.restore(); ctx.globalAlpha = 1;
-    runeForgeBtn = hasStars ? { x: rfX, y: rfY, w: rfW, h: rfH } : null;
-  } else {
-    runeForgeBtn = null;
-  }
-
-  // ── AUTO NEXT (break/countdown only) ──────────────────────────────────────────
-  if (!gameOver && waveState !== 'active') {
-    const aH = 24, aY = panelBot - 76, aX = px + 6, aW = pw - 12;
-    drawFantasyPanel(aX, aY, aW, aH, autoNextWave ? 'rgba(18,52,20,0.98)' : 'rgba(18,18,28,0.94)',
-      autoNextWave ? 0.88 : 0.24, 5);
-    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillStyle = autoNextWave ? '#8af090' : 'rgba(210,210,240,0.75)';
-    ctx.fillText(autoNextWave ? 'AUTO NEXT: ON' : 'AUTO NEXT: OFF', aX + aW/2, aY + 14);
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(170,140,80,0.65)';
-    ctx.fillText('[A] toggle', aX + aW/2, aY + 22);
-    ctx.textAlign = 'left';
-    autoNextBtn = { x: aX, y: aY, w: aW, h: aH };
-  } else {
     autoNextBtn = null;
-  }
-
-  // ── NEXT WAVE ────────────────────────────────────────────────────────────────
-  if (!gameOver && waveState !== 'active') {
-    const bH = 44, bY = panelBot - bH - 4, bX = px + 6, bW = pw - 12;
-    ctx.shadowColor = 'rgba(200,30,20,0.8)'; ctx.shadowBlur = 12;
-    drawFantasyPanel(bX, bY, bW, bH, 'rgba(140,18,18,0.97)', 0.92, 6);
-    ctx.shadowBlur = 0;
-    ctx.textAlign = 'center'; ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = '#f0e8d0'; ctx.shadowColor = 'rgba(255,100,80,0.7)'; ctx.shadowBlur = 8;
-    ctx.fillText('MARCH BEGINS', bX + bW/2, bY + 17);
-    ctx.font = '11px monospace'; ctx.shadowBlur = 0;
-    ctx.fillStyle = autoNextWave ? '#60ee80' : 'rgba(255,200,180,0.8)';
-    ctx.fillText(autoNextWave ? 'AUTO ENGAGED' : '[Space]', bX + bW/2, bY + 32);
-    ctx.textAlign = 'left';
-    nextWaveBtn = { x: bX, y: bY, w: bW, h: bH };
+    runeForgeBtn = null;
+    nextWaveBtn = null;
   } else {
+    speedBtns = [];
+    autoNextBtn = null;
+    runeForgeBtn = null;
     nextWaveBtn = null;
   }
 
   ctx.restore();
+}
+
+function drawSpeedTriangles(cx, cy, n, color, size = 5) {
+  const gap = 3.5, total = n * size + (n - 1) * gap;
+  let tx = cx - total / 2;
+  ctx.fillStyle = color;
+  for (let i = 0; i < n; i++) {
+    let ox = tx, oy = cy;
+    if (n === 4) {
+      const col = i % 2, rr = Math.floor(i / 2), g2 = 3, t2 = 2 * size + g2;
+      ox = cx - t2 / 2 + col * (size + g2); oy = cy + (rr === 0 ? -3.5 : 3.5);
+    }
+    ctx.beginPath();
+    ctx.moveTo(ox, oy - size * 0.6); ctx.lineTo(ox + size, oy); ctx.lineTo(ox, oy + size * 0.6);
+    ctx.closePath(); ctx.fill();
+    if (n !== 4) tx += size + gap;
+  }
+}
+
+/** Inline rune shop — embedded in the right panel between waves. */
+function drawRuneCartridge(rx, ry, rw, rh) {
+  runeMenuBtns = [];
+  const _now = performance.now();
+
+  drawFantasyPanel(rx, ry, rw, rh, 'rgba(12,6,28,0.98)', 0.72, 5);
+
+  // Header strip
+  ctx.fillStyle = 'rgba(36,18,58,0.95)';
+  ctx.beginPath(); ctx.roundRect(rx, ry, rw, 14, [5, 5, 0, 0]); ctx.fill();
+  ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#c8a8ff';
+  ctx.fillText('RUNE CARVER', rx + 6, ry + 10);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#f0d040';
+  ctx.fillText(`✦ ${stars}`, rx + rw - 18, ry + 10);
+  // Close toggle
+  const clX = rx + rw - 14, clY = ry + 2, clW = 12, clH = 11;
+  ctx.fillStyle = 'rgba(60,30,50,0.7)';
+  ctx.beginPath(); ctx.roundRect(clX, clY, clW, clH, 2); ctx.fill();
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,140,180,0.75)'; ctx.textAlign = 'center';
+  ctx.fillText('×', clX + clW / 2, clY + 9);
+  runeMenuBtns.push({ x: clX, y: clY, w: clW, h: clH, close: true });
+  ctx.textAlign = 'left';
+
+  const ICON_KEYS = { ironEdge: 'runeIronEdge', swiftStrike: 'runeSwiftStrike', frostRune: 'runeFrost', battleHymn: 'runeBattleHymn', valhalla: 'runeValhalla' };
+  const cols = 2;
+  const cellW = Math.floor((rw - 8) / cols);
+  const cellH = 20;
+  const gridY = ry + 16;
+
+  RUNE_DEFS.forEach((def, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const cx  = rx + 4 + col * cellW;
+    const cy  = gridY + row * cellH;
+    const owned    = runeInventory[def.id] ?? 0;
+    const equipped = runeEquippedCount(def.id);
+    const maxed    = owned >= def.maxOwned;
+    const canBuy   = !maxed && stars >= def.cost;
+
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent';
+    ctx.fillRect(cx, cy, cellW - 2, cellH - 1);
+
+    const iconKey = ICON_KEYS[def.id];
+    const sp      = SPRITES[iconKey];
+    const ix = cx + 10, iy = cy + cellH / 2;
+    if (sp?.img?.complete) {
+      ctx.save();
+      ctx.globalAlpha = owned > 0 ? 1 : 0.4;
+      ctx.drawImage(sp.img, ix - 7, iy - 7, 14, 14);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = owned > 0 ? def.color : 'rgba(60,45,30,0.5)';
+      ctx.beginPath(); ctx.arc(ix, iy, 5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.font = 'bold 6.5px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = owned > 0 ? '#e0c890' : 'rgba(140,110,70,0.55)';
+    const shortLbl = def.label.split(' ')[0];
+    ctx.fillText(shortLbl, cx + 18, cy + 8);
+
+    // Owned pips
+    for (let p = 0; p < def.maxOwned; p++) {
+      const px2 = cx + 18 + p * 7;
+      ctx.beginPath(); ctx.arc(px2, cy + 15, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = p < owned ? def.color : 'rgba(40,28,18,0.6)';
+      ctx.fill();
+      if (p < equipped) {
+        ctx.beginPath(); ctx.arc(px2, cy + 15, 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
+      }
+    }
+
+    // Buy chip
+    const bw = 28, bh = 13;
+    const bx = cx + cellW - bw - 6;
+    const by = cy + (cellH - bh) / 2;
+    if (!maxed) {
+      const pulse = canBuy ? 0.7 + Math.sin(_now * 0.006 + i) * 0.3 : 0;
+      drawFantasyPanel(bx, by, bw, bh,
+        canBuy ? `rgba(14,36,8,${0.85 + pulse * 0.15})` : 'rgba(18,10,30,0.9)',
+        canBuy ? 0.65 : 0.2, 3);
+      ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = canBuy ? '#88ee60' : 'rgba(140,100,180,0.45)';
+      ctx.fillText(`✦${def.cost}`, bx + bw / 2, by + 9);
+      runeMenuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: i });
+    } else {
+      ctx.font = '6px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(100,80,50,0.45)';
+      ctx.fillText('FULL', bx + bw / 2, cy + 12);
+    }
+    ctx.textAlign = 'left';
+  });
+
+  ctx.font = '6px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(100,80,55,0.50)';
+  ctx.fillText('equip on tower panel  ·  R to close', rx + rw / 2, ry + rh - 3);
+  ctx.textAlign = 'left';
 }
 
 function drawTopBar() {
@@ -4695,17 +5109,14 @@ function drawTopBar() {
   const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
   const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
 
-  // Map name is the primary identity; wave label demoted to small subtitle
-  const _centerName = _currentMapName || 'NORTHERN SHIELD';
+  // Center: wave progress primary; map name only as subtitle (avoids duplicating left panel)
   ctx.font        = `bold ${wIsBoss ? 13 : 12}px monospace`;
   ctx.fillStyle   = wColor;
   ctx.shadowColor = wGlow;
-  ctx.shadowBlur  = wIsBoss ? 10 : 6;
+  ctx.shadowBlur  = wIsBoss ? 8 : 4;
   ctx.textAlign   = 'center';
-  ctx.fillText(_centerName, midX - 30, cy - 3);
+  ctx.fillText(wLabel, midX - 30, cy - 3);
   ctx.shadowBlur  = 0;
-  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,110,70,0.45)';
-  ctx.fillText(wLabel, midX - 30, cy + 8);
 
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -4752,7 +5163,16 @@ function drawTopBar() {
 
   ctx.fillStyle = '#b0d0f0';
   ctx.fillText(`⚔ ${slain}`, rx, cy);
-  rx -= ctx.measureText(`★ ${slain}`).width + 18;
+  rx -= ctx.measureText(`⚔ ${slain}`).width + 18;
+
+  // Reserve gold indicator
+  if (goldReserve > 0) {
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,80,0.55)';
+    const _resStr = `◈${goldReserve}g`;
+    ctx.fillText(_resStr, rx, cy);
+    rx -= ctx.measureText(_resStr).width + 14;
+    ctx.font = 'bold 11px monospace';
+  }
 
   // Stars (rune currency)
   if (stars > 0 || waveState !== 'active') {
@@ -4813,20 +5233,12 @@ function drawTopBar() {
 }
 
 function drawBottomBuildBar() {
+  drawDefenderDossier();
+
   const INFO_H     = 22;
   const PORTRAIT_H = BUILD_BTN.h - INFO_H;
 
-  const spriteKeys = {
-    [TOWER_TYPES.BERSERK]:  'berserker',
-    [TOWER_TYPES.VALKYRIE]: 'valkyrie',
-    [TOWER_TYPES.MILITARY]: 'archer',
-    [TOWER_TYPES.CATAPULT]: 'catapult',
-    [TOWER_TYPES.BLONDIE]:  'blondie',
-    [TOWER_TYPES.PILTORN]:  'piltorn',
-    [TOWER_TYPES.HYDDA]:    'hydda',
-    [TOWER_TYPES.ISJATTEN]: 'isjatten',
-    [TOWER_TYPES.DRAKSHIP]: 'drakship',
-  };
+  const spriteKeys = DEFENDER_SPRITE_KEYS;
 
   const buttons     = getBuildButtons();
   const buildPanelX = GRID_LEFT + 2;
@@ -4843,11 +5255,28 @@ function drawBottomBuildBar() {
   ctx.fillText('WARBAND', buildPanelX + 8, buildPanelY + 11);
   ctx.restore();
 
+  const anyTowerSelected = buildMode === CELL.TOWER && selectedTowerType;
+
   for (const btn of buttons) {
-    const isSelected = btn.mode === CELL.WALL
+    const isBuildSelected = btn.mode === CELL.WALL
       ? buildMode === CELL.WALL
       : buildMode === CELL.TOWER && selectedTowerType === btn.id;
+    const isFieldMatch = btn.mode === CELL.TOWER && selectedTower?.type === btn.id;
+    const isSelected   = isBuildSelected || isFieldMatch;
     const affordable = gold >= btn.cost;
+
+    const btnCx = btn.x + btn.width / 2;
+    const btnCy = btn.y + btn.height / 2;
+    ctx.save();
+    if (isSelected) {
+      ctx.translate(btnCx, btnCy);
+      ctx.scale(1.05, 1.05);
+      ctx.translate(-btnCx, -btnCy);
+    } else if (anyTowerSelected && btn.mode === CELL.TOWER) {
+      ctx.globalAlpha = 0.62;
+    } else if (!affordable && btn.mode === CELL.TOWER) {
+      ctx.globalAlpha = 0.48;
+    }
 
     const isWall      = btn.mode === CELL.WALL;
     const fillStyle   = isSelected
@@ -4855,6 +5284,25 @@ function drawBottomBuildBar() {
       : (isWall ? 'rgba(8,14,22,0.92)'  : 'rgba(18,9,28,0.92)');
     const borderAlpha = isSelected ? 0.90 : 0.35;
     drawFantasyPanel(btn.x, btn.y, btn.width, btn.height, fillStyle, borderAlpha, 6);
+
+    if (isSelected && btn.glowRgb) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(${btn.glowRgb},0.95)`;
+      ctx.lineWidth   = 2;
+      ctx.shadowColor = `rgba(${btn.glowRgb},0.55)`;
+      ctx.shadowBlur  = isBuildSelected ? 8 : 4;
+      ctx.beginPath(); ctx.roundRect(btn.x + 1, btn.y + 1, btn.width - 2, btn.height - 2, 5); ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (isBuildSelected) {
+        ctx.fillStyle = `rgba(${btn.glowRgb},0.95)`;
+        ctx.beginPath();
+        ctx.moveTo(btn.x + btn.width - 10, btn.y + 4);
+        ctx.lineTo(btn.x + btn.width - 4, btn.y + 4);
+        ctx.lineTo(btn.x + btn.width - 7, btn.y + 9);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
 
     // Category color stripe — 2px across top of card
     const _catColor = btn.category === 'warriors' ? 'rgba(200,70,30,0.60)'
@@ -4888,6 +5336,16 @@ function drawBottomBuildBar() {
     const ppy = btn.y + 4;
     const ppw = btn.width - 8;
     const pph = PORTRAIT_H - 4;
+    const portraitCx = ppx + ppw / 2;
+    const portraitCy = ppy + pph / 2;
+    const portraitCore = Math.min(ppw, pph) * 0.34;
+    const glowStrength = affordable ? 1 : 0.45;
+
+    if (btn.mode === CELL.TOWER && btn.glowRgb) {
+      drawDefenderPortraitGlow(portraitCx, portraitCy, btn.glowRgb, portraitCore, glowStrength);
+    } else if (btn.mode === CELL.WALL) {
+      drawDefenderPortraitGlow(portraitCx, portraitCy, '55,95,140', portraitCore, glowStrength * 0.7);
+    }
 
     const sprKey = spriteKeys[btn.id];
     const sp     = sprKey ? SPRITES[sprKey] : null;
@@ -4969,15 +5427,31 @@ function drawBottomBuildBar() {
     // Row 1: veteran name if roster member available, otherwise class name
     const _vetCard = btn.mode === CELL.TOWER ? _roster?.defenders.find(d => d.type === btn.id && !d.deployed) : null;
     const _cardLabel = (_vetCard?.name) ? _vetCard.name : btn.label;
-    ctx.font      = `bold ${labelSz}px monospace`;
-    ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#f0e8d0' : '#c0b090';
-    ctx.textAlign = 'left';
-    ctx.fillText(_cardLabel, btn.x + 4, infoY + 9);
+    if (btn.mode === CELL.TOWER && btn.glowRgb) {
+      ctx.font = `bold ${labelSz}px monospace`;
+      drawDefenderName(_cardLabel, btn.x + 4, infoY + 9, btn.id, affordable ? 1 : 0.42);
+    } else {
+      ctx.font      = `bold ${labelSz}px monospace`;
+      ctx.fillStyle = !affordable ? '#3a3020' : isSelected ? '#f0e8d0' : '#c0b090';
+      ctx.textAlign = 'left';
+      ctx.fillText(_cardLabel, btn.x + 4, infoY + 9);
+    }
 
     // Row 2: ability label (left) + cost (right)
     const abilityLabel = ABILITY_LABELS[btn.id];
     ctx.font = `${labelSz}px monospace`;
-    if (abilityLabel) {
+    if (abilityLabel && btn.glowRgb) {
+      const chipW = ctx.measureText(abilityLabel).width + 6;
+      const chipX = btn.x + 4;
+      const chipY = infoY + 12;
+      ctx.fillStyle = `rgba(${btn.glowRgb},${affordable ? (isSelected ? 0.35 : 0.22) : 0.10})`;
+      ctx.beginPath(); ctx.roundRect(chipX, chipY, chipW, 9, 2); ctx.fill();
+      ctx.fillStyle = affordable
+        ? `rgba(${btn.glowRgb},${isSelected ? 1 : 0.78})`
+        : 'rgba(60,45,30,0.45)';
+      ctx.textAlign = 'left';
+      ctx.fillText(abilityLabel, chipX + 3, chipY + 7);
+    } else if (abilityLabel) {
       ctx.fillStyle = !affordable ? '#2a2010' : isSelected ? 'rgba(160,200,255,0.9)' : 'rgba(100,140,190,0.6)';
       ctx.textAlign = 'left';
       ctx.fillText(abilityLabel, btn.x + 4, infoY + 20);
@@ -5017,6 +5491,7 @@ function drawBottomBuildBar() {
     }
 
     ctx.textAlign = 'left';
+    ctx.restore();
   }
 
   // Red pulse overlay when player can't afford any tower
@@ -5279,8 +5754,7 @@ function drawTowerPanel(tower) {
     const careerRoman = tower._careerLevel > 0 ? `  [${ROMAN[tower._careerLevel] ?? tower._careerLevel}]` : '';
     ctx.textAlign = 'left';
     ctx.font      = '10px monospace';
-    ctx.fillStyle = 'rgba(220,190,130,0.80)';
-    ctx.fillText(tower.name + careerRoman, px + 10, py + 28);
+    drawDefenderName(tower.name + careerRoman, px + 10, py + 28, tower, 0.92);
   }
 
   // Stats
@@ -5716,12 +6190,42 @@ function drawRuneForgeHint() {
   ctx.font        = 'bold 10px monospace';
   ctx.fillStyle   = '#d080ff';
   ctx.shadowColor = 'rgba(180,80,240,0.8)'; ctx.shadowBlur = 8;
-  ctx.fillText(`✦ ${stars} RUNES EARNED — Press R to open Rune Forge`, tx + tw / 2, ty + 15);
+  ctx.fillText(`✦ ${stars} RUNES — open Rune Carver in the right panel [R]`, tx + tw / 2, ty + 15);
   ctx.shadowBlur  = 0;
   ctx.font        = '9px monospace';
   ctx.fillStyle   = 'rgba(200,160,240,0.65)';
-  ctx.fillText('Arm your defenders between waves', tx + tw / 2, ty + 27);
+  ctx.fillText('Forge between waves, equip on defenders', tx + tw / 2, ty + 27);
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawLastStandBanner() {
+  if (gameOver || towers.length !== 1 || lives > 2) return;
+  const solo = towers[0];
+  if (!solo) return;
+  const def  = solo.defenderId ? _roster?.find(solo.defenderId) : null;
+  const trait = def?.trait ? (TRAIT_DEFS[def.trait]?.label ?? def.trait) : null;
+  const name  = solo.name ?? TOWER_DEFS[solo.type]?.label ?? solo.type;
+  const now   = performance.now();
+  const pulse = 0.72 + 0.28 * Math.sin(now / 340);
+  const bw = 180, bh = 28;
+  const cx  = GRID_LEFT + COLS * CELL_SIZE / 2;
+  const bx  = cx - bw / 2, by = GRID_TOP + ROWS * CELL_SIZE - bh - 6;
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = 'rgba(80,10,10,0.88)';
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(220,60,40,0.70)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#ff8060';
+  ctx.shadowColor = '#ff4020'; ctx.shadowBlur = 6;
+  ctx.fillText(`⚔  LONE STAND — ${name}`, cx, by + 12);
+  ctx.shadowBlur = 0;
+  if (trait) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,160,130,0.75)';
+    ctx.fillText(trait, cx, by + 23);
+  }
   ctx.restore();
 }
 
@@ -6007,26 +6511,31 @@ function drawEnemyIntroBanner() {
   if (!_enemyIntroBanner || _enemyIntroBanner.timer <= 0) return;
   _enemyIntroBanner.timer--;
   const { timer, maxTimer, label, hint } = _enemyIntroBanner;
-  const alpha = Math.min(1, (maxTimer - timer) / 20) * (timer < 40 ? timer / 40 : 1);
-  const bw = 230, bh = 34;
-  const bx = GRID_LEFT + 6;
-  const by = GRID_TOP + ROWS * CELL_SIZE - bh - 26;
+  // Fade in over 10 frames, fade out over last 40 frames
+  const fadeIn  = Math.min(1, (maxTimer - timer) / 10);
+  const fadeOut = timer < 40 ? timer / 40 : 1;
+  const alpha   = fadeIn * fadeOut;
+  // Slide in from top: offset decreases from -12 to 0 in first 10 frames
+  const slideY  = -(1 - fadeIn) * 12;
+  const bw = 240, bh = 36;
+  const gridCenterX = GRID_LEFT + COLS * CELL_SIZE / 2;
+  const bx = gridCenterX - bw / 2;
+  const by = GRID_TOP + 6 + slideY;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.fillStyle = 'rgba(4,8,20,0.95)';
+  ctx.fillStyle = 'rgba(4,8,22,0.97)';
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-  ctx.strokeStyle = 'rgba(60,120,200,0.55)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(60,120,200,0.60)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.stroke();
-  // Accent strip
-  ctx.fillStyle = 'rgba(60,120,200,0.70)';
+  ctx.fillStyle = 'rgba(60,120,200,0.75)';
   ctx.fillRect(bx, by, 3, bh);
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'center';
   ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#80b8ff';
-  ctx.shadowColor = '#4080ff'; ctx.shadowBlur = 6;
-  ctx.fillText(label, bx + 9, by + 13);
+  ctx.shadowColor = '#4080ff'; ctx.shadowBlur = 5;
+  ctx.fillText(label, gridCenterX, by + 14);
   ctx.shadowBlur = 0;
-  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,170,220,0.70)';
-  ctx.fillText(hint, bx + 9, by + 26);
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,170,220,0.72)';
+  ctx.fillText(hint, gridCenterX, by + 27);
   ctx.restore();
 }
 
@@ -6057,7 +6566,7 @@ function drawHelpOverlay() {
     ['SPC',         'Launch next wave'],
     ['P',           'Pause'],
     ['M',           'Mute sound'],
-    ['R',           'Rune Forge (between waves)'],
+    ['R',           'Rune Carver (right panel, between waves)'],
     ['F',           'Cycle speed ×1 → ×2 → ×4'],
     ['A',           'Toggle auto next wave'],
     ['G',           'Toggle grid lines'],
@@ -6191,183 +6700,6 @@ function drawRunePicker() {
   }
 }
 
-function drawRuneMenu() {
-  runeMenuBtns = [];
-  const W = BASE_W, H = BASE_H;
-  const menuW = 400, menuH = 340;
-  const mx = Math.round((W - menuW) / 2);
-  const my = Math.round((H - menuH) / 2);
-
-  // Dim backdrop with subtle vignette
-  ctx.fillStyle = 'rgba(0,0,0,0.78)';
-  ctx.fillRect(0, 0, W, H);
-
-  // Main panel
-  drawFantasyPanel(mx, my, menuW, menuH, 'rgba(8,4,20,0.99)', 0.88, 10);
-
-  // Decorative header band
-  ctx.save();
-  ctx.beginPath(); ctx.roundRect(mx, my, menuW, 48, [10, 10, 0, 0]);
-  ctx.fillStyle = 'rgba(28,14,52,0.98)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(160,100,240,0.35)'; ctx.lineWidth = 1; ctx.stroke();
-  // Horizontal rule below header
-  ctx.strokeStyle = 'rgba(180,120,255,0.25)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(mx + 8, my + 48); ctx.lineTo(mx + menuW - 8, my + 48); ctx.stroke();
-  ctx.restore();
-
-  // Forge icon — anvil + hammer (drawn, center-left of header)
-  const hicX = mx + 26, hicY = my + 24;
-  const forgePulse = 0.6 + Math.sin(performance.now() * 0.005) * 0.4;
-  ctx.save();
-  ctx.shadowColor = `rgba(180,120,255,${forgePulse * 0.7})`; ctx.shadowBlur = 10;
-  ctx.fillStyle   = `rgba(180,140,255,${0.5 + forgePulse * 0.4})`;
-  // Anvil body
-  ctx.fillRect(hicX - 9, hicY - 2, 18, 6);
-  ctx.fillRect(hicX - 6, hicY + 4,  12, 4);
-  // Hammer
-  ctx.save();
-  ctx.translate(hicX + 4, hicY - 8); ctx.rotate(-0.45);
-  ctx.fillRect(-1.5, 0, 3, 10);
-  ctx.fillRect(-4, -4, 8, 4);
-  ctx.restore();
-  ctx.shadowBlur = 0;
-  ctx.restore();
-
-  // Header title
-  ctx.textAlign   = 'center';
-  ctx.font        = 'bold 15px monospace';
-  ctx.fillStyle   = '#e0c8ff';
-  ctx.shadowColor = 'rgba(200,140,255,0.7)'; ctx.shadowBlur = 14;
-  ctx.fillText('RUNE FORGE', mx + menuW / 2, my + 30);
-  ctx.shadowBlur  = 0;
-  ctx.font        = '9px monospace';
-  ctx.fillStyle   = '#705070';
-  ctx.fillText(`Spend ✦ stars to forge permanent power runes`, mx + menuW / 2, my + 42);
-
-  // Star count badge (top-right of header)
-  const sbW = 52, sbH = 20, sbX = mx + menuW - sbW - 10, sbY = my + 14;
-  ctx.save();
-  ctx.fillStyle = 'rgba(240,200,30,0.12)';
-  ctx.beginPath(); ctx.roundRect(sbX, sbY, sbW, sbH, 4); ctx.fill();
-  ctx.strokeStyle = 'rgba(240,190,30,0.5)'; ctx.lineWidth = 1; ctx.stroke();
-  ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0d040'; ctx.textAlign = 'center';
-  ctx.shadowColor = 'rgba(240,200,30,0.6)'; ctx.shadowBlur = 6;
-  ctx.fillText(`✦ ${stars}`, sbX + sbW / 2, sbY + sbH / 2 + 4);
-  ctx.shadowBlur = 0; ctx.restore();
-
-  // Close button [×]
-  const clW = 20, clH = 20, clX = mx + menuW - clW - 6, clY = my + 6;
-  ctx.save();
-  ctx.fillStyle = 'rgba(80,40,40,0.6)';
-  ctx.beginPath(); ctx.roundRect(clX, clY, clW, clH, 4); ctx.fill();
-  ctx.font = 'bold 12px monospace'; ctx.fillStyle = 'rgba(200,120,100,0.7)'; ctx.textAlign = 'center';
-  ctx.fillText('×', clX + clW / 2, clY + clH / 2 + 4);
-  ctx.restore();
-
-  // ── Rune rows ──────────────────────────────────────────────────────────────
-  const rowH = 52, rowStart = my + 56;
-
-  RUNE_DEFS.forEach((def, i) => {
-    const ry       = rowStart + i * rowH;
-    const owned    = runeInventory[def.id] ?? 0;
-    const equipped = runeEquippedCount(def.id);
-    const maxed    = owned >= def.maxOwned;
-    const canBuy   = !maxed && stars >= def.cost;
-
-    // Row background (alternating)
-    if (i % 2 === 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.025)';
-      ctx.beginPath(); ctx.roundRect(mx + 8, ry + 2, menuW - 16, rowH - 4, 4); ctx.fill();
-    }
-
-    // Rune icon sprite (if loaded) or colored circle fallback
-    const ICON_KEYS = { ironEdge: 'runeIronEdge', swiftStrike: 'runeSwiftStrike', frostRune: 'runeFrost', battleHymn: 'runeBattleHymn', valhalla: 'runeValhalla' };
-    const iconKey = ICON_KEYS[def.id];
-    const sp      = SPRITES[iconKey];
-    const iconX   = mx + 22, iconY = ry + rowH / 2 - 1;
-    if (sp) {
-      ctx.save();
-      ctx.shadowColor = def.color; ctx.shadowBlur = owned > 0 ? 8 : 2;
-      ctx.globalAlpha = owned > 0 ? 1 : 0.35;
-      ctx.drawImage(sp.img, iconX - 12, iconY - 12, 24, 24);
-      ctx.restore();
-    } else {
-      ctx.save();
-      ctx.shadowColor = def.color; ctx.shadowBlur = 6;
-      ctx.fillStyle   = owned > 0 ? def.color : 'rgba(80,60,30,0.4)';
-      ctx.beginPath(); ctx.arc(iconX, iconY, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.font = '11px monospace'; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.textAlign = 'center';
-      ctx.fillText(def.symbol, iconX, iconY + 4);
-      ctx.shadowBlur = 0; ctx.restore();
-    }
-
-    // Rune name
-    ctx.textAlign = 'left';
-    ctx.font      = `bold 10px monospace`;
-    ctx.fillStyle = owned > 0 ? '#e8d0a0' : 'rgba(180,140,80,0.5)';
-    ctx.fillText(def.label, mx + 40, ry + 16);
-
-    // Description
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = owned > 0 ? '#807868' : 'rgba(100,80,50,0.5)';
-    ctx.fillText(def.desc, mx + 40, ry + 27);
-
-    // Owned pip track
-    const pipStartX = mx + 40;
-    for (let p = 0; p < def.maxOwned; p++) {
-      const px2 = pipStartX + p * 14;
-      const owned_pip = p < owned;
-      const equipped_pip = p < equipped;
-      ctx.beginPath(); ctx.arc(px2, ry + 40, 5, 0, Math.PI * 2);
-      ctx.fillStyle = owned_pip ? def.color : 'rgba(60,40,20,0.6)';
-      ctx.fill();
-      if (equipped_pip) {
-        ctx.beginPath(); ctx.arc(px2, ry + 40, 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
-      }
-      if (owned_pip && !equipped_pip) {
-        // unequipped owned — subtle ring to signal it's free
-        ctx.beginPath(); ctx.arc(px2, ry + 40, 5, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 0.8; ctx.stroke();
-      }
-    }
-    if (owned > 0) {
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,70,0.65)'; ctx.textAlign = 'left';
-      ctx.fillText(`${equipped} equipped / ${owned} owned`, pipStartX + def.maxOwned * 14 + 6, ry + 43);
-    }
-
-    // Buy button
-    const bw = 60, bh = 26;
-    const bx = mx + menuW - bw - 12;
-    const by = ry + (rowH - bh) / 2;
-    const btnFill = maxed ? 'rgba(30,20,10,0.9)'
-                  : canBuy ? 'rgba(14,36,8,0.97)' : 'rgba(18,10,30,0.9)';
-    const btnBorder = maxed ? 0.15 : canBuy ? 0.75 : 0.22;
-    ctx.save();
-    if (canBuy) {
-      ctx.shadowColor = 'rgba(80,220,60,0.4)'; ctx.shadowBlur = 8;
-    }
-    drawFantasyPanel(bx, by, bw, bh, btnFill, btnBorder, 5);
-    ctx.shadowBlur = 0;
-    ctx.textAlign  = 'center';
-    ctx.font       = 'bold 10px monospace';
-    ctx.fillStyle  = maxed ? '#403828' : canBuy ? '#88ee60' : 'rgba(160,110,200,0.45)';
-    if (!maxed) {
-      ctx.shadowColor = canBuy ? 'rgba(80,220,60,0.5)' : 'none'; ctx.shadowBlur = canBuy ? 6 : 0;
-    }
-    ctx.fillText(maxed ? 'FULL' : `✦ ${def.cost}`, bx + bw / 2, by + bh / 2 + 4);
-    ctx.shadowBlur = 0;
-    ctx.restore();
-
-    if (!maxed) runeMenuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: i });
-  });
-
-  // Footer hint
-  ctx.textAlign = 'center'; ctx.font = '9px monospace';
-  ctx.fillStyle = 'rgba(90,65,40,0.6)';
-  ctx.fillText('Equip runes on towers by selecting a tower  •  Esc / R to close', mx + menuW / 2, my + menuH - 10);
-}
-
 // ── Chronicle overlay — scrollable full-screen battle log ────────────────────
 
 function drawChronicleOverlay() {
@@ -6423,6 +6755,10 @@ function drawChronicleOverlay() {
     ctx.fillStyle = isActive ? '#e8c040' : 'rgba(140,120,70,0.55)';
     ctx.textAlign = 'center';
     ctx.fillText(lbl, chipX + cw / 2, chipY + 10);
+    if (!isActive) {
+      ctx.strokeStyle = 'rgba(140,120,70,0.30)'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(chipX + 5, chipY + 11); ctx.lineTo(chipX + cw - 5, chipY + 11); ctx.stroke();
+    }
     _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: null });
     chipX += cw + CHIP_GAP;
   }
@@ -6439,6 +6775,10 @@ function drawChronicleOverlay() {
     ctx.fillStyle = isActive ? '#c0a0ff' : 'rgba(140,120,70,0.55)';
     ctx.textAlign = 'center';
     ctx.fillText(lbl, chipX + cw / 2, chipY + 10);
+    if (!isActive) {
+      ctx.strokeStyle = 'rgba(140,120,70,0.30)'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(chipX + 5, chipY + 11); ctx.lineTo(chipX + cw - 5, chipY + 11); ctx.stroke();
+    }
     _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: def.id });
     chipX += cw + CHIP_GAP;
   }
@@ -6498,31 +6838,56 @@ function drawChronicleOverlay() {
     totalH += entryH;
   }
 
-  // ── Hall of the Honored ───────────────────────────────────────────────────
-  const allHall = [
-    ...hallH.map(e => ({ ...e, honored: true })),
-    ...hallF.map(e => ({ ...e, honored: false })),
-  ];
-  if (allHall.length > 0) {
-    // Section separator + title
+  // ── Hall of the Honored (retired champions) ──────────────────────────────
+  if (hallH.length > 0) {
     if (y + 30 > listTop && y < listTop + listH) {
-      ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.8;
+      ctx.strokeStyle = 'rgba(128,168,112,0.30)'; ctx.lineWidth = 0.8;
       ctx.beginPath(); ctx.moveTo(PAD + 4, y + 8); ctx.lineTo(W - PAD - 4, y + 8); ctx.stroke();
-      ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,170,80,0.55)';
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#80a870';
       ctx.textAlign = 'center';
       ctx.fillText('HALL OF THE HONORED', W / 2, y + 20);
       ctx.textAlign = 'left';
     }
-    y      += 28;
-    totalH += 28;
-
-    for (const entry of allHall) {
+    y += 28; totalH += 28;
+    for (const entry of hallH) {
       const titlesStr = entry.titles?.length ? entry.titles.slice(0,2).map(id => TITLE_DEFS[id]?.label ?? id).join(' · ') : '';
       const entryH = 36;
-
       if (y + entryH > listTop && y < listTop + listH) {
-        const entryColor = entry.honored ? '#c0a0ff' : '#c8b060';
-        ctx.font = 'bold 8px monospace'; ctx.fillStyle = entryColor; ctx.textAlign = 'left';
+        ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#c0a0ff'; ctx.textAlign = 'left';
+        ctx.fillText(`${entry.name}  ·  ${entry.rankLabel}  ·  ${entry.battlesPlayed ?? 0} battles  ·  ${entry.careerKills ?? 0}K`, PAD + 4, y + 10);
+        if (titlesStr) {
+          ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,160,100,0.50)';
+          ctx.fillText(`✦ ${titlesStr}`, PAD + 4, y + 21);
+        }
+        const _epitaphY = titlesStr ? 32 : 23;
+        if (entry.legacyNote) {
+          ctx.font = '7px monospace'; ctx.fillStyle = '#a8d080';
+          ctx.fillText(`⬧ ${entry.legacyNote}`, PAD + 4, y + _epitaphY);
+        } else if (entry.epitaph) {
+          ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(190,165,115,0.60)';
+          ctx.fillText(`"${entry.epitaph}"`, PAD + 4, y + _epitaphY);
+        }
+      }
+      y += entryH; totalH += entryH;
+    }
+  }
+
+  // ── Hall of the Fallen (dismissed veterans) ───────────────────────────────
+  if (hallF.length > 0) {
+    if (y + 30 > listTop && y < listTop + listH) {
+      ctx.strokeStyle = 'rgba(160,80,80,0.30)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(PAD + 4, y + 8); ctx.lineTo(W - PAD - 4, y + 8); ctx.stroke();
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#a05050';
+      ctx.textAlign = 'center';
+      ctx.fillText('HALL OF THE FALLEN', W / 2, y + 20);
+      ctx.textAlign = 'left';
+    }
+    y += 28; totalH += 28;
+    for (const entry of hallF) {
+      const titlesStr = entry.titles?.length ? entry.titles.slice(0,2).map(id => TITLE_DEFS[id]?.label ?? id).join(' · ') : '';
+      const entryH = 36;
+      if (y + entryH > listTop && y < listTop + listH) {
+        ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#c8b060'; ctx.textAlign = 'left';
         ctx.fillText(`${entry.name}  ·  ${entry.rankLabel}  ·  ${entry.battlesPlayed ?? 0} battles  ·  ${entry.careerKills ?? 0}K`, PAD + 4, y + 10);
         if (titlesStr) {
           ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,160,100,0.50)';
@@ -6533,8 +6898,7 @@ function drawChronicleOverlay() {
           ctx.fillText(`"${entry.epitaph}"`, PAD + 4, y + (titlesStr ? 32 : 23));
         }
       }
-      y      += entryH;
-      totalH += entryH;
+      y += entryH; totalH += entryH;
     }
   }
 
@@ -6545,8 +6909,8 @@ function drawChronicleOverlay() {
 }
 
 // ── Defender biography overlay ────────────────────────────────────────────────
-function drawDefenderBioOverlay(defenderId) {
-  const def = _roster?.find(defenderId);
+function drawDefenderBioOverlay(bioState) {
+  const def = _roster?.find(bioState.defenderId);
   if (!def) { _showDefenderBio = null; return; }
 
   const W = BASE_W, H = BASE_H;
@@ -6573,14 +6937,30 @@ function drawDefenderBioOverlay(defenderId) {
   ctx.font = '9px monospace'; ctx.fillStyle = rank.color ?? 'rgba(200,170,80,0.70)';
   ctx.fillText(`${rank.label}  ·  ${clsLbl}  ·  ${def.battlesPlayed} battles  ·  ${def.careerKills}K`, W / 2, PAD + 30);
 
-  ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(PAD, PAD + 38); ctx.lineTo(W - PAD, PAD + 38); ctx.stroke();
+  // Next rank requirements
+  const _rankIdx = VETERAN_RANKS.findIndex(r => r.id === rank.id);
+  if (_rankIdx > 0) {
+    const _nextRank = VETERAN_RANKS[_rankIdx - 1];
+    const _gaps = [];
+    if (def.careerLevel < _nextRank.minLevel) _gaps.push(`Lv${_nextRank.minLevel}`);
+    if ((def.battlesPlayed ?? 0) < _nextRank.minBattles) _gaps.push(`${_nextRank.minBattles}B`);
+    if ((def.careerKills ?? 0) < _nextRank.minKills) _gaps.push(`${_nextRank.minKills}K`);
+    if ((def.titles?.length ?? 0) < _nextRank.minTitles) _gaps.push(`${_nextRank.minTitles} title${_nextRank.minTitles > 1 ? 's' : ''}`);
+    if (_gaps.length > 0) {
+      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(${glow},0.35)`;
+      ctx.fillText(`→ ${_nextRank.label}: needs ${_gaps.join(', ')}`, W / 2, PAD + 40);
+    }
+  }
 
-  // Bio prose
-  const bioText  = generateBio(def, _campaignState?.chronicle, clsLbl);
+  ctx.strokeStyle = 'rgba(180,140,60,0.30)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(PAD, PAD + 48); ctx.lineTo(W - PAD, PAD + 48); ctx.stroke();
+
+  // Bio prose (cached — generateBio is expensive, only run once per open)
+  if (!bioState.bioText) bioState.bioText = generateBio(def, _campaignState?.chronicle, clsLbl);
+  const bioText  = bioState.bioText;
   ctx.font = '8px monospace';
   const bioLines = wrapText(ctx, bioText, CW - 8);
-  let bioY = PAD + 52;
+  let bioY = PAD + 62;
   ctx.fillStyle = 'rgba(190,165,115,0.80)'; ctx.textAlign = 'left';
   for (const line of bioLines) { ctx.fillText(line, PAD + 4, bioY); bioY += 11; }
 
@@ -6602,8 +6982,9 @@ function drawDefenderBioOverlay(defenderId) {
   // Bonds
   const defBonds = (_campaignState?.bonds ?? []).filter(b => b.defenderIds.includes(def.defenderId));
   if (defBonds.length) {
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)';
+    ctx.font = 'italic 8px monospace'; ctx.fillStyle = '#c0b080';
     ctx.fillText(`Bonds: ${defBonds.map(b => b.name).join(', ')}`, PAD + 4, bioY);
+    ctx.font = '8px monospace';
     bioY += 13;
   }
 
@@ -6633,8 +7014,8 @@ function drawDefenderBioOverlay(defenderId) {
   ctx.fillText(`"${epitaph}"`, W / 2, bioY);
 
   // Footer
-  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.35)';
-  ctx.fillText('CLICK OR ESC TO CLOSE', W / 2, H - 8);
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.50)';
+  ctx.fillText('[ESC to close]', W / 2, H - 8);
 
   ctx.restore();
 }
@@ -6645,7 +7026,13 @@ function drawRetirementCeremony(def) {
   const PW = 320, PH = 220;
   const px = (W - PW) / 2, py = (H - PH) / 2;
 
+  const fadeAlpha = _retireCeremonyFade > 0
+    ? Math.min(1, (30 - _retireCeremonyFade) / 18)
+    : 1;
+  if (_retireCeremonyFade > 0) _retireCeremonyFade--;
+
   ctx.save();
+  ctx.globalAlpha = fadeAlpha;
   ctx.fillStyle = 'rgba(4,2,12,0.85)';
   ctx.fillRect(0, 0, W, H);
 
@@ -6678,7 +7065,8 @@ function drawRetirementCeremony(def) {
   for (const el of eLines) { ctx.fillText(el, W / 2, ey); ey += 10; }
 
   // Legacy bonus note
-  const hasLegacy = (_campaignState?.legacyBonuses ?? {})[def.type];
+  const _legacyArr = (_campaignState?.legacyBonuses ?? {})[def.type];
+  const hasLegacy = Array.isArray(_legacyArr) ? _legacyArr.length >= 3 : !!_legacyArr;
   if (!hasLegacy) {
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
     ctx.fillText(`The next ${clsLbl} recruit carries ${def.name}'s tradition.`, W / 2, py + 140);
@@ -6688,6 +7076,11 @@ function drawRetirementCeremony(def) {
   const btnW = 120, btnH = 28, btnGap = 14;
   const b1x = W / 2 - btnW - btnGap / 2, b2x = W / 2 + btnGap / 2;
   const btnY = py + PH - 44;
+
+  // "This is permanent." warning above confirm button
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.75)'; ctx.textAlign = 'center';
+  ctx.fillText('This is permanent.', b1x + btnW / 2, btnY - 5);
+  ctx.textAlign = 'center';
 
   drawFantasyPanel(b1x, btnY, btnW, btnH, 'rgba(20,8,36,0.97)', 0.7, 6);
   ctx.font = 'bold 9px monospace'; ctx.fillStyle = 'rgba(180,140,220,0.85)';
@@ -6797,8 +7190,11 @@ function drawBetweenBattles() {
       const lvlTag = tower._careerLevel > 0 ? ` [${ROMAN[tower._careerLevel] ?? ''}]` : '';
       const rowY   = lpY + 170 + i * 22;
       ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
-      ctx.fillStyle = i === 0 ? `rgba(${tower.glowRgb ?? '220,180,60'},0.95)` : 'rgba(180,160,120,0.7)';
+      const topRgb  = defenderGlowRgb(tower);
+      ctx.fillStyle = `rgba(${topRgb},${i === 0 ? 0.95 : 0.78})`;
+      if (i === 0) { ctx.shadowColor = `rgba(${topRgb},0.55)`; ctx.shadowBlur = 4; }
       ctx.fillText(`${icons[i]} ${tower.name}${lvlTag}  ☠${tower.killCount ?? 0}  ⚔${Math.round(tower.damageDealt ?? 0)}`, lcx, rowY);
+      ctx.shadowBlur = 0;
       if (i === 0) {
         ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)';
         ctx.fillText(def2?.label ?? tower.type, lcx, rowY + 11);
@@ -6921,6 +7317,7 @@ function drawBetweenBattles() {
   const cbX = b1x, cbY = btnsY + btnH + 6;
   const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
   if (_hasChronicle) {
+    const _isFirstChronicle = _campaignState.chronicle.battles.length === 1;
     drawFantasyPanel(cbX, cbY, chronicleBtnW, chronicleBtnH, 'rgba(20,8,36,0.97)', 0.6, 4);
     ctx.save();
     ctx.textAlign = 'center'; ctx.font = '10px monospace';
@@ -6928,6 +7325,20 @@ function drawBetweenBattles() {
     ctx.fillText(`📜 THE CHRONICLE  (${_campaignState.chronicle.battles.length} ${_campaignState.chronicle.battles.length === 1 ? 'battle' : 'battles'})`, cbX + chronicleBtnW / 2, cbY + 16);
     ctx.restore();
     _betweenBtns.push({ x: cbX, y: cbY, w: chronicleBtnW, h: chronicleBtnH, action: 'openChronicle' });
+    if (_isFirstChronicle) {
+      const _pulse = 0.65 + 0.35 * Math.sin(performance.now() / 420);
+      ctx.font = '7px monospace';
+      ctx.fillStyle = `rgba(200,160,255,${_pulse.toFixed(2)})`;
+      ctx.textAlign = 'center';
+      ctx.fillText('↑  NEW ENTRY IN CHRONICLE', cbX + chronicleBtnW / 2, cbY - 4);
+      ctx.textAlign = 'left';
+    }
+    // Notification dot — new battle added this betweenBattles
+    {
+      const _dotPulse = 0.75 + 0.25 * Math.sin(performance.now() / 300);
+      ctx.fillStyle = `rgba(200,120,255,${_dotPulse.toFixed(2)})`;
+      ctx.beginPath(); ctx.arc(cbX + chronicleBtnW - 7, cbY + 5, 3, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   // ── RIGHT PANEL: Warband Roster ─────────────────────────────
@@ -6954,32 +7365,57 @@ function drawBetweenBattles() {
   // Promotion banner — shown when _promotionQueue has pending items
   let _promoBannerH = 0;
   if (_promotionQueue.length > 0) {
-    _promoBannerH = 40;
-    const prom   = _promotionQueue[0];
-    const pbX    = rix - 2, pbY = rpY + 48, pbW = riW + 4, pbH = _promoBannerH - 4;
-    const pbCol  = prom.type === 'scar' ? 'rgba(200,80,30,0.18)' :
-                   prom.type === 'bond' ? 'rgba(130,90,200,0.18)' : 'rgba(60,130,60,0.18)';
-    const pbBdr  = prom.type === 'scar' ? 'rgba(200,100,50,0.55)' :
-                   prom.type === 'bond' ? 'rgba(140,100,220,0.55)' : 'rgba(100,200,100,0.55)';
-    ctx.fillStyle = pbCol; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.roundRect(pbX, pbY, pbW, pbH, 4); ctx.fill(); ctx.stroke();
+    // 10s auto-dismiss
+    if (_promoBannerTimer <= 0) _promoBannerTimer = 600;
+    _promoBannerTimer--;
+    if (_promoBannerTimer <= 0) { _promotionQueue.shift(); _promoBannerTimer = 0; }
 
-    ctx.font = 'bold 8px monospace';
-    ctx.fillStyle = prom.type === 'scar' ? '#e87050' : prom.type === 'bond' ? '#c0a0ff' : '#88dd80';
-    ctx.textAlign = 'left';
-    ctx.fillText(`⬆  ${prom.rankLabel}`, rix + 4, pbY + 13);
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,180,150,0.75)';
-    const _promText = prom.text ?? `${prom.defenderName}: ${prom.rankLabel}`;
-    ctx.fillText(_promText.length > 55 ? _promText.slice(0, 52) + '…' : _promText, rix + 4, pbY + 25);
+    if (_promotionQueue.length > 0) {
+      _promoBannerH = 40;
+      const prom   = _promotionQueue[0];
+      const pbX    = rix - 2, pbY = rpY + 48, pbW = riW + 4, pbH = _promoBannerH - 4;
+      const pbCol  = prom.type === 'scar' ? 'rgba(200,80,30,0.18)' :
+                     prom.type === 'bond' ? 'rgba(130,90,200,0.18)' : 'rgba(60,130,60,0.18)';
+      const pbBdr  = prom.type === 'scar' ? 'rgba(200,100,50,0.55)' :
+                     prom.type === 'bond' ? 'rgba(140,100,220,0.55)' : 'rgba(100,200,100,0.55)';
+      ctx.fillStyle = pbCol; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.roundRect(pbX, pbY, pbW, pbH, 4); ctx.fill(); ctx.stroke();
 
-    const ackW = 56, ackH = 14;
-    const ackX = rpX + rpW - 12 - ackW, ackY = pbY + (pbH - ackH) / 2;
-    ctx.fillStyle = 'rgba(20,40,20,0.85)'; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.7;
-    ctx.beginPath(); ctx.roundRect(ackX, ackY, ackW, ackH, 3); ctx.fill(); ctx.stroke();
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,220,160,0.8)'; ctx.textAlign = 'center';
-    ctx.fillText(`ACK  (${_promotionQueue.length})`, ackX + ackW / 2, ackY + 10);
-    ctx.textAlign = 'left';
-    _betweenBtns.push({ x: ackX, y: ackY, w: ackW, h: ackH, action: 'ackPromotion' });
+      // Countdown progress bar along the bottom edge
+      const _cdFrac = _promoBannerTimer / 600;
+      ctx.fillStyle = pbBdr.replace('0.55', '0.30');
+      ctx.fillRect(pbX + 2, pbY + pbH - 3, (pbW - 4) * _cdFrac, 2);
+
+      // Left accent bar (3px) — color per type
+      const _accentColor = prom.type === 'scar' ? 'rgba(200,100,60,0.8)' :
+                           prom.type === 'bond' ? 'rgba(160,100,220,0.8)' : 'rgba(80,180,80,0.8)';
+      ctx.fillStyle = _accentColor;
+      ctx.fillRect(pbX, pbY, 3, pbH);
+
+      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = prom.type === 'scar' ? '#e87050' : prom.type === 'bond' ? '#c0a0ff' : '#88dd80';
+      ctx.textAlign = 'left';
+      ctx.fillText(`⬆  ${prom.rankLabel}`, rix + 4, pbY + 13);
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(200,180,150,0.75)';
+      const _promText = prom.text ?? `${prom.defenderName}: ${prom.rankLabel}`;
+      ctx.fillText(_promText.length > 55 ? _promText.slice(0, 52) + '…' : _promText, rix + 4, pbY + 25);
+
+      // [×] dismiss button + queue count
+      const ackW = 20, ackH = 14;
+      const ackX = rpX + rpW - 12 - ackW, ackY = pbY + 4;
+      ctx.fillStyle = 'rgba(30,20,20,0.85)'; ctx.strokeStyle = pbBdr; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.roundRect(ackX, ackY, ackW, ackH, 3); ctx.fill(); ctx.stroke();
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(220,160,140,0.8)'; ctx.textAlign = 'center';
+      ctx.fillText('×', ackX + ackW / 2, ackY + 10);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: ackX, y: ackY, w: ackW, h: ackH, action: 'ackPromotion' });
+      if (_promotionQueue.length > 1) {
+        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${_promotionQueue.length - 1} more`, ackX - 3, ackY + 10);
+        ctx.textAlign = 'left';
+      }
+    }
   }
 
   // Recruit section: 112px at the bottom
@@ -7018,8 +7454,13 @@ function drawBetweenBattles() {
 
   _roster.defenders.slice(_rosterScrollOffset, _rosterScrollOffset + maxRows).forEach((def, i) => {
     const ry = listTop + i * rowH;
+    const isRenaming  = _renameState?.defenderId === def.defenderId;
     ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
     ctx.fillRect(rpX + 4, ry, rpW - 8, rowH - 2);
+    if (isRenaming) {
+      ctx.strokeStyle = 'rgba(255,180,40,0.7)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(rpX + 4, ry, rpW - 8, rowH - 2, 2); ctx.stroke();
+    }
 
     const tDef    = TOWER_DEFS[def.type];
     const glow    = tDef?.glowRgb ?? '180,150,80';
@@ -7028,15 +7469,25 @@ function drawBetweenBattles() {
     const isChampionPlus = ['champion','ironguard','legend'].includes(defRank.id);
 
     // Name + level
-    const isRenaming  = _renameState?.defenderId === def.defenderId;
+    const isUnnamed   = def.careerLevel < 1;
     const displayName = isRenaming
       ? _renameState.draft + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
+      : isUnnamed ? '— unnamed —'
       : `${def.name}${lvlStr}`;
     ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = isRenaming ? `rgba(255,220,100,0.95)` : `rgba(${glow},0.95)`;
-    if (isRenaming) { ctx.shadowColor = 'rgba(255,200,60,0.5)'; ctx.shadowBlur = 4; }
-    ctx.fillText(displayName, rix, ry + 14);
-    ctx.shadowBlur = 0;
+    if (isRenaming) {
+      ctx.fillStyle = 'rgba(255,220,100,0.95)';
+      ctx.shadowColor = 'rgba(255,200,60,0.5)'; ctx.shadowBlur = 4;
+      ctx.fillText(displayName, rix, ry + 14);
+      ctx.shadowBlur = 0;
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.55)';
+      ctx.fillText('Enter confirm · Esc cancel', rix, ry + 24);
+    } else if (isUnnamed) {
+      ctx.fillStyle = 'rgba(130,120,100,0.45)';
+      ctx.fillText(displayName, rix, ry + 14);
+    } else {
+      drawDefenderName(displayName, rix, ry + 14, def.type, 0.95);
+    }
 
     // 📜 BIO button (far right, ry+4)
     const bioW = 18, bioH = 12;
@@ -7049,17 +7500,19 @@ function drawBetweenBattles() {
     ctx.textAlign = 'left';
     _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
 
-    // ✏ rename button (to the left of BIO)
+    // ✏ rename button (to the left of BIO) — only for defenders who've earned a name (careerLevel >= 1)
     const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
-    ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
-    ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
-    ctx.lineWidth   = 0.8;
-    ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
-    ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
-    ctx.textAlign = 'center';
-    ctx.fillText('✏', rnX + rnW / 2, rnY + 9);
-    ctx.textAlign = 'left';
-    _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
+    if (!isUnnamed) {
+      ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
+      ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
+      ctx.lineWidth   = 0.8;
+      ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
+      ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText('✏', rnX + rnW / 2, rnY + 9);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
+    }
 
     // Rank · class · title line (ry+26)
     const _rTitle = getPrimaryTitle(def);
@@ -7113,11 +7566,26 @@ function drawBetweenBattles() {
     const traitDef = def.trait ? TRAIT_DEFS[def.trait] : null;
     const scarLabels = (def.scars ?? []).map(s => SCAR_DEFS[s]?.label ?? s);
     if (traitDef || scarLabels.length) {
-      let traitLine = '';
-      if (traitDef) traitLine += traitDef.label;
-      if (scarLabels.length) traitLine += (traitDef ? '  ·  ' : '') + scarLabels.slice(0,2).join(' · ');
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.52)';
-      ctx.fillText(traitLine, rix, ry + 36);
+      const _traitColors = {
+        reckless:'#e08060', steadfast:'#80b0e0', brooding:'#9090c0',
+        serene:'#80d0c0',  methodical:'#b0d080', impulsive:'#e0c040',
+        vengeful:'#d06080', devout:'#c0a8e0',
+      };
+      const _traitColor = def.trait ? (_traitColors[def.trait] ?? 'rgba(160,200,160,0.52)') : 'rgba(160,200,160,0.52)';
+      ctx.font = '7px monospace';
+      const _scarStr = scarLabels.slice(0,2).join(' · ') + (scarLabels.length > 2 ? ` +${scarLabels.length - 2}` : '');
+      if (traitDef) {
+        ctx.fillStyle = _traitColor;
+        ctx.fillText(traitDef.label, rix, ry + 36);
+        if (scarLabels.length) {
+          const _scarX = rix + ctx.measureText(traitDef.label + '  ·  ').width;
+          ctx.fillStyle = 'rgba(200,130,100,0.55)';
+          ctx.fillText(_scarStr, _scarX, ry + 36);
+        }
+      } else if (scarLabels.length) {
+        ctx.fillStyle = 'rgba(200,130,100,0.55)';
+        ctx.fillText(_scarStr, rix, ry + 36);
+      }
     }
 
     // Career stats (ry+46)
@@ -7177,15 +7645,18 @@ function drawBetweenBattles() {
     // Bond indicator (ry+92)
     const defBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
     if (defBond) {
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.55)';
+      ctx.font = 'italic 7px monospace'; ctx.fillStyle = '#c0b080';
       ctx.fillText(`⚭ ${defBond.name}`, rix, ry + 93);
+      ctx.font = '7px monospace';
     }
 
     // Legacy bonus indicator
-    const _legBonus = (_campaignState?.legacyBonuses ?? {})[def.type];
+    const _legArr2 = (_campaignState?.legacyBonuses ?? {})[def.type];
+    const _legBonus = Array.isArray(_legArr2) ? _legArr2[0] : _legArr2;
     if (_legBonus && def.battlesPlayed === 0) {
+      const _extraLeg = Array.isArray(_legArr2) ? _legArr2.length - 1 : 0;
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
-      ctx.fillText(`✦ ${_legBonus.fromName}'s tradition`, rix + 80, ry + 14);
+      ctx.fillText(`✦ ${_legBonus.fromName}'s tradition${_extraLeg > 0 ? ` +${_extraLeg}` : ''}`, rix + 80, ry + 14);
     }
   });
 
@@ -7333,7 +7804,13 @@ function drawBetweenBattles() {
         ctx.font = '7px monospace';
         ctx.fillStyle = canBuy ? '#88ee66' : 'rgba(120,110,70,0.4)';
         ctx.textAlign = 'center';
-        ctx.fillText(`+  ${cost}g`, btnX + btnW2 / 2, btnY2 + 10);
+        ctx.fillText(`+${cost}g`, btnX + btnW2 / 2, btnY2 + 7);
+        if (goldReserve > 0) {
+          const pct = Math.round((cost / goldReserve) * 100);
+          ctx.font = '6px monospace';
+          ctx.fillStyle = !canBuy ? 'rgba(200,80,60,0.8)' : pct > 60 ? '#e0a040' : 'rgba(120,180,120,0.55)';
+          ctx.fillText(`${pct}%`, btnX + btnW2 / 2, btnY2 + 13);
+        }
         ctx.textAlign = 'left';
         if (canBuy) _betweenBtns.push({ x: btnX, y: btnY2, w: btnW2, h: btnH2, action: 'upgradeFortress', key });
       }
@@ -7348,10 +7825,27 @@ function drawBetweenBattles() {
     if ((fb.equipDmMult         ?? 1) > 1) fbParts.push(`items +${Math.round((fb.equipDmMult - 1) * 100)}%`);
     if ((fb.eventPreviewBonus   ?? 0) > 0) fbParts.push(`${1 + fb.eventPreviewBonus} waves ahead`);
     if ((fb.wallSlowBonus       ?? 0) > 0) fbParts.push(`slow +${Math.round(fb.wallSlowBonus * 100)}%`);
+    let _fortSummY = recY + 14 + nodeKeys.length * nodeRowH + 8;
     if (fbParts.length > 0) {
-      const summY = recY + 14 + nodeKeys.length * nodeRowH + 8;
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(120,200,120,0.65)';
-      ctx.fillText(`Active: ${fbParts.join(' · ')}`, rix, summY);
+      ctx.fillText(`Active: ${fbParts.join(' · ')}`, rix, _fortSummY);
+      _fortSummY += 12;
+    }
+    // Legacy bonuses display
+    const _legBonusMap = _campaignState?.legacyBonuses ?? {};
+    const _legEntries = Object.entries(_legBonusMap).filter(([, v]) => (Array.isArray(v) ? v.length : !!v) > 0);
+    if (_legEntries.length > 0) {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)';
+      ctx.fillText('PENDING LEGACY', rix, _fortSummY);
+      _fortSummY += 10;
+      for (const [cls, val] of _legEntries) {
+        const _arr = Array.isArray(val) ? val : [val];
+        const _clsLabel = TOWER_DEFS[cls]?.label ?? cls;
+        const _names = _arr.slice(0,3).map(e => e.fromName).join(', ');
+        ctx.font = '7px monospace'; ctx.fillStyle = '#a8d080';
+        ctx.fillText(`⬧ ${_clsLabel}: ${_names}${_arr.length > 3 ? ` +${_arr.length-3}` : ''}`, rix, _fortSummY);
+        _fortSummY += 10;
+      }
     }
   }
 
@@ -7665,17 +8159,10 @@ function draw() {
     }
   }
 
-  // Tower light pools — per-tower signature color halo
+  // Tower light pools — per-tower signature color halo (shared with card portrait glow)
   for (const t of towers) {
     if (t.disabledTimer > 0) continue;
-    const _tlr = CELL_SIZE * 2.8;
-    const rgb = t.glowRgb;
-    const _tlg = ctx.createRadialGradient(t.x, t.y + 2, 0, t.x, t.y + 2, _tlr);
-    _tlg.addColorStop(0,    `rgba(${rgb},0.12)`);
-    _tlg.addColorStop(0.50, `rgba(${rgb},0.05)`);
-    _tlg.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.fillStyle = _tlg;
-    ctx.beginPath(); ctx.arc(t.x, t.y, _tlr, 0, Math.PI * 2); ctx.fill();
+    drawDefenderPortraitGlow(t.x, t.y + 2, t.glowRgb, CELL_SIZE * 0.5);
   }
 
   [...towers].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
@@ -7750,6 +8237,22 @@ function draw() {
     ctx.restore();
   }
 
+  // Rank pips — small colored circle on base of towers with WARRIOR+ rank
+  {
+    ctx.save();
+    for (const t of towers) {
+      if (!t.defenderId) continue;
+      const _rankDef = _roster?.find(t.defenderId);
+      if (!_rankDef) continue;
+      const _rank = getRank(_rankDef);
+      if (_rank.id === 'greenhorn') continue;
+      const px = t.x - CELL_SIZE * 0.52, py = t.y + CELL_SIZE * 0.42;
+      ctx.fillStyle = _rank.color ?? '#c0a060';
+      ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // Active synergy glow rings
   {
     const synColors = { eagleEye: 'rgba(120,160,240,0.32)', siegeFury: 'rgba(230,110,40,0.32)', winterGrip: 'rgba(80,200,240,0.32)', shieldWall: 'rgba(220,160,40,0.32)', tidecall: 'rgba(40,180,220,0.32)', runeChain: 'rgba(180,100,240,0.32)' };
@@ -7792,12 +8295,10 @@ function draw() {
       const pillC = t.glowRgb ? `rgba(${t.glowRgb},0.22)` : 'rgba(20,10,30,0.88)';
       ctx.fillStyle = pillC;
       ctx.beginPath(); ctx.roundRect(nx - tw / 2 - padX, ny, tw + padX * 2, tagH, 1.5); ctx.fill();
-      // Name text with glow
-      ctx.fillStyle   = t.glowRgb ? `rgba(${t.glowRgb},1.0)` : 'rgba(235,210,155,1.0)';
-      ctx.shadowColor = t.glowRgb ? `rgba(${t.glowRgb},0.70)` : 'rgba(220,180,100,0.50)';
-      ctx.shadowBlur  = 4;
-      ctx.fillText(t.name, nx, ny + 1);
-      ctx.shadowBlur  = 0;
+      // Name text with glow — class color matched to portrait halo
+      ctx.textAlign = 'center';
+      ctx.font      = 'bold 6px monospace';
+      drawDefenderName(t.name, nx, ny + 1, t, 1);
     }
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
@@ -7903,6 +8404,19 @@ function draw() {
     ctx.lineWidth   = 1.8;
     ctx.beginPath(); ctx.arc(sr.x, sr.y, sr.r, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
+  }
+
+  // Enemy type underglow — silhouette read on dark terrain
+  for (const e of enemies) {
+    if (!e.alive || e.reached) continue;
+    const er   = e.radius + 3;
+    const glow = e.highlightColor ?? e.color ?? '#8860c0';
+    const _eg  = ctx.createRadialGradient(e.x, e.y + 1, 0, e.x, e.y + 1, er * 2.4);
+    _eg.addColorStop(0,   glow + '55');
+    _eg.addColorStop(0.55, glow + '22');
+    _eg.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = _eg;
+    ctx.beginPath(); ctx.arc(e.x, e.y, er * 2.4, 0, Math.PI * 2); ctx.fill();
   }
 
   enemies.slice().sort((a, b) => a.y - b.y).forEach(e => e.draw(ctx));
@@ -8199,7 +8713,7 @@ function draw() {
       _baseVigCache.addColorStop(1, 'rgba(0,0,0,1)');
       _baseVigW = width; _baseVigH = height;
     }
-    ctx.globalAlpha = 0.30;
+    ctx.globalAlpha = 0.22;
     ctx.fillStyle   = _baseVigCache;
     ctx.fillRect(0, 0, width, height);
     ctx.globalAlpha = 1;
@@ -8254,6 +8768,7 @@ function draw() {
   drawHud();
   drawGoldCoins();
   drawBossWarning();
+  drawLastStandBanner();
   drawBossDefeat();
   drawBossLootBanner();
   drawEnemyIntroBanner();
@@ -8295,8 +8810,7 @@ function draw() {
     ctx.restore();
   }
 
-  // Rune menu overlay (break/countdown only)
-  if (showRuneMenu && waveState !== 'active') drawRuneMenu();
+  // Rune cartridge is drawn inline in drawRightPanel
   if (showRunePicker && runePickerTower) drawRunePicker();
   drawHelpOverlay();
 

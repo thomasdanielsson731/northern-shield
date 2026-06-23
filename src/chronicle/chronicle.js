@@ -115,12 +115,12 @@ export function checkScars(defender, battleData, allBattles) {
 // ── Veteran ranks ─────────────────────────────────────────────────────────────
 // Listed highest-first; getRank returns the first one the defender qualifies for.
 export const VETERAN_RANKS = [
-  { id: 'legend',    label: 'LEGEND',    color: '#ffd040', minLevel: 10, minBattles: 100, minKills: 0,   minTitles: 3 },
+  { id: 'legend',    label: 'LEGEND',    color: '#ffe890', minLevel: 10, minBattles: 100, minKills: 0,   minTitles: 3 },
   { id: 'ironguard', label: 'IRONGUARD', color: '#c0a0ff', minLevel: 10, minBattles: 50,  minKills: 0,   minTitles: 1 },
-  { id: 'champion',  label: 'CHAMPION',  color: '#e89040', minLevel: 8,  minBattles: 30,  minKills: 150, minTitles: 0 },
+  { id: 'champion',  label: 'CHAMPION',  color: '#c87820', minLevel: 8,  minBattles: 30,  minKills: 150, minTitles: 0 },
   { id: 'veteran',   label: 'VETERAN',   color: '#90c870', minLevel: 5,  minBattles: 15,  minKills: 50,  minTitles: 0 },
   { id: 'warrior',   label: 'WARRIOR',   color: '#8090c0', minLevel: 3,  minBattles: 5,   minKills: 0,   minTitles: 0 },
-  { id: 'greenhorn', label: 'GREENHORN', color: '#706860', minLevel: 0,  minBattles: 0,   minKills: 0,   minTitles: 0 },
+  { id: 'greenhorn', label: 'GREENHORN', color: '#9e8e7e', minLevel: 0,  minBattles: 0,   minKills: 0,   minTitles: 0 },
 ];
 
 export function getRank(defender) {
