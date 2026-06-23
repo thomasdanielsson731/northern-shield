@@ -38,6 +38,11 @@ const SPAWN = { col: 0,                    row: 11 };
 const GOAL  = { col: Math.floor(COLS / 2), row: Math.floor(ROWS / 2) };
 
 const WALL_COST = 12;
+const WALL_BASE_HP = 100;
+const WALL_HP_BY_LEVEL      = [100, 120, 140, 160, 180];  // index = level 0-4
+const WALL_UPGRADE_COST     = [8, 14, 20, 28];            // cost to upgrade L0→1, L1→2, L2→3, L3→4
+const WALL_MAX_LEVEL        = 4;
+const WALL_WAVE_DAMAGE      = 5;                           // HP lost per wave for walls adjacent to path
 
 const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 62, gap: 4 };
 
@@ -137,6 +142,7 @@ let novaRings         = [];  // Isjätte nova rings: { x, y, r, maxR, life, maxL
 let fortressHeldTimer = 0;   // countdown for FORTRESS HELD display (frames)
 let wallFrostCells    = [];  // cached cells adjacent to walls: [{ x, y, cs }]
 let wallFrostDirty    = true;
+let wallData          = {};  // `${col}_${row}` → {level, hp, maxHp}
 
 // Playtest UX
 let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
@@ -529,6 +535,8 @@ function restartCombatState() {
   fortressHeldTimer = 0;
   wallFrostCells    = [];
   wallFrostDirty    = true;
+  wallData          = {};
+  grid.wallData     = wallData;
 
   firstTowerPlaced  = false;
   firstKillDone     = false;
@@ -1486,6 +1494,29 @@ function updateWave() {
       unlockAchievement('wave100');
       highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
       recordBattleResult('victory');
+    }
+    // End-of-wave wear damage — walls adjacent to the enemy path take attrition damage
+    {
+      const _damaged = new Set();
+      const _allPaths = [currentPath, ..._extraSpawns.map(es => es.path)].filter(Boolean);
+      for (const _path of _allPaths) {
+        for (const { col: pc, row: pr } of _path) {
+          for (const [dc, dr] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+            const _wk = `${pc+dc}_${pr+dr}`;
+            if (wallData[_wk] && !_damaged.has(_wk)) {
+              _damaged.add(_wk);
+              wallData[_wk].hp = Math.max(0, wallData[_wk].hp - WALL_WAVE_DAMAGE);
+              if (wallData[_wk].hp === 0) {
+                grid.setCell(pc+dc, pr+dr, CELL.EMPTY);
+                delete wallData[_wk];
+                wallFrostDirty = true;
+                currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+                for (const _es of _extraSpawns) _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row) ?? _es.path;
+              }
+            }
+          }
+        }
+      }
     }
     waveState = 'break';
   }
@@ -2533,6 +2564,7 @@ function tryPlaceAt(col, row, mode, towerType) {
 
   if (mode === CELL.WALL) {
     sfxPlace(true);
+    wallData[`${col}_${row}`] = { level: 0, hp: WALL_BASE_HP, maxHp: WALL_BASE_HP };
     const adjTW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
     for (const [ac, ar] of adjTW) {
       const bt = towers.find(t => t.col === ac && t.row === ar && t.type === TOWER_TYPES.BERSERK);
@@ -2587,9 +2619,13 @@ function handleRightClickAt(mouseX, mouseY) {
     const wallKey = `w_${col}_${row}`;
     if (pendingSell && pendingSell.key === wallKey) {
       wallFrostDirty = true;
-      gold += Math.floor(_effectiveWallCost * 0.75);
+      const _wd = wallData[`${col}_${row}`];
+      const _wallRefund = Math.floor(_effectiveWallCost * (0.5 + (_wd?.level ?? 0) * 0.1));
+      gold += _wallRefund;
+      delete wallData[`${col}_${row}`];
       grid.setCell(col, row, CELL.EMPTY);
       currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+      for (const _es of _extraSpawns) _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row) ?? _es.path;
       rerouteActiveEnemies();
       sfxSell();
       pendingSell = null;
@@ -2609,6 +2645,36 @@ function handleRightClickAt(mouseX, mouseY) {
       pendingSell = { key: anchorKey, col: t.col, row: t.row, timer: 90 };
     }
   }
+}
+
+function upgradeWall(col, row) {
+  const key = `${col}_${row}`;
+  const wd = wallData[key];
+  if (!wd || wd.level >= WALL_MAX_LEVEL) return false;
+  const cost = WALL_UPGRADE_COST[wd.level];
+  if (gold < cost) return false;
+  gold -= cost;
+  const prevMaxHp = wd.maxHp;
+  wd.level++;
+  const newMaxHp  = WALL_HP_BY_LEVEL[wd.level];
+  const hpRatio   = wd.hp / prevMaxHp;
+  wd.maxHp = newMaxHp;
+  // Heal proportionally + the HP bonus from the upgrade itself
+  wd.hp = Math.min(Math.round(newMaxHp * hpRatio) + (newMaxHp - prevMaxHp), newMaxHp);
+  sfxPlace(true);
+  return true;
+}
+
+function repairWall(col, row) {
+  const key = `${col}_${row}`;
+  const wd = wallData[key];
+  if (!wd || wd.hp >= wd.maxHp) return false;
+  const cost = Math.max(1, Math.ceil((wd.maxHp - wd.hp) / wd.maxHp * _effectiveWallCost));
+  if (gold < cost) return false;
+  gold -= cost;
+  wd.hp = wd.maxHp;
+  sfxPlace(true);
+  return true;
 }
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -2674,6 +2740,12 @@ window.addEventListener('keydown', e => {
   }
 
   if (gameOver) return;
+
+  // Upgrade / repair selected wall
+  if (pendingSell && !getTowerAtCell(pendingSell.col, pendingSell.row)) {
+    if (key === 'u') { upgradeWall(pendingSell.col, pendingSell.row); pendingSell = null; return; }
+    if (key === 'r') { repairWall(pendingSell.col, pendingSell.row);  pendingSell = null; return; }
+  }
 
   if ((e.key === ' ' || e.key === 'Enter') && (waveState === 'countdown' || waveState === 'break')) {
     e.preventDefault();
@@ -8338,6 +8410,7 @@ function draw() {
   grid.healthRatio = Math.max(0, lives / STARTING_LIVES);
   grid.gold        = gold;
   grid.hoardPulse  = hoardPulse;
+  grid.wallData    = wallData;
 
   // Grass terrain (blit pre-rendered offscreen canvas — free per frame)
   if (terrainCanvas) ctx.drawImage(terrainCanvas, 0, 0);
@@ -9251,10 +9324,25 @@ function drawPendingSell() {
     ctx.fillStyle = `rgba(160,200,160,${pulse * 0.8})`;
     ctx.fillText('Returns to warband', vx + vsW / 2, vy + vsH / 2 + 9);
   } else {
-    ctx.fillText(`SELL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 3);
+    const _wd = wallData[`${pendingSell.col}_${pendingSell.row}`];
+    ctx.fillText(`SELL? (${sellCountdown}s)`, vx + vsW / 2, vy + vsH / 2 - 10);
     ctx.font      = '8px monospace';
     ctx.fillStyle = `rgba(240,200,60,${pulse * 0.8})`;
-    ctx.fillText(`Refund: ◆${Math.floor(_effectiveWallCost * 0.75)}`, vx + vsW / 2, vy + vsH / 2 + 9);
+    const _wallRefund = Math.floor(_effectiveWallCost * (0.5 + (_wd?.level ?? 0) * 0.1));
+    ctx.fillText(`Refund: ◆${_wallRefund}`, vx + vsW / 2, vy + vsH / 2 + 1);
+    if (_wd && _wd.level < WALL_MAX_LEVEL) {
+      const _lvlNames = ['I', 'II', 'III', 'IV'];
+      const _upgCost  = WALL_UPGRADE_COST[_wd.level];
+      const _canUpg   = gold >= _upgCost;
+      ctx.fillStyle = `rgba(${_canUpg ? '160,230,160' : '180,120,100'},${pulse * 0.9})`;
+      ctx.fillText(`[U] →Lv${_lvlNames[_wd.level]} ◆${_upgCost}`, vx + vsW / 2, vy + vsH / 2 + 12);
+    }
+    if (_wd && _wd.hp < _wd.maxHp) {
+      const _repCost  = Math.max(1, Math.ceil((_wd.maxHp - _wd.hp) / _wd.maxHp * _effectiveWallCost));
+      const _canRep   = gold >= _repCost;
+      ctx.fillStyle = `rgba(${_canRep ? '200,210,255' : '180,120,100'},${pulse * 0.9})`;
+      ctx.fillText(`[R] Repair ◆${_repCost}`, vx + vsW / 2, vy + vsH / 2 + 22);
+    }
   }
   ctx.restore();
 }

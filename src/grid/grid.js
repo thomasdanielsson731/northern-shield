@@ -1247,5 +1247,37 @@ export class Grid {
         ctx.restore();
       }
     }
+
+    // ── Wall level badge + HP bar ─────────────────────────────────────────────
+    {
+      const _wallKey = `${Math.floor(x / cs)}_${Math.floor(y / cs)}`;
+      const _wd = this.wallData?.[_wallKey];
+      if (_wd) {
+        // Level badge (top-right corner) if upgraded
+        if (_wd.level > 0) {
+          const _lvlColors = ['', '#88bb70', '#70a8d0', '#d4aa30', '#e8d080'];
+          ctx.save();
+          ctx.font         = `bold ${Math.max(5, cs * 0.40)}px monospace`;
+          ctx.textAlign    = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle    = _lvlColors[_wd.level] ?? '#ffffff';
+          ctx.fillText(['', 'I', 'II', 'III', 'IV'][_wd.level], x + cs - 1, y + 1);
+          ctx.restore();
+        }
+        // HP bar at bottom if damaged
+        if (_wd.hp < _wd.maxHp) {
+          const _bx     = x + 1;
+          const _by     = y + cs - 3;
+          const _bw     = cs - 2;
+          const _ratio  = _wd.hp / _wd.maxHp;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0,0,0,0.65)';
+          ctx.fillRect(_bx, _by, _bw, 2);
+          ctx.fillStyle = _ratio > 0.5 ? '#60c830' : _ratio > 0.25 ? '#d4a010' : '#c83020';
+          ctx.fillRect(_bx, _by, Math.max(1, Math.round(_bw * _ratio)), 2);
+          ctx.restore();
+        }
+      }
+    }
   }
 }
