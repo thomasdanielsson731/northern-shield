@@ -30,7 +30,8 @@ const CELL_SIZE = 14;
 
 const RIGHT_PANEL_W  = 188;
 const FRAME_THICK    = 32;   // must match thick inside drawFrames()
-const GRID_LEFT      = FRAME_THICK;
+const LEFT_NAV_W     = 56;   // Command Center navigation sidebar
+const GRID_LEFT      = FRAME_THICK + LEFT_NAV_W;
 const GRID_TOP       = 64;
 const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 
@@ -46,8 +47,17 @@ const WALL_WAVE_DAMAGE      = 5;                           // HP lost per wave f
 
 const BUILD_BTN = { x: GRID_LEFT, w: 110, h: 62, gap: 4 };
 
+// Command Center navigation sidebar items
+const NAV_ITEMS = [
+  { id: 'battle',    icon: '⚔',  label: 'BATTLE'    },
+  { id: 'warband',   icon: '🛡',  label: 'WAR BAND'  },
+  { id: 'fortress',  icon: '🏰',  label: 'FORTRESS'  },
+  { id: 'chronicle', icon: '📜',  label: 'CHRONICLE' },
+  { id: 'hall',      icon: '⚱',  label: 'HALL'      },
+];
+
 // Natural game dimensions at CELL_SIZE=14 — used to derive the scale factor
-const BASE_W = FRAME_THICK + COLS * CELL_SIZE + RIGHT_PANEL_W;
+const BASE_W = FRAME_THICK + LEFT_NAV_W + COLS * CELL_SIZE + RIGHT_PANEL_W;
 const BASE_H = GRID_TOP  + ROWS * CELL_SIZE + BUILD_BTN.h + 56;
 
 let gameScale     = 1;
@@ -226,6 +236,11 @@ let _fortressBonuses     = getFortressBonuses({});  // recomputed in initBattle
 let _effectiveWallCost   = 12;     // WALL_COST adjusted by Wallworks
 let _wallSlowFactor      = 0.65;   // adjusted by Wallworks; applied in enemy proximity-slow loop
 let _effectiveRecruitCost = 30;    // RECRUIT_COST adjusted by Barracks
+
+// Command Center navigation state
+let _navActiveId  = 'battle';   // currently active nav section
+let _navBtns      = [];          // hit-test rects for nav items (rebuilt each frame)
+let _navHover     = -1;          // index of hovered nav item (-1 = none)
 
 // Between-battles UI state
 let _recruitType        = null;          // currently selected class in recruit picker
@@ -2787,7 +2802,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (_showDefenderBio)    { _showDefenderBio    = null;  return; }
     if (_retirementCeremony) { _retirementCeremony = null;  return; }
-    if (_showChronicle)      { _showChronicle = false; _chronicleDefFilter = null; return; }
+    if (_showChronicle)      { _showChronicle = false; _chronicleDefFilter = null; _navActiveId = 'battle'; return; }
     if (_renameState)        { _renameState  = null;  return; }
     if (showRunePicker) { showRunePicker = false; runePickerTower = null; return; }
     if (showRuneMenu)   { showRuneMenu  = false; return; }
@@ -2918,6 +2933,17 @@ canvas.addEventListener('mousedown', e => {
   const mouseX = (e.clientX - rect.left - panX) / gameScale;
   const mouseY = (e.clientY - rect.top  - panY) / gameScale;
 
+  // Command Center nav — checked before any phase-specific handler
+  if (e.button === 0) {
+    for (const _nb of _navBtns) {
+      if (mouseX >= _nb.x && mouseX <= _nb.x + _nb.w &&
+          mouseY >= _nb.y && mouseY <= _nb.y + _nb.h) {
+        _handleNavClick(_nb.id);
+        return;
+      }
+    }
+  }
+
   // Map select phase — first click selects, second click on same starts game
   if (gamePhase === 'mapSelect') {
     if (e.button === 0) {
@@ -2965,7 +2991,7 @@ canvas.addEventListener('mousedown', e => {
             return;
           }
         }
-        _showChronicle = false; _chronicleDefFilter = null; return;
+        _showChronicle = false; _chronicleDefFilter = null; _navActiveId = 'battle'; return;
       }
       if (_retirementCeremony) { /* handled by _betweenBtns retirement actions below */ }
 
@@ -3428,6 +3454,16 @@ canvas.addEventListener('mousemove', e => {
   const _hcell = grid.pixelToCell(_hx, _hy);
   hoverCol = _hcell.col;
   hoverRow = _hcell.row;
+
+  // Command Center nav hover
+  let _navFound = false;
+  for (let _ni = 0; _ni < _navBtns.length; _ni++) {
+    const _nb = _navBtns[_ni];
+    if (dragX >= _nb.x && dragX <= _nb.x + _nb.w && dragY >= _nb.y && dragY <= _nb.y + _nb.h) {
+      _navHover = _ni; _navFound = true; break;
+    }
+  }
+  if (!_navFound) _navHover = -1;
 });
 
 canvas.addEventListener('mouseup', e => {
@@ -4831,6 +4867,136 @@ function drawFortressComplex() {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+// ── Command Center — nav actions ──────────────────────────────────────────────
+function _handleNavClick(id) {
+  _navActiveId = id;
+  // Chronicle: open overlay from any phase
+  if (id === 'chronicle') {
+    if ((_campaignState?.chronicle?.battles?.length ?? 0) > 0) {
+      _showChronicle = true;
+    }
+    return;
+  }
+  // Battle: close any open overlay
+  if (id === 'battle') {
+    _showChronicle    = false;
+    _showDefenderBio  = null;
+    return;
+  }
+  // Hall / Warband / Fortress: acknowledged for future — close chronicle if open
+  _showChronicle = false;
+}
+
+// ── Command Center — left sidebar navigation ──────────────────────────────────
+function drawCommandNav() {
+  const nx  = FRAME_THICK;
+  const nw  = LEFT_NAV_W;
+  const ny  = FRAME_THICK;
+  const nh  = BASE_H - FRAME_THICK * 2;
+
+  _navBtns = [];
+  ctx.save();
+
+  // Sidebar background
+  ctx.fillStyle = 'rgba(6,3,14,0.97)';
+  ctx.fillRect(nx, ny, nw, nh);
+
+  // Separator line on right edge
+  ctx.strokeStyle = 'rgba(130,90,35,0.50)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(nx + nw - 0.5, ny + 6);
+  ctx.lineTo(nx + nw - 0.5, ny + nh - 6);
+  ctx.stroke();
+
+  // Fortress crest at top
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '17px sans-serif';
+  ctx.fillStyle = 'rgba(200,150,50,0.65)';
+  ctx.fillText('🛡', nx + nw / 2, ny + 20);
+
+  // Nav items
+  const itemH        = 46;
+  const itemsStartY  = ny + 44;
+
+  // Badge counts per nav item
+  const _badgeCounts = {
+    warband:   _promotionQueue?.length ?? 0,
+    chronicle: 0,
+    hall:      0,
+  };
+
+  const t = performance.now() * 0.001;
+
+  for (let i = 0; i < NAV_ITEMS.length; i++) {
+    const item     = NAV_ITEMS[i];
+    const iy       = itemsStartY + i * itemH;
+    const isActive = _navActiveId === item.id;
+    const isHover  = _navHover === i;
+
+    // Background tint for active / hover
+    if (isActive) {
+      ctx.fillStyle = 'rgba(160,100,20,0.28)';
+      ctx.fillRect(nx + 1, iy, nw - 1, itemH);
+      // Gold left accent bar
+      ctx.fillStyle = '#c8901a';
+      ctx.fillRect(nx, iy + 5, 3, itemH - 10);
+    } else if (isHover) {
+      ctx.fillStyle = 'rgba(100,70,20,0.14)';
+      ctx.fillRect(nx + 1, iy, nw - 1, itemH);
+    }
+
+    // Icon
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = '17px sans-serif';
+    ctx.globalAlpha  = isActive ? 1 : (isHover ? 0.78 : 0.42);
+    if (isActive) {
+      ctx.shadowColor = 'rgba(220,160,50,0.70)';
+      ctx.shadowBlur  = 10;
+    }
+    ctx.fillStyle = isActive ? '#f0d080' : '#b09050';
+    ctx.fillText(item.icon, nx + nw / 2, iy + 17);
+    ctx.shadowBlur  = 0;
+    ctx.globalAlpha = 1;
+
+    // Label
+    ctx.font      = '5px monospace';
+    ctx.fillStyle = isActive ? 'rgba(220,180,80,0.90)' : 'rgba(130,100,50,0.48)';
+    ctx.fillText(item.label, nx + nw / 2, iy + 32);
+
+    // Badge dot
+    const _bc = _badgeCounts[item.id] ?? 0;
+    if (_bc > 0) {
+      const _pulse = 0.75 + 0.25 * Math.sin(t * 4);
+      const bx = nx + nw - 10;
+      const by = iy + 10;
+      ctx.fillStyle = `rgba(230,60,60,${_pulse.toFixed(2)})`;
+      ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
+      if (_bc > 1) {
+        ctx.font = 'bold 5px monospace'; ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+        ctx.fillText(_bc > 9 ? '9+' : String(_bc), bx, by);
+      }
+    }
+
+    _navBtns.push({ x: nx, y: iy, w: nw, h: itemH, id: item.id, idx: i });
+  }
+
+  // Stars count at bottom
+  const _starsY = ny + nh - 36;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font         = '9px monospace';
+  ctx.fillStyle    = 'rgba(200,160,60,0.55)';
+  ctx.fillText(`✦${stars}`, nx + nw / 2, _starsY);
+  ctx.font      = '5px monospace';
+  ctx.fillStyle = 'rgba(130,100,50,0.38)';
+  ctx.fillText('STARS', nx + nw / 2, _starsY + 13);
+
+  ctx.restore();
 }
 
 function drawFrames() {
@@ -7633,7 +7799,7 @@ function drawBetweenBattles() {
   const isVictory = _battleResult === 'victory';
 
   // ── LEFT PANEL: Battle summary ──────────────────────────────
-  const lpX = 12, lpY = 12, lpW = 308, lpH = H - 24;
+  const lpX = GRID_LEFT + 4, lpY = 12, lpW = 300, lpH = H - 24;
   drawFantasyPanel(lpX, lpY, lpW, lpH, 'rgba(4,2,12,0.97)', 0.88, 10);
   const lcx = lpX + lpW / 2;
 
@@ -7850,7 +8016,7 @@ function drawBetweenBattles() {
   }
 
   // ── RIGHT PANEL: Warband Roster ─────────────────────────────
-  const rpX = 328, rpY = 12, rpW = W - 328 - 12, rpH = H - 24;
+  const rpX = lpX + lpW + 8, rpY = 12, rpW = W - (lpX + lpW + 8) - 12, rpH = H - 24;
   drawFantasyPanel(rpX, rpY, rpW, rpH, 'rgba(4,2,14,0.97)', 0.88, 10);
   const rix = rpX + 10;
   const riW = rpW - 20;
@@ -8591,6 +8757,7 @@ function draw() {
 
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
+    drawCommandNav();
     drawFrames();
     if (_showChronicle)    drawChronicleOverlay();
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
@@ -9305,6 +9472,7 @@ function draw() {
 
   drawRightPanel();
   drawHud();
+  drawCommandNav();
   drawGoldCoins();
   drawBossWarning();
   drawLastStandBanner();
