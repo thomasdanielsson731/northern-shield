@@ -4409,6 +4409,52 @@ function drawExtraPortalPaths() {
   ctx.restore();
 }
 
+// Draw glowing gate markers at the 4 cardinal gaps in the fortress ring
+function drawRingGateMarkers() {
+  if (!_currentBattlePreset?.multiPortal) return;
+  const cs = CELL_SIZE;
+  const _R = 5;
+  const _t = performance.now() * 0.001;
+  const _pulse = 0.45 + Math.sin(_t * 1.8) * 0.35;
+
+  // Gate center (grid-local coords) for each cardinal gap
+  const _gates = [
+    { x: (GOAL.col - _R) * cs + cs / 2, y: GOAL.row * cs + cs / 2, orient: 'EW' },
+    { x: (GOAL.col + _R) * cs + cs / 2, y: GOAL.row * cs + cs / 2, orient: 'EW' },
+    { x: GOAL.col * cs + cs / 2, y: (GOAL.row - _R) * cs + cs / 2, orient: 'NS' },
+    { x: GOAL.col * cs + cs / 2, y: (GOAL.row + _R) * cs + cs / 2, orient: 'NS' },
+  ];
+
+  ctx.save();
+  for (const g of _gates) {
+    ctx.save();
+    const _glowAlpha = 0.55 + _pulse * 0.35;
+    const _glowColor = `rgba(255,210,80,${_glowAlpha})`;
+
+    // Short post lines extending from ring walls into the gap
+    ctx.strokeStyle = `rgba(190,145,55,0.55)`;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    if (g.orient === 'EW') {
+      ctx.beginPath(); ctx.moveTo(g.x, g.y - cs * 1.45); ctx.lineTo(g.x, g.y - cs * 0.42); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(g.x, g.y + cs * 0.42); ctx.lineTo(g.x, g.y + cs * 1.45); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.moveTo(g.x - cs * 1.45, g.y); ctx.lineTo(g.x - cs * 0.42, g.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(g.x + cs * 0.42, g.y); ctx.lineTo(g.x + cs * 1.45, g.y); ctx.stroke();
+    }
+
+    // Glowing lantern at gate center
+    ctx.shadowColor = _glowColor;
+    ctx.shadowBlur = 4 + _pulse * 9;
+    ctx.fillStyle = _glowColor;
+    ctx.beginPath(); ctx.arc(g.x, g.y, cs * 0.20, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawPath() {
   if (!currentPath || currentPath.length < 2) return;
 
@@ -5783,6 +5829,25 @@ function drawBottomBuildBar() {
         ctx.font = '7px monospace'; ctx.textAlign = 'right';
         ctx.fillStyle = `rgba(${TOWER_DEFS[btn.id]?.glowRgb ?? '220,180,60'},0.80)`;
         ctx.fillText(`V.${ROMAN[vet.careerLevel] ?? vet.careerLevel}`, btn.x + btn.width - 3, btn.y + 10);
+      }
+    }
+
+    // ── Deployed badge (hero cards only) ────────────────────────────────────────
+    if (btn.isHero) {
+      const _depCnt = towers.filter(t => t.type === btn.id).length;
+      if (_depCnt > 0) {
+        ctx.save();
+        ctx.font = 'bold 6px monospace';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        const _badge = `▶${_depCnt}`;
+        const _bw = ctx.measureText(_badge).width + 4;
+        ctx.fillStyle = 'rgba(10,38,10,0.84)';
+        ctx.beginPath(); ctx.roundRect(btn.x + 3, btn.y + 13, _bw, 9, 2); ctx.fill();
+        ctx.fillStyle = '#48d830';
+        ctx.shadowColor = '#30b020'; ctx.shadowBlur = 4;
+        ctx.fillText(_badge, btn.x + 5, btn.y + 21);
+        ctx.shadowBlur = 0;
+        ctx.restore();
       }
     }
 
@@ -8616,6 +8681,7 @@ function draw() {
   grid.draw(ctx, time, _gridAlpha);
   drawPath();
   drawExtraPortalPaths();
+  drawRingGateMarkers();
 
   // Grid cell hover highlight
   if (!dragItem && hoverCol >= 0 && hoverRow >= 0 && !gameOver) {
