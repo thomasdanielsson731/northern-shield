@@ -344,3 +344,18 @@ export function sfxBondGrief() {
   tone(196, 0.42, 0.05, 'sine', 0.36);
   tone(165, 0.50, 0.04, 'sine', 0.54);
 }
+
+export function sfxChapterBanner() {
+  // Rising two-note herald — a new chapter of the saga begins
+  tone(220, 0.20, 0.12, 'sine');
+  tone(330, 0.24, 0.10, 'sine', 0.12);
+  tone(440, 0.20, 0.08, 'sawtooth', 0.26);
+  tone(550, 0.16, 0.07, 'sine', 0.42);
+}
+
+export function sfxKillMilestone() {
+  // Brief triumphant sting — a defender reaches a career kill milestone
+  tone(660, 0.10, 0.10, 'sine');
+  tone(880, 0.12, 0.09, 'sine', 0.06);
+  tone(1100, 0.14, 0.08, 'sawtooth', 0.14);
+}

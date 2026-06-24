@@ -25,6 +25,7 @@ import {
   sfxTalentUnlock, sfxLootDrop, sfxFortressUpgrade, sfxRecruit, sfxDismiss, sfxRename, sfxBond,
   sfxBossPhase25, sfxBossPhase50,
   sfxRetireCeremony, sfxEnemyIntro, sfxPortalOpens, sfxEventResolve, sfxBondGrief,
+  sfxChapterBanner, sfxKillMilestone,
 } from './sounds.js';
 
 const COLS = 48;
@@ -273,6 +274,7 @@ let _reserveContrib     = 0;            // gold added to reserve this battle (25
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
 let _starsEarnedThisBattle = 0;        // stars gained this battle (flawless waves + boss kills)
 let _lastResolvedEventTitle = null;    // event card title resolved this between-battles (for echo)
+let _defKillMilestones  = new Set();   // 'defenderId_milestone' combos that fired this session
 
 // Chronicle event accumulators — reset each battle, consumed in recordBattleResult
 let _chronBossKills  = [];    // [{boss, killerName, killerId}]
@@ -290,6 +292,7 @@ let _retireCeremonyFade  = 0;   // fade-in counter (30 → 0)
 let _chronicleDefFilter  = null; // null=all, defenderId=filter chronicle to one defender
 let _showDefenderBio     = null; // { defenderId, bioText } or null; bioText cached on first draw
 let _chronicleBtns       = [];   // hit regions in the chronicle overlay (filter chips)
+let _chronicleChipCache  = null; // { battleCount, chips: [{id, w}] } — cached chip widths
 
 // Map selection
 let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
@@ -614,6 +617,7 @@ function restartCombatState() {
   _enemyIntroBanner  = null;
   _enemyIntroQueue   = [];
   _starsEarnedThisBattle = 0;
+  _defKillMilestones = new Set();
   _battleXpData      = [];
   _reserveContrib    = 0;
   _bossLootBanner    = null;
@@ -968,6 +972,26 @@ function _generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 function runeUnequippedCount(id) { return Math.max(0, (runeInventory[id] ?? 0) - runeEquippedCount(id)); }
+
+// Kill milestone floater — fires once per defender per milestone per session
+const _KILL_MILESTONES = [50, 100, 200, 500];
+function _checkKillMilestone(tower) {
+  if (!tower?.defenderId) return;
+  const def = _roster?.find(tower.defenderId);
+  const totalKills = (def?.careerKills ?? 0) + tower.killCount;
+  for (const m of _KILL_MILESTONES) {
+    const key = `${tower.defenderId}_${m}`;
+    if (totalKills >= m && !_defKillMilestones.has(key)) {
+      _defKillMilestones.add(key);
+      dmgFloaters.push({
+        x: tower.x, y: tower.y - 22,
+        val: `☠ ${m}K!`, life: 180, maxLife: 180,
+        color: '#ffd060', large: true, suffix: '', vy: -0.35, raw: true,
+      });
+      sfxKillMilestone();
+    }
+  }
+}
 
 // Find tower that owns a given grid cell (handles multi-cell footprint)
 function getTowerAtCell(col, row) {
@@ -1414,10 +1438,10 @@ function startNextWave() {
   }
 
   // Chapter milestone banners
-  if (waveNumber ===  1) { chapterBannerTimer = 240; chapterBannerText = 'CHAPTER 1: THE NORTHERN MARCH'; }
-  if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; }
-  if (waveNumber === 51) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 3: THE IRON WINTER'; }
-  if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK'; }
+  if (waveNumber ===  1) { chapterBannerTimer = 240; chapterBannerText = 'CHAPTER 1: THE NORTHERN MARCH';  sfxChapterBanner(); }
+  if (waveNumber === 26) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 2: THE CORRUPTED MARCH'; sfxChapterBanner(); }
+  if (waveNumber === 51) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 3: THE IRON WINTER';     sfxChapterBanner(); }
+  if (waveNumber === 76) { chapterBannerTimer = 210; chapterBannerText = 'CHAPTER 4: RAGNARÖK';            sfxChapterBanner(); }
 
   // Endless mode: flavored wave events + milestone banners every 25 waves
   if (endlessMode) {
@@ -3801,6 +3825,7 @@ function update() {
         tower.killCount    += tr.killed;
         slain              += tr.killed;
         waveSlainCount     += tr.killed;
+        _checkKillMilestone(tower);
         spawnParticles(tr.x, tr.y, '#80d8ff', tr.killed * 6);
         for (const e of enemies) {
           if (!e._killed) continue;
@@ -3847,7 +3872,12 @@ function update() {
       const valBonus = (b.source?.rune === 'valhalla') ? Math.min(20, Math.ceil(reward * 0.5)) : 0;
       gold        += reward + valBonus;
       goldEarned  += reward + valBonus;
-      if (b.source) { b.source.killCount++; b.source.goldGenerated = (b.source.goldGenerated || 0) + reward + valBonus; }
+      if (b.source) {
+        b.source.killCount++;
+        b.source.goldGenerated = (b.source.goldGenerated || 0) + reward + valBonus;
+        // Kill milestone check — compare career kills + battle kills against thresholds
+        _checkKillMilestone(b.source);
+      }
       // For pierce bullets that stay alive, use stored kill position instead of current target
       const killX    = (b.canPierce && b.alive) ? b.lastKillX : (b.target?.x ?? b.x);
       const killY    = (b.canPierce && b.alive) ? b.lastKillY : (b.target?.y ?? b.y);
@@ -3861,7 +3891,8 @@ function update() {
         impactFlashes.push({ x: killX, y: killY, maxR: 24, life: 1, color: '#ffd060' });
         spawnParticles(killX, killY, '#ffd060', 7);
       }
-      dmgFloaters.push({ x: killX, y: killY - 8, val: reward + valBonus, life: isCrit ? 70 : 52, maxLife: isCrit ? 70 : 52, color: isCrit ? '#ff8820' : valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44', large: isCrit });
+      const _fJitter = dmgFloaters.some(f => Math.abs(f.x - killX) < 10 && Math.abs(f.y - (killY - 8)) < 10) ? (Math.random() - 0.5) * 10 : 0;
+      dmgFloaters.push({ x: killX, y: killY - 8 + _fJitter, val: reward + valBonus, life: isCrit ? 70 : 52, maxLife: isCrit ? 70 : 52, color: isCrit ? '#ff8820' : valBonus > 0 ? '#f0c840' : (reward + valBonus) >= 20 ? '#ff9040' : '#ffcc44', large: isCrit });
       if (killBoss) {
         if (b.target && b.canPierce && b.alive) { /* boss killed mid-pierce — handled at deathTimer */ }
         else if (b.target?.isBoss) onBossKilled(b.target, b.source);
@@ -3921,7 +3952,11 @@ function update() {
               const _splashVal = (b.source?.rune === 'valhalla') ? Math.ceil(enemy.reward * 1.5) : enemy.reward;
               gold       += _splashVal;
               goldEarned += _splashVal;
-              if (b.source) { b.source.killCount++; b.source.goldGenerated = (b.source.goldGenerated || 0) + _splashVal; }
+              if (b.source) {
+                b.source.killCount++;
+                b.source.goldGenerated = (b.source.goldGenerated || 0) + _splashVal;
+                _checkKillMilestone(b.source);
+              }
               if (splashKills === 1) sfxDie(enemy.isBoss, enemy.type);  // only play once per splash cluster
               if (b.source) b.source.damageDealt += b.splashDamage;
               dmgFloaters.push({ x: enemy.x, y: enemy.y - 8, val: _splashVal, life: 52, maxLife: 52, color: _splashVal >= 20 ? '#ff9040' : '#ffcc44' });
@@ -6064,12 +6099,31 @@ function drawTopBar() {
     }
   }
 
+  // Boss approach hint — during break, when within 5 waves of next boss
+  if (waveState === 'break' && !endlessMode) {
+    const _nbWave = [...BOSS_WAVES].filter(w => w > displayWave).sort((a, b) => a - b)[0] ?? null;
+    if (_nbWave && _nbWave - displayWave <= 5) {
+      const _bossIn = _nbWave - displayWave;
+      const _bPulse = 0.55 + Math.sin(performance.now() * 0.005) * 0.25;
+      ctx.font      = '7px monospace';
+      ctx.fillStyle = `rgba(240,100,60,${_bPulse})`;
+      ctx.fillText(`☠ ${BOSS_CONFIGS[_nbWave]?.name ?? 'BOSS'}  IN  ${_bossIn}`, midX, cy - 14);
+    }
+  }
+
   // Active wave event chip — shown below wave label during combat
   if (waveState === 'active' && currentWaveEvent) {
     const _evPulse = 0.55 + Math.sin(performance.now() * 0.004) * 0.25;
+    // Build modifier suffix for clarity
+    const _evMods = [];
+    if (currentWaveEvent.hpMult)    _evMods.push(`+${Math.round((currentWaveEvent.hpMult - 1) * 100)}% HP`);
+    if (currentWaveEvent.speedMult && currentWaveEvent.speedMult < 1) _evMods.push(`−${Math.round((1 - currentWaveEvent.speedMult) * 100)}% SPD`);
+    if (currentWaveEvent.speedMult && currentWaveEvent.speedMult > 1) _evMods.push(`+${Math.round((currentWaveEvent.speedMult - 1) * 100)}% SPD`);
+    if (currentWaveEvent.bonus?.count) _evMods.push(`+${currentWaveEvent.bonus.count} ${currentWaveEvent.bonus.type ?? ''}`);
+    const _evSuffix = _evMods.length ? `  ${_evMods.join(', ')}` : '';
     ctx.font      = '7px monospace';
     ctx.fillStyle = `rgba(255,200,80,${_evPulse})`;
-    ctx.fillText(`⚑ ${currentWaveEvent.label}`, midX, cy - 14);
+    ctx.fillText(`⚑ ${currentWaveEvent.label}${_evSuffix}`, midX, cy - 14);
   }
 
   // Endless depth tier label — shown below wave counter in endless mode
@@ -7267,7 +7321,8 @@ function drawBossWarning() {
   const bossCfg  = BOSS_CONFIGS[waveNumber + 1];
   const bossLabel = bossCfg ? bossCfg.name : 'BOSS';
   const bannerY = GRID_TOP + 36;
-  const bannerH = bossCfg?.hint ? 46 : 34;
+  const _bossHasPhase = bossCfg?.phase50SlowImmune || bossCfg?.phase75 || bossCfg?.phase25;
+  const bannerH = bossCfg?.hint ? (_bossHasPhase ? 56 : 46) : (_bossHasPhase ? 44 : 34);
   const bannerW = 280;
 
   ctx.save();
@@ -7295,6 +7350,16 @@ function drawBossWarning() {
     ctx.fillStyle = 'rgba(220,140,80,0.75)';
     ctx.shadowBlur = 0;
     ctx.fillText(bossCfg.hint, cx, bannerY + 39);
+  }
+  if (_bossHasPhase) {
+    const _pBits = [];
+    if (bossCfg?.phase75)            _pBits.push('75%');
+    if (bossCfg?.phase50SlowImmune)  _pBits.push('50%');
+    if (bossCfg?.phase25)            _pBits.push('25%');
+    ctx.font      = '7px monospace';
+    ctx.fillStyle = 'rgba(255,160,80,0.45)';
+    ctx.shadowBlur = 0;
+    ctx.fillText(`⚔ Phase II at ${_pBits.join(' / ')} HP`, cx, bannerY + (bossCfg?.hint ? 50 : 38));
   }
   ctx.shadowBlur  = 0;
   ctx.restore();
@@ -7796,12 +7861,21 @@ function drawChronicleOverlay() {
   const CHIP_H = 14, CHIP_GAP = 3;
   let chipX = PAD;
   const chipY = PAD + 40;
+  // Build or reuse chip width cache (skip measureText every frame)
+  if (!_chronicleChipCache || _chronicleChipCache.battleCount !== battles.length) {
+    ctx.font = '7px monospace';
+    const _chips = [{ id: null, lbl: 'ALL', w: ctx.measureText('ALL').width + 10 }];
+    for (const def of uniqueDefs.slice(0, 8)) {
+      const lbl = def.name.slice(0, 10);
+      _chips.push({ id: def.id, lbl, w: ctx.measureText(lbl).width + 10 });
+    }
+    _chronicleChipCache = { battleCount: battles.length, chips: _chips };
+  }
   // "ALL" chip
   {
-    const lbl = 'ALL';
-    ctx.font = '7px monospace';
-    const cw = ctx.measureText(lbl).width + 10;
+    const { lbl, w: cw } = _chronicleChipCache.chips[0];
     const isActive = !_chronicleDefFilter;
+    ctx.font = '7px monospace';
     ctx.fillStyle   = isActive ? 'rgba(200,170,60,0.25)' : 'rgba(30,20,10,0.5)';
     ctx.strokeStyle = isActive ? 'rgba(200,170,60,0.7)' : 'rgba(80,60,30,0.3)';
     ctx.lineWidth   = isActive ? 1 : 0.5;
@@ -7816,11 +7890,11 @@ function drawChronicleOverlay() {
     _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: null });
     chipX += cw + CHIP_GAP;
   }
-  for (const def of uniqueDefs.slice(0, 8)) {
+  for (const chipEntry of _chronicleChipCache.chips.slice(1)) {
     ctx.font = '7px monospace';
-    const lbl = def.name.slice(0, 10);
-    const cw  = ctx.measureText(lbl).width + 10;
+    const { id: defId, lbl, w: cw } = chipEntry;
     if (chipX + cw > W - PAD) break;
+    const isActive = _chronicleDefFilter === defId;
     const isActive = _chronicleDefFilter === def.id;
     ctx.fillStyle   = isActive ? 'rgba(160,130,200,0.25)' : 'rgba(30,20,10,0.5)';
     ctx.strokeStyle = isActive ? 'rgba(160,130,200,0.7)'  : 'rgba(80,60,30,0.3)';
@@ -7833,7 +7907,7 @@ function drawChronicleOverlay() {
       ctx.strokeStyle = 'rgba(140,120,70,0.30)'; ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(chipX + 5, chipY + 11); ctx.lineTo(chipX + cw - 5, chipY + 11); ctx.stroke();
     }
-    _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: def.id });
+    _chronicleBtns.push({ x: chipX, y: chipY, w: cw, h: CHIP_H, action: 'filterDef', defenderId: defId });
     chipX += cw + CHIP_GAP;
   }
 
@@ -7874,7 +7948,8 @@ function drawChronicleOverlay() {
       ctx.textAlign = 'left';
       ctx.font = 'bold 8px monospace';
       ctx.fillStyle = 'rgba(200,175,115,0.65)';
-      const hdrPrefix = `BATTLE ${battle.battleNumber}  ·  ${mapLabel}  ·  `;
+      const _bWavesLabel = battle.waveCount ?? battle.waves;
+      const hdrPrefix = `BATTLE ${battle.battleNumber}  ·  ${mapLabel}${_bWavesLabel ? `  ·  ${_bWavesLabel}W` : ''}  ·  `;
       ctx.fillText(hdrPrefix, PAD + 4, y + 10);
       const prefixW = ctx.measureText(hdrPrefix).width;
       ctx.fillStyle = resultColor;
@@ -8098,6 +8173,15 @@ function drawDefenderBioOverlay(bioState) {
       ctx.font = '8px monospace';
       bioY += 13;
     }
+  }
+
+  // Legacy bonus
+  if (def.legacyBonus) {
+    const _lb = def.legacyBonus;
+    const _lbStat = _lb.stat === 'dm' ? '+8% DMG' : _lb.stat === 'rm' ? '+8% RNG' : '−7% CD';
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.70)';
+    ctx.fillText(`✦ ${_lb.fromName}'s Legacy: ${_lbStat}`, PAD + 4, bioY);
+    bioY += 13;
   }
 
   // Titles
@@ -8403,7 +8487,30 @@ function drawDebrief() {
     ctx.textAlign = 'left';
     ctx.fillText('No defenders deployed.', panX + 30, hy);
   }
-  hy += 28;
+  hy += 20;
+
+  // ── Per-defender kill breakdown (compact list) ─────────────────────────────
+  const _defKillList = towers
+    .filter(t => (t.killCount ?? 0) > 0)
+    .sort((a, b) => (b.killCount ?? 0) - (a.killCount ?? 0))
+    .slice(0, 5);
+  if (_defKillList.length > 1) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)'; ctx.textAlign = 'left';
+    ctx.fillText('KILLS BY DEFENDER', panX + 30, hy);
+    hy += 10;
+    const _colW = Math.floor(panW / Math.min(_defKillList.length, 3));
+    for (let _ki = 0; _ki < _defKillList.length; _ki++) {
+      const _dt = _defKillList[_ki];
+      const _dCol = _ki % 3;
+      const _dRow = Math.floor(_ki / 3);
+      const _dx = panX + 30 + _dCol * _colW;
+      const _dy = hy + _dRow * 14;
+      const _rgb = defenderGlowRgb(_dt);
+      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(${_rgb},0.80)`; ctx.textAlign = 'left';
+      ctx.fillText(`${_dt.name ?? TOWER_DEFS[_dt.type]?.label ?? '?'}  ${_dt.killCount}☠`, _dx, _dy);
+    }
+    hy += Math.ceil(_defKillList.length / 3) * 14 + 4;
+  }
 
   // ── Continue prompt ────────────────────────────────────────────────────────
   const _canContinue = _debriefTimer >= 60;
@@ -8520,6 +8627,27 @@ function drawCampaignEventCard() {
 
   _drawEventBtn(b1X, btnY, btnW, btnH, ev.choiceA, canA);
   _drawEventBtn(b2X, btnY, btnW, btnH, ev.choiceB, canB);
+
+  // ── Effect preview line ──
+  {
+    const _n = _roster?.defenders?.length ?? 0;
+    const _traitless = _roster?.defenders?.filter(d => !d.trait).length ?? 0;
+    const _top3 = Math.min(_n, 3);
+    let _preview = null;
+    if (ev.id === 'blotet')       _preview = `A: all ${_n} defenders +25 XP  ·  B: top defender +20 XP`;
+    else if (ev.id === 'smeden')  _preview = `A: top ${_top3} defenders +20 XP  ·  B: newest defender +15 XP`;
+    else if (ev.id === 'volva')   _preview = _traitless > 0 ? `A: ${_traitless} traitless defender gets trait  ·  B: −8g` : `A: random defender gets trait  ·  B: −8g`;
+    else if (ev.id === 'skalden') _preview = `A: top killer +60 XP  ·  B: no effect`;
+    else if (ev.id === 'handelsman') _preview = `A: random equipment item  ·  B: no effect`;
+    else if (ev.id === 'leidangr')   _preview = `A: recruit new defender  ·  B: recruit + −8g reserve`;
+    else if (ev.id === 'utilegumadr')_preview = `A: recruit veteran (scarred)  ·  B: no effect`;
+    else if (ev.id === 'runstenen')  _preview = `A: strongest defender unlocks talent  ·  B: +1 ✦`;
+    if (_preview) {
+      ctx.textAlign = 'center'; ctx.font = '7px monospace';
+      ctx.fillStyle = 'rgba(160,140,80,0.50)';
+      ctx.fillText(_preview, cX + cW / 2, cY + cH - 26);
+    }
+  }
 
   // — PASS hint — bottom center of card
   const _passY = cY + cH - 12;
@@ -8739,26 +8867,38 @@ function drawBetweenBattles() {
   ctx.fillStyle = 'rgba(200,170,100,0.65)';
   ctx.fillText(`BATTLE ${battlesCompleted}  —  ${_currentMapName}`, lcx, lpY + 57);
 
-  lpSep(lpY + 66);
+  // Campaign total progress line
+  {
+    const _cBattles = battlesCompleted;
+    const _cWaves   = (_campaignState?.chronicle?.battles ?? []).reduce((s, b) => s + (b.waveCount ?? b.waves ?? 0), 0);
+    const _cKills   = _roster.defenders.reduce((s, d) => s + (d.careerKills ?? 0), 0);
+    const _bits2 = [`${_cBattles}B`];
+    if (_cWaves > 0) _bits2.push(`${_cWaves}W`);
+    if (_cKills > 0) _bits2.push(`${_cKills}K`);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,75,0.40)';
+    ctx.fillText(`Campaign: ${_bits2.join(' · ')}`, lcx, lpY + 68);
+  }
+
+  lpSep(lpY + 76);
 
   ctx.font      = '11px monospace';
   ctx.fillStyle = '#e8c040';
-  ctx.fillText(`Waves cleared: ${waveNumber}`, lcx, lpY + 80);
+  ctx.fillText(`Waves cleared: ${waveNumber}`, lcx, lpY + 90);
   ctx.fillStyle = 'rgba(200,170,100,0.8)';
-  ctx.fillText(`Enemies slain: ${slain}`, lcx, lpY + 95);
-  ctx.fillText(`Gold earned: +${goldEarned}g  (+${_reserveContrib}g reserve)`, lcx, lpY + 110);
+  ctx.fillText(`Enemies slain: ${slain}`, lcx, lpY + 105);
+  ctx.fillText(`Gold earned: +${goldEarned}g  (+${_reserveContrib}g reserve)`, lcx, lpY + 120);
   // Damaged wall summary
   const _damagedWalls = Object.values(wallData).filter(w => !w.temporary && w.hp < w.maxHp);
   if (_damagedWalls.length > 0) {
     ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(220,140,60,0.55)';
-    ctx.fillText(`⚠ ${_damagedWalls.length} wall${_damagedWalls.length !== 1 ? 's' : ''} damaged — reinforce between battles`, lcx, lpY + 122);
+    ctx.fillText(`⚠ ${_damagedWalls.length} wall${_damagedWalls.length !== 1 ? 's' : ''} damaged — reinforce between battles`, lcx, lpY + 132);
   }
 
   ctx.font        = '12px monospace';
   ctx.fillStyle   = '#f0d040';
   ctx.shadowColor = 'rgba(240,190,20,0.6)';
   ctx.shadowBlur  = 6;
-  ctx.fillText(`✦ ${stars} campaign stars${_starsEarnedThisBattle > 0 ? ` (+${_starsEarnedThisBattle})` : ''}  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 129);
+  ctx.fillText(`✦ ${stars} campaign stars${_starsEarnedThisBattle > 0 ? ` (+${_starsEarnedThisBattle})` : ''}  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 141);
   ctx.shadowBlur = 0;
 
   // Bonds count + resolved event echo
@@ -8769,15 +8909,15 @@ function drawBetweenBattles() {
     if (_lastResolvedEventTitle) _bits.push(`⚑ ${_lastResolvedEventTitle}`);
     if (_bits.length > 0) {
       ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,100,0.55)';
-      ctx.fillText(_bits.join('  ·  '), lcx, lpY + 140);
+      ctx.fillText(_bits.join('  ·  '), lcx, lpY + 152);
     }
   }
 
-  lpSep(lpY + 146);
+  lpSep(lpY + 158);
 
   ctx.font      = '9px monospace';
   ctx.fillStyle = 'rgba(160,140,100,0.6)';
-  ctx.fillText('TOP DEFENDERS THIS BATTLE', lcx, lpY + 158);
+  ctx.fillText('TOP DEFENDERS THIS BATTLE', lcx, lpY + 170);
 
   const top3 = [...towers]
     .sort((a, b) => ((b.killCount || 0) + (b.damageDealt || 0) * 0.02) -
@@ -8786,13 +8926,13 @@ function drawBetweenBattles() {
 
   if (top3.length === 0) {
     ctx.fillStyle = 'rgba(120,100,70,0.5)';
-    ctx.fillText('none deployed', lcx, lpY + 176);
+    ctx.fillText('none deployed', lcx, lpY + 188);
   } else {
     const icons = ['★', '·', '·'];
     top3.forEach((tower, i) => {
       const def2   = TOWER_DEFS[tower.type];
       const lvlTag = tower._careerLevel > 0 ? ` [${ROMAN[tower._careerLevel] ?? ''}]` : '';
-      const rowY   = lpY + 176 + i * 22;
+      const rowY   = lpY + 188 + i * 22;
       ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
       const topRgb  = defenderGlowRgb(tower);
       ctx.fillStyle = `rgba(${topRgb},${i === 0 ? 0.95 : 0.78})`;
@@ -8807,7 +8947,7 @@ function drawBetweenBattles() {
   }
 
   // Talent unlocks earned this battle
-  let postTop3Y = lpY + 176 + top3.length * 22 + 14;
+  let postTop3Y = lpY + 188 + top3.length * 22 + 14;
   if (top3.length > 0 && top3[0]) postTop3Y += 11; // extra for class label on first entry
 
   if (_newBattleTalentUnlocks.length > 0) {
@@ -8960,9 +9100,11 @@ function drawBetweenBattles() {
   ctx.save();
   ctx.textAlign = 'left';
 
-  ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#c8b060';
-  ctx.shadowColor = 'rgba(200,170,60,0.5)'; ctx.shadowBlur = 6;
-  ctx.fillText('⚔  WARBAND ROSTER', rix, rpY + 24);
+  const _hasPending = (_promotionQueue?.length ?? 0) > 0;
+  ctx.font = 'bold 12px monospace';
+  ctx.fillStyle = _hasPending ? '#ffe060' : '#c8b060';
+  ctx.shadowColor = _hasPending ? 'rgba(255,220,60,0.7)' : 'rgba(200,170,60,0.5)'; ctx.shadowBlur = _hasPending ? 10 : 6;
+  ctx.fillText(_hasPending ? `⚔  WARBAND ROSTER  ✦ ${_promotionQueue.length}` : '⚔  WARBAND ROSTER', rix, rpY + 24);
   ctx.shadowBlur = 0;
 
   const rCount    = _roster.defenders.length;
@@ -9618,7 +9760,7 @@ function drawMapSelect() {
     if (_previewEvent) {
       const _evPulse = 0.45 + Math.sin(performance.now() * 0.003) * 0.20;
       ctx.font = '7px monospace'; ctx.fillStyle = `rgba(220,180,80,${_evPulse})`;
-      ctx.fillText(`⚑ Event awaits: ${_previewEvent.title}`, W / 2, _mapContextY);
+      ctx.fillText(`⚑ Event awaits: ${_previewEvent.title}  (between battles)`, W / 2, _mapContextY);
     }
   }
 
@@ -9859,6 +10001,29 @@ function draw() {
     ctx.strokeStyle = 'rgba(180,230,255,1)';
     ctx.lineWidth   = 0.5;
     for (const fc of wallFrostCells) ctx.strokeRect(fc.x + 0.25, fc.y + 0.25, fc.cs - 0.5, fc.cs - 0.5);
+    ctx.restore();
+  }
+
+  // Wall HP overlay — show health of damaged walls during break (adjacent to path = at risk)
+  if (waveState === 'break' || waveState === 'countdown') {
+    ctx.save();
+    ctx.font = '5px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [wk, wd] of Object.entries(wallData)) {
+      if (wd.temporary) continue;
+      const ratio = wd.hp / wd.maxHp;
+      if (ratio >= 1) continue; // undamaged — no label
+      const [wc, wr] = wk.split('_').map(Number);
+      const wx = wc * CELL_SIZE + CELL_SIZE / 2;
+      const wy = wr * CELL_SIZE + CELL_SIZE / 2;
+      // Color-code by damage level
+      if (ratio >= 0.5) {
+        ctx.fillStyle = `rgba(255,200,80,${0.55 + (1 - ratio) * 0.3})`;
+      } else {
+        ctx.fillStyle = `rgba(255,80,40,${0.70 + (0.5 - ratio) * 0.5})`;
+      }
+      ctx.fillText(`${Math.ceil(wd.hp)}`, wx, wy);
+    }
+    ctx.textBaseline = 'alphabetic';
     ctx.restore();
   }
 
