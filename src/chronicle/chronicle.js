@@ -110,20 +110,21 @@ export function checkScars(defender, battleData, allBattles) {
 
   // Boss-encounter scars (based on full battle history)
   const myBattles = allBattles.filter(b => b.defenders?.some(d => d.defenderId === id));
-  if (!has('draugen_scar')) {
-    const n = myBattles.filter(b => b.bossKills?.some(bk => bk.boss === 'DRAUGEN-JARL')).length;
-    if (n >= 3) earned.push('draugen_scar');
+  // Pre-count boss kills and max waves in a single pass
+  let _draugenKills = 0, _jotunnKills = 0, _maxWaves = 0;
+  for (const b of myBattles) {
+    if ((b.wavesCleared ?? 0) > _maxWaves) _maxWaves = b.wavesCleared ?? 0;
+    if (b.bossKills) {
+      for (const bk of b.bossKills) {
+        if (bk.boss === 'DRAUGEN-JARL')     _draugenKills++;
+        if (bk.boss === 'JÖTUNHELM WALKER') _jotunnKills++;
+      }
+    }
   }
-  if (!has('jotunn_scar')) {
-    const n = myBattles.filter(b => b.bossKills?.some(bk => bk.boss === 'JÖTUNHELM WALKER')).length;
-    if (n >= 3) earned.push('jotunn_scar');
-  }
-  if (!has('fenrir_brand')) {
-    if (myBattles.some(b => (b.wavesCleared ?? 0) >= 75)) earned.push('fenrir_brand');
-  }
-  if (!has('surtr_brand')) {
-    if (myBattles.some(b => (b.wavesCleared ?? 0) >= 100)) earned.push('surtr_brand');
-  }
+  if (!has('draugen_scar') && _draugenKills >= 3) earned.push('draugen_scar');
+  if (!has('jotunn_scar')  && _jotunnKills  >= 3) earned.push('jotunn_scar');
+  if (!has('fenrir_brand') && _maxWaves >= 75)     earned.push('fenrir_brand');
+  if (!has('surtr_brand')  && _maxWaves >= 100)    earned.push('surtr_brand');
 
   return earned.slice(0, cap);
 }
@@ -351,6 +352,12 @@ export function generateBio(defender, chronicle, classLabel) {
     lines.push(`${n} has felled ${kills} enemies — a count the warband does not forget.`);
   } else if (kills > 0) {
     lines.push(`${n} has felled ${kills} enemies across their career.`);
+  }
+
+  // Line 4b: Legacy bonus — predecessor's gift to newly recruited defender
+  if (defender.legacyBonus?.fromName && battles === 0) {
+    const _legLabel = defender.legacyBonus.stat === 'dm' ? 'strikes harder' : defender.legacyBonus.stat === 'rm' ? 'reaches further' : 'acts faster';
+    lines.push(`${n} carries the legacy of ${defender.legacyBonus.fromName} — a ${defender.legacyBonus.fromRank ?? 'veteran'} who came before. Their presence means ${n} ${_legLabel} in the line.`);
   }
 
   // Line 5: Equipment — brief note if well-outfitted

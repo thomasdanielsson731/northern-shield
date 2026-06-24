@@ -170,6 +170,23 @@ export function sfxBossPhase() {
   tone(165, 0.18, 0.18, 'square', 0.05);
 }
 
+export function sfxBossPhase50() {
+  // Mid-battle roar — momentum shift
+  tone(110, 0.30, 0.18, 'sawtooth');
+  tone(165, 0.26, 0.14, 'square',   0.06);
+  tone(220, 0.20, 0.10, 'sawtooth', 0.14);
+  tone(440, 0.14, 0.07, 'sine',     0.24);
+}
+
+export function sfxBossPhase25() {
+  // Deep ominous growl — death is near
+  tone(55,  0.55, 0.20, 'square');
+  tone(82,  0.45, 0.16, 'square',   0.08);
+  tone(110, 0.35, 0.12, 'sawtooth', 0.18);
+  tone(165, 0.24, 0.10, 'sawtooth', 0.30);
+  tone(220, 0.18, 0.08, 'sine',     0.46);
+}
+
 export function sfxRune() {
   [880, 1100, 1320].forEach((f, i) => tone(f, 0.10, 0.09, 'sine', i * 0.06));
 }

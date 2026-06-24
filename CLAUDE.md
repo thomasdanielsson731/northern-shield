@@ -50,6 +50,7 @@ src/
     talents.js         — TALENT_DEFS, CLASS_TALENTS, getTalentBonuses(); 4 talents per class, auto-unlocked at career levels 3/5/8/10
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
+    events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
   chronicle/
@@ -150,6 +151,17 @@ Two towers are gated behind stars earned in the current run: `isjatten` requires
 
 Towers upgrade to level 10: +25% damage, +8% range, −5% cooldown per level. Sell = 50% of base cost. High scores persist to `localStorage` under key `northern-shield-hs` (max 8 entries).
 
+### Wall system
+
+Two wall types in `TOWER_BUILD_ITEMS`:
+
+| Type | Key | Cost | Behaviour |
+|---|---|---|---|
+| Shield Wall | `1` | `WALL_COST=12` | Permanent; 4 upgrade levels; HP `[100,120,140,160,180]`; upgrade costs `[8,14,20,28]`; loses `WALL_WAVE_DAMAGE=5` HP each wave if adjacent to path |
+| Reinforce | `2` | `REINFORCE_COST=30` | Temporary; crumbles after `REINFORCE_WAVES=3` wave-end ticks; `wallData[key].reinforce` countdown; no upgrade path |
+
+`wallData` is a `'${col}_${row}'`-keyed object. Each entry: `{ level, hp, maxHp, reinforce? }`. `wallFrostCells` is a cached list of cells adjacent to walls (rebuilt when `wallFrostDirty=true`).
+
 ### Rune system
 
 Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars now persist across battles as part of campaign state (`_campaignState.stars`). Press `R` between waves to open the Rune Forge overlay (`showRuneMenu`).
@@ -216,6 +228,23 @@ Auto-starts in 10 s (`MAP_AUTO_DELAY`) if the player doesn't pick. `initGame(map
 | 80 | DARK HARVEST | +40% HP, +4 extra Jötunn |
 | 90 | FÖRSPELET | +50% HP, +40% speed |
 
+### Named Campaign Events
+
+`src/campaign/events.js` — 8 trade-off story moments shown between battles. `getAvailableEvent(cs)` returns one random eligible event that hasn't been seen this campaign (`cs.seenEventIds`), or `null`.
+
+Each event has two choices (A costs gold/stars, B is free or cheaper). Effects are applied in `game.js` because they need access to roster/gold/stars. `_campaignState.seenEventIds[]` tracks which events have fired.
+
+| ID | Title | Trigger | Choice A | Choice B |
+|---|---|---|---|---|
+| `handelsman` | THE TRADER | battle 2+ | Buy equipment (60g) | Pass |
+| `volva` | THE SEERESS | battle 3+, 2 stars | Name a hidden trait (2★) | Hospitality (8g) |
+| `smeden` | THE ARMORER | battle 2+ | Full commission (35g, +20 XP ×3 vets) | Quick sharpen (12g, +15 XP newest) |
+| `skalden` | THE POET | battle 4+, defender 15+ kills | Commission verse (25g, +60 XP MVP) | Let observe (free) |
+| `leidangr` | THE SURVIVOR | battle 3+, roster < 8 | Recruit survivor (20g) | Provisions (8g) |
+| `blotet` | THE FEAST | battle 6+ | Grand feast (50g, +25 XP all) | Modest feast (20g, +20 XP top rank) |
+| `utilegumadr` | THE EXILE | battle 7+, 1 star, roster < 8 | Hire exile (35g+1★) | Turn away |
+| `runstenen` | THE RUNE STONE | battle 4+, 3 stars | Draw rune (3★, unlock next talent early) | Leave (gain 1★) |
+
 ### Achievements
 
 Five achievements defined in `ACH_DEFS`, persisted to `localStorage` under key `northern-shield-ach` (a JSON array of earned IDs). Toast notifications queue in `_achToasts`.
@@ -227,6 +256,10 @@ Five achievements defined in `ACH_DEFS`, persisted to `localStorage` under key `
 | `wave50` | BULWARK | Survive to wave 50 |
 | `wave100` | SHIELD ETERNAL | Clear all 100 waves |
 | `flawless5` | GHOST WALKER | 5 flawless waves in one run |
+
+### Endless mode
+
+After wave 100 is cleared, `endlessMode = true`. The game continues past `MAX_WAVES=100` indefinitely. An `endlessBanner` countdown shows the "ENDLESS MODE" announcement. Wave events and portal activations stop scaling (the `WAVE_EVENTS` dictionary is finite); enemy stats continue scaling via the normal formula.
 
 ### Wave threat coloring
 
