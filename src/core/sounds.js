@@ -310,3 +310,29 @@ export function sfxBond() {
   tone(660, 0.14, 0.07, 'sine', 0.10);
   tone(330, 0.18, 0.05, 'sine', 0.22);
 }
+
+export function sfxRetireCeremony() {
+  // Solemn descending chord — a veteran steps down
+  [440, 330, 220, 165].forEach((f, i) => tone(f, 0.40, 0.08, 'sawtooth', i * 0.14));
+  tone(110, 0.60, 0.06, 'square', 0.58);
+}
+
+export function sfxEnemyIntro() {
+  // Short warning sting — new threat arrives
+  tone(220, 0.12, 0.15, 'square');
+  tone(165, 0.18, 0.12, 'square', 0.10);
+  tone(110, 0.22, 0.10, 'sawtooth', 0.22);
+}
+
+export function sfxPortalOpens() {
+  // Distant deep rumble — a new gate tears open
+  tone(55,  0.60, 0.16, 'square');
+  tone(82,  0.50, 0.12, 'square',   0.10);
+  tone(110, 0.35, 0.09, 'sawtooth', 0.24);
+  tone(165, 0.20, 0.07, 'sine',     0.44);
+}
+
+export function sfxEventResolve() {
+  // Bright resolution chime — an event concludes
+  [880, 1100, 1320, 1760].forEach((f, i) => tone(f, 0.14, 0.09, 'sine', i * 0.06));
+}

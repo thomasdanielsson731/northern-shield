@@ -24,6 +24,7 @@ import {
   sfxFlawless, sfxWaveDone, sfxEndlessStart, sfxEndlessMilestone,
   sfxTalentUnlock, sfxLootDrop, sfxFortressUpgrade, sfxRecruit, sfxDismiss, sfxRename, sfxBond,
   sfxBossPhase25, sfxBossPhase50,
+  sfxRetireCeremony, sfxEnemyIntro, sfxPortalOpens, sfxEventResolve,
 } from './sounds.js';
 
 const COLS = 48;
@@ -260,6 +261,7 @@ let _rosterScrollOffset = 0;            // how many defender rows scrolled past 
 let _renameState        = null;          // { defenderId, draft } while canvas rename is active
 let _enemyIntroSeen     = new Set();     // enemy types shown intro banner this campaign
 let _enemyIntroBanner   = null;          // { type, timer, label, hint } for first-encounter tooltip
+let _enemyIntroQueue    = [];            // queued { label, hint } banners waiting to display
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
 let _debriefTimer       = 0;             // frames since debrief opened (used for entry anim + click gate)
 let _pendingCampaignEvent = null;        // EVENT_DEFS entry shown as card in betweenBattles
@@ -269,6 +271,8 @@ let _campaignVictoryScreen = false;     // true after W100 victory, until dismis
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
+let _starsEarnedThisBattle = 0;        // stars gained this battle (flawless waves + boss kills)
+let _lastResolvedEventTitle = null;    // event card title resolved this between-battles (for echo)
 
 // Chronicle event accumulators — reset each battle, consumed in recordBattleResult
 let _chronBossKills  = [];    // [{boss, killerName, killerId}]
@@ -608,6 +612,8 @@ function restartCombatState() {
   _rosterScrollOffset = 0;
   _renameState       = null;
   _enemyIntroBanner  = null;
+  _enemyIntroQueue   = [];
+  _starsEarnedThisBattle = 0;
   _battleXpData      = [];
   _reserveContrib    = 0;
   _bossLootBanner    = null;
@@ -937,8 +943,9 @@ function recordBattleResult(result) {
   _roster.releaseAll();
   _campaignState.defenders = _roster.toJSON();
 
-  _pendingCampaignEvent = getAvailableEvent(_campaignState);
-  _eventCardAnim        = 0;
+  _pendingCampaignEvent    = getAvailableEvent(_campaignState);
+  _eventCardAnim           = 0;
+  _lastResolvedEventTitle  = null;
 
   _recruitType = null;
 
@@ -1332,10 +1339,14 @@ function startNextWave() {
   for (const _es of _extraSpawns) {
     if (!_es.active && _es.activateWave && waveNumber === _es.activateWave) {
       _es.active = true;
+      sfxPortalOpens();
+      screenShake = Math.max(screenShake, 14);
+      chapterBannerText  = `⚠ ${_es.dir} GATE OPENS — NEW THREAT APPROACHES`;
+      chapterBannerTimer = 300;
       dmgFloaters.push({
-        x: GOAL.col * CELL_SIZE + CELL_SIZE / 2, y: GOAL.row * CELL_SIZE - 20,
-        val: `⚠ ${_es.dir} GATE OPENS`, life: 180, maxLife: 180,
-        color: '#ff6040', large: true, suffix: '', vy: 0, raw: true,
+        x: _es.col * CELL_SIZE + CELL_SIZE / 2, y: _es.row * CELL_SIZE,
+        val: `⚠ GATE OPENS`, life: 120, maxLife: 120,
+        color: '#ff6040', large: true, suffix: '', vy: -0.3, raw: true,
       });
     }
   }
@@ -1361,12 +1372,33 @@ function startNextWave() {
       [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves' },
     };
     const waveTypes = new Set(spawnQueue.map(e => e.__herald ? e.type : e).filter(t => typeof t === 'string'));
+    _enemyIntroQueue = [];
     for (const [t, info] of Object.entries(_INTRO_TYPES)) {
       if (waveTypes.has(t) && !_enemyIntroSeen.has(t)) {
         _enemyIntroSeen.add(t);
-        _enemyIntroBanner = { label: info.label, hint: info.hint, timer: 210, maxTimer: 210 };
-        break; // show one banner at a time
+        _enemyIntroQueue.push({ label: info.label, hint: info.hint });
       }
+    }
+    // Boss first-encounter banners
+    const _BOSS_INTROS = {
+      10:  { label: '☠ DRAUGEN-JARL RISES', hint: 'Chieftain of the Dead — heavy HP, spawns minions. Focus fire.' },
+      25:  { label: '☠ JÖTUNHELM WALKER COMES', hint: 'Mountain giant — colossal HP, leaves shockwave. Siege damage preferred.' },
+      50:  { label: '☠ FENRIR UNCHAINED', hint: 'The Great Wolf — speed surges at each phase. AoE towers essential.' },
+      75:  { label: '☠ HATI & SKÖLL DESCEND', hint: 'Twin hunters — split and converge. Two-front defense required.' },
+      100: { label: '☠ SURTR, LORD OF FIRE', hint: 'The world-ender. All defenses to maximum. The north must hold.' },
+    };
+    if (BOSS_WAVES.has(waveNumber) && _BOSS_INTROS[waveNumber]) {
+      const _bKey = `boss_${waveNumber}`;
+      if (!_enemyIntroSeen.has(_bKey)) {
+        _enemyIntroSeen.add(_bKey);
+        _enemyIntroQueue.unshift(_BOSS_INTROS[waveNumber]); // boss banner shows FIRST
+      }
+    }
+
+    if (_enemyIntroQueue.length > 0) {
+      const _first = _enemyIntroQueue.shift();
+      _enemyIntroBanner = { label: _first.label, hint: _first.hint, timer: 210, maxTimer: 210 };
+      sfxEnemyIntro();
     }
   }
   screenShake = Math.max(screenShake, Math.min(14, 2 + Math.floor(waveNumber * 0.12)));
@@ -1476,6 +1508,7 @@ function updateWave() {
       flawlessTimer     = 180;
       hoardPulse = 60;
       stars++;   // 1 star for flawless wave
+      _starsEarnedThisBattle++;
       if (stars === 1 && _runeForgeHintTimer <= 0) _runeForgeHintTimer = 360;
       flawlessCount++;
       flawlessStreak++;
@@ -3069,6 +3102,7 @@ canvas.addEventListener('mousedown', e => {
         for (const evBtn of _pendingEventBtns) {
           if (mouseX >= evBtn.x && mouseX <= evBtn.x + evBtn.w &&
               mouseY >= evBtn.y && mouseY <= evBtn.y + evBtn.h) {
+            if (evBtn.choice === 'PASS') { _pendingCampaignEvent = null; return; }
             if (evBtn.canAfford) applyCampaignEventChoice(_pendingCampaignEvent.id, evBtn.choice);
             return;
           }
@@ -3215,7 +3249,7 @@ canvas.addEventListener('mousedown', e => {
             sfxRune();
           } else if (btn.action === 'openRetire') {
             const retDef = _roster?.find(btn.defenderId);
-            if (retDef) { _retirementCeremony = retDef; _retireCeremonyFade = 30; sfxFlawless(); }
+            if (retDef) { _retirementCeremony = retDef; _retireCeremonyFade = 30; sfxRetireCeremony(); }
           } else if (btn.action === 'startRename') {
             const def = _roster?.find(btn.defenderId);
             if (def && def.careerLevel >= 1) _renameState = { defenderId: def.defenderId, draft: def.name };
@@ -6012,6 +6046,17 @@ function drawTopBar() {
   ctx.fillText(wLabel, midX, cy - 3);
   ctx.shadowBlur  = 0;
 
+  // Upcoming portal milestone hint (when multiPortal map and within 3 waves of next gate)
+  if (!endlessMode && _extraSpawns.length > 0) {
+    const _nextPortal = _extraSpawns.find(es => !es.active && es.activateWave > displayWave && es.activateWave <= displayWave + 3);
+    if (_nextPortal) {
+      const _milestonePulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.25;
+      ctx.font      = '7px monospace';
+      ctx.fillStyle = `rgba(255,140,60,${_milestonePulse})`;
+      ctx.fillText(`▲ W${_nextPortal.activateWave}: ${_nextPortal.dir} GATE OPENS`, midX, cy - 14);
+    }
+  }
+
   // Phase line below wave label
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -7008,6 +7053,7 @@ function onBossPhase25(boss) {
 function onBossKilled(boss, killerTower = null) {
   bossesDefeated++;
   stars         += 3;
+  _starsEarnedThisBattle += 3;
   // Log to chronicle
   _chronBossKills.push({
     boss:       boss.bossName ?? '',
@@ -7438,7 +7484,15 @@ function drawBossLootBanner() {
 }
 
 function drawEnemyIntroBanner() {
-  if (!_enemyIntroBanner || _enemyIntroBanner.timer <= 0) return;
+  if (!_enemyIntroBanner || _enemyIntroBanner.timer <= 0) {
+    // Advance queue if more banners are waiting
+    if (_enemyIntroQueue.length > 0) {
+      const _next = _enemyIntroQueue.shift();
+      _enemyIntroBanner = { label: _next.label, hint: _next.hint, timer: 210, maxTimer: 210 };
+      sfxEnemyIntro();
+    }
+    return;
+  }
   _enemyIntroBanner.timer--;
   const { timer, maxTimer, label, hint } = _enemyIntroBanner;
   // Fade in over 10 frames, fade out over last 40 frames
@@ -7768,6 +7822,42 @@ function drawChronicleOverlay() {
     totalH += entryH;
   }
 
+  // ── Empty filter state ────────────────────────────────────────────────────
+  if (filteredBattles.length === 0 && _chronicleDefFilter) {
+    const _emptyName = uniqueDefs.find(d => d.id === _chronicleDefFilter)?.name ?? 'this defender';
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.45)'; ctx.textAlign = 'center';
+    ctx.fillText(`No chronicle entries for ${_emptyName}`, W / 2, listTop + 40);
+    ctx.textAlign = 'left';
+    totalH += 60;
+  }
+
+  // ── Bonds section ─────────────────────────────────────────────────────────
+  const _campaignBonds = _campaignState?.bonds ?? [];
+  if (_campaignBonds.length > 0 && !_chronicleDefFilter) {
+    if (y + 30 > listTop && y < listTop + listH) {
+      ctx.strokeStyle = 'rgba(180,140,60,0.28)'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(PAD + 4, y + 8); ctx.lineTo(W - PAD - 4, y + 8); ctx.stroke();
+      ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.75)';
+      ctx.textAlign = 'center';
+      ctx.fillText('BONDS OF BATTLE', W / 2, y + 20);
+      ctx.textAlign = 'left';
+    }
+    y += 28; totalH += 28;
+    for (const bond of _campaignBonds) {
+      const _bEntH = 22;
+      if (y + _bEntH > listTop && y < listTop + listH) {
+        const _bA = _roster?.find(bond.defenderIds[0]);
+        const _bB = _roster?.find(bond.defenderIds[1]);
+        const _bNames = `${_bA?.name ?? bond.defenderIds[0]}  &  ${_bB?.name ?? bond.defenderIds[1]}`;
+        ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.70)'; ctx.textAlign = 'left';
+        ctx.fillText(`∞ ${bond.name ?? 'Bond'}`, PAD + 4, y + 10);
+        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(170,145,95,0.55)';
+        ctx.fillText(_bNames, PAD + 4, y + 20);
+      }
+      y += _bEntH; totalH += _bEntH;
+    }
+  }
+
   // ── Hall of the Honored (retired champions) ──────────────────────────────
   if (hallH.length > 0) {
     if (y + 30 > listTop && y < listTop + listH) {
@@ -8005,8 +8095,13 @@ function drawRetirementCeremony(def) {
 
   // Legacy bonus note
   const _legacyArr = (_campaignState?.legacyBonuses ?? {})[def.type];
-  const hasLegacy = Array.isArray(_legacyArr) ? _legacyArr.length >= 3 : !!_legacyArr;
-  if (!hasLegacy) {
+  const _legacyFull = Array.isArray(_legacyArr) && _legacyArr.length >= 3;
+  if (_legacyFull) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(240,200,60,0.65)';
+    ctx.shadowColor = 'rgba(220,180,40,0.4)'; ctx.shadowBlur = 4;
+    ctx.fillText(`✦ LEGACY AT FULL STRENGTH — ${clsLbl} line endures`, W / 2, py + 140);
+    ctx.shadowBlur = 0;
+  } else {
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.55)';
     ctx.fillText(`The next ${clsLbl} recruit carries ${def.name}'s tradition.`, W / 2, py + 140);
   }
@@ -8022,7 +8117,7 @@ function drawRetirementCeremony(def) {
     const _retBondedId = _retBond.defenderIds.find(id => id !== def.defenderId);
     const _retBonded   = _roster?.find(_retBondedId);
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.65)'; ctx.textAlign = 'center';
-    ctx.fillText(`⚠ ${_retBonded?.name ?? '?'} will carry Bond Grief`, b1x + btnW / 2, btnY - 22);
+    ctx.fillText(`⚠ ∞ ${_retBond.name ?? 'Bond'} severs — ${_retBonded?.name ?? '?'} carries grief`, b1x + btnW / 2, btnY - 22);
   }
   // "This is permanent." warning above confirm button
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.75)'; ctx.textAlign = 'center';
@@ -8163,7 +8258,7 @@ function drawDebrief() {
   _drawStat('BATTLES FOUGHT', `${battlesCompleted}`, sRX, hy + ROW, 'rgba(180,155,110,0.80)');
   _drawStat('PROMOTIONS', `${_promotionQueue.length}`, sRX, hy + ROW * 2,
             _promotionQueue.length > 0 ? '#a8e0c0' : 'rgba(160,135,90,0.50)');
-  _drawStat('STARS', `✦ ${stars}`, sRX, hy + ROW * 3, '#f0d040');
+  _drawStat('STARS', `✦ ${stars}${_starsEarnedThisBattle > 0 ? ` (+${_starsEarnedThisBattle})` : ''}`, sRX, hy + ROW * 3, '#f0d040');
 
   hy += ROW * 4 + 6;
 
@@ -8342,9 +8437,18 @@ function drawCampaignEventCard() {
   _drawEventBtn(b1X, btnY, btnW, btnH, ev.choiceA, canA);
   _drawEventBtn(b2X, btnY, btnW, btnH, ev.choiceB, canB);
 
+  // — PASS hint — bottom center of card
+  const _passY = cY + cH - 12;
+  ctx.textAlign = 'center'; ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(120,100,60,0.40)';
+  ctx.fillText('— PASS —  (ESC)', cX + cW / 2, _passY);
+  const _passW = 60, _passH = 14;
+  const _passX = cX + cW / 2 - _passW / 2;
+
   _pendingEventBtns = [
     { x: b1X, y: btnY, w: btnW, h: btnH, choice: 'A', canAfford: canA },
     { x: b2X, y: btnY, w: btnW, h: btnH, choice: 'B', canAfford: canB },
+    { x: _passX, y: _passY - 10, w: _passW, h: _passH, choice: 'PASS', canAfford: true },
   ];
 
   ctx.restore();
@@ -8461,7 +8565,9 @@ function applyCampaignEventChoice(eventId, choice) {
   cs.defenders          = _roster.toJSON();
   cs.goldReserve        = goldReserve;
   try { saveCampaign(cs); } catch {}
+  _lastResolvedEventTitle = _pendingCampaignEvent?.title ?? null;
   _pendingCampaignEvent = null;
+  sfxEventResolve();
 }
 
 function drawBetweenBattles() {
@@ -8557,14 +8663,26 @@ function drawBetweenBattles() {
   ctx.fillStyle   = '#f0d040';
   ctx.shadowColor = 'rgba(240,190,20,0.6)';
   ctx.shadowBlur  = 6;
-  ctx.fillText(`✦ ${stars} campaign stars  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 129);
+  ctx.fillText(`✦ ${stars} campaign stars${_starsEarnedThisBattle > 0 ? ` (+${_starsEarnedThisBattle})` : ''}  ·  ◆ ${goldReserve}g reserve`, lcx, lpY + 129);
   ctx.shadowBlur = 0;
 
-  lpSep(lpY + 139);
+  // Bonds count + resolved event echo
+  {
+    const _bondCount = (_campaignState?.bonds ?? []).length;
+    const _bits = [];
+    if (_bondCount > 0) _bits.push(`⚭ ${_bondCount} bond${_bondCount !== 1 ? 's' : ''}`);
+    if (_lastResolvedEventTitle) _bits.push(`⚑ ${_lastResolvedEventTitle}`);
+    if (_bits.length > 0) {
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,150,100,0.55)';
+      ctx.fillText(_bits.join('  ·  '), lcx, lpY + 140);
+    }
+  }
+
+  lpSep(lpY + 146);
 
   ctx.font      = '9px monospace';
   ctx.fillStyle = 'rgba(160,140,100,0.6)';
-  ctx.fillText('TOP DEFENDERS THIS BATTLE', lcx, lpY + 153);
+  ctx.fillText('TOP DEFENDERS THIS BATTLE', lcx, lpY + 158);
 
   const top3 = [...towers]
     .sort((a, b) => ((b.killCount || 0) + (b.damageDealt || 0) * 0.02) -
@@ -8573,13 +8691,13 @@ function drawBetweenBattles() {
 
   if (top3.length === 0) {
     ctx.fillStyle = 'rgba(120,100,70,0.5)';
-    ctx.fillText('none deployed', lcx, lpY + 170);
+    ctx.fillText('none deployed', lcx, lpY + 176);
   } else {
     const icons = ['★', '·', '·'];
     top3.forEach((tower, i) => {
       const def2   = TOWER_DEFS[tower.type];
       const lvlTag = tower._careerLevel > 0 ? ` [${ROMAN[tower._careerLevel] ?? ''}]` : '';
-      const rowY   = lpY + 170 + i * 22;
+      const rowY   = lpY + 176 + i * 22;
       ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
       const topRgb  = defenderGlowRgb(tower);
       ctx.fillStyle = `rgba(${topRgb},${i === 0 ? 0.95 : 0.78})`;
@@ -8594,7 +8712,7 @@ function drawBetweenBattles() {
   }
 
   // Talent unlocks earned this battle
-  let postTop3Y = lpY + 170 + top3.length * 22 + 14;
+  let postTop3Y = lpY + 176 + top3.length * 22 + 14;
   if (top3.length > 0 && top3[0]) postTop3Y += 11; // extra for class label on first entry
 
   if (_newBattleTalentUnlocks.length > 0) {
@@ -8670,11 +8788,17 @@ function drawBetweenBattles() {
       const _lineH    = 12;
       const _maxLines = Math.floor((reportAvailH - 18) / _lineH);
       let _py = reportAreaTop + 23;
+      const _truncated = _proseLines.length > _maxLines;
       for (let _li = 0; _li < Math.min(_proseLines.length, _maxLines); _li++) {
         const _isLast = _li === _proseLines.length - 1 || _li === _maxLines - 1;
-        ctx.fillStyle = _isLast ? 'rgba(190,165,115,0.55)' : 'rgba(190,165,115,0.75)';
+        ctx.fillStyle = _isLast ? 'rgba(190,165,115,0.45)' : 'rgba(190,165,115,0.75)';
         ctx.fillText(_proseLines[_li], _proseX, _py);
         _py += _lineH;
+      }
+      if (_truncated) {
+        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,80,0.38)'; ctx.textAlign = 'right';
+        ctx.fillText('→ see Chronicle for full entry', _proseX + _proseW, _py + 2);
+        ctx.textAlign = 'left';
       }
       ctx.restore();
     }
@@ -8995,6 +9119,16 @@ function drawBetweenBattles() {
       const _bonded = _roster?.find(_defBond.defenderIds.find(id => id !== def.defenderId));
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(220,80,60,0.82)';
       ctx.fillText(`⚠ ${_bonded?.name ?? '?'} carries Bond Grief`, rix, ry + 36);
+    } else if (_defBond && !isPendingDismiss) {
+      const _bondPartner = _roster?.find(_defBond.defenderIds.find(id => id !== def.defenderId));
+      ctx.font = '7px monospace';
+      ctx.fillStyle = 'rgba(200,160,60,0.60)';
+      ctx.fillText(`∞ ${_defBond.name ?? 'Bond'} · ${_bondPartner?.name ?? '?'}`, rix, ry + 36);
+      if (traitDef) {
+        const _bondW = ctx.measureText(`∞ ${_defBond.name ?? 'Bond'} · `).width + 18;
+        ctx.fillStyle = 'rgba(140,120,90,0.45)';
+        ctx.fillText(traitDef.label, rix + _bondW, ry + 36);
+      }
     } else if (traitDef || scarLabels.length) {
       const _traitColors = {
         reckless:'#e08060', steadfast:'#80b0e0', brooding:'#9090c0',
