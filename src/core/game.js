@@ -5,6 +5,7 @@ import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
+import { getAvailableEvent } from '../campaign/events.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
@@ -72,13 +73,18 @@ let panStartOffX      = 0, panStartOffY  = 0;
 let rightClickDragged = false;
 let rightClickSaved   = null;
 
+const REINFORCE_COST  = 30;
+const REINFORCE_WAVES = 3;   // number of wave-end ticks before a reinforce wall crumbles
+
 // TOWER items: static siege/defensive structures
 const TOWER_BUILD_ITEMS = [
-  { id: 'wall',    label: 'Shield Wall', key: '1', color: '#6e5038', cost: WALL_COST, mode: CELL.WALL, category: 'walls' },
+  { id: 'wall',      label: 'Shield Wall',  key: '1', color: '#6e5038', cost: WALL_COST,     mode: CELL.WALL, category: 'walls' },
+  { id: 'reinforce', label: 'Reinforce',    key: '2', color: '#8a6a18', cost: REINFORCE_COST, mode: CELL.WALL, category: 'walls' },
   { id: 'piltorn',  ...TOWER_DEFS['piltorn'],  mode: CELL.TOWER, category: 'siege' },
   { id: 'catapult', ...TOWER_DEFS['catapult'], mode: CELL.TOWER, category: 'siege' },
   { id: 'drakship', ...TOWER_DEFS['drakship'], mode: CELL.TOWER, category: 'siege' },
 ];
+let selectedWallType = 'wall';  // 'wall' | 'reinforce'
 // HERO items: warband characters with roster identity
 const HERO_BUILD_ITEMS = [
   ...['berserk', 'valkyrie', 'military', 'hydda', 'blondie', 'isjatten'].map(type => ({
@@ -139,6 +145,7 @@ let hoverRow  = -1;
 
 let goldCoins  = [];   // flying coin particles: { sx, sy, t, speed }
 let hoardPulse = 0;    // frames of bounce animation when coin lands
+let _lastTreasuryStage = 1; // tracked to fire hoardPulse on stage change
 // Gold hoard target = trelleborg center (GOAL cell, in screen space — updated by initGame)
 let hoardX   = GRID_LEFT + GOAL.col * CELL_SIZE + CELL_SIZE / 2;
 let hoardY   = GRID_TOP  + GOAL.row * CELL_SIZE + CELL_SIZE / 2;
@@ -251,6 +258,10 @@ let _renameState        = null;          // { defenderId, draft } while canvas r
 let _enemyIntroSeen     = new Set();     // enemy types shown intro banner this campaign
 let _enemyIntroBanner   = null;          // { type, timer, label, hint } for first-encounter tooltip
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
+let _debriefTimer       = 0;             // frames since debrief opened (used for entry anim + click gate)
+let _pendingCampaignEvent = null;        // EVENT_DEFS entry shown as card in betweenBattles
+let _pendingEventBtns     = [];          // [{x,y,w,h,choice,canAfford}] hit areas for event card
+let _eventCardAnim        = 0;           // frames since card opened (slide-in)
 let _campaignVictoryScreen = false;     // true after W100 victory, until dismissed
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
@@ -264,6 +275,7 @@ let _showChronicle   = false; // overlay showing full chronicle log
 let _chronicleScrollY = 0;    // scroll offset in chronicle overlay (px)
 
 // Defender Legacy System state
+let _firstChampionTooltipTimer = 0;  // frames remaining for one-time CHAMPION retire tooltip
 let _promotionQueue      = [];   // [{defenderName, rankLabel, text, type}] — cleared on next battle
 let _promoBannerTimer    = 0;   // auto-dismiss countdown (600 frames = 10s at 60fps)
 let _retirementCeremony  = null; // defender obj whose retirement ceremony is showing
@@ -564,6 +576,7 @@ function restartCombatState() {
   _frameTick    = 0;
   goldCoins     = [];
   hoardPulse    = 0;
+  _lastTreasuryStage = getHoardStage(STARTING_GOLD).level;
   bossWarnAlpha    = 0;
   portalFlash      = 0;
   portalFlashColor = 'red';
@@ -842,6 +855,11 @@ function recordBattleResult(result) {
         text:         `${def.name} has been promoted to ${newRank.label}.`,
         type:         'rank',
       });
+      // First-time CHAMPION: show one-time retire tooltip (3 s)
+      if (newRank.id === 'champion' && !_campaignState.firstChampionTooltipShown) {
+        _campaignState.firstChampionTooltipShown = true;
+        _firstChampionTooltipTimer = 180;
+      }
     }
   }
 
@@ -913,14 +931,16 @@ function recordBattleResult(result) {
   _roster.releaseAll();
   _campaignState.defenders = _roster.toJSON();
 
+  _pendingCampaignEvent = getAvailableEvent(_campaignState);
+  _eventCardAnim        = 0;
+
   _recruitType = null;
 
   try { saveCampaign(_campaignState); } catch {}
   if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
-  // Defeat: immediate (no fade — abruptness communicates loss); victory: gentle reveal
-  _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
   if (result === 'victory' && waveNumber >= MAX_WAVES) _campaignVictoryScreen = true;
-  gamePhase = 'betweenBattles';
+  _debriefTimer = 0;
+  gamePhase = 'debrief';
 }
 
 // Start game with chosen preset map (called from map select screen).
@@ -1560,6 +1580,22 @@ function updateWave() {
         }
       }
     }
+    // Temporary reinforce walls: decrement wave counter, remove expired
+    {
+      for (const _wk of Object.keys(wallData)) {
+        const _wd = wallData[_wk];
+        if (!_wd.temporary) continue;
+        _wd.wavesLeft--;
+        if (_wd.wavesLeft <= 0) {
+          const [_rc, _rr] = _wk.split('_').map(Number);
+          grid.setCell(_rc, _rr, CELL.EMPTY);
+          delete wallData[_wk];
+          wallFrostDirty = true;
+          currentPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row) ?? currentPath;
+          for (const _es of _extraSpawns) _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row) ?? _es.path;
+        }
+      }
+    }
     waveState = 'break';
   }
 }
@@ -2078,7 +2114,7 @@ function initTerrain() {
       lm.fillStyle = `rgba(${sg + 52},${sg + 48},${sg + 58},0.60)`;
       lm.fillRect(-sw / 2, -sh / 2, sw, Math.round(sh * 0.12));
       // Carved rune lines
-      lm.strokeStyle = 'rgba(140,80,200,0.58)'; lm.lineWidth = 0.7;
+      lm.strokeStyle = 'rgba(80,140,200,0.58)'; lm.lineWidth = 0.7;
       lm.beginPath();
       lm.moveTo(0, -sh * 0.32); lm.lineTo(0, sh * 0.28);
       lm.moveTo(-sw * 0.32, -sh * 0.08); lm.lineTo(sw * 0.32, -sh * 0.08);
@@ -2086,8 +2122,8 @@ function initTerrain() {
       lm.moveTo(sw * 0.30, -sh * 0.24); lm.lineTo(-sw * 0.30, sh * 0.06);
       lm.stroke();
       // Rune glow halo
-      lm.shadowColor = 'rgba(130,70,210,0.55)'; lm.shadowBlur = 5;
-      lm.strokeStyle = 'rgba(160,100,240,0.28)'; lm.lineWidth = 1.5;
+      lm.shadowColor = 'rgba(80,140,200,0.55)'; lm.shadowBlur = 5;
+      lm.strokeStyle = 'rgba(80,140,200,0.28)'; lm.lineWidth = 1.5;
       lm.strokeRect(-sw / 2 - 2, -sh / 2 - 2, sw + 4, sh + 4);
       lm.shadowBlur = 0;
       // Ground scatter
@@ -2107,7 +2143,7 @@ function initTerrain() {
       // Trunk
       const trunkW = Math.round(cs * 0.24);
       const trunkH = Math.round(cs * 0.72);
-      lm.fillStyle = '#2a1808';
+      lm.fillStyle = '#1e1006';
       lm.fillRect(-trunkW / 2, -trunkH / 2, trunkW, trunkH + trunkW / 2);
       // Trunk highlight
       lm.fillStyle = 'rgba(80,48,18,0.45)';
@@ -2291,7 +2327,7 @@ function initTerrain() {
         [-prX * 0.68, prY * 0.25, prY * 0.48],
         [prX * 0.45, prY * 0.60, prY * 0.44],
       ]) {
-        lm.beginPath(); lm.moveTo(rx2, ry2); lm.lineTo(rx2 + (Math.random() - 0.5) * 2, ry2 - rl); lm.stroke();
+        lm.beginPath(); lm.moveTo(rx2, ry2); lm.lineTo(rx2 + (rng() - 0.5) * 2, ry2 - rl); lm.stroke();
       }
       lm.lineCap = 'butt';
       lm.restore();
@@ -2595,7 +2631,9 @@ function tryPlaceAt(col, row, mode, towerType) {
     }
   }
 
-  const cost = mode === CELL.WALL ? _effectiveWallCost : TOWER_DEFS[towerType].cost;
+  const cost = mode === CELL.WALL
+    ? (towerType === 'reinforce' ? REINFORCE_COST : _effectiveWallCost)
+    : TOWER_DEFS[towerType].cost;
   if (gold < cost) return false;
 
   // Mark all footprint cells
@@ -2636,7 +2674,9 @@ function tryPlaceAt(col, row, mode, towerType) {
 
   if (mode === CELL.WALL) {
     sfxPlace(true);
-    wallData[`${col}_${row}`] = { level: 0, hp: WALL_BASE_HP, maxHp: WALL_BASE_HP };
+    wallData[`${col}_${row}`] = towerType === 'reinforce'
+      ? { level: 0, hp: WALL_BASE_HP, maxHp: WALL_BASE_HP, temporary: true, wavesLeft: REINFORCE_WAVES }
+      : { level: 0, hp: WALL_BASE_HP, maxHp: WALL_BASE_HP };
     const adjTW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
     for (const [ac, ar] of adjTW) {
       const bt = towers.find(t => t.col === ac && t.row === ar && t.type === TOWER_TYPES.BERSERK);
@@ -2781,6 +2821,16 @@ window.addEventListener('keydown', e => {
   }
 
   const key = e.key.toLowerCase();
+
+  // Debrief — space/enter to advance after gate
+  if (gamePhase === 'debrief') {
+    if ((e.key === ' ' || e.key === 'Enter') && _debriefTimer >= 60) {
+      e.preventDefault();
+      _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
+      gamePhase = 'betweenBattles';
+    }
+    return;
+  }
 
   // Map select keyboard navigation
   if (gamePhase === 'mapSelect') {
@@ -2963,6 +3013,15 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
+  // Post-battle debrief — click to advance after 2s gate
+  if (gamePhase === 'debrief') {
+    if (e.button === 0 && _debriefTimer >= 60) {
+      _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
+      gamePhase = 'betweenBattles';
+    }
+    return;
+  }
+
   // Between-battles summary screen
   if (gamePhase === 'betweenBattles') {
     if (e.button === 0) {
@@ -2994,6 +3053,18 @@ canvas.addEventListener('mousedown', e => {
         _showChronicle = false; _chronicleDefFilter = null; _navActiveId = 'battle'; return;
       }
       if (_retirementCeremony) { /* handled by _betweenBtns retirement actions below */ }
+
+      // Named campaign event card — intercepts all clicks when visible
+      if (_pendingCampaignEvent && _betweenFadeIn <= 0 && _eventCardAnim > 12) {
+        for (const evBtn of _pendingEventBtns) {
+          if (mouseX >= evBtn.x && mouseX <= evBtn.x + evBtn.w &&
+              mouseY >= evBtn.y && mouseY <= evBtn.y + evBtn.h) {
+            if (evBtn.canAfford) applyCampaignEventChoice(_pendingCampaignEvent.id, evBtn.choice);
+            return;
+          }
+        }
+        return; // click on card backdrop = no-op
+      }
 
       for (const btn of _betweenBtns) {
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
@@ -3272,6 +3343,7 @@ canvas.addEventListener('mousedown', e => {
     if (btn) {
       buildMode = btn.mode;
       if (btn.mode === CELL.TOWER) selectedTowerType = btn.id;
+      if (btn.mode === CELL.WALL) selectedWallType = btn.id;
       selectedTower = null;
       dragItem = btn;
       dragX    = mouseX;
@@ -3537,6 +3609,15 @@ function clampRightPanelScale() {
 function update() {
   if (gameOver || gamePhase !== 'playing' || isPaused) return;
 
+  // Treasury stage advancement pulse
+  {
+    const _curStage = getHoardStage(gold).level;
+    if (_curStage > _lastTreasuryStage) {
+      _lastTreasuryStage = _curStage;
+      hoardPulse = Math.max(hoardPulse, 90);
+    }
+  }
+
   // Auto-next-wave: skip break after a short pause so wave-clear animations breathe
   if (autoNextWave && waveTimer > 60 && (waveState === 'break' || waveState === 'countdown')) {
     startNextWave();
@@ -3551,6 +3632,7 @@ function update() {
   if (mylingWarningTimer  > 0) mylingWarningTimer--;
   if (maraEmpWarningTimer > 0) maraEmpWarningTimer--;
   if (jotunnWarningTimer  > 0) jotunnWarningTimer--;
+  if (_firstChampionTooltipTimer > 0) _firstChampionTooltipTimer--;
 
   updateWave();
 
@@ -4198,7 +4280,7 @@ function drawRampartHearts(x, y, current, max, filledColor) {
 }
 
 /** Mockup-style defender row in the right panel. */
-function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false } = {}) {
+function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false, maxScore = 0 } = {}) {
   const CARD_H = 32;
   const rgb    = defenderGlowRgb(tower);
   const tName  = tower.name ?? TOWER_DEFS[tower.type]?.label ?? tower.type;
@@ -4256,7 +4338,18 @@ function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isField
   if (_pt) {
     ctx.font = '6px monospace';
     ctx.fillStyle = 'rgba(160,130,200,0.55)';
-    ctx.fillText(`✦${_pt.label}`, rightX, y + CARD_H - 3);
+    ctx.fillText(`✦${_pt.label}`, rightX, y + CARD_H - 6);
+  }
+
+  // Contribution bar along bottom edge (only during combat with data)
+  if (maxScore > 0 && (dmg > 0 || kills > 0)) {
+    const score = dmg + kills * 32;
+    const frac  = Math.min(1, score / maxScore);
+    const bx = x + 2, by = y + CARD_H - 3, bw = w - 4;
+    ctx.fillStyle = `rgba(${rgb},0.18)`;
+    ctx.fillRect(bx, by, bw, 2);
+    ctx.fillStyle = `rgba(${rgb},${isMvp ? 0.85 : 0.55})`;
+    ctx.fillRect(bx, by, Math.max(2, Math.round(bw * frac)), 2);
   }
   ctx.textAlign = 'left';
   return CARD_H + 3;
@@ -5095,6 +5188,172 @@ function drawFrames() {
   ctx.restore();
 }
 
+// ── Combat overlay: WAR BAND tab ─────────────────────────────────────────────
+function drawCombatWarbandOverlay(px, py, pw, ph) {
+  const sX = px + 6, sW = pw - 12, dVX = px + pw - 8, ROW = 9;
+  let ly = py + 8;
+
+  ctx.save();
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#8090d8'; ctx.textAlign = 'left';
+  ctx.fillText('🛡 WAR BAND — DEPLOYED', sX, ly + 8); ly += 14;
+  ctx.strokeStyle = 'rgba(80,90,200,0.30)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(sX, ly); ctx.lineTo(sX + sW, ly); ctx.stroke(); ly += 4;
+
+  const scored = towers.map(t => ({
+    t, score: (t.damageDealt||0) + (t.killCount||0)*32,
+  })).sort((a,b) => b.score - a.score);
+  const maxScore = scored.length ? scored[0].score : 0;
+
+  for (const { t } of scored) {
+    if (ly + 35 > py + ph) break;
+    ly += drawDefenderSidebarRow(sX, ly, sW, dVX, t, {
+      isMvp: false, isFieldSelected: selectedTower?.defenderId === t.defenderId, maxScore,
+    });
+  }
+
+  // Roster not deployed
+  const _undeployed = _roster ? _roster.defenders.filter(d => !towers.some(t => t.defenderId === d.defenderId)) : [];
+  if (_undeployed.length > 0 && ly + 18 < py + ph) {
+    ly += 4;
+    ctx.font = 'bold 7.5px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)'; ctx.textAlign = 'left';
+    ctx.fillText('⊙ RESERVE', sX, ly + 7); ly += 12;
+    for (const d of _undeployed.slice(0, 4)) {
+      if (ly + 10 > py + ph) break;
+      const rgb = defenderGlowRgb(d.type);
+      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(${rgb},0.45)`;
+      ctx.fillText(`${d.name.slice(0, 13)}  ${TOWER_DEFS[d.type]?.label ?? ''}`, sX + 4, ly + 8);
+      ly += 10;
+    }
+  }
+  ctx.restore();
+}
+
+// ── Combat overlay: HALL tab ──────────────────────────────────────────────────
+function drawCombatHallOverlay(px, py, pw, ph) {
+  const sX = px + 6, sW = pw - 12, ROW = 10;
+  let ly = py + 8;
+  ctx.save();
+
+  const fallen  = _campaignState?.hallOfFallen  ?? [];
+  const honored = _campaignState?.hallOfHonored ?? [];
+
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#a05050'; ctx.textAlign = 'left';
+  ctx.fillText('⚱ HALL OF FALLEN', sX, ly + 8); ly += 14;
+  if (fallen.length === 0) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,110,90,0.45)';
+    ctx.fillText('None fallen yet.', sX + 4, ly + 7); ly += 10;
+  } else {
+    for (const f of fallen.slice(0, 5)) {
+      if (ly + ROW > py + ph - 40) break;
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(180,120,100,0.70)';
+      ctx.fillText(f.name ?? '?', sX + 4, ly + 7);
+      ctx.font = '6.5px monospace'; ctx.fillStyle = 'rgba(150,100,80,0.45)'; ctx.textAlign = 'right';
+      ctx.fillText(f.rankLabel ?? '', px + pw - 8, ly + 7);
+      ctx.textAlign = 'left'; ly += ROW;
+    }
+  }
+  ly += 6;
+  ctx.strokeStyle = 'rgba(80,170,100,0.25)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(sX, ly); ctx.lineTo(sX + sW, ly); ctx.stroke(); ly += 4;
+
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#80a870';
+  ctx.fillText('✦ HALL OF HONORED', sX, ly + 8); ly += 14;
+  if (honored.length === 0) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(120,150,100,0.45)';
+    ctx.fillText('No retirements yet.', sX + 4, ly + 7);
+  } else {
+    for (const h of honored.slice(0, 4)) {
+      if (ly + ROW > py + ph) break;
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(120,180,120,0.70)';
+      ctx.fillText(h.name ?? '?', sX + 4, ly + 7);
+      if (h.legacyNote) {
+        ctx.font = '6.5px monospace'; ctx.fillStyle = '#a8d080'; ctx.textAlign = 'right';
+        ctx.fillText(h.legacyNote.slice(0, 18), px + pw - 8, ly + 7);
+        ctx.textAlign = 'left';
+      }
+      ly += ROW;
+    }
+  }
+  ctx.restore();
+}
+
+// ── Combat overlay: FORTRESS tab ─────────────────────────────────────────────
+function drawCombatFortressOverlay(px, py, pw, ph) {
+  const sX = px + 6, sW = pw - 12, dVX = px + pw - 8, ROW = 9;
+  let ly = py + 8;
+  ctx.save();
+
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#5882c8'; ctx.textAlign = 'left';
+  ctx.fillText('🏰 FORTRESS STATUS', sX, ly + 8); ly += 14;
+  ctx.strokeStyle = 'rgba(60,80,160,0.30)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(sX, ly); ctx.lineTo(sX + sW, ly); ctx.stroke(); ly += 5;
+
+  // Lives / wall summary
+  const livC = lives <= 2 ? '#ff3030' : lives <= 4 ? '#ff7040' : '#50e870';
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,155,105,0.60)';
+  ctx.fillText('Ramparts:', sX, ly + ROW - 2);
+  ctx.font = 'bold 7.5px monospace'; ctx.fillStyle = livC; ctx.textAlign = 'right';
+  ctx.fillText(`${lives}/${STARTING_LIVES}`, dVX, ly + ROW - 2);
+  ctx.textAlign = 'left'; ly += ROW;
+
+  const _wallEntries = Object.values(wallData);
+  if (_wallEntries.length > 0) {
+    const _maxLvl  = Math.max(..._wallEntries.map(w => w.level));
+    const _damaged = _wallEntries.filter(w => w.hp < w.maxHp).length;
+    const _tempCnt = _wallEntries.filter(w => w.temporary).length;
+    const _wLvlStr = ['', 'I','II','III','IV'][_maxLvl] ?? '';
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,155,105,0.60)'; ctx.textAlign = 'left';
+    ctx.fillText(`Walls (${_wLvlStr || 'Base'}):`, sX, ly + ROW - 2);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = _damaged > 0 ? '#e8c040' : '#70c870';
+    ctx.fillText(_damaged > 0 ? `${_damaged} damaged` : 'intact', dVX, ly + ROW - 2);
+    ctx.textAlign = 'left'; ly += ROW;
+    if (_tempCnt > 0) {
+      ctx.font = '7px monospace'; ctx.fillStyle = '#f0c050';
+      ctx.fillText(`⟳ ${_tempCnt} reinforce wall${_tempCnt !== 1 ? 's' : ''}`, sX, ly + ROW - 2);
+      ly += ROW;
+    }
+  }
+  ly += 5;
+
+  // Fortress upgrades
+  const upgrades = _campaignState?.fortressUpgrades ?? {};
+  const _upgradeRows = [
+    { key: 'barracks',   label: 'Barracks',   icon: '⚑' },
+    { key: 'armory',     label: 'Armory',      icon: '⚔' },
+    { key: 'watchtower', label: 'Watchtower',  icon: '◈' },
+    { key: 'wallworks',  label: 'Wallworks',   icon: '▣' },
+  ];
+  ctx.strokeStyle = 'rgba(60,80,160,0.20)'; ctx.lineWidth = 0.4;
+  ctx.beginPath(); ctx.moveTo(sX, ly); ctx.lineTo(sX + sW, ly); ctx.stroke(); ly += 4;
+  ctx.font = 'bold 7.5px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.70)';
+  ctx.fillText('UPGRADES', sX, ly + 7); ly += 10;
+  for (const { key, label, icon } of _upgradeRows) {
+    if (ly + ROW > py + ph) break;
+    const lvl = upgrades[key] ?? 0;
+    const lvlStr = lvl === 0 ? '—' : ['I','II','III'][lvl - 1] ?? `${lvl}`;
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)'; ctx.textAlign = 'left';
+    ctx.fillText(`${icon} ${label}`, sX, ly + ROW - 2);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = lvl > 0 ? '#90c870' : 'rgba(120,100,70,0.45)';
+    ctx.fillText(lvlStr, dVX, ly + ROW - 2);
+    ctx.textAlign = 'left'; ly += ROW;
+  }
+
+  // Reserve gold
+  if (ly + ROW + 4 < py + ph) {
+    ly += 5;
+    const gr = _campaignState?.goldReserve ?? 0;
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,155,105,0.60)'; ctx.textAlign = 'left';
+    ctx.fillText('Reserve:', sX, ly + ROW - 2);
+    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#e8c040';
+    ctx.fillText(`◆${gr}g`, dVX, ly + ROW - 2);
+    ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+
 function drawRightPanel() {
   const px = GRID_LEFT + COLS * CELL_SIZE + 4;
   const pw = BASE_W - px - 36;
@@ -5105,6 +5364,13 @@ function drawRightPanel() {
   const fullH    = BASE_H - GRID_TOP - 36;
   const panelBot = GRID_TOP + fullH;
   drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(10,6,20,0.98)');
+
+  // Route combat non-battle tabs to their overlays
+  if (gamePhase === 'playing' && _navActiveId !== 'battle') {
+    if (_navActiveId === 'warband')  { drawCombatWarbandOverlay(px, GRID_TOP, pw, fullH);  return; }
+    if (_navActiveId === 'hall')     { drawCombatHallOverlay(px, GRID_TOP, pw, fullH);     return; }
+    if (_navActiveId === 'fortress') { drawCombatFortressOverlay(px, GRID_TOP, pw, fullH); return; }
+  }
 
   // Wave-announcement banner occupies y=GRID_TOP+2..+46 during break/countdown
   let ly = waveState === 'active' ? GRID_TOP + 8 : GRID_TOP + 50;
@@ -5308,11 +5574,13 @@ function drawRightPanel() {
       _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
     } else {
       const show = Math.min(scored.length, 4);
+      const _maxScore = scored.length > 0 ? scored[0].score : 0;
       for (let i = 0; i < show; i++) {
         const { t } = scored[i];
         ly += drawDefenderSidebarRow(sX, ly, sW, dVX, t, {
           isMvp: i === 0 && mvpT?.mvpTimer > 0,
           isFieldSelected: selectedTower != null && selectedTower.defenderId === t.defenderId,
+          maxScore: _maxScore,
         });
       }
     }
@@ -5610,45 +5878,88 @@ function drawRuneCartridge(rx, ry, rw, rh) {
 }
 
 function drawTopBar() {
-  // Draw panel only in the visible strip between the frame and the grid top
+  // Full-width command strip spanning from frame edge to frame edge
   const FT  = FRAME_THICK;
-  const pw  = BASE_W - FT * 2;
-  const ph  = GRID_TOP - FT - 2;
-  if (ph < 4) return; // not enough space
-  drawFantasyPanel(FT, FT, pw, ph, 'rgba(42,22,6,0.97)');
+  const ph  = GRID_TOP - FT - 1;
+  if (ph < 4) return;
+
+  // Background: dark glass fills the full content width
+  ctx.save();
+  ctx.fillStyle = 'rgba(6,3,12,0.97)';
+  ctx.fillRect(FT, FT, BASE_W - FT * 2, ph);
+  // Bottom separator — gold gradient
+  {
+    const _sg = ctx.createLinearGradient(FT, 0, BASE_W - FT, 0);
+    _sg.addColorStop(0,   'rgba(120,80,14,0)');
+    _sg.addColorStop(0.2, 'rgba(200,148,28,0.55)');
+    _sg.addColorStop(0.8, 'rgba(200,148,28,0.55)');
+    _sg.addColorStop(1,   'rgba(120,80,14,0)');
+    ctx.strokeStyle = _sg;
+    ctx.lineWidth   = 0.8;
+    ctx.beginPath(); ctx.moveTo(FT, FT + ph - 0.5); ctx.lineTo(BASE_W - FT, FT + ph - 0.5); ctx.stroke();
+  }
 
   const barMid = FT + Math.round(ph / 2);
   const cy     = barMid + 4;
-  ctx.save();
 
-  // ── LEFT: avatar circle + title ─────────────────────────────────────────────
-  const avX = FT + 16, avY = barMid, avR = 12;
-  ctx.beginPath();
-  ctx.arc(avX, avY, avR, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(80,42,10,0.95)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(210,148,35,0.8)';
-  ctx.lineWidth   = 1.5;
-  ctx.stroke();
-  ctx.font      = '12px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f0c840';
-  ctx.fillText('⚔', avX, avY + 4);
-
-  ctx.font        = 'bold 11px monospace';
-  ctx.fillStyle   = '#f0c840';
-  ctx.shadowColor = 'rgba(220,170,40,0.7)';
-  ctx.shadowBlur  = 8;
-  ctx.textAlign   = 'left';
-  ctx.fillText('NORTHERN SHIELD', avX + avR + 5, cy - 4);
-  ctx.shadowBlur  = 0;
+  // ── FAR LEFT: compact title + map name ──────────────────────────────────────
+  let lx = FT + 8;
+  ctx.font      = 'bold 8px monospace';
+  ctx.fillStyle = 'rgba(210,160,40,0.60)';
+  ctx.textAlign = 'left';
+  ctx.fillText('NORTHERN SHIELD', lx, cy - 3);
+  const _titleW = ctx.measureText('NORTHERN SHIELD').width;
   if (_currentMapName) {
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,130,80,0.55)';
-    ctx.fillText(_currentMapName, avX + avR + 5, cy + 7);
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(130,100,55,0.45)';
+    ctx.fillText(_currentMapName, lx, cy + 7);
+  }
+  lx += _titleW + 12;
+
+  // ── CONTROL PILLS: speed × auto | mute ──────────────────────────────────────
+  ctx.font = 'bold 9px monospace';
+  const _btnH = 14, _btnY = barMid - _btnH / 2;
+
+  // Speed pill
+  {
+    const _spStr = `×${gameSpeed}`;
+    const _spTW  = ctx.measureText(_spStr).width;
+    const _spBW  = _spTW + 10;
+    ctx.fillStyle = gameSpeed >= 4 ? 'rgba(190,44,14,0.92)' : gameSpeed >= 2 ? 'rgba(180,110,14,0.92)' : 'rgba(22,52,16,0.80)';
+    ctx.beginPath(); ctx.roundRect(lx, _btnY, _spBW, _btnH, 3); ctx.fill();
+    ctx.strokeStyle = gameSpeed >= 4 ? 'rgba(255,110,50,0.85)' : gameSpeed >= 2 ? 'rgba(255,180,50,0.75)' : 'rgba(70,180,70,0.55)';
+    ctx.lineWidth   = 0.8; ctx.stroke();
+    ctx.fillStyle   = gameSpeed >= 4 ? '#ffb080' : gameSpeed >= 2 ? '#ffe090' : '#90d070';
+    if (gameSpeed >= 2) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 3; }
+    ctx.textAlign = 'center';
+    ctx.fillText(_spStr, lx + _spBW / 2, barMid + 3);
+    ctx.shadowBlur = 0;
+    speedBtns.push({ x: lx, y: _btnY, w: _spBW, h: _btnH });
+    lx += _spBW + 3;
   }
 
-  // ── CENTER: wave label + timer ───────────────────────────────────────────────
-  const midX = Math.round(BASE_W / 2);
+  // Auto pill
+  {
+    const _aBW = 28;
+    ctx.fillStyle   = autoNextWave ? 'rgba(14,48,16,0.92)' : 'rgba(14,14,24,0.70)';
+    ctx.beginPath(); ctx.roundRect(lx, _btnY, _aBW, _btnH, 3); ctx.fill();
+    ctx.strokeStyle = autoNextWave ? 'rgba(70,200,70,0.70)' : 'rgba(55,55,75,0.40)';
+    ctx.lineWidth   = 0.8; ctx.stroke();
+    ctx.fillStyle   = autoNextWave ? '#80f090' : 'rgba(110,110,130,0.65)';
+    if (autoNextWave) { ctx.shadowColor = '#80f090'; ctx.shadowBlur = 3; }
+    ctx.textAlign = 'center';
+    ctx.fillText('AUTO', lx + _aBW / 2, barMid + 3);
+    ctx.shadowBlur = 0;
+    autoNextBtn = { x: lx, y: _btnY, w: _aBW, h: _btnH };
+    lx += _aBW + 5;
+  }
+
+  // Mute dot
+  ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = isMuted ? '#ff6060' : 'rgba(60,75,55,0.55)';
+  ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx, cy);
+
+  // ── CENTER: wave label + phase indicator ─────────────────────────────────────
+  const midX       = Math.round(BASE_W / 2);
   const displayWave = waveState === 'countdown' ? waveNumber + 1 : waveNumber;
   const wLabel  = endlessMode ? `WAVE ${displayWave} / ∞` : `WAVE ${displayWave} / ${MAX_WAVES}`;
   const wThreat = endlessMode ? 1.0 : displayWave / MAX_WAVES;
@@ -5656,154 +5967,110 @@ function drawTopBar() {
   const wColor  = wIsBoss ? '#ff6040' : wThreat > 0.8 ? '#ff9040' : wThreat > 0.5 ? '#e8c040' : '#a8ecd0';
   const wGlow   = wIsBoss ? 'rgba(255,80,20,0.55)' : wThreat > 0.8 ? 'rgba(255,130,20,0.45)' : wThreat > 0.5 ? 'rgba(230,180,30,0.4)' : 'rgba(100,220,160,0.45)';
 
-  // Center: wave progress primary; map name only as subtitle (avoids duplicating left panel)
   ctx.font        = `bold ${wIsBoss ? 13 : 12}px monospace`;
   ctx.fillStyle   = wColor;
   ctx.shadowColor = wGlow;
   ctx.shadowBlur  = wIsBoss ? 8 : 4;
   ctx.textAlign   = 'center';
-  ctx.fillText(wLabel, midX - 30, cy - 3);
+  ctx.fillText(wLabel, midX, cy - 3);
   ctx.shadowBlur  = 0;
 
+  // Phase line below wave label
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
-    ctx.font        = 'bold 11px monospace';
+    ctx.font        = '9px monospace';
     ctx.fillStyle   = autoNextWave ? `rgba(80,220,140,${readyPulse})` : `rgba(245,215,105,${readyPulse})`;
     ctx.shadowColor = autoNextWave ? 'rgba(50,200,100,0.6)' : 'rgba(220,180,40,0.5)';
     ctx.shadowBlur  = 4;
-    ctx.fillText(autoNextWave ? 'AUTO' : 'READY', midX + 40, cy);
+    ctx.fillText(autoNextWave ? '— AUTO —' : '— READY —', midX, cy + 8);
     ctx.shadowBlur  = 0;
   } else {
     const rem = spawnQueue.length + enemies.filter(e => e.alive).length;
     const remPulse = rem > 0 && rem <= 4 ? 0.75 + Math.sin(performance.now() * 0.008) * 0.25 : 1;
-    ctx.font      = rem <= 4 && rem > 0 ? 'bold 12px monospace' : '11px monospace';
-    ctx.fillStyle = rem === 0 ? '#60e880' : rem <= 4 ? `rgba(120,240,120,${remPulse})` : '#e8a060';
-    ctx.fillText(`◈ ${rem}/${waveTotal}`, midX + 36, cy);
+    ctx.font      = rem <= 4 && rem > 0 ? 'bold 9px monospace' : '9px monospace';
+    ctx.fillStyle = rem === 0 ? '#60e880' : rem <= 4 ? `rgba(120,240,120,${remPulse})` : 'rgba(180,160,100,0.60)';
+    ctx.fillText(`◈ ${rem} / ${waveTotal}`, midX, cy + 8);
   }
 
-  // ── RIGHT: resources ─────────────────────────────────────────────────────────
+  // ── RIGHT CLUSTER: ⚑ lives | ◆ gold | ✦ stars | ⚔ slain ─────────────────────
   let rx = BASE_W - FT - 8;
   ctx.font      = 'bold 11px monospace';
   ctx.textAlign = 'right';
 
+  // Help hint (far-rightmost)
+  ctx.font      = '10px monospace';
+  ctx.fillStyle = showHelp ? 'rgba(240,200,80,0.85)' : 'rgba(120,95,50,0.60)';
+  ctx.fillText('[?]', rx, cy);
+  rx -= ctx.measureText('[?]').width + 10;
+
+  // Sprite scale pill
+  if (showHelp) {
+    try {
+      const sc = getSpriteScale();
+      const pillW = 74, pillH = 16;
+      const pillX = rx - pillW;
+      const pillY = barMid - pillH / 2;
+      ctx.save();
+      ctx.globalAlpha = 0.70;
+      ctx.fillStyle   = 'rgba(10,10,12,0.78)';
+      ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 4); ctx.fill();
+      ctx.font      = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#a0a0b0';
+      ctx.globalAlpha = 1;
+      ctx.fillText(`Scale ${sc.toFixed(2)}`, pillX + pillW / 2, pillY + pillH / 2 + 3);
+      ctx.restore();
+      rx = pillX - 8;
+    } catch (err) { /* ignore */ }
+  }
+
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right';
+
+  // Ramparts / lives
   const livesDangerPulse = lives <= 3 ? 0.65 + Math.sin(performance.now() * 0.007) * 0.35 : 1;
   const livesLostFlash   = lifeLostTimer > 0 ? Math.min(1, lifeLostTimer / 20) * (lifeLostTimer > 60 ? 1 : lifeLostTimer / 60) : 0;
-  const livesTopColor = livesLostFlash > 0 ? '#ff2020' : lives <= 3 ? '#ff4040' : lives <= 7 ? '#ffaa50' : '#60ee80';
-  ctx.fillStyle   = livesTopColor;
+  const livesColor = livesLostFlash > 0 ? '#ff2020' : lives <= 3 ? '#ff4040' : lives <= 7 ? '#ffaa50' : '#60ee80';
+  ctx.fillStyle   = livesColor;
   ctx.shadowColor = livesLostFlash > 0 ? `rgba(255,0,0,${livesLostFlash * 0.95})` : lives <= 3 ? `rgba(255,30,30,${livesDangerPulse * 0.85})` : 'rgba(255,80,80,0.3)';
   ctx.shadowBlur  = livesLostFlash > 0 ? 16 : lives <= 3 ? 6 + livesDangerPulse * 10 : 4;
   ctx.globalAlpha = livesLostFlash > 0 ? 0.7 + livesLostFlash * 0.3 : lives <= 3 ? 0.85 + livesDangerPulse * 0.15 : 1;
   ctx.fillText(`⚑ ${lives}/${STARTING_LIVES}`, rx, cy);
-  ctx.globalAlpha = 1;
-  rx -= ctx.measureText(`⚑ ${lives}/${STARTING_LIVES}`).width + 18;
-  ctx.shadowBlur  = 0;
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  rx -= ctx.measureText(`⚑ ${lives}/${STARTING_LIVES}`).width + 14;
 
-  // ── Gold ────────────────────────────────────────────────────────────────────
+  // Gold
   const goldStr = `◆ ${Math.floor(_displayGold)}g`;
-  ctx.font        = 'bold 11px monospace';
   ctx.fillStyle   = hoardPulse > 0 ? '#fff8a0' : '#e8c040';
   ctx.shadowColor = 'rgba(220,180,30,0.5)';
   ctx.shadowBlur  = hoardPulse > 0 ? 8 : 3;
   ctx.fillText(goldStr, rx, cy);
   ctx.shadowBlur  = 0;
-  rx -= ctx.measureText(goldStr).width + 18;
+  rx -= ctx.measureText(goldStr).width + 14;
 
-  ctx.fillStyle = '#b0d0f0';
-  ctx.fillText(`⚔ ${slain}`, rx, cy);
-  rx -= ctx.measureText(`⚔ ${slain}`).width + 18;
-
-  // Reserve gold indicator
+  // Reserve gold
   if (goldReserve > 0) {
-    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,80,0.55)';
+    ctx.font = '9px monospace';
+    ctx.fillStyle = 'rgba(160,140,80,0.50)';
     const _resStr = `◈${goldReserve}g`;
     ctx.fillText(_resStr, rx, cy);
-    rx -= ctx.measureText(_resStr).width + 14;
+    rx -= ctx.measureText(_resStr).width + 12;
     ctx.font = 'bold 11px monospace';
   }
 
-  // Stars (rune currency)
+  // Stars
   if (stars > 0 || waveState !== 'active') {
     ctx.fillStyle   = '#f0d040';
     ctx.shadowColor = 'rgba(240,200,30,0.6)';
-    ctx.shadowBlur  = 6;
+    ctx.shadowBlur  = 4;
     ctx.fillText(`✦ ${stars}`, rx, cy);
     ctx.shadowBlur  = 0;
     rx -= ctx.measureText(`✦ ${stars}`).width + 14;
   }
 
-  // ── Compact pill buttons: speed × auto × mute ──────────────────────────────
-  ctx.font      = 'bold 9px monospace';
-  ctx.textAlign = 'left';
-  let lx2 = avX + avR * 2 + ctx.measureText('NORTHERN SHIELD').width + 20;
-  const _btnH = 15;
-  const _btnY = barMid - _btnH / 2;
-
-  // Speed pill — cycles ×1→×2→×4→×1 on click
-  {
-    const _spStr = `×${gameSpeed}`;
-    const _spTW  = ctx.measureText(_spStr).width;
-    const _spBW  = _spTW + 12;
-    const _spFill   = gameSpeed >= 4 ? 'rgba(190,44,14,0.92)' : gameSpeed >= 2 ? 'rgba(180,110,14,0.92)' : 'rgba(22,52,16,0.80)';
-    const _spBorder = gameSpeed >= 4 ? 'rgba(255,110,50,0.85)' : gameSpeed >= 2 ? 'rgba(255,180,50,0.75)' : 'rgba(70,180,70,0.55)';
-    const _spTxt    = gameSpeed >= 4 ? '#ffb080' : gameSpeed >= 2 ? '#ffe090' : '#90d070';
-    ctx.fillStyle = _spFill;
-    ctx.beginPath(); ctx.roundRect(lx2, _btnY, _spBW, _btnH, 3); ctx.fill();
-    ctx.strokeStyle = _spBorder; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.fillStyle = _spTxt;
-    if (gameSpeed >= 2) { ctx.shadowColor = _spTxt; ctx.shadowBlur = 3; }
-    ctx.textAlign = 'center';
-    ctx.fillText(_spStr, lx2 + _spBW / 2, barMid + 3);
-    ctx.shadowBlur = 0;
-    speedBtns.push({ x: lx2, y: _btnY, w: _spBW, h: _btnH });
-    lx2 += _spBW + 3;
-  }
-
-  // Auto pill — toggles auto-next-wave on click
-  {
-    const _aFill = autoNextWave ? 'rgba(14,48,16,0.92)' : 'rgba(14,14,24,0.70)';
-    const _aBord = autoNextWave ? 'rgba(70,200,70,0.70)' : 'rgba(55,55,75,0.40)';
-    const _aBW   = 30;
-    ctx.fillStyle = _aFill;
-    ctx.beginPath(); ctx.roundRect(lx2, _btnY, _aBW, _btnH, 3); ctx.fill();
-    ctx.strokeStyle = _aBord; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.fillStyle = autoNextWave ? '#80f090' : 'rgba(110,110,130,0.65)';
-    if (autoNextWave) { ctx.shadowColor = '#80f090'; ctx.shadowBlur = 3; }
-    ctx.textAlign = 'center';
-    ctx.fillText('AUTO', lx2 + _aBW / 2, barMid + 3);
-    ctx.shadowBlur = 0;
-    autoNextBtn = { x: lx2, y: _btnY, w: _aBW, h: _btnH };
-    lx2 += _aBW + 6;
-  }
-
-  // Mute indicator (text only — toggled by M key)
-  ctx.font = '9px monospace'; ctx.textAlign = 'left';
-  ctx.fillStyle = isMuted ? '#ff6060' : 'rgba(70,85,65,0.70)';
-  ctx.fillText(isMuted ? '◈MUTE' : '◈SFX', lx2, cy);
-
-  // Help hint — far right, muted (? key)
-  ctx.textAlign = 'right';
+  // Slain
   ctx.font      = '10px monospace';
-  ctx.fillStyle = showHelp ? 'rgba(240,200,80,0.85)' : 'rgba(140,110,60,0.75)';
-  ctx.fillText('[?]', FT + pw - 6, cy);
-
-  // Sprite scale pill — only shown when help overlay is open
-  if (showHelp) {
-    try {
-      const sc = getSpriteScale();
-      const pillW = 74, pillH = 20;
-      const pillX = FT + pw - pillW - 12;
-      const pillY = barMid - pillH / 2;
-      ctx.save();
-      ctx.globalAlpha = 0.70;
-      ctx.fillStyle = 'rgba(10,10,12,0.78)';
-      ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 6); ctx.fill();
-      ctx.font = 'bold 9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#a0a0b0';
-      ctx.fillText(`Scale ${sc.toFixed(2)}`, pillX + pillW / 2, pillY + pillH / 2 + 3);
-      ctx.restore();
-    } catch (err) { /* ignore */ }
-  }
+  ctx.fillStyle = 'rgba(140,165,200,0.60)';
+  ctx.fillText(`⚔ ${slain}`, rx, cy);
 
   ctx.restore();
 }
@@ -5844,7 +6111,7 @@ function drawBottomBuildBar() {
 
   for (const btn of buttons) {
     const isBuildSelected = btn.mode === CELL.WALL
-      ? buildMode === CELL.WALL
+      ? buildMode === CELL.WALL && selectedWallType === btn.id
       : buildMode === CELL.TOWER && selectedTowerType === btn.id;
     const isFieldMatch = btn.mode === CELL.TOWER && selectedTower?.type === btn.id;
     const isSelected   = isBuildSelected || isFieldMatch;
@@ -6569,7 +6836,15 @@ function onBossPhase50(boss) {
   const cfg = BOSS_CONFIGS[boss.waveNum];
   if (cfg?.phase50SlowImmune) boss.slowImmune = true;
 
-  if (boss.waveNum === 25) {
+  if (boss.waveNum === 10) {
+    // Draugen-Jarl: spawns 3 Draugr at 50%
+    boss.stunTimer = 22;
+    for (let i = 0; i < 3; i++) spawnEnemy(ENEMY_TYPES.DRAUGR, waveHpScale * 0.80);
+    bossRings.push({ x: boss.x, y: boss.y, r: boss.radius, maxR: boss.radius * 5, life: 32, maxLife: 32, color: '#8040c0' });
+    const cx = COLS * CELL_SIZE / 2;
+    const cy = ROWS * CELL_SIZE / 2;
+    dmgFloaters.push({ x: cx, y: cy, val: 'DRAUGR SUMMONED', life: 90, maxLife: 90, color: '#b060e0', large: true, suffix: '' });
+  } else if (boss.waveNum === 25) {
     // Jötunhelm Walker: EMP disables 2 random towers briefly
     const eligible = towers.filter(t => t.disabledTimer <= 0);
     const chosen   = eligible.sort(() => Math.random() - 0.5).slice(0, 2);
@@ -7753,6 +8028,365 @@ function drawCampaignVictoryOverlay() {
   ctx.fillText('[click to continue]', cx, cy + 18);
 }
 
+// ── Post-battle debrief screen ────────────────────────────────────────────────
+function drawDebrief() {
+  _debriefTimer++;
+  const W = BASE_W, H = BASE_H;
+  const isVictory = _battleResult === 'victory';
+
+  // Dark backdrop
+  const _t   = Math.min(1, _debriefTimer / 20);
+  ctx.save();
+  ctx.globalAlpha = _t * 0.88;
+  ctx.fillStyle   = 'rgba(4,2,8,1)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  const panW = 460, panH = 360;
+  const panX = Math.round((W - panW) / 2);
+  const panY = Math.round((H - panH) / 2) - 8;
+  const slideY = panY + Math.round((1 - _t) * 24);
+
+  ctx.globalAlpha = _t;
+  drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+
+  // ── Result header ────────────────────────────────────────────────────────────
+  const hx = panX + panW / 2;
+  let hy = slideY + 28;
+  const rColor = isVictory ? '#f0c840' : '#e04040';
+  const rGlow  = isVictory ? 'rgba(240,180,20,0.6)' : 'rgba(220,40,40,0.6)';
+  ctx.font        = 'bold 20px monospace';
+  ctx.fillStyle   = rColor;
+  ctx.shadowColor = rGlow;
+  ctx.shadowBlur  = isVictory ? 14 : 10;
+  ctx.textAlign   = 'center';
+  ctx.fillText(isVictory ? '— VICTORY —' : '— DEFEATED —', hx, hy);
+  ctx.shadowBlur  = 0;
+
+  // Map name subtitle
+  hy += 16;
+  ctx.font      = '9px monospace';
+  ctx.fillStyle = 'rgba(160,130,80,0.50)';
+  ctx.fillText(_currentMapName ?? 'MIDGARD', hx, hy);
+
+  // Separator
+  hy += 10;
+  {
+    const _sg = ctx.createLinearGradient(panX + 20, 0, panX + panW - 20, 0);
+    _sg.addColorStop(0, 'rgba(160,120,20,0)');
+    _sg.addColorStop(0.5, `rgba(${isVictory ? '180,140,30' : '160,50,30'},0.50)`);
+    _sg.addColorStop(1, 'rgba(160,120,20,0)');
+    ctx.strokeStyle = _sg; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(panX + 20, hy); ctx.lineTo(panX + panW - 20, hy); ctx.stroke();
+  }
+  hy += 14;
+
+  // ── Stats grid (two-column) ───────────────────────────────────────────────────
+  const sLX = panX + 30, sRX = panX + panW / 2 + 20;
+  const ROW = 22;
+
+  const _drawStat = (label, value, x, y, valColor) => {
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,135,90,0.60)'; ctx.textAlign = 'left';
+    ctx.fillText(label, x, y);
+    ctx.font = 'bold 10px monospace'; ctx.fillStyle = valColor ?? '#d8c89a'; ctx.textAlign = 'right';
+    ctx.fillText(value, x + 190, y);
+  };
+
+  // Left column
+  const _livesC = lives <= 0 ? '#e04040' : lives <= 3 ? '#ff8040' : '#60ee80';
+  _drawStat('WAVES CLEARED', endlessMode ? `${waveNumber}` : `${waveNumber} / ${MAX_WAVES}`, sLX, hy,
+            isVictory ? '#f0c840' : '#e8a060');
+  _drawStat('RAMPARTS HELD', `${Math.max(0, lives)} / ${STARTING_LIVES}`, sLX, hy + ROW, _livesC);
+  _drawStat('GOLD CARRIED HOME', `◆ ${goldEarned}g`, sLX, hy + ROW * 2, '#e8c040');
+  _drawStat('RESERVE BONUS', `+${_reserveContrib}g`, sLX, hy + ROW * 3, '#c0a030');
+
+  // Right column
+  _drawStat('ENEMIES SLAIN', `${slain}`, sRX, hy, '#b0d0f0');
+  _drawStat('BATTLES FOUGHT', `${battlesCompleted}`, sRX, hy + ROW, 'rgba(180,155,110,0.80)');
+  _drawStat('PROMOTIONS', `${_promotionQueue.length}`, sRX, hy + ROW * 2,
+            _promotionQueue.length > 0 ? '#a8e0c0' : 'rgba(160,135,90,0.50)');
+  _drawStat('STARS', `✦ ${stars}`, sRX, hy + ROW * 3, '#f0d040');
+
+  hy += ROW * 4 + 12;
+
+  // ── MVP ──────────────────────────────────────────────────────────────────────
+  const _mvpT = towers.length > 0
+    ? towers.reduce((best, t) => {
+        const sc = (t.damageDealt ?? 0) + (t.killCount ?? 0) * 32;
+        return sc > ((best.damageDealt ?? 0) + (best.killCount ?? 0) * 32) ? t : best;
+      }, towers[0])
+    : null;
+
+  {
+    const sepG = ctx.createLinearGradient(panX + 20, 0, panX + panW - 20, 0);
+    sepG.addColorStop(0,   'rgba(100,90,50,0)');
+    sepG.addColorStop(0.5, 'rgba(120,100,40,0.35)');
+    sepG.addColorStop(1,   'rgba(100,90,50,0)');
+    ctx.strokeStyle = sepG; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(panX + 20, hy); ctx.lineTo(panX + panW - 20, hy); ctx.stroke();
+    hy += 12;
+  }
+
+  ctx.font = 'bold 8.5px monospace'; ctx.fillStyle = 'rgba(160,135,90,0.60)'; ctx.textAlign = 'left';
+  ctx.fillText('BATTLE MVP', panX + 30, hy);
+  hy += 13;
+  if (_mvpT) {
+    const mvpRgb = defenderGlowRgb(_mvpT);
+    const mvpDmg = Math.round(_mvpT.damageDealt ?? 0);
+    const mvpKills = _mvpT.killCount ?? 0;
+    ctx.font      = 'bold 11px monospace';
+    ctx.fillStyle = `rgba(${mvpRgb},0.90)`;
+    ctx.textAlign = 'left';
+    ctx.fillText(_mvpT.name ?? TOWER_DEFS[_mvpT.type]?.label ?? _mvpT.type, panX + 30, hy);
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(180,155,110,0.65)';
+    const _cls  = TOWER_DEFS[_mvpT.type]?.label ?? '';
+    const _rank = (_mvpT._rankIndex != null) ? (VETERAN_RANKS?.[_mvpT._rankIndex]?.label ?? '') : '';
+    ctx.fillText(`${_rank} ${_cls}  •  ${mvpDmg} dmg  •  ${mvpKills} kills`, panX + 30, hy + 13);
+  } else {
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(140,115,75,0.45)';
+    ctx.textAlign = 'left';
+    ctx.fillText('No defenders deployed.', panX + 30, hy);
+  }
+  hy += 28;
+
+  // ── Continue prompt ────────────────────────────────────────────────────────
+  const _canContinue = _debriefTimer >= 60;
+  const _cPulse = _canContinue ? 0.65 + Math.sin(performance.now() * 0.004) * 0.35 : 0;
+  ctx.font      = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `rgba(200,170,80,${_cPulse})`;
+  ctx.shadowColor = `rgba(220,180,40,${_cPulse * 0.6})`;
+  ctx.shadowBlur  = _canContinue ? 4 : 0;
+  ctx.fillText('— CLICK TO CONTINUE —', hx, slideY + panH - 18);
+  ctx.shadowBlur = 0;
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ── Named Campaign Events ──────────────────────────────────────────────────
+
+function _drawEventBtn(bx, by, bw, bh, choiceDef, canAfford) {
+  ctx.save();
+  ctx.globalAlpha *= (canAfford ? 1 : 0.42);
+  ctx.fillStyle = canAfford ? 'rgba(30,20,8,0.97)' : 'rgba(18,12,5,0.8)';
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 4);
+  ctx.fill();
+  ctx.strokeStyle = canAfford ? 'rgba(190,140,50,0.55)' : 'rgba(80,60,25,0.35)';
+  ctx.lineWidth   = 0.8;
+  ctx.stroke();
+  // Label
+  ctx.textAlign   = 'left';
+  ctx.font        = 'bold 9px monospace';
+  ctx.fillStyle   = canAfford ? '#e8c060' : '#705828';
+  ctx.fillText(choiceDef.label, bx + 10, by + 14);
+  // Cost badge
+  ctx.textAlign   = 'right';
+  ctx.fillStyle   = canAfford ? 'rgba(220,170,60,0.85)' : 'rgba(100,75,28,0.7)';
+  ctx.fillText(choiceDef.costText, bx + bw - 8, by + 14);
+  // Description (wrapped, max 2 lines)
+  ctx.textAlign = 'left';
+  ctx.font      = '8px monospace';
+  ctx.fillStyle = canAfford ? 'rgba(190,170,130,0.75)' : 'rgba(110,90,55,0.5)';
+  const descLines = wrapText(ctx, choiceDef.desc, bw - 20);
+  let dy = by + 27;
+  for (const line of descLines.slice(0, 2)) { ctx.fillText(line, bx + 10, dy); dy += 11; }
+  ctx.restore();
+}
+
+function drawCampaignEventCard() {
+  if (!_pendingCampaignEvent) return;
+  _pendingEventBtns = [];
+  _eventCardAnim++;
+  const ev = _pendingCampaignEvent;
+  const W = BASE_W, H = BASE_H;
+  const FT = FRAME_THICK;
+
+  // Dim the betweenBattles screen behind the card
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,10,0.68)';
+  ctx.fillRect(FT, FT, W - FT * 2, H - FT * 2);
+
+  // Slide-in + fade-in
+  const slideOff = Math.max(0, (18 - _eventCardAnim) * 1.6);
+  const fadeIn   = Math.min(1, _eventCardAnim / 14);
+  ctx.globalAlpha = fadeIn;
+
+  const cW = 444, cH = 310;
+  const cX = Math.round((W - cW) / 2);
+  const cY = Math.round((H - cH) / 2) + slideOff;
+
+  drawFantasyPanel(cX, cY, cW, cH, 'rgba(4,2,16,0.99)', 0.90, 10);
+
+  // ── Icon + header ──
+  const centerX = cX + cW / 2;
+  ctx.textAlign = 'center';
+  ctx.font      = '20px monospace';
+  ctx.fillStyle = 'rgba(200,160,60,0.90)';
+  ctx.fillText(ev.icon, centerX, cY + 30);
+
+  ctx.font        = 'bold 16px monospace';
+  ctx.fillStyle   = '#e8c860';
+  ctx.shadowColor = 'rgba(220,180,60,0.5)';
+  ctx.shadowBlur  = 12;
+  ctx.fillText(ev.title, centerX, cY + 52);
+  ctx.shadowBlur  = 0;
+
+  ctx.font      = '8px monospace';
+  ctx.fillStyle = 'rgba(170,130,70,0.55)';
+  ctx.fillText(ev.subtitle, centerX, cY + 65);
+
+  // Separator
+  ctx.strokeStyle = 'rgba(180,140,60,0.22)';
+  ctx.lineWidth   = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cX + 20, cY + 74); ctx.lineTo(cX + cW - 20, cY + 74);
+  ctx.stroke();
+
+  // Flavor text
+  ctx.font      = '8px monospace';
+  ctx.fillStyle = 'rgba(200,180,140,0.68)';
+  ctx.textAlign = 'left';
+  const flavorLines = wrapText(ctx, ev.flavor, cW - 56);
+  let fy = cY + 88;
+  for (const line of flavorLines.slice(0, 4)) { ctx.fillText(line, cX + 28, fy); fy += 13; }
+
+  // ── Choice buttons ──
+  const btnY  = cY + cH - 68;
+  const btnH  = 52;
+  const btnW  = (cW - 52) / 2;
+  const b1X   = cX + 18;
+  const b2X   = b1X + btnW + 16;
+  const cs    = _campaignState;
+  const canA  = ev.canAffordA(cs);
+  const canB  = ev.canAffordB(cs);
+
+  _drawEventBtn(b1X, btnY, btnW, btnH, ev.choiceA, canA);
+  _drawEventBtn(b2X, btnY, btnW, btnH, ev.choiceB, canB);
+
+  _pendingEventBtns = [
+    { x: b1X, y: btnY, w: btnW, h: btnH, choice: 'A', canAfford: canA },
+    { x: b2X, y: btnY, w: btnW, h: btnH, choice: 'B', canAfford: canB },
+  ];
+
+  ctx.restore();
+}
+
+function _applyEventXp(def, xp) {
+  def.xp = (def.xp ?? 0) + xp;
+  for (let lvl = CAREER_XP.length - 1; lvl >= 0; lvl--) {
+    if (def.xp >= CAREER_XP[lvl]) { def.careerLevel = lvl; break; }
+  }
+}
+
+function applyCampaignEventChoice(eventId, choice) {
+  if (!_campaignState) return;
+  const cs = _campaignState;
+  if (!cs.seenEventIds) cs.seenEventIds = [];
+  cs.seenEventIds.push(eventId);
+
+  if (choice === 'B') {
+    if (eventId === 'volva') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 8;
+      goldReserve    = cs.goldReserve;
+    } else if (eventId === 'smeden') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 12;
+      goldReserve    = cs.goldReserve;
+      const youngest = _roster.defenders.slice().sort((a, b) => (a.battlesPlayed ?? 0) - (b.battlesPlayed ?? 0))[0];
+      if (youngest) _applyEventXp(youngest, 15);
+    } else if (eventId === 'leidangr') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 8;
+      goldReserve    = cs.goldReserve;
+    } else if (eventId === 'blotet') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 20;
+      goldReserve    = cs.goldReserve;
+      const topDef   = _roster.defenders.slice().sort((a, b) => (b.xp ?? 0) - (a.xp ?? 0))[0];
+      if (topDef) _applyEventXp(topDef, 20);
+    } else if (eventId === 'runstenen') {
+      stars    = Math.min(10, (stars ?? 0) + 1);
+      cs.stars = stars;
+    }
+    // handelsman B, skalden B, utilegumadr B: no effect
+  } else {
+    if (eventId === 'handelsman') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 60;
+      goldReserve    = cs.goldReserve;
+      const itemKeys = Object.keys(ITEM_DEFS).filter(k => ['common', 'rare'].includes(ITEM_DEFS[k].rarity));
+      const itemId   = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+      _equipmentInventory.push(itemId);
+      cs.equipmentInventory = _equipmentInventory.slice();
+      sfxLootDrop();
+    } else if (eventId === 'volva') {
+      stars    = Math.max(0, (stars ?? 0) - 2);
+      cs.stars = stars;
+      const traitless = _roster.defenders.find(d => !d.trait);
+      if (traitless) traitless.trait = getRandomTrait(traitless.type);
+      sfxRune();
+    } else if (eventId === 'smeden') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 35;
+      goldReserve    = cs.goldReserve;
+      const top3     = _roster.defenders.slice().sort((a, b) => (b.xp ?? 0) - (a.xp ?? 0)).slice(0, 3);
+      for (const d of top3) _applyEventXp(d, 20);
+    } else if (eventId === 'skalden') {
+      cs.goldReserve  = (cs.goldReserve ?? 0) - 25;
+      goldReserve     = cs.goldReserve;
+      const topKiller = _roster.defenders.slice().sort((a, b) => (b.careerKills ?? 0) - (a.careerKills ?? 0))[0];
+      if (topKiller) _applyEventXp(topKiller, 60);
+    } else if (eventId === 'leidangr') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 20;
+      goldReserve    = cs.goldReserve;
+      const heroTypes = HERO_BUILD_ITEMS.map(h => h.type);
+      const type      = heroTypes[Math.floor(Math.random() * heroTypes.length)];
+      const def       = new Defender({ defenderId: _generateId(), name: getDefenderName(type), type });
+      def.trait       = getRandomTrait(type);
+      _roster.defenders.push(def);
+      sfxRecruit(type);
+    } else if (eventId === 'blotet') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 50;
+      goldReserve    = cs.goldReserve;
+      for (const d of _roster.defenders) _applyEventXp(d, 25);
+    } else if (eventId === 'utilegumadr') {
+      cs.goldReserve = (cs.goldReserve ?? 0) - 35;
+      goldReserve    = cs.goldReserve;
+      stars          = Math.max(0, (stars ?? 0) - 1);
+      cs.stars       = stars;
+      const heroTypes   = HERO_BUILD_ITEMS.map(h => h.type);
+      const type        = heroTypes[Math.floor(Math.random() * heroTypes.length)];
+      const def         = new Defender({ defenderId: _generateId(), name: getDefenderName(type), type });
+      def.xp            = CAREER_XP[1];
+      def.careerLevel   = 1;
+      def.trait         = getRandomTrait(type);
+      const scarOptions = ['lone_stand', 'mark_last_hour', 'rampart_wound'];
+      def.scars         = [scarOptions[Math.floor(Math.random() * scarOptions.length)]];
+      _roster.defenders.push(def);
+      sfxRecruit(type);
+    } else if (eventId === 'runstenen') {
+      stars    = Math.max(0, (stars ?? 0) - 3);
+      cs.stars = stars;
+      const strongest = _roster.defenders.slice().sort((a, b) => (b.xp ?? 0) - (a.xp ?? 0))[0];
+      if (strongest) {
+        const talLevels = Object.keys(CLASS_TALENTS[strongest.type] ?? {}).map(Number).sort((a, b) => a - b);
+        const nextLvl   = talLevels.find(lvl => {
+          const talId = CLASS_TALENTS[strongest.type][lvl];
+          return !(strongest.talents ?? []).includes(talId);
+        });
+        if (nextLvl !== undefined) {
+          const talId = CLASS_TALENTS[strongest.type][nextLvl];
+          if (!strongest.talents) strongest.talents = [];
+          if (!strongest.talents.includes(talId)) strongest.talents.push(talId);
+          sfxTalentUnlock();
+        }
+      }
+    }
+  }
+
+  cs.defenders          = _roster.toJSON();
+  cs.goldReserve        = goldReserve;
+  try { saveCampaign(cs); } catch {}
+  _pendingCampaignEvent = null;
+}
+
 function drawBetweenBattles() {
   _betweenBtns = [];
   const W = BASE_W, H = BASE_H;
@@ -8240,6 +8874,28 @@ function drawBetweenBattles() {
       ctx.fillText('RETIRE', rtnX + rtnW / 2, rtnY + 10);
       ctx.textAlign = 'left';
       _betweenBtns.push({ x: rtnX, y: rtnY, w: rtnW, h: rtnH, action: 'openRetire', defenderId: def.defenderId });
+
+      // One-time tooltip: first CHAMPION retire hint
+      if (_firstChampionTooltipTimer > 0) {
+        const _fadeIn  = Math.min(1, (180 - _firstChampionTooltipTimer) / 12);
+        const _fadeOut = _firstChampionTooltipTimer < 30 ? _firstChampionTooltipTimer / 30 : 1;
+        const _alpha   = _fadeIn * _fadeOut;
+        const ttX = rtnX + rtnW + 4;
+        const ttW = 90, ttH = 18;
+        ctx.save();
+        ctx.globalAlpha = _alpha;
+        ctx.fillStyle   = 'rgba(60,40,10,0.92)';
+        ctx.strokeStyle = '#e8a040';
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath(); ctx.roundRect(ttX, rtnY - 2, ttW, ttH, 3); ctx.fill(); ctx.stroke();
+        ctx.font      = '7px monospace';
+        ctx.fillStyle = '#f0c060';
+        ctx.textAlign = 'left';
+        ctx.fillText('← RETIRE WITH HONOR', ttX + 4, rtnY + 7);
+        ctx.fillStyle = 'rgba(180,150,80,0.75)';
+        ctx.fillText('grants legacy bonus', ttX + 4, rtnY + 15);
+        ctx.restore();
+      }
     }
 
     // Trait + scars row (ry+36) — replaced by bond grief warning when dismiss is pending
@@ -8755,6 +9411,13 @@ function draw() {
     return;
   }
 
+  if (gamePhase === 'debrief') {
+    drawDebrief();
+    drawFrames();
+    ctx.restore();
+    return;
+  }
+
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
     drawCommandNav();
@@ -8762,6 +9425,7 @@ function draw() {
     if (_showChronicle)    drawChronicleOverlay();
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
     if (_retirementCeremony) drawRetirementCeremony(_retirementCeremony);
+    if (_pendingCampaignEvent && _betweenFadeIn <= 0) drawCampaignEventCard();
     ctx.restore();
     return;
   }

@@ -1253,8 +1253,21 @@ export class Grid {
       const _wallKey = `${Math.floor(x / cs)}_${Math.floor(y / cs)}`;
       const _wd = this.wallData?.[_wallKey];
       if (_wd) {
-        // Level badge (top-right corner) if upgraded
-        if (_wd.level > 0) {
+        // Temporary (REINFORCE) wall: amber tint overlay + waves-left countdown
+        if (_wd.temporary) {
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.fillStyle   = '#e8a020';
+          ctx.fillRect(x, y, cs, cs);
+          ctx.globalAlpha = 1;
+          ctx.font         = `bold ${Math.max(5, cs * 0.42)}px monospace`;
+          ctx.textAlign    = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle    = '#f0c050';
+          ctx.fillText(`${_wd.wavesLeft}`, x + cs - 1, y + 1);
+          ctx.restore();
+        } else if (_wd.level > 0) {
+          // Level badge (top-right corner) if upgraded
           const _lvlColors = ['', '#88bb70', '#70a8d0', '#d4aa30', '#e8d080'];
           ctx.save();
           ctx.font         = `bold ${Math.max(5, cs * 0.40)}px monospace`;
