@@ -1,3 +1,5 @@
+import { createEmptyCampaignProgress } from './campaignMaps.js';
+
 export const CAMPAIGN_KEY = 'ns-campaign-v2';
 export const SETTINGS_KEY = 'ns-settings';
 
@@ -23,6 +25,7 @@ export function createNewCampaign() {
     bonds:              [],
     coDeployments:      {},
     legacyBonuses:      {},
+    campaignProgress:   createEmptyCampaignProgress(),
   };
 }
 

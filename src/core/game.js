@@ -6,6 +6,32 @@ import { SPRITES } from '../assets.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
 import { getAvailableEvent } from '../campaign/events.js';
+import {
+  CAMPAIGN_MAP_COUNT,
+  createEmptyCampaignProgress,
+  getCampaignMapMeta,
+  getMapDisplayName,
+  getPortalCountForMap,
+  getNodeCountForMap,
+  getNodeBossConfig,
+  isNodeUnlocked,
+  buildNodeWavePlan,
+  buildCampaignNodeSpawnQueue,
+  difficultyToEquivWave,
+  getMapRun,
+} from '../campaign/campaignMaps.js';
+import {
+  serializeFieldState,
+  completeNode,
+  canPlaceHero,
+  canPlaceStructure,
+  isNodeCasualty,
+  markNodeCasualty,
+  clearNodeCasualties,
+  isHeroTowerType,
+  MAX_FIELD_HEROES,
+  MAX_FIELD_STRUCTURES,
+} from '../campaign/campaignRun.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
@@ -29,7 +55,7 @@ import {
 } from './sounds.js';
 
 const COLS = 48;
-const ROWS = 22;
+const ROWS = 30;
 const CELL_SIZE = 14;
 
 const RIGHT_PANEL_W  = 188;
@@ -42,7 +68,7 @@ const GRID_LEFT      = FRAME_THICK + LEFT_DOCK_W;
 const GRID_TOP       = FRAME_THICK + 32; // frame strip + top command bar
 const GRID_BOTTOM    = GRID_TOP + ROWS * CELL_SIZE;
 
-const SPAWN = { col: 0,                    row: 11 };
+const SPAWN = { col: 0,                    row: Math.floor(ROWS / 2) };
 const GOAL  = { col: Math.floor(COLS / 2), row: Math.floor(ROWS / 2) };
 
 const WALL_COST = 12;
@@ -458,7 +484,19 @@ let _panelDirty          = true;       // redraw right panel flag
 let _frostTrailCells     = new Map();  // `${col}_${row}` → expiry tick — FROST MARCH event trail
 
 // Map selection
-let gamePhase        = 'mapSelect';  // 'mapSelect' | 'playing' | 'betweenBattles'
+let gamePhase        = 'campaignSelect';  // campaignSelect | nodeMap | mapSelect | playing | debrief | betweenBattles
+let _campaignMapIndex   = 0;
+let _campaignNodeIndex  = 0;
+let _campaignNodeMode   = false;
+let _nodeWavePlan       = null;
+let _nodeWaveMax        = 0;
+let _nodeCasualties     = new Set();
+let _campaignMapPage    = 0;
+let _campaignSelectBtns = [];
+let _nodeMapBtns        = [];
+let _nodeWaveIndex      = 0;
+let _returnToNodeMapAfterDebrief = false;
+const CAMPAIGN_MAPS_PER_PAGE = 10;
 let selectedMapIdx   = 0;
 let mapSelectBtns    = [];       // hit areas for map cards
 let mapAutoTimerStart = 0;       // performance.now() when auto-start countdown began
@@ -705,24 +743,41 @@ function restartCombatState() {
   grid.setCell(SPAWN.col, SPAWN.row, CELL.SPAWN);
   grid.setCell(GOAL.col,  GOAL.row,  CELL.GOAL);
 
-  // Multi-portal maps: reserve extra spawn cells so towers can't block future portals
-  // Activation schedule per design doc: W11 east, W21 north, W41 south, W71 NW corner
+  // Campaign / multi-portal maps: reserve extra spawn cells
   _extraSpawns = [];
-  if (_currentBattlePreset?.multiPortal) {
-    const _potentialPortals = [
+  const _portalCount = _currentBattlePreset?.campaignPortalCount
+    ?? (_currentBattlePreset?.multiPortal ? 4 : 1);
+  if (_portalCount > 1) {
+    const _candidates = [
+      { col: COLS - 1,  row: GOAL.row,  activateWave: 1, dir: 'EAST',  name: 'EAST FEN'    },
+      { col: GOAL.col,  row: 0,          activateWave: 2, dir: 'NORTH', name: 'NORTH ROAD'  },
+      { col: GOAL.col,  row: ROWS - 1,   activateWave: 2, dir: 'SOUTH', name: 'SOUTH WATCH' },
+      { col: 0,         row: 0,          activateWave: 3, dir: 'NW',    name: 'DARK GATE'   },
+    ];
+    for (let _pi = 0; _pi < Math.min(_portalCount - 1, _candidates.length); _pi++) {
+      const _pp = _candidates[_pi];
+      grid.setCell(_pp.col, _pp.row, CELL.SPAWN);
+      _extraSpawns.push({
+        col: _pp.col, row: _pp.row, path: null,
+        active: _pp.activateWave === 1,
+        activateWave: _pp.activateWave, dir: _pp.dir, name: _pp.name,
+      });
+    }
+  } else if (_currentBattlePreset?.multiPortal) {
+    const _candidates = [
       { col: COLS - 1,  row: GOAL.row,  activateWave: 11, dir: 'EAST',  name: 'EAST FEN'    },
       { col: GOAL.col,  row: 0,          activateWave: 21, dir: 'NORTH', name: 'NORTH ROAD'  },
       { col: GOAL.col,  row: ROWS - 1,   activateWave: 41, dir: 'SOUTH', name: 'SOUTH WATCH' },
       { col: 0,         row: 0,          activateWave: 71, dir: 'NW',    name: 'DARK GATE'   },
     ];
-    for (const _pp of _potentialPortals) {
+    for (const _pp of _candidates) {
       grid.setCell(_pp.col, _pp.row, CELL.SPAWN);
       _extraSpawns.push({ col: _pp.col, row: _pp.row, path: null, active: false, activateWave: _pp.activateWave, dir: _pp.dir, name: _pp.name });
     }
   }
 
-  // Pre-place fortress ring walls around GOAL for multiPortal maps
-  if (_currentBattlePreset?.multiPortal) {
+  // Pre-place fortress ring walls around GOAL for campaign / multiPortal maps
+  if (_currentBattlePreset?.pathless || _currentBattlePreset?.multiPortal) {
     const _R = 5;  // Chebyshev ring radius
     for (let _rc = GOAL.col - _R; _rc <= GOAL.col + _R; _rc++) {
       for (let _rr = GOAL.row - _R; _rr <= GOAL.row + _R; _rr++) {
@@ -742,10 +797,16 @@ function restartCombatState() {
     wallFrostDirty = true;
   }
 
-  currentPath   = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  // Compute initial paths for extra portals
-  for (const _es of _extraSpawns) {
-    _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+  if (_currentBattlePreset?.pathless) {
+    currentPath = [{ col: SPAWN.col, row: SPAWN.row }, { col: GOAL.col, row: GOAL.row }];
+    for (const _es of _extraSpawns) {
+      _es.path = [{ col: _es.col, row: _es.row }, { col: GOAL.col, row: GOAL.row }];
+    }
+  } else {
+    currentPath   = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+    for (const _es of _extraSpawns) {
+      _es.path = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+    }
   }
   enemies       = [];
   towers        = [];
@@ -1166,7 +1227,240 @@ function recordBattleResult(result) {
 
 // Start game with chosen preset map (called from map select screen).
 function initGame(preset) {
+  _campaignNodeMode = false;
   initCampaign(preset);
+}
+
+function isPathlessMode() {
+  return !!_currentBattlePreset?.pathless;
+}
+
+function getCampaignBattlePreset(mapIndex) {
+  return {
+    name:                getMapDisplayName(mapIndex),
+    desc:                'Campaign region',
+    spawn:               { col: 0, row: Math.floor(ROWS / 2) },
+    goal:                { col: Math.floor(COLS / 2), row: Math.floor(ROWS / 2) },
+    pathless:            true,
+    campaignPortalCount: getPortalCountForMap(mapIndex),
+  };
+}
+
+function ensureCampaignProgress() {
+  if (!_campaignState) _campaignState = migrateLegacySaves();
+  if (!_campaignState.campaignProgress) {
+    _campaignState.campaignProgress = createEmptyCampaignProgress();
+  }
+  return _campaignState.campaignProgress;
+}
+
+function getHeroCombatHp(tower) {
+  const def = _roster?.find(tower.defenderId);
+  const lvl = def?.careerLevel ?? tower.level ?? 1;
+  return 80 + lvl * 25;
+}
+
+function initHeroCombatHp(tower) {
+  tower.combatHp    = getHeroCombatHp(tower);
+  tower.combatMaxHp = tower.combatHp;
+}
+
+function restoreCampaignField(state) {
+  if (!state) return;
+  gold = state.gold ?? gold;
+  _displayGold = gold;
+  for (const wt of state.towers ?? []) {
+    if (isNodeCasualty(_nodeCasualties, wt.defenderId)) continue;
+    const fp = TOWER_DEFS[wt.type]?.footprint ?? { w: 1, h: 1 };
+    let blocked = false;
+    for (let dc = 0; dc < fp.w && !blocked; dc++) {
+      for (let dr = 0; dr < fp.h; dr++) {
+        const c = wt.col + dc, r = wt.row + dr;
+        const fc = grid.getCell(c, r);
+        if (fc === null || fc === CELL.SPAWN || fc === CELL.GOAL || fc !== CELL.EMPTY) blocked = true;
+      }
+    }
+    if (blocked) continue;
+    for (let dc = 0; dc < fp.w; dc++) {
+      for (let dr = 0; dr < fp.h; dr++) {
+        grid.setCell(wt.col + dc, wt.row + dr, CELL.TOWER);
+      }
+    }
+    const cx = (wt.col + fp.w / 2) * CELL_SIZE;
+    const cy = (wt.row + fp.h / 2) * CELL_SIZE;
+    const t = new Tower(cx, cy, wt.col, wt.row, wt.type);
+    t.level = wt.level ?? 1;
+    if (wt.defenderId) {
+      const def = _roster.find(wt.defenderId);
+      if (def) {
+        t.defenderId = def.defenderId;
+        t.name = wt.name ?? def.name;
+        const rawEq = getItemBonuses(def.equipment);
+        const eqBonuses = rawEq;
+        const talentBonuses = getTalentBonuses(def.talents);
+        t.applyCareerData(def.defenderId, t.name, def.careerLevel, eqBonuses, talentBonuses, def.legacyBonus ?? null);
+      }
+    }
+    if (wt.rune) t.rune = wt.rune;
+    if (wt.itemRune) t.itemRune = wt.itemRune;
+    if (isHeroTowerType(t.type)) initHeroCombatHp(t);
+    towers.push(t);
+  }
+  for (const [key, w] of Object.entries(state.walls ?? {})) {
+    const [c, r] = key.split('_').map(Number);
+    if (grid.getCell(c, r) !== CELL.EMPTY) continue;
+    grid.setCell(c, r, CELL.WALL);
+    wallData[key] = { ...w };
+  }
+  wallFrostDirty = true;
+  _synergyDirty  = true;
+}
+
+function startCampaignNodeBattle(mapIndex, nodeIndex) {
+  ensureCampaignProgress();
+  _campaignMapIndex  = mapIndex;
+  _campaignNodeIndex = nodeIndex;
+  _campaignNodeMode  = true;
+  _nodeWavePlan      = buildNodeWavePlan(mapIndex, nodeIndex);
+  _nodeWaveIndex     = 0;
+  clearNodeCasualties(_nodeCasualties);
+
+  if (!_campaignState) _campaignState = migrateLegacySaves();
+  battlesCompleted = _campaignState.battlesCompleted ?? 0;
+  stars            = _campaignState.stars ?? 0;
+  goldReserve      = _campaignState.goldReserve ?? 0;
+  _equipmentInventory = (_campaignState.equipmentInventory ?? []).slice();
+  runeInventory    = Object.assign(
+    { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 },
+    _campaignState.runeInventory ?? {}
+  );
+  if (!_roster) _roster = new Roster();
+  _roster.load(_campaignState.defenders ?? []);
+
+  const preset = getCampaignBattlePreset(mapIndex);
+  initBattle(preset);
+  const field = getMapRun(_campaignState.campaignProgress, mapIndex).fieldState;
+  restoreCampaignField(field);
+  waveNumber = 0;
+  endlessMode = false;
+}
+
+function finishCampaignNodeVictory() {
+  const progress = ensureCampaignProgress();
+  const field = serializeFieldState(towers, wallData, gold);
+  completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
+  _campaignState.campaignProgress = progress;
+  _campaignState.stars = stars;
+  _campaignState.runeInventory = { ...runeInventory };
+  clearNodeCasualties(_nodeCasualties);
+  try { saveCampaign(_campaignState); } catch {}
+  _campaignNodeMode = false;
+  _returnToNodeMapAfterDebrief = true;
+  victory = true;
+  _battleResult = 'victory';
+  _debriefTimer = 0;
+  gamePhase = 'debrief';
+}
+
+function killHeroInCombat(tower) {
+  markNodeCasualty(_nodeCasualties, tower.defenderId);
+  dmgFloaters.push({
+    x: tower.x, y: tower.y - 14,
+    val: tower.name ? `${tower.name} FALLEN` : 'FALLEN',
+    life: 120, maxLife: 120, color: '#ff4040', large: true, suffix: '', raw: true,
+  });
+  spawnParticles(tower.x, tower.y, '#ff3030', 14);
+  const def = _roster?.find(tower.defenderId);
+  if (def) def.deployed = false;
+  const fp = tower.footprint;
+  for (let dc = 0; dc < fp.w; dc++) {
+    for (let dr = 0; dr < fp.h; dr++) {
+      grid.setCell(tower.col + dc, tower.row + dr, CELL.EMPTY);
+    }
+  }
+  towers = towers.filter(t => t !== tower);
+  if (selectedTower === tower) selectedTower = null;
+  _synergyDirty = true;
+}
+
+function pickEnemyTarget(enemy) {
+  const priority = ENEMY_DEFS[enemy.type]?.targetPriority ?? 'goal';
+  const goalPos  = grid.cellCenter(GOAL.col, GOAL.row);
+  let best = null, bestD = Infinity;
+
+  if (priority === 'warband' || priority === 'structures') {
+    for (const t of towers) {
+      const isHero = isHeroTowerType(t.type);
+      if (priority === 'warband' && !isHero) continue;
+      if (priority === 'structures' && isHero) continue;
+      if (isHero && isNodeCasualty(_nodeCasualties, t.defenderId)) continue;
+      if (isHero && (t.combatHp ?? 1) <= 0) continue;
+      const d = (t.x - enemy.x) ** 2 + (t.y - enemy.y) ** 2;
+      if (d < bestD) { bestD = d; best = { x: t.x, y: t.y }; }
+    }
+    if (best) return best;
+    for (const [key, w] of Object.entries(wallData)) {
+      if ((w.hp ?? 1) <= 0) continue;
+      const [c, r] = key.split('_').map(Number);
+      const pos = grid.cellCenter(c, r);
+      const d = (pos.x - enemy.x) ** 2 + (pos.y - enemy.y) ** 2;
+      if (d < bestD) { bestD = d; best = pos; }
+    }
+    if (best) return best;
+  }
+  return goalPos;
+}
+
+function updateEnemyPathlessTarget(enemy) {
+  if (!enemy.alive || enemy.reached) return;
+  const target = pickEnemyTarget(enemy);
+  enemy.path = [{ x: enemy.x, y: enemy.y }, { x: target.x, y: target.y }];
+  enemy.pathIndex = 0;
+}
+
+function processEnemyMeleeAttacks() {
+  if (!isPathlessMode()) return;
+  for (const enemy of enemies) {
+    if (!enemy.alive || enemy.reached || enemy.stunTimer > 0) continue;
+    if ((enemy.meleeTimer ?? 0) > 0) { enemy.meleeTimer--; continue; }
+    const range = enemy.radius + 14;
+    const dmg   = enemy.isBoss ? 28 : Math.max(8, Math.round(12 + enemy.maxHp * 0.02));
+
+    for (const t of towers) {
+      const dx = t.x - enemy.x, dy = t.y - enemy.y;
+      if (dx * dx + dy * dy > range * range) continue;
+      if (isHeroTowerType(t.type)) {
+        if (isNodeCasualty(_nodeCasualties, t.defenderId)) continue;
+        if (t.combatHp == null) initHeroCombatHp(t);
+        t.combatHp -= dmg;
+        enemy.meleeTimer = 28;
+        enemy.hitFlash = 6;
+        if (t.combatHp <= 0) killHeroInCombat(t);
+        break;
+      } else if (ENEMY_DEFS[enemy.type]?.targetPriority === 'structures') {
+        if (t.structureHp == null) t.structureHp = 120 + (t.level ?? 1) * 30;
+        t.structureHp -= dmg;
+        enemy.meleeTimer = 32;
+        if (t.structureHp <= 0) removeTower(t);
+        break;
+      }
+    }
+
+    for (const [key, w] of Object.entries(wallData)) {
+      const [c, r] = key.split('_').map(Number);
+      const pos = grid.cellCenter(c, r);
+      const dx = pos.x - enemy.x, dy = pos.y - enemy.y;
+      if (dx * dx + dy * dy > range * range) continue;
+      w.hp = Math.max(0, (w.hp ?? WALL_BASE_HP) - dmg);
+      enemy.meleeTimer = 32;
+      if (w.hp <= 0) {
+        grid.setCell(c, r, CELL.EMPTY);
+        delete wallData[key];
+        wallFrostDirty = true;
+      }
+      break;
+    }
+  }
 }
 
 // Count how many of a given rune type are currently equipped on towers
@@ -1557,11 +1851,16 @@ let waveLeak  = false;
 function startNextWave() {
   ancestralAidActive = false;   // clear any unused Aid from prior wave
   waveNumber++;
-  const _bands   = getWaveBands(waveNumber);
+  let _equivWave = waveNumber;
+  if (_campaignNodeMode && _nodeWavePlan) {
+    const waveSpec = _nodeWavePlan.waves[_nodeWaveIndex];
+    if (waveSpec) _equivWave = difficultyToEquivWave(waveSpec.difficulty, waveSpec.waveInNode);
+  }
+  const _bands   = getWaveBands(_equivWave);
   waveHpScale    = _bands.hp;
   waveSpeedScale = _bands.speed;
   waveRangeMult  = 1;
-  currentWaveEvent = WAVE_EVENTS[waveNumber] ?? null;
+  currentWaveEvent = _campaignNodeMode ? null : (WAVE_EVENTS[waveNumber] ?? null);
   if (endlessMode && waveNumber > 101) {
     const epoch = waveNumber - 102;
     currentWaveEvent = ENDLESS_FLAVOR_EVENTS[epoch % ENDLESS_FLAVOR_EVENTS.length];
@@ -1609,8 +1908,10 @@ function startNextWave() {
     }
   }
 
-  spawnQueue  = buildWave(waveNumber);
-  if (currentWaveEvent?.bonus) {
+  spawnQueue  = _campaignNodeMode && _nodeWavePlan
+    ? buildCampaignNodeSpawnQueue(_nodeWavePlan.waves[_nodeWaveIndex], _campaignMapIndex)
+    : buildWave(waveNumber);
+  if (!_campaignNodeMode && currentWaveEvent?.bonus) {
     const bonusType = ENEMY_TYPES[currentWaveEvent.bonus.type.toUpperCase()] ?? currentWaveEvent.bonus.type;
     for (let i = 0; i < currentWaveEvent.bonus.count; i++) spawnQueue.push(bonusType);
     for (let i = spawnQueue.length - 1; i > 0; i--) {
@@ -1711,7 +2012,10 @@ function updateWave() {
   if (portalFlash > 0) portalFlash--;
 
   if (waveState === 'countdown' || waveState === 'break') {
-    const nextIsBoss = BOSS_WAVES.has(waveNumber + 1);
+    const _nextBoss = _campaignNodeMode && _nodeWavePlan
+      ? (_nodeWavePlan.waves[_nodeWaveIndex + 1]?.isBoss ?? false)
+      : BOSS_WAVES.has(waveNumber + 1);
+    const nextIsBoss = _nextBoss;
     bossWarnAlpha = nextIsBoss
       ? Math.min(1, bossWarnAlpha + 0.025)
       : Math.max(0, bossWarnAlpha - 0.04);
@@ -1740,7 +2044,9 @@ function updateWave() {
     if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
       const next = spawnQueue.shift();
-      if (next && next.__boss) {
+      if (next && next.__nodeBoss) {
+        spawnNodeBoss(next.mapIndex);
+      } else if (next && next.__boss) {
         spawnBoss(next.waveNum);
       } else if (next && next.__herald) {
         const e = spawnEnemy(next.type, waveHpScale);
@@ -1859,7 +2165,15 @@ function updateWave() {
     // Wave milestone achievements
     if (waveNumber === 25)  unlockAchievement('wave25');
     if (waveNumber === 50)  unlockAchievement('wave50');
-    if (waveNumber >= MAX_WAVES && !endlessMode) {
+    if (_campaignNodeMode && _nodeWavePlan) {
+      const wavesInNode = _nodeWavePlan.waves.length;
+      if (_nodeWaveIndex < wavesInNode - 1) {
+        _nodeWaveIndex++;
+      } else {
+        finishCampaignNodeVictory();
+        return;
+      }
+    } else if (waveNumber >= MAX_WAVES && !endlessMode) {
       unlockAchievement('wave100');
       highScores = saveHighScore({ waves: waveNumber, slain, goldEarned, cleared: true, date: new Date().toLocaleDateString('en-GB') });
       recordBattleResult('victory');
@@ -2692,7 +3006,11 @@ function getViewSize() {
 }
 
 function computeScale() {
-  gameScale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+  // Prefer filling viewport height so the taller grid uses the screen
+  gameScale = window.innerHeight / BASE_H;
+  if (BASE_W * gameScale > window.innerWidth) {
+    gameScale = window.innerWidth / BASE_W;
+  }
   clampPan();
 }
 
@@ -2808,7 +3126,8 @@ function getBuildButtonAt(mx, my) {
 // ── spawning ──────────────────────────────────────────────────────────────────
 
 function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
-  if (!currentPath || gameOver) return;
+  if (gameOver) return;
+  if (!isPathlessMode() && !currentPath) return;
 
   // Multi-portal: randomly pick from active spawn points
   const _activeExtras = _extraSpawns.filter(es => es.active && es.path);
@@ -2877,7 +3196,8 @@ function estimateWaveHp(waveNum) {
 }
 
 function spawnBoss(waveNum) {
-  if (!currentPath || gameOver) return;
+  if (gameOver) return;
+  if (!isPathlessMode() && !currentPath) return;
   const cfg  = BOSS_CONFIGS[waveNum];
   const path = currentPath.map(({ col, row }) => grid.cellCenter(col, row));
 
@@ -2914,6 +3234,31 @@ function spawnBoss(waveNum) {
   enemies.push(boss);
 }
 
+function spawnNodeBoss(mapIndex) {
+  if (gameOver) return;
+  const cfg  = getNodeBossConfig(mapIndex);
+  const path = isPathlessMode()
+    ? [grid.cellCenter(SPAWN.col, SPAWN.row), grid.cellCenter(GOAL.col, GOAL.row)]
+    : currentPath.map(({ col, row }) => grid.cellCenter(col, row));
+
+  screenShake      = Math.max(screenShake, 22);
+  portalFlash      = 48;
+  portalFlashColor = 'red';
+  _bossEntryVignette = 50;
+  sfxBossEntry();
+
+  const boss     = new Enemy(path, ENEMY_TYPES.JOTUNN, 1);
+  boss.hp        = cfg.hp;
+  boss.maxHp     = cfg.hp;
+  boss.radius    = 14;
+  boss.reward    = cfg.reward;
+  boss.isBoss    = true;
+  boss.bossName  = cfg.name;
+  boss.waveNum   = null;
+  boss.stunTimer = 55;
+  enemies.push(boss);
+}
+
 // ── rerouting ─────────────────────────────────────────────────────────────────
 
 function rerouteActiveEnemies() {
@@ -2944,8 +3289,10 @@ function hasEnemyInCell(col, row) {
 const FORTRESS_ZONE_RADIUS = 10;
 
 function isInFortressZone(col, row) {
-  if (!_currentBattlePreset?.multiPortal) return true;
-  return Math.max(Math.abs(col - GOAL.col), Math.abs(row - GOAL.row)) <= FORTRESS_ZONE_RADIUS;
+  if (isPathlessMode() || _currentBattlePreset?.multiPortal) {
+    return Math.max(Math.abs(col - GOAL.col), Math.abs(row - GOAL.row)) <= FORTRESS_ZONE_RADIUS;
+  }
+  return true;
 }
 
 function tryPlaceAt(col, row, mode, towerType) {
@@ -2953,10 +3300,18 @@ function tryPlaceAt(col, row, mode, towerType) {
   const gate = TOWER_STAR_GATES[towerType];
   if (mode === CELL.TOWER && gate && stars < gate) return false;
 
-  // Fortress zone restriction: on multiPortal maps towers/walls must be near the center fortress
-  if (!isInFortressZone(col, row)) {
+  const _isHeroType = HERO_BUILD_ITEMS.some(h => h.id === towerType);
+  const _isStructure = mode === CELL.TOWER && !_isHeroType;
+
+  // Structures/walls near fortress; warband heroes place anywhere on campaign maps
+  if (!_isHeroType && !isInFortressZone(col, row)) {
     pathBlockFlash = { col, row, timer: 70, type: 'zone' };
     return false;
+  }
+
+  if (_campaignNodeMode) {
+    if (_isHeroType && !canPlaceHero(towers)) return false;
+    if (_isStructure && !canPlaceStructure(towers)) return false;
   }
 
   const fp = (mode === CELL.TOWER) ? (TOWER_DEFS[towerType]?.footprint ?? {w:1,h:1}) : {w:1,h:1};
@@ -2975,7 +3330,6 @@ function tryPlaceAt(col, row, mode, towerType) {
     }
   }
 
-  const _isHeroType = HERO_BUILD_ITEMS.some(h => h.id === towerType);
   const _barracksDiscount = _isHeroType
     ? towers.reduce((s, t) => s + (TOWER_DEFS[t.type]?.recruitCostReduce ?? 0), 0) : 0;
   const cost = mode === CELL.WALL
@@ -2989,32 +3343,33 @@ function tryPlaceAt(col, row, mode, towerType) {
       grid.setCell(col + dc, row + dr, mode);
     }
   }
-  const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  let _extraPathsOk = true;
-  const _newExtraPaths = [];
-  if (newPath) {
-    for (const _es of _extraSpawns) {
-      const _ep = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
-      if (!_ep) { _extraPathsOk = false; break; }
-      _newExtraPaths.push(_ep);
-    }
-  }
-  if (!newPath || !_extraPathsOk) {
-    for (let dc = 0; dc < fp.w; dc++) {
-      for (let dr = 0; dr < fp.h; dr++) {
-        grid.setCell(col + dc, row + dr, CELL.EMPTY);
+  if (!isPathlessMode()) {
+    const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+    let _extraPathsOk = true;
+    const _newExtraPaths = [];
+    if (newPath) {
+      for (const _es of _extraSpawns) {
+        const _ep = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+        if (!_ep) { _extraPathsOk = false; break; }
+        _newExtraPaths.push(_ep);
       }
     }
-    pathBlockFlash = { col, row, timer: 70 };
-    return false;
+    if (!newPath || !_extraPathsOk) {
+      for (let dc = 0; dc < fp.w; dc++) {
+        for (let dr = 0; dr < fp.h; dr++) {
+          grid.setCell(col + dc, row + dr, CELL.EMPTY);
+        }
+      }
+      pathBlockFlash = { col, row, timer: 70 };
+      return false;
+    }
+    currentPath = newPath;
+    for (let i = 0; i < _extraSpawns.length; i++) {
+      if (_newExtraPaths[i]) _extraSpawns[i].path = _newExtraPaths[i];
+    }
+    pathDirty = true;
+    rerouteActiveEnemies();
   }
-
-  currentPath = newPath;
-  for (let i = 0; i < _extraSpawns.length; i++) {
-    if (_newExtraPaths[i]) _extraSpawns[i].path = _newExtraPaths[i];
-  }
-  pathDirty   = true;
-  rerouteActiveEnemies();
   goldSpent += cost;
   gold      -= cost;
   wallFrostDirty = true;
@@ -3055,6 +3410,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     if (_chokeCells.has(`${col}_${row}`)) t.onHighGround = true;
     if (hasBonus) t.applyCareerData(def.defenderId, def.name, def.careerLevel, eqBonuses, talentBonuses, legacyBonus);
     else { t.defenderId = def.defenderId; t.name = def.name; }
+    if (isHeroTowerType(towerType)) initHeroCombatHp(t);
     towers.push(t);
     const _sg = TOWER_STAR_GATES[towerType];
     if (_sg && stars >= _sg && !_starDeployFanfare.has(towerType)) {
@@ -3085,42 +3441,44 @@ function moveHeroTo(tower, newCol, newRow) {
     pathBlockFlash = { col: newCol, row: newRow, timer: 70, type: 'occupied' };
     return false;
   }
-  if (!isInFortressZone(newCol, newRow)) {
+  if (!isHeroTowerType(tower.type) && !isInFortressZone(newCol, newRow)) {
     pathBlockFlash = { col: newCol, row: newRow, timer: 70, type: 'zone' };
     return false;
   }
   // Temporarily free old cell and test new placement
   grid.setCell(tower.col, tower.row, CELL.EMPTY);
   grid.setCell(newCol, newRow, CELL.TOWER);
-  const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
-  let extraOk = true;
-  const newExtraPaths = [];
-  if (newPath) {
-    for (const es of _extraSpawns) {
-      const ep = grid.findPath(es.col, es.row, GOAL.col, GOAL.row);
-      if (!ep) { extraOk = false; break; }
-      newExtraPaths.push(ep);
+  if (!isPathlessMode()) {
+    const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+    let extraOk = true;
+    const newExtraPaths = [];
+    if (newPath) {
+      for (const es of _extraSpawns) {
+        const ep = grid.findPath(es.col, es.row, GOAL.col, GOAL.row);
+        if (!ep) { extraOk = false; break; }
+        newExtraPaths.push(ep);
+      }
     }
-  }
-  if (!newPath || !extraOk) {
-    grid.setCell(newCol, newRow, CELL.EMPTY);
-    grid.setCell(tower.col, tower.row, CELL.TOWER);
-    pathBlockFlash = { col: newCol, row: newRow, timer: 70 };
-    return false;
+    if (!newPath || !extraOk) {
+      grid.setCell(newCol, newRow, CELL.EMPTY);
+      grid.setCell(tower.col, tower.row, CELL.TOWER);
+      pathBlockFlash = { col: newCol, row: newRow, timer: 70 };
+      return false;
+    }
+    currentPath = newPath;
+    for (let i = 0; i < _extraSpawns.length; i++) {
+      if (newExtraPaths[i]) _extraSpawns[i].path = newExtraPaths[i];
+    }
+    pathDirty = true;
+    rerouteActiveEnemies();
   }
   // Apply — update tower position and grid
   tower.col = newCol;
   tower.row = newRow;
   tower.x   = newCol * CELL_SIZE + CELL_SIZE / 2;
   tower.y   = newRow * CELL_SIZE + CELL_SIZE / 2;
-  currentPath = newPath;
-  for (let i = 0; i < _extraSpawns.length; i++) {
-    if (newExtraPaths[i]) _extraSpawns[i].path = newExtraPaths[i];
-  }
-  pathDirty = true;
   wallFrostDirty = true;
   _synergyDirty = true;
-  rerouteActiveEnemies();
   sfxPlace('tower');
   return true;
 }
@@ -3420,6 +3778,48 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // Map select phase — first click selects, second click on same starts game
+  if (gamePhase === 'campaignSelect') {
+    if (e.button === 0) {
+      for (const btn of _campaignSelectBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (btn.action === 'prevPage') _campaignMapPage = Math.max(0, _campaignMapPage - 1);
+          else if (btn.action === 'nextPage') {
+            const maxPage = Math.ceil(CAMPAIGN_MAP_COUNT / CAMPAIGN_MAPS_PER_PAGE) - 1;
+            _campaignMapPage = Math.min(maxPage, _campaignMapPage + 1);
+          } else if (btn.action === 'skirmish') {
+            gamePhase = 'mapSelect';
+            mapAutoTimerStart = performance.now();
+          } else if (btn.action === 'openMap') {
+            _campaignMapIndex = btn.mapIndex;
+            gamePhase = 'nodeMap';
+          }
+          return;
+        }
+      }
+    }
+    return;
+  }
+
+  if (gamePhase === 'nodeMap') {
+    if (e.button === 0) {
+      for (const btn of _nodeMapBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (btn.action === 'back') gamePhase = 'campaignSelect';
+          else if (btn.action === 'warCamp') {
+            _betweenSubtab = 'recruit';
+            gamePhase = 'betweenBattles';
+          } else if (btn.action === 'attack') {
+            startCampaignNodeBattle(_campaignMapIndex, btn.nodeIndex);
+          }
+          return;
+        }
+      }
+    }
+    return;
+  }
+
   if (gamePhase === 'mapSelect') {
     if (e.button === 0) {
       for (const btn of mapSelectBtns) {
@@ -3441,8 +3841,15 @@ canvas.addEventListener('mousedown', e => {
   // Post-battle debrief — click to advance after 2s gate
   if (gamePhase === 'debrief') {
     if (e.button === 0 && _debriefTimer >= 60) {
-      _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
-      gamePhase = 'betweenBattles';
+      if (_returnToNodeMapAfterDebrief) {
+        _returnToNodeMapAfterDebrief = false;
+        gamePhase = 'nodeMap';
+        gameOver = false;
+        victory = false;
+      } else {
+        _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
+        gamePhase = 'betweenBattles';
+      }
     }
     return;
   }
@@ -3499,11 +3906,13 @@ canvas.addEventListener('mousedown', e => {
           if (!['startRename'].includes(btn.action)) _renameState = null;
           if (btn.action === 'fightAgain') {
             _betweenSubtab = 'recruit';
-            initBattle(_currentBattlePreset);
+            if (_campaignMapIndex != null && _currentBattlePreset?.pathless) {
+              gamePhase = 'nodeMap';
+            } else {
+              initBattle(_currentBattlePreset);
+            }
           } else if (btn.action === 'mapSelect') {
-            gamePhase = 'mapSelect';
-            mapAutoTimerStart = performance.now();
-            selectedMapIdx = 0;
+            gamePhase = 'campaignSelect';
             _betweenSubtab = 'recruit';
           } else if (btn.action === 'selectRecruitType') {
             _recruitType = _recruitType === btn.recruitType ? null : btn.recruitType;
@@ -4476,6 +4885,7 @@ function update() {
   }
 
   for (let i = enemies.length - 1; i >= 0; i--) {
+    if (isPathlessMode()) updateEnemyPathlessTarget(enemies[i]);
     enemies[i].update();
     // FROST MARCH: enemy leaves a slow trail; enemies on trail get slowed
     if (currentWaveEvent?.special === 'frostMarch' && enemies[i].alive && !enemies[i].reached) {
@@ -4507,11 +4917,22 @@ function update() {
       if (lives <= 0) {
         gameOver   = true;
         sfxGameOver();
-        promptNameAndSave({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
-        recordBattleResult('defeat');
+        if (_campaignNodeMode) {
+          clearNodeCasualties(_nodeCasualties);
+          _campaignNodeMode = false;
+          _returnToNodeMapAfterDebrief = true;
+          _battleResult = 'defeat';
+          _debriefTimer = 0;
+          gamePhase = 'debrief';
+        } else {
+          promptNameAndSave({ waves: waveNumber, slain, goldEarned, date: new Date().toLocaleDateString('en-GB') });
+          recordBattleResult('defeat');
+        }
       }
     }
   }
+
+  processEnemyMeleeAttacks();
 
   // Mara: supernatural fear disables nearby towers + EMP shockwave rings
   for (const enemy of enemies) {
@@ -5320,6 +5741,7 @@ function drawRingGateMarkers() {
 }
 
 function drawPath() {
+  if (isPathlessMode()) return;
   if (!currentPath || currentPath.length < 2) return;
 
   const t  = performance.now() * 0.001;
@@ -10547,6 +10969,147 @@ const MAP_SELECT_FLAVOR = [
   'The saga will remember this stand for a thousand winters.',
 ];
 
+function drawCampaignSelect() {
+  _campaignSelectBtns = [];
+  const W = BASE_W, H = BASE_H;
+  const progress = ensureCampaignProgress();
+  const pageStart = _campaignMapPage * CAMPAIGN_MAPS_PER_PAGE;
+  const pageEnd   = Math.min(CAMPAIGN_MAP_COUNT, pageStart + CAMPAIGN_MAPS_PER_PAGE);
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#f0e8d0';
+  ctx.fillText('NORTHERN SHIELD', W / 2, 58);
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#907050';
+  ctx.fillText('— CAMPAIGN — 100 REGIONS', W / 2, 78);
+
+  const cols = 5, cardW = 132, cardH = 52, gap = 10;
+  const gridW = cols * cardW + (cols - 1) * gap;
+  const startX = Math.round((W - gridW) / 2);
+  const startY = 96;
+
+  for (let i = pageStart; i < pageEnd; i++) {
+    const idx = i - pageStart;
+    const col = idx % cols, row = Math.floor(idx / cols);
+    const cx = startX + col * (cardW + gap);
+    const cy = startY + row * (cardH + gap);
+    const unlocked = i < progress.mapsUnlocked;
+    const cleared  = progress.clearedMaps.includes(i);
+    const meta     = getCampaignMapMeta(i);
+
+    drawFantasyPanel(cx, cy, cardW, cardH,
+      unlocked ? 'rgba(22,14,6,0.96)' : 'rgba(10,8,6,0.92)',
+      unlocked ? 0.75 : 0.35, 8);
+
+    ctx.font = 'bold 10px monospace';
+    ctx.fillStyle = unlocked ? (cleared ? '#a0e080' : '#e8d8a0') : '#504030';
+    ctx.textAlign = 'left';
+    ctx.fillText(`#${i + 1}`, cx + 8, cy + 16);
+    ctx.font = '8px monospace';
+    ctx.fillStyle = unlocked ? '#b09060' : '#403020';
+    const shortName = (meta?.name ?? '').split(' ')[0];
+    ctx.fillText(shortName, cx + 8, cy + 30);
+    ctx.fillText(`${meta?.nodeCount ?? '?'} nodes`, cx + 8, cy + 42);
+
+    if (unlocked) {
+      _campaignSelectBtns.push({ x: cx, y: cy, w: cardW, h: cardH, action: 'openMap', mapIndex: i });
+    }
+  }
+
+  const navY = startY + 3 * (cardH + gap) + 12;
+  const btnW = 72, btnH = 24;
+  const prevX = W / 2 - btnW - 50, nextX = W / 2 + 50;
+  drawFantasyPanel(prevX, navY, btnW, btnH, 'rgba(12,8,4,0.95)', 0.6, 6);
+  drawFantasyPanel(nextX, navY, btnW, btnH, 'rgba(12,8,4,0.95)', 0.6, 6);
+  ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c0a060';
+  ctx.fillText('◀ PREV', prevX + btnW / 2, navY + 16);
+  ctx.fillText('NEXT ▶', nextX + btnW / 2, navY + 16);
+  _campaignSelectBtns.push({ x: prevX, y: navY, w: btnW, h: btnH, action: 'prevPage' });
+  _campaignSelectBtns.push({ x: nextX, y: navY, w: btnW, h: btnH, action: 'nextPage' });
+
+  const skX = W / 2 - 60, skY = H - 48;
+  drawFantasyPanel(skX, skY, 120, 26, 'rgba(18,10,4,0.95)', 0.55, 6);
+  ctx.fillText('SKIRMISH MODE', W / 2, skY + 17);
+  _campaignSelectBtns.push({ x: skX, y: skY, w: 120, h: 26, action: 'skirmish' });
+
+  ctx.font = '8px monospace'; ctx.fillStyle = '#504030';
+  ctx.fillText(`Page ${_campaignMapPage + 1} / ${Math.ceil(CAMPAIGN_MAP_COUNT / CAMPAIGN_MAPS_PER_PAGE)}  ·  ${progress.mapsUnlocked} regions unlocked`, W / 2, H - 18);
+}
+
+function drawNodeMap() {
+  _nodeMapBtns = [];
+  const W = BASE_W, H = BASE_H;
+  const progress = ensureCampaignProgress();
+  const meta     = getCampaignMapMeta(_campaignMapIndex);
+  const nodeCount = meta?.nodeCount ?? getNodeCountForMap(_campaignMapIndex);
+  const run       = getMapRun(progress, _campaignMapIndex);
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#f0e8d0';
+  ctx.fillText(meta?.name ?? 'REGION', W / 2, 54);
+  ctx.font = '9px monospace';
+  ctx.fillStyle = '#907050';
+  ctx.fillText(`${nodeCount} nodes  ·  ${meta?.portalCount ?? 1} portal(s)  ·  Boss: ${meta?.boss?.name ?? '???'}`, W / 2, 72);
+
+  const mapX = 40, mapY = 88, mapW = W - 80, mapH = H - 180;
+  drawFantasyPanel(mapX, mapY, mapW, mapH, 'rgba(8,12,8,0.95)', 0.65, 10);
+
+  const nodesPerRow = Math.min(10, nodeCount);
+  const rows = Math.ceil(nodeCount / nodesPerRow);
+  const nxGap = mapW / (nodesPerRow + 1);
+  const nyGap = mapH / (rows + 1);
+
+  for (let n = 0; n < nodeCount; n++) {
+    const col = n % nodesPerRow, row = Math.floor(n / nodesPerRow);
+    const nx = mapX + nxGap * (col + 1);
+    const ny = mapY + nyGap * (row + 1);
+    const unlocked = isNodeUnlocked(progress, _campaignMapIndex, n);
+    const cleared  = run.nodesCleared.includes(n);
+    const isBoss   = n === nodeCount - 1;
+    const r = isBoss ? 10 : 7;
+
+    ctx.beginPath(); ctx.arc(nx, ny, r, 0, Math.PI * 2);
+    ctx.fillStyle = cleared ? 'rgba(80,160,60,0.85)' : unlocked ? 'rgba(200,150,50,0.75)' : 'rgba(40,35,25,0.8)';
+    ctx.fill();
+    if (isBoss) {
+      ctx.strokeStyle = 'rgba(255,80,40,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.font = '7px monospace'; ctx.fillStyle = '#f0e0c0';
+    ctx.fillText(String(n + 1), nx, ny + 3);
+
+    if (n > 0) {
+      const prev = n - 1;
+      const pcol = prev % nodesPerRow, prow = Math.floor(prev / nodesPerRow);
+      const px = mapX + nxGap * (pcol + 1), py = mapY + nyGap * (prow + 1);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(nx, ny);
+      ctx.strokeStyle = 'rgba(80,70,40,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    if (unlocked && !cleared) {
+      _nodeMapBtns.push({ x: nx - 14, y: ny - 14, w: 28, h: 28, action: 'attack', nodeIndex: n });
+    }
+  }
+
+  const backX = 24, backY = H - 44;
+  drawFantasyPanel(backX, backY, 90, 26, 'rgba(12,8,4,0.95)', 0.55, 6);
+  ctx.font = '9px monospace'; ctx.fillStyle = '#c0a060';
+  ctx.fillText('◀ MAPS', backX + 45, backY + 17);
+  _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 26, action: 'back' });
+
+  const campX = W - 114;
+  drawFantasyPanel(campX, backY, 100, 26, 'rgba(20,30,14,0.95)', 0.6, 6);
+  ctx.fillStyle = '#90c070';
+  ctx.fillText('WAR CAMP', campX + 50, backY + 17);
+  _nodeMapBtns.push({ x: campX, y: backY, w: 100, h: 26, action: 'warCamp' });
+
+  const heroes = run.fieldState?.towers?.filter(t => isHeroTowerType(t.type)).length ?? 0;
+  const structs = run.fieldState?.towers?.filter(t => !isHeroTowerType(t.type)).length ?? 0;
+  ctx.font = '8px monospace'; ctx.fillStyle = '#706040';
+  ctx.fillText(`Field: ${heroes}/${MAX_FIELD_HEROES} heroes  ·  ${structs}/${MAX_FIELD_STRUCTURES} structures`, W / 2, H - 18);
+}
+
 function drawMapSelect() {
   mapSelectBtns = [];
   const W = BASE_W, H = BASE_H;
@@ -10869,6 +11432,20 @@ function draw() {
   ctx.translate(panX, panY);
   ctx.scale(gameScale, gameScale);
   drawBackground();
+
+  if (gamePhase === 'campaignSelect') {
+    drawCampaignSelect();
+    drawFrames();
+    ctx.restore();
+    return;
+  }
+
+  if (gamePhase === 'nodeMap') {
+    drawNodeMap();
+    drawFrames();
+    ctx.restore();
+    return;
+  }
 
   if (gamePhase === 'mapSelect') {
     drawMapSelect();
@@ -12256,4 +12833,6 @@ function gameLoop() {
 computeScale();
 window.addEventListener('resize', computeScale);
 initTerrain();
+_campaignState = migrateLegacySaves();
+ensureCampaignProgress();
 gameLoop();

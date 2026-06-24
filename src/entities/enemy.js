@@ -29,7 +29,8 @@ export const ENEMY_DEFS = {
     reward:         12,
     color:          '#6018b8',   // vivid deep purple — nightmare spirit
     highlightColor: '#b060e0',   // saturated violet glow
-    flying:         false
+    flying:         false,
+    targetPriority: 'warband',
   },
   draugr: {
     label:          'Draugr',
@@ -59,7 +60,8 @@ export const ENEMY_DEFS = {
     reward:         32,
     color:          '#5c4030',   // stone-brown — Norse earth giant
     highlightColor: '#ff9030',   // bright amber-orange volcanic heat
-    flying:         false
+    flying:         false,
+    targetPriority: 'structures',
   },
   warg: {
     label:          'Warg',
@@ -69,7 +71,8 @@ export const ENEMY_DEFS = {
     reward:         8,
     color:          '#4a3828',   // dark grey-brown — Norse shadow wolf
     highlightColor: '#e08830',   // amber eye-glow highlight
-    flying:         false
+    flying:         false,
+    targetPriority: 'warband',
   },
   einherjar: {
     label:          'Einherjar',
@@ -79,7 +82,8 @@ export const ENEMY_DEFS = {
     reward:         28,
     color:          '#58506a',   // iron grey with purple tint — armored fallen warrior
     highlightColor: '#8090b8',   // steel-blue armour sheen
-    flying:         false
+    flying:         false,
+    targetPriority: 'structures',
   },
   fossegrim: {
     label:          'Fossegrim',
