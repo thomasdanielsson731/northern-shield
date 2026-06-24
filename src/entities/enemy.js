@@ -1176,7 +1176,15 @@ export class Enemy {
       ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
       ctx.globalAlpha = 1;
       if (pct < 1.0) {
-        ctx.fillStyle = pct > 0.50 ? '#48a038' : pct > 0.25 ? '#c8a030' : '#e84040';
+        const _typeFill = {
+          draugr: '#a84848', myling: '#7048c0', jotunn: '#5068a8', mara: '#7828a8',
+          warg: '#a07028', einherjar: '#687040', fossegrim: '#288878',
+        };
+        const _baseFill = _typeFill[this.type];
+        const _urgency  = pct > 0.50 ? 1.0 : pct > 0.25 ? 0.72 : 0.48;
+        ctx.fillStyle = _baseFill
+          ? `rgba(${parseInt(_baseFill.slice(1, 3), 16)},${parseInt(_baseFill.slice(3, 5), 16)},${parseInt(_baseFill.slice(5, 7), 16)},${_urgency})`
+          : (pct > 0.50 ? '#48a038' : pct > 0.25 ? '#c8a030' : '#e84040');
         ctx.fillRect(barX, barY, barW * pct, barH);
         // Colorblind-safe: tick marks at 25 / 50 / 75 %
         ctx.strokeStyle = 'rgba(0,0,0,0.50)';
@@ -1185,9 +1193,12 @@ export class Enemy {
           const tx = barX + barW * t;
           ctx.beginPath(); ctx.moveTo(tx, barY); ctx.lineTo(tx, barY + barH); ctx.stroke();
         }
-        ctx.strokeStyle = 'rgba(200,160,40,0.32)';
-        ctx.lineWidth   = 0.5;
-        ctx.strokeRect(barX, barY, barW, barH);
+        // Type accent border on HP bar tray for type-identification under crowding
+        const _typeAccent = { draugr:'#a03030', myling:'#7030b0', jotunn:'#304080', mara:'#601890', warg:'#806020', einherjar:'#606030', fossegrim:'#205060' };
+        const _accentColor = _typeAccent[this.type] ?? 'rgba(200,160,40,0.32)';
+        ctx.strokeStyle = _accentColor;
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(barX - 0.5, barY - 0.5, barW + 1, barH + 1);
       }
     }
   }

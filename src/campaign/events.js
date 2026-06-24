@@ -115,11 +115,14 @@ export const EVENT_DEFS = [
   },
 ];
 
-// Returns one random eligible event not yet seen this campaign, or null.
+// Returns one random eligible event, or null. Unseen events are preferred; once all
+// have been seen, eligible events may repeat so long campaigns stay interesting.
 export function getAvailableEvent(cs) {
   if (!cs) return null;
   const seen     = cs.seenEventIds ?? [];
-  const eligible = EVENT_DEFS.filter(e => !seen.includes(e.id) && e.trigger(cs));
+  const eligible = EVENT_DEFS.filter(e => e.trigger(cs));
   if (eligible.length === 0) return null;
-  return eligible[Math.floor(Math.random() * eligible.length)];
+  const unseen = eligible.filter(e => !seen.includes(e.id));
+  const pool   = unseen.length > 0 ? unseen : eligible;
+  return pool[Math.floor(Math.random() * pool.length)];
 }

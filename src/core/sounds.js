@@ -317,6 +317,26 @@ export function sfxRetireCeremony() {
   tone(110, 0.60, 0.06, 'square', 0.58);
 }
 
+export function sfxEquipItem() {
+  // Short metallic click — item slotted into equipment
+  tone(800, 0.06, 0.18, 'square');
+  tone(1200, 0.05, 0.14, 'sine', 0.04);
+}
+
+export function sfxSynergy() {
+  // Two ascending tones — synergy bond activated
+  tone(500, 0.08, 0.12, 'sine');
+  tone(700, 0.10, 0.12, 'sine', 0.06);
+  tone(900, 0.07, 0.08, 'sine', 0.13);
+}
+
+export function sfxBossEntry() {
+  // Deep horn — boss wave begins
+  tone(80,  0.60, 0.18, 'sawtooth');
+  tone(60,  0.80, 0.12, 'square',  0.10);
+  tone(120, 0.40, 0.08, 'sine',    0.40);
+}
+
 export function sfxEnemyIntro() {
   // Short warning sting — new threat arrives
   tone(220, 0.12, 0.15, 'square');

@@ -42,6 +42,13 @@ export class Bullet {
     this.angle = Math.atan2(dy, dx);
 
     if (dist <= Math.max(this.speed, hitDistance)) {
+      // CURSED SHIELDS: first hit absorbed — no damage, remove shield
+      if (this.target.shieldedFirstHit) {
+        this.target.shieldedFirstHit = false;
+        this.target.hitFlash = 3; this.target.hitFlashMax = 3; this.target.hitFlashColor = '80,180,255';
+        if (!this.canPierce) { this.alive = false; }
+        return 0;
+      }
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
       this.target.hp = Math.max(0, this.target.hp - this.damage);
       if (this.source) this.source.damageDealt += actualDamage;

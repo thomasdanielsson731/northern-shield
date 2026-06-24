@@ -37,15 +37,20 @@ function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowCol
 }
 
 export const TOWER_TYPES = {
-  BERSERK:  'berserk',
-  VALKYRIE: 'valkyrie',
-  MILITARY: 'military',
-  CATAPULT: 'catapult',
-  BLONDIE:  'blondie',
-  PILTORN:  'piltorn',
-  HYDDA:    'hydda',
-  ISJATTEN: 'isjatten',
-  DRAKSHIP: 'drakship',
+  BERSERK:    'berserk',
+  VALKYRIE:   'valkyrie',
+  MILITARY:   'military',
+  CATAPULT:   'catapult',
+  BLONDIE:    'blondie',
+  PILTORN:    'piltorn',
+  HYDDA:      'hydda',
+  ISJATTEN:   'isjatten',
+  DRAKSHIP:   'drakship',
+  MINE:       'mine',
+  WATCHTOWER: 'watchtower',
+  BALLISTA:   'ballista',
+  RUNESHRINE: 'runeshrine',
+  BARRACKS:   'barracks',
 };
 
 export const TOWER_DEFS = {
@@ -191,6 +196,83 @@ export const TOWER_DEFS = {
     fireFlashDuration: 14,
     footprint:    { w: 3, h: 1 },
   },
+  // ── Outposts (passive) ────────────────────────────────────────────────────
+  [TOWER_TYPES.BALLISTA]: {
+    label:             'Ballista',
+    key:               'r',
+    color:             '#5a4028',
+    glowRgb:           '160,100,40',
+    rangeColor:        'rgba(140,90,40,0.24)',
+    cost:              70,
+    range:             160,
+    fireRate:          95,
+    damage:            200,
+    radius:            7,
+    bulletSpeed:       18,
+    bulletShape:       'arrow',
+    fireFlashDuration: 18,
+  },
+  [TOWER_TYPES.RUNESHRINE]: {
+    label:        'Rune Shrine',
+    key:          't',
+    color:        '#6050a8',
+    glowRgb:      '100,80,200',
+    rangeColor:   'rgba(80,60,180,0.20)',
+    cost:         55,
+    range:        0,
+    fireRate:     9999,
+    damage:       0,
+    radius:       6,
+    bulletSpeed:  0,
+    passive:      true,
+    starPerWaves: 4,
+  },
+  [TOWER_TYPES.BARRACKS]: {
+    label:             'Barracks',
+    key:               'y',
+    color:             '#506030',
+    glowRgb:           '100,130,60',
+    rangeColor:        'rgba(80,100,50,0.20)',
+    cost:              60,
+    range:             0,
+    fireRate:          9999,
+    damage:            0,
+    radius:            6,
+    bulletSpeed:       0,
+    passive:           true,
+    xpPerWave:         2,
+    recruitCostReduce: 5,
+  },
+  [TOWER_TYPES.MINE]: {
+    label:       'Mine',
+    key:         'q',
+    color:       '#7a6040',
+    glowRgb:     '160,120,60',
+    rangeColor:  'rgba(120,90,40,0.20)',
+    cost:        45,
+    range:       0,
+    fireRate:    9999,
+    damage:      0,
+    radius:      6,
+    bulletSpeed: 0,
+    passive:     true,
+    goldPerWave: 3,
+  },
+  [TOWER_TYPES.WATCHTOWER]: {
+    label:            'Watch Tower',
+    key:              'e',
+    color:            '#7080a0',
+    glowRgb:          '100,130,180',
+    rangeColor:       'rgba(80,110,160,0.20)',
+    cost:             35,
+    range:            0,
+    fireRate:         9999,
+    damage:           0,
+    radius:           6,
+    bulletSpeed:      0,
+    passive:          true,
+    eventPreviewBonus: 1,
+  },
 };
 
 const MAX_LEVEL = 10;
@@ -249,6 +331,9 @@ export class Tower {
     this.rune            = null;
     this._talentBonuses  = null;
     this._legacyBonus    = null;
+    this.itemRune        = null;   // rune socketed into equipped item's rune slot
+    this._waveTicks      = 0;      // wave counter for rune shrine star generation
+    this.onHighGround    = false;  // placed on a tactical high-ground choke tile
 
     // MVP marker timer (frames); when >0 the tower is highlighted as MVP
     this.mvpTimer = 0;
@@ -278,6 +363,16 @@ export class Tower {
       this.slowFactor   = Math.min(this.slowFactor,   0.50);
       this.slowDuration = Math.min(this.slowDuration + 20, 80);
     }
+    // Item rune slot — weaker stacking bonus from equipped item's socket
+    if (this.itemRune === 'ironEdge')    this.damage   = Math.round(this.damage * 1.12);
+    if (this.itemRune === 'swiftStrike') this.fireRate = Math.max(4, Math.round(this.fireRate * 0.91));
+    if (this.itemRune === 'battleHymn')  this.range    = Math.round(this.range  * 1.18);
+    if (this.itemRune === 'frostRune') {
+      this.slowFactor   = Math.min(this.slowFactor,   0.55);
+      this.slowDuration = Math.min(this.slowDuration + 12, 80);
+    }
+    // High-ground choke point: +15% range
+    if (this.onHighGround && this.range > 0) this.range = Math.round(this.range * 1.15);
     if (this._careerLevel > 0) {
       const { dm, rm, cm } = careerBonusForLevel(this._careerLevel);
       this.damage   = Math.round(this.damage   * dm);
@@ -346,8 +441,19 @@ export class Tower {
     this._applyLevel();
   }
 
+  setItemRune(id) {
+    this.itemRune = id;
+    this._applyLevel();
+  }
+
+  clearItemRune() {
+    this.itemRune = null;
+    this._applyLevel();
+  }
+
   update(enemies, bullets = null) {
     if (this.disabledTimer > 0) { this.disabledTimer--; return null; }
+    if (TOWER_DEFS[this.type]?.passive) return null;
 
     // ── Hydda: passive healer — ticks down cooldown, signals heal to caller ──
     if (this.type === TOWER_TYPES.HYDDA) {
@@ -397,7 +503,8 @@ export class Tower {
       }
     }
 
-    if (!target) return null;
+    if (!target) { this._currentTarget = null; return null; }
+    this._currentTarget = target;
     this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
 
     if (Array.isArray(bullets)) {
@@ -508,15 +615,20 @@ export class Tower {
       ctx.scale(fpScale, fpScale);
       ctx.translate(-this.x, -this.y);
     }
-    if      (this.type === TOWER_TYPES.BERSERK)  this._drawBerserk(ctx, t);
-    else if (this.type === TOWER_TYPES.VALKYRIE) this._drawValkyrie(ctx, t);
-    else if (this.type === TOWER_TYPES.MILITARY) this._drawMilitary(ctx, t);
-    else if (this.type === TOWER_TYPES.CATAPULT) this._drawCatapult(ctx, t);
-    else if (this.type === TOWER_TYPES.PILTORN)  this._drawPiltorn(ctx, t);
-    else if (this.type === TOWER_TYPES.HYDDA)    this._drawHydda(ctx, t);
-    else if (this.type === TOWER_TYPES.ISJATTEN) this._drawIsjatten(ctx, t);
-    else if (this.type === TOWER_TYPES.DRAKSHIP) this._drawDrakship(ctx, t);
-    else                                         this._drawBlondie(ctx, t);
+    if      (this.type === TOWER_TYPES.BERSERK)    this._drawBerserk(ctx, t);
+    else if (this.type === TOWER_TYPES.VALKYRIE)   this._drawValkyrie(ctx, t);
+    else if (this.type === TOWER_TYPES.MILITARY)   this._drawMilitary(ctx, t);
+    else if (this.type === TOWER_TYPES.CATAPULT)   this._drawCatapult(ctx, t);
+    else if (this.type === TOWER_TYPES.PILTORN)    this._drawPiltorn(ctx, t);
+    else if (this.type === TOWER_TYPES.HYDDA)      this._drawHydda(ctx, t);
+    else if (this.type === TOWER_TYPES.ISJATTEN)   this._drawIsjatten(ctx, t);
+    else if (this.type === TOWER_TYPES.DRAKSHIP)   this._drawDrakship(ctx, t);
+    else if (this.type === TOWER_TYPES.MINE)       this._drawMine(ctx, t);
+    else if (this.type === TOWER_TYPES.WATCHTOWER) this._drawWatchtower(ctx, t);
+    else if (this.type === TOWER_TYPES.BALLISTA)   this._drawBallista(ctx, t);
+    else if (this.type === TOWER_TYPES.RUNESHRINE) this._drawRuneShrine(ctx, t);
+    else if (this.type === TOWER_TYPES.BARRACKS)   this._drawBarracks(ctx, t);
+    else                                           this._drawBlondie(ctx, t);
     if (useFpScale) ctx.restore();
 
     // Attack flash
@@ -1832,6 +1944,280 @@ export class Tower {
     ctx.fillStyle = '#c09040';
     ctx.fillRect(-3, -8, 6, 1);
 
+    ctx.restore();
+  }
+
+  _drawMine(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.7 + Math.sin(t * 1.8) * 0.10;
+    ctx.save();
+    ctx.translate(x, y);
+    // Shaft entrance — dark rectangle
+    ctx.fillStyle = '#3a2810';
+    ctx.fillRect(-4, -3, 8, 7);
+    // Timber frame
+    ctx.strokeStyle = '#7a5828'; ctx.lineWidth = 1.2;
+    ctx.strokeRect(-4, -3, 8, 7);
+    // Horizontal beam
+    ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(5, -3); ctx.stroke();
+    // Gold nugget glow
+    ctx.globalAlpha = pulse * 0.85;
+    ctx.fillStyle = '#d0a020';
+    ctx.beginPath(); ctx.arc(0, 1, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // Level indicator dots
+    for (let i = 0; i < Math.min(this.level, 5); i++) {
+      ctx.fillStyle = '#c8a030';
+      ctx.beginPath(); ctx.arc(-4 + i * 2, -6, 1, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  _drawWatchtower(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.6 + Math.sin(t * 1.2) * 0.15;
+    ctx.save();
+    ctx.translate(x, y);
+    // Tower body
+    ctx.fillStyle = '#5a6880';
+    ctx.fillRect(-3, -8, 6, 12);
+    // Battlement
+    ctx.fillStyle = '#6a7898';
+    for (let i = -1; i <= 1; i += 1) {
+      ctx.fillRect(i * 2 - 0.8, -11, 1.6, 3);
+    }
+    // Arrow slit window
+    ctx.fillStyle = '#202830';
+    ctx.fillRect(-0.6, -6, 1.2, 3);
+    // Beacon flame at top
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#f0c040';
+    ctx.beginPath(); ctx.arc(0, -12, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = pulse * 0.4;
+    ctx.fillStyle = '#ff8020';
+    ctx.beginPath(); ctx.arc(0, -12, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Ballista: heavy bolt-thrower on swiveling stone mount ────────────────────
+  _drawBallista(ctx, t) {
+    const x = this.x, y = this.y;
+    const glow = 0.5 + Math.sin(t * 2.5) * 0.35;
+    ctx.save();
+    ctx.translate(x, y);
+    // Stone mounting base
+    ctx.fillStyle = '#4a3a2e';
+    ctx.fillRect(-6, 0, 12, 8);
+    ctx.fillStyle = 'rgba(160,130,70,0.15)';
+    ctx.fillRect(-6, 0, 12, 1.5);
+    ctx.fillStyle = '#3a2a1e';
+    ctx.fillRect(-6, 7, 12, 1.5);
+    // Ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 8, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Rotating assembly — forward = aimAngle
+    ctx.save();
+    ctx.translate(0, -2);
+    ctx.rotate(this.aimAngle + Math.PI / 2);
+    // Torsion bundle at pivot
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(-2, -2, 4, 5);
+    ctx.fillStyle = '#704028';
+    ctx.fillRect(-2, -2, 1.5, 5);
+    // Tiller (forward beam)
+    ctx.strokeStyle = '#6a4020';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(140,90,30,0.5)';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 3); ctx.lineTo(0, -14);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Cross-arms (bow limbs)
+    ctx.strokeStyle = '#8a5028';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-11, -7); ctx.lineTo(11, -7);
+    ctx.stroke();
+    // Curved limb tips
+    ctx.strokeStyle = '#6a3818';
+    ctx.lineWidth = 2;
+    for (const [tx, dir] of [[-11, -1], [11, 1]]) {
+      ctx.beginPath();
+      ctx.arc(tx, -7, 2.5, dir > 0 ? Math.PI / 2 : -Math.PI / 2, dir > 0 ? Math.PI * 1.5 : Math.PI / 2, dir < 0);
+      ctx.stroke();
+    }
+    // Bowstring
+    const stretchY = this.fireFlash > 0 ? -4 : -7;
+    ctx.strokeStyle = 'rgba(215,185,110,0.9)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-11, -7); ctx.lineTo(0, stretchY); ctx.lineTo(11, -7);
+    ctx.stroke();
+    // Bolt on track
+    ctx.shadowColor = `rgba(220,190,80,${0.5 + glow * 0.5})`;
+    ctx.shadowBlur = 5 * glow;
+    ctx.fillStyle = '#c8b070';
+    ctx.fillRect(-0.8, -14, 1.6, 7);
+    ctx.fillStyle = '#e0d4a0';
+    ctx.beginPath();
+    ctx.moveTo(0, -16); ctx.lineTo(-2.2, -12.5); ctx.lineTo(2.2, -12.5); ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#b82818';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(-1, stretchY + 1); ctx.lineTo(-4, stretchY + 4); ctx.lineTo(-1, stretchY + 3); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(1, stretchY + 1); ctx.lineTo(4, stretchY + 4); ctx.lineTo(1, stretchY + 3); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // ── Rune Shrine: standing rune-stone generating star energy ──────────────────
+  _drawRuneShrine(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse  = 0.5 + Math.sin(t * 1.5) * 0.5;
+    const pulse2 = 0.5 + Math.sin(t * 1.5 + Math.PI * 0.7) * 0.5;
+    ctx.save();
+    ctx.translate(x, y);
+    // Stone base
+    ctx.fillStyle = '#3a3040';
+    ctx.fillRect(-5, 3, 10, 5);
+    ctx.fillStyle = 'rgba(80,60,140,0.20)';
+    ctx.fillRect(-5, 3, 10, 1.5);
+    // Main standing stone
+    ctx.fillStyle = '#24203a';
+    ctx.beginPath();
+    ctx.roundRect(-4, -14, 8, 18, 1);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(120,100,180,0.12)';
+    ctx.beginPath();
+    ctx.roundRect(-4, -14, 2, 18, 1);
+    ctx.fill();
+    // Carved glowing runes
+    ctx.save();
+    ctx.shadowBlur = 8 + pulse * 10;
+    ctx.shadowColor = `rgba(100,80,220,${0.6 + pulse * 0.4})`;
+    ctx.strokeStyle = `rgba(140,110,255,${0.65 + pulse * 0.35})`;
+    ctx.lineWidth = 0.9;
+    ctx.lineCap = 'round';
+    // Hagalaz (H-cross)
+    ctx.beginPath();
+    ctx.moveTo(-2, -12); ctx.lineTo(-2, -9);
+    ctx.moveTo(2, -12); ctx.lineTo(2, -9);
+    ctx.moveTo(-2, -10.5); ctx.lineTo(2, -10.5);
+    ctx.stroke();
+    // Ingwaz (diamond)
+    ctx.beginPath();
+    ctx.moveTo(0, -8); ctx.lineTo(2.5, -6); ctx.lineTo(0, -4); ctx.lineTo(-2.5, -6); ctx.closePath();
+    ctx.stroke();
+    // Tiwaz (arrow-up)
+    ctx.beginPath();
+    ctx.moveTo(0, -3); ctx.lineTo(0, 0);
+    ctx.moveTo(-2, -2); ctx.lineTo(0, -3); ctx.lineTo(2, -2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    // Glow halo
+    const glowR = 5 + pulse * 3;
+    const g = ctx.createRadialGradient(0, -6, 1, 0, -6, glowR + 5);
+    g.addColorStop(0, `rgba(100,80,220,${0.30 + pulse * 0.20})`);
+    g.addColorStop(1, 'rgba(80,60,180,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, -6, glowR + 6, glowR + 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Orbiting star particles
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.2 + (i / 3) * Math.PI * 2;
+      const r = 6 + pulse * 2;
+      ctx.fillStyle = `rgba(160,130,255,${0.35 + pulse2 * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r, -6 + Math.sin(a) * r * 0.5, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Wave tick counter dots (shows waves until next star)
+    const spw = TOWER_DEFS[TOWER_TYPES.RUNESHRINE].starPerWaves ?? 4;
+    for (let i = 0; i < spw; i++) {
+      const filled = i < (this._waveTicks ?? 0);
+      ctx.fillStyle = filled ? '#c0a0ff' : 'rgba(80,60,140,0.5)';
+      ctx.beginPath();
+      ctx.arc(-4 + i * 2.8, 6, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── Barracks: military training hall, reduces recruit cost ───────────────────
+  _drawBarracks(ctx, t) {
+    const x = this.x, y = this.y;
+    const pulse = 0.6 + Math.sin(t * 1.8) * 0.2;
+    ctx.save();
+    ctx.translate(x, y);
+    // Building body — wooden barracks
+    ctx.fillStyle = '#4a3820';
+    ctx.fillRect(-6, -4, 12, 12);
+    // Plank horizontal lines
+    ctx.strokeStyle = 'rgba(30,15,5,0.28)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 1; i < 5; i++) {
+      ctx.moveTo(-6, -4 + i * 2.5); ctx.lineTo(6, -4 + i * 2.5);
+    }
+    ctx.stroke();
+    // Left-side highlight plank
+    ctx.fillStyle = 'rgba(180,140,80,0.13)';
+    ctx.fillRect(-6, -4, 2, 12);
+    // Gabled roof
+    ctx.fillStyle = '#303828';
+    ctx.beginPath();
+    ctx.moveTo(-8, -4); ctx.lineTo(0, -12); ctx.lineTo(8, -4); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(100,120,80,0.18)';
+    ctx.beginPath();
+    ctx.moveTo(-8, -4); ctx.lineTo(0, -12); ctx.lineTo(-3, -4); ctx.closePath();
+    ctx.fill();
+    // Ridge cap
+    ctx.strokeStyle = '#4a5830';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-1.5, -11); ctx.lineTo(1.5, -11);
+    ctx.stroke();
+    // Crossed spears (unit symbol on gable)
+    ctx.save();
+    ctx.shadowColor = `rgba(200,170,80,${0.45 * pulse})`;
+    ctx.shadowBlur = 4 * pulse;
+    ctx.strokeStyle = '#c8a030';
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-3.5, -8); ctx.lineTo(3.5, -14);
+    ctx.moveTo(3.5, -8); ctx.lineTo(-3.5, -14);
+    ctx.stroke();
+    ctx.fillStyle = '#e0c060';
+    ctx.beginPath();
+    ctx.moveTo(-3.5, -14); ctx.lineTo(-4.8, -12.2); ctx.lineTo(-2.2, -12.2); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(3.5, -14); ctx.lineTo(2.2, -12.2); ctx.lineTo(4.8, -12.2); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    // Door
+    ctx.fillStyle = '#1e1008';
+    ctx.fillRect(-2, 0, 4, 8);
+    ctx.fillStyle = '#4a3010';
+    ctx.fillRect(-1.5, 0.5, 1.5, 5);
+    // Level indicator dots
+    for (let i = 0; i < Math.min(this.level, 5); i++) {
+      ctx.fillStyle = '#90c060';
+      ctx.beginPath(); ctx.arc(-4 + i * 2, -7, 1, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
 }
