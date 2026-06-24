@@ -41,7 +41,7 @@ export const FORTRESS_DEFS = {
   },
 
   watchtower: {
-    label:    'Watchtower',
+    label:    'Watch Tower',
     icon:     '👁',
     desc:     'Reveals upcoming wave events earlier in the HUD',
     maxLevel: 3,

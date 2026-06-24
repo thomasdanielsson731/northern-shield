@@ -1,6 +1,11 @@
 # Northern Shield
 
-Norse dark-fantasy **Fortress Defense RPG** built on HTML5 Canvas. You command a persistent warband of defenders protecting and expanding their fortress across many battles.
+Norse dark-fantasy **Fortress Defense RPG** built on HTML5 Canvas. Command a persistent warband across **100 campaign maps** (node chains, pathless combat) or optional **skirmish** classic maze TD.
+
+## Modes
+
+- **Campaign (default):** 100 regions, 10–30 nodes each, 2–3 waves/node, boss finale. Field persists between nodes (max 10 heroes + 10 structures).
+- **Skirmish:** 3 maps, 100-wave maze TD with BFS path validation — via Skirmish Mode on campaign select.
 
 ## Core Fantasy
 
@@ -36,7 +41,7 @@ Walls and buildings are strategic assets that grow between battles:
 - **Shield Walls** — redirect enemies, create kill-zones
 - **Great Hall** — fortress center, sets roster capacity
 - **Barracks** — unlocks new defender classes
-- **Watchtowers** — passive range/vision bonuses
+- **Watch Towers** — passive range/vision bonuses
 - **Treasury** — resources and equipment storage
 - **Rune Forge** — craft and apply runes to defenders
 
@@ -56,3 +61,13 @@ Walls and buildings are strategic assets that grow between battles:
 - Loss is painful but never feels unfair
 - Strategic deployment over reaction speed
 - Persistent, not roguelite
+
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| [CLAUDE.md](CLAUDE.md) | Coding reference |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Domain model, campaign, planned systems |
+| [ART_DIRECTION.md](ART_DIRECTION.md) | Sprite rules |
+
+Design specs (Hero domain, fortress roles, traits, balance): outer workspace `design/` — see monorepo `tower-defence/design/README.md`.

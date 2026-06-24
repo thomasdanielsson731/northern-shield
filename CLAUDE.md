@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Northern Shield** — a Norse dark fantasy, grid-based maze tower defense game built with vanilla JS, HTML5 Canvas, and ES Modules. No game engine. Goal: fast iteration, simple architecture.
+**Northern Shield** — a Norse dark fantasy **Fortress Defense RPG** built with vanilla JS, HTML5 Canvas, and ES Modules. No game engine. Goal: fast iteration, simple architecture.
+
+**Two play modes:**
+- **Campaign (default):** 100 regions, 10–30 nodes each, 2–3 waves per node, boss on last node. Pathless combat — no maze path, no BFS on placement. Field persists between nodes (max 10 heroes + 10 structures).
+- **Skirmish (optional):** Classic 3-map / 100-wave maze TD via **Skirmish Mode** on the campaign select screen. BFS path validation, drawn path, `WAVE_EVENTS`, endless mode after wave 100.
 
 ## Commands
 
@@ -51,6 +55,8 @@ src/
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
     events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
+    campaignMaps.js    — 100 campaign maps, node/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
+    campaignRun.js     — field persistence (10 heroes + 10 structures), node casualties, completeNode()
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
   chronicle/
@@ -69,6 +75,7 @@ tests/
   bullet.unit.test.js
   pathing.functional.test.js
   campaign.unit.test.js
+  campaignMaps.unit.test.js
   roster.unit.test.js
 ```
 
@@ -84,31 +91,36 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 
 | Region | Position |
 |---|---|
-| Top HUD bar | y=0, h=GRID_TOP=64 |
-| Command Center nav sidebar | x=FRAME_THICK=32, w=LEFT_NAV_W=56 |
-| Grid | GRID_LEFT=88 (`FRAME_THICK+LEFT_NAV_W`), GRID_TOP=64, 48×22 cells at CELL_SIZE=14 → 672×308 px |
+| Top command bar | y=0, h=GRID_TOP (`FRAME_THICK+32` = 48) |
+| Left dock (WARBAND \| STRUCTURES tabs) | x=FRAME_THICK=16, w=LEFT_DOCK_W=172 |
+| Grid | GRID_LEFT=188, GRID_TOP=48, **48×30** cells at CELL_SIZE=14 → 672×420 px |
 | Right panel | x=right of grid, w=188 (`RIGHT_PANEL_W`) |
-| Bottom build bar | below grid, h=62 (`BUILD_BTN.h`) |
-| Ornamental frame | 32 px thick (`FRAME_THICK`), drawn last (on top of everything) |
+| Ornamental frame | 16 px thick (`FRAME_THICK`), drawn last |
 
-Key constants: `COLS=48, ROWS=22, CELL_SIZE=14`, `SPAWN={col:0, row:11}`, `GOAL={col:24, row:11}` (center — fortress at center design), `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100`. `BASE_W` and `BASE_H` are derived from these constants. `LEFT_NAV_W=56` for the Command Center sidebar.
+Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL={col:24, row:15}` (fortress at center), `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100` (skirmish only). `BASE_W` and `BASE_H` derived from constants; `computeScale()` prefers filling viewport height.
 
-**Multi-portal system:** MIDGARD preset has `multiPortal:true`. Three extra portals reserved at game start as `CELL.SPAWN` (east col:47,row:11; north col:24,row:0; south col:24,row:21) — towers can never be placed there. `_extraSpawns[]` tracks them with `active` flag. Portals activate at: W11 east, W21 north, W41 south, W71 NW corner. `spawnEnemy()` distributes enemies across all active portals. ALL portal paths are BFS-validated on every tower/wall placement.
+**Campaign combat:** `pathless: true` on campaign presets — no `drawPath()`, no BFS on placement. Heroes place anywhere; structures/walls only in fortress zone (Chebyshev ≤10 from `GOAL`). Enemies use direct targeting (`pickEnemyTarget`, `targetPriority` in `ENEMY_DEFS`).
+
+**Skirmish combat:** BFS path validation on every tower/wall placement. Path drawn. Multi-portal maps (`multiPortal:true`) reserve extra `CELL.SPAWN` cells; all portal paths validated on placement.
+
+**Multi-portal (campaign + skirmish):** `campaignPortalCount` scales 1→4 by map tier (maps 0–14: 1, 15–39: 2, 40–69: 3, 70+: 4). Extra portals activate on early waves in campaign mode.
 
 ### Render order (each frame)
 
-1. Terrain canvas blit (baked offscreen once at init; rebaked when sprites load)
+1. Terrain canvas blit (baked offscreen once at init)
 2. `grid.draw()` — cells, spawn portal, goal/hoard
-3. `drawPath()` — stone road (5 layered strokes + joint lines) + will-o'-wisps
+3. `drawPath()` — **skirmish only** (`isPathlessMode()` returns early)
 4. Towers → selection ring → bullets → enemies → particles
 5. Portal flash, screen shake, vignette
-6. `drawRightPanel()`, `drawHud()` (build bar + top HUD)
+6. Left dock (`drawLeftDock`), right panel, HUD
 7. Coins, boss warning, wave announcement, tower detail panel, drag ghost
 8. `drawFrames()` — ornamental sprite frame, drawn last
 
 ### Pathfinding
 
-BFS in `grid.js`. Enemies follow a pixel path (`currentPath`) computed from `SPAWN` to `GOAL`. When a tower or wall is placed, the path is recomputed; active enemies get `setPath()` called to reroute from their current cell. Flying enemies (Myling) ignore the grid and move directly toward the goal.
+BFS in `grid.js`. **Skirmish mode:** enemies follow `currentPath` (SPAWN → GOAL); placement recomputes path and reroutes active enemies. Flying enemies (Myling) move directly toward goal.
+
+**Campaign (pathless) mode:** no path validation on placement. `updateEnemyPathlessTarget()` sets a direct move vector each tick toward `pickEnemyTarget()` result (warband, structures, or goal per `ENEMY_DEFS.targetPriority`). `processEnemyMeleeAttacks()` handles hero/structure/wall damage.
 
 ### Sprite system
 
@@ -158,7 +170,7 @@ Two wall types in `TOWER_BUILD_ITEMS`:
 | Type | Key | Cost | Behaviour |
 |---|---|---|---|
 | Shield Wall | `1` | `WALL_COST=12` | Permanent; 4 upgrade levels; HP `[100,120,140,160,180]`; upgrade costs `[8,14,20,28]`; loses `WALL_WAVE_DAMAGE=5` HP each wave if adjacent to path |
-| Reinforce | `2` | `REINFORCE_COST=30` | Temporary; crumbles after `REINFORCE_WAVES=3` wave-end ticks; `wallData[key].reinforce` countdown; no upgrade path |
+| Reinforce Wall | `2` | `REINFORCE_COST=30` | Temporary; crumbles after `REINFORCE_WAVES=3` wave-end ticks; `wallData[key].reinforce` countdown; no upgrade path |
 
 `wallData` is a `'${col}_${row}'`-keyed object. Each entry: `{ level, hp, maxHp, reinforce? }`. `wallFrostCells` is a cached list of cells adjacent to walls (rebuilt when `wallFrostDirty=true`).
 
@@ -192,23 +204,29 @@ Active synergies are shown in the tower detail panel and rendered as a colored g
 
 ### Campaign boundary and game phases
 
-`gamePhase` is `'mapSelect' | 'playing' | 'betweenBattles'`. Campaign state (`stars`, `runeInventory`, `battlesCompleted`, the Roster) persists across the boundary; combat state resets.
+`gamePhase`: `'campaignSelect' | 'nodeMap' | 'mapSelect' | 'playing' | 'debrief' | 'betweenBattles'`.
+
+**Default flow:** `campaignSelect` → `nodeMap` → `startCampaignNodeBattle()` → `playing` → `debrief` → `nodeMap`. **War Camp** on node map opens `betweenBattles` for recruit/upgrade/equip (meta layer — buying towers and upgrading chars happens here, not during node assault). **Skirmish Mode** button → `mapSelect` → legacy 3-map skirmish.
+
+Campaign state (`stars`, `runeInventory`, `battlesCompleted`, Roster, `campaignProgress`) persists across boundaries; combat state resets per node assault (field restored from `mapRuns[].fieldState`).
 
 Key functions:
-- `initCampaign(preset)` — loads `ns-campaign-v2` save (or migrates legacy), restores stars/runes/roster, calls `initBattle`
+- `startCampaignNodeBattle(mapIndex, nodeIndex)` — loads field, sets `_campaignNodeMode`, builds `_nodeWavePlan`
+- `finishCampaignNodeVictory()` — `completeNode()`, saves `serializeFieldState()`, returns to debrief → node map
+- `initCampaign(preset)` — loads `ns-campaign-v2` save, restores stars/runes/roster, calls `initBattle`
 - `initBattle(preset)` — sets map geometry, calls `restartCombatState()`, sets `gamePhase = 'playing'`
-- `restartCombatState()` — clears enemies/towers/bullets/gold; returns equipped runes to inventory; does NOT touch stars or roster
-- `recordBattleResult(result)` — grants defender XP, serializes roster into campaign save, increments `battlesCompleted`, transitions to `betweenBattles`
+- `restartCombatState()` — clears enemies; returns equipped runes; does NOT touch stars, roster, or campaign field (restored separately in campaign)
+- `recordBattleResult(result)` — skirmish/between-battles outcome; grants XP, saves campaign
 
-On load (and after `betweenBattles → MAP SELECT`), the game shows a map select screen with three preset maps:
+**Skirmish maps** (via `mapSelect`):
 
 | Name | Spawn | Goal | Description |
 |---|---|---|---|
-| MIDGARD | col 0, row 11 | col 35, row 11 | Classic fortress (default) |
-| BIFROST PASS | col 0, row 5 | col 35, row 16 | Off-center lanes |
-| NIDHOGG'S RUN | col 0, row 1 | col 35, row 20 | Corner crossing |
+| MIDGARD | col 0, row 15 | col 24, row 15 | Fortress at center, multi-portal |
+| BIFROST PASS | col 0, row 5 | col 47, row 16 | Off-center lanes |
+| NIDHOGG'S RUN | col 0, row 1 | col 47, row 20 | Corner crossing |
 
-Auto-starts in 10 s (`MAP_AUTO_DELAY`) if the player doesn't pick. `initGame(map)` calls `initCampaign(map)` which is the campaign entry point.
+Auto-starts in 10 s on map select if player doesn't pick. `initGame(map)` calls `initCampaign(map)` for skirmish entry.
 
 ### Wave events
 
@@ -267,7 +285,9 @@ The wave status line in the HUD is colored by threat: boss waves are red (`#ff40
 
 ### Core game rule: path-validity enforcement
 
-Before any wall or tower placement is applied, BFS is run to check that a valid path from `SPAWN` to `GOAL` still exists. If the placement would block all paths, it is rejected silently. This is the fundamental constraint that makes maze-building safe — never bypass it.
+**Skirmish / non-pathless presets only:** Before any wall or tower placement, BFS checks that a valid path from `SPAWN` to `GOAL` still exists (and all active portal paths on multi-portal maps). Rejected placements show `pathBlockFlash`.
+
+**Campaign pathless mode:** No BFS check. Structures/walls restricted to fortress zone (`isInFortressZone`). Heroes place anywhere on empty cells. Field caps: max 10 heroes + 10 structures (`campaignRun.js`).
 
 ### Design philosophy
 
@@ -276,9 +296,12 @@ Before any wall or tower placement is applied, BFS is run to check that a valid 
 For code work, the relevant constraints:
 
 **Non-negotiable rules:**
-- **Path validity** — BFS check before every placement. Never bypass this.
-- **Battle vs. campaign separation** — `initBattle()` resets only combat state; `initCampaign()` resets everything. Never add cross-battle state to `restartCombatState()`.
-- **No implicit roguelite resets** — do not silently discard defender state. If state resets, it must be explicit and intentional.
+- **Path validity (skirmish)** — BFS check before every placement when `!isPathlessMode()`. Never bypass on skirmish presets.
+- **Fortress zone (campaign)** — structures/walls only near GOAL; heroes anywhere.
+- **Field caps (campaign)** — max 10 heroes + 10 structures on field; persisted in `campaignProgress.mapRuns[].fieldState`.
+- **Node casualties** — hero deaths during node assault go to `_nodeCasualties`; cleared on node victory. Roster defender persists.
+- **Battle vs. campaign separation** — `initBattle()` resets combat state; field restored via `restoreCampaignField()`. Never add cross-node state to `restartCombatState()` incorrectly.
+- **No implicit roguelite resets** — do not silently discard defender state.
 
 **Coding standards for RPG systems:**
 - New systems go in new files under new subdirectories (`src/roster/`, `src/fortress/`, `src/campaign/`). `game.js` calls into them; it does not absorb them.
@@ -332,7 +355,7 @@ Boss drop schedule: wave 10 → common, wave 25 → rare, wave 50 → rare, wave
 |---|---|---|
 | Barracks | Recruit cost −5/10/15g, +20/40/60g starting gold | level 3 |
 | Armory | Equipment damage multiplier ×1.08/1.13/1.20 | level 3 |
-| Watchtower | Wave event preview +1/2/3 waves ahead | level 3 |
+| Watch Tower | Wave event preview +1/2/3 waves ahead | level 3 |
 | Wallworks | Wall cost −1/2/3g, adjacent slow +4/7/10% | level 3 |
 
 ### Chronicle system
@@ -406,6 +429,20 @@ _campaignState = {
 **Auto-generated biography** — `generateBio(defender, chronicle, classLabel)` produces a 4-5 sentence biography. Opened via 📜 BIO button on roster cards, also shown in retirement ceremony.
 
 **Hall of Fallen / Hall of Honored** — both visible at bottom of Chronicle overlay. Fallen = dismissed VETERAN+. Honored = formally retired.
+
+## Design specs (Tactical Squad Management)
+
+Planned systems documented in outer workspace `design/` (relative from monorepo root: `tower-defence/design/`):
+
+| Doc | Topic |
+|-----|-------|
+| `HERO_DOMAIN.md` | Hero entity, MVP/v2, save schema |
+| `FORTRESS_ROLES.md` | 20 roles, zones, synergies |
+| `WARBAND_COMPOSITION.md` | Squad archetypes, deploy counts |
+| `TRAITS.md` | 50 traits with gameplay + story |
+| `DIFFICULTY_BALANCE.md` | Campaign curve analysis + P1–P7 fixes |
+
+See also [ARCHITECTURE.md](ARCHITECTURE.md) §8. **Next code:** difficulty tuning → fortress roles MVP → trait hooks.
 
 ## Art direction
 

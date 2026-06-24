@@ -110,16 +110,16 @@ const REINFORCE_WAVES = 3;   // number of wave-end ticks before a reinforce wall
 
 // TOWER items: static siege/defensive structures
 const TOWER_BUILD_ITEMS = [
-  { id: 'wall',        label: 'Shield Wall',  key: '1', color: '#6e5038', cost: WALL_COST,     mode: CELL.WALL,  category: 'walls' },
-  { id: 'reinforce',   label: 'Reinforce',    key: '2', color: '#8a6a18', cost: REINFORCE_COST, mode: CELL.WALL,  category: 'walls' },
-  { id: 'piltorn',    ...TOWER_DEFS['piltorn'],  mode: CELL.TOWER, category: 'siege' },
-  { id: 'catapult',   ...TOWER_DEFS['catapult'], mode: CELL.TOWER, category: 'siege' },
-  { id: 'drakship',   ...TOWER_DEFS['drakship'], mode: CELL.TOWER, category: 'siege' },
-  { id: 'mine',       ...TOWER_DEFS['mine'],       mode: CELL.TOWER, category: 'outpost' },
-  { id: 'watchtower', ...TOWER_DEFS['watchtower'], mode: CELL.TOWER, category: 'outpost' },
-  { id: 'ballista',   ...TOWER_DEFS['ballista'],   mode: CELL.TOWER, category: 'siege'   },
-  { id: 'runeshrine', ...TOWER_DEFS['runeshrine'], mode: CELL.TOWER, category: 'outpost' },
-  { id: 'barracks',   ...TOWER_DEFS['barracks'],   mode: CELL.TOWER, category: 'outpost' },
+  { id: 'wall',        label: 'Shield Wall',   key: '1', color: '#6e5038', cost: WALL_COST,      mode: CELL.WALL,  category: 'walls' },
+  { id: 'reinforce',   label: 'Reinforce Wall', key: '2', color: '#8a6a18', cost: REINFORCE_COST, mode: CELL.WALL,  category: 'walls' },
+  { id: 'watchtower',  ...TOWER_DEFS['watchtower'], mode: CELL.TOWER, category: 'outpost' },
+  { id: 'ballista',    ...TOWER_DEFS['ballista'],   mode: CELL.TOWER, category: 'siege'   },
+  { id: 'catapult',    ...TOWER_DEFS['catapult'],   mode: CELL.TOWER, category: 'siege' },
+  { id: 'mine',        ...TOWER_DEFS['mine'],       mode: CELL.TOWER, category: 'outpost' },
+  { id: 'barracks',    ...TOWER_DEFS['barracks'],   mode: CELL.TOWER, category: 'outpost' },
+  { id: 'runeshrine',  ...TOWER_DEFS['runeshrine'], mode: CELL.TOWER, category: 'outpost' },
+  { id: 'piltorn',     ...TOWER_DEFS['piltorn'],    mode: CELL.TOWER, category: 'siege' },
+  { id: 'drakship',    ...TOWER_DEFS['drakship'],   mode: CELL.TOWER, category: 'siege' },
 ];
 let selectedWallType = 'wall';  // 'wall' | 'reinforce'
 // HERO items: warband characters with roster identity
@@ -229,7 +229,7 @@ function _layoutStructureCard(item, cardX, cardY, cardW, cardH, isBuildSel) {
   const lbl = STRUCTURE_SHORT[item.id] ?? item.label;
   ctx.font = 'bold 7px monospace';
   ctx.fillStyle = !affordable ? '#3a3020' : isBuildSel ? '#f0e8d0' : '#c0b090';
-  ctx.fillText(lbl.length > 9 ? lbl.slice(0, 8) + '…' : lbl, cardX + 4, infoY + 9);
+  ctx.fillText(lbl.length > 13 ? lbl.slice(0, 12) + '…' : lbl, cardX + 4, infoY + 9);
   const abilLbl = ABILITY_LABELS[item.id];
   if (abilLbl && cardW > 36) {
     drawRoleChip(cardX + 4, infoY + 18, abilLbl, glowRgb, { alpha: affordable ? (isBuildSel ? 1 : 0.75) : 0.35 });
@@ -249,11 +249,18 @@ function _layoutStructureCard(item, cardX, cardY, cardW, cardH, isBuildSel) {
   ctx.restore();
 }
 
-/** Short labels for cramped structure build slots. */
+/** Display labels for structure build slots (Title Case). */
 const STRUCTURE_SHORT = {
-  wall: 'Shield', reinforce: 'Reinf', piltorn: 'Warden', catapult: 'Catapult',
-  drakship: 'Dragon', mine: 'Mine', watchtower: 'Watch', ballista: 'Ballista',
-  runeshrine: 'Shrine', barracks: 'Barracks',
+  wall:        'Shield Wall',
+  reinforce:   'Reinforce Wall',
+  watchtower:  'Watch Tower',
+  ballista:    'Ballista',
+  catapult:    'Catapult',
+  mine:        'Mine',
+  barracks:    'Barracks',
+  runeshrine:  'Rune Shrine',
+  piltorn:     'Warden',
+  drakship:    'Dragonship',
 };
 
 // Tactical high-ground choke tiles — defenders placed here get +15% range.
@@ -6425,7 +6432,7 @@ function drawCombatFortressOverlay(px, py, pw, ph) {
   const _upgradeRows = [
     { key: 'barracks',   label: 'Barracks',   icon: '⚑' },
     { key: 'armory',     label: 'Armory',      icon: '⚔' },
-    { key: 'watchtower', label: 'Watchtower',  icon: '◈' },
+    { key: 'watchtower', label: 'Watch Tower', icon: '◈' },
     { key: 'wallworks',  label: 'Wallworks',   icon: '▣' },
   ];
   ctx.strokeStyle = 'rgba(60,80,160,0.20)'; ctx.lineWidth = 0.4;

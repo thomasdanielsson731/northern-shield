@@ -30,22 +30,36 @@ The player commands a living warband. Defenders earn names, experience, and scar
 
 ---
 
-## Core Gameplay Loop (per battle)
+## Core Gameplay Loop
+
+### Campaign (primary)
+
+```
+Select region (1–100 maps)
+↓
+Node map — prepare in War Camp (recruit, upgrade, equip)
+↓
+Node assault (2–3 waves, boss on last node)
+↓
+Field persists (max 10 heroes + 10 structures)
+↓
+Clear map → unlock next region
+```
+
+**Combat:** Pathless — warband places anywhere; structures/walls only near fortress. Enemies target warband or structures by type.
+
+**Roadmap (Tactical Squad Management):** Hero domain, fortress roles, warband composition presets, 50-trait system, campaign difficulty tuning — see design specs in workspace `design/`.
+
+### Skirmish (optional — classic maze TD)
 
 ```
 Deploy defenders
 ↓
-Shape enemy path (walls + structures)
+Shape enemy path (walls + structures) — BFS-validated maze
 ↓
-Survive the wave
+Survive up to 100 waves (+ endless)
 ↓
-Earn resources (gold, experience, equipment)
-↓
-Advance defenders (level, talent, gear)
-↓
-Expand the fortress
-↓
-Next battle — stronger warband, larger fortress
+Earn resources → advance warband → next skirmish
 ```
 
 ---
@@ -87,7 +101,7 @@ Walls and structures are **strategic assets**, not simple obstacles:
 - **Shield Walls** — Block and redirect enemy paths; create kill-zones
 - **Great Hall** — Fortress center; determines roster capacity
 - **Barracks** — Unlocks new defender classes and recruitment
-- **Watchtowers** — Passive vision and range bonuses for nearby defenders
+- **Watch Towers** — Passive vision and range bonuses for nearby defenders
 - **Treasury** — Stores resources; higher tiers unlock equipment and talents
 - **Rune Forge** — Crafts and upgrades equipment; applies runes to defenders
 
