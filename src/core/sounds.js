@@ -336,3 +336,11 @@ export function sfxEventResolve() {
   // Bright resolution chime — an event concludes
   [880, 1100, 1320, 1760].forEach((f, i) => tone(f, 0.14, 0.09, 'sine', i * 0.06));
 }
+
+export function sfxBondGrief() {
+  // Soft somber descent — a bond is severed, the survivor carries the weight
+  tone(330, 0.30, 0.07, 'sine');
+  tone(247, 0.36, 0.06, 'sine', 0.18);
+  tone(196, 0.42, 0.05, 'sine', 0.36);
+  tone(165, 0.50, 0.04, 'sine', 0.54);
+}

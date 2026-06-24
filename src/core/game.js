@@ -24,7 +24,7 @@ import {
   sfxFlawless, sfxWaveDone, sfxEndlessStart, sfxEndlessMilestone,
   sfxTalentUnlock, sfxLootDrop, sfxFortressUpgrade, sfxRecruit, sfxDismiss, sfxRename, sfxBond,
   sfxBossPhase25, sfxBossPhase50,
-  sfxRetireCeremony, sfxEnemyIntro, sfxPortalOpens, sfxEventResolve,
+  sfxRetireCeremony, sfxEnemyIntro, sfxPortalOpens, sfxEventResolve, sfxBondGrief,
 } from './sounds.js';
 
 const COLS = 48;
@@ -1365,27 +1365,27 @@ function startNextWave() {
   // Enemy intro banner — fire at wave start so player reads it before combat, not during
   {
     const _INTRO_TYPES = {
-      [ENEMY_TYPES.WARG]:      { label: '⚡ NEW: WARG',      hint: 'Fast wolf pack — use splash or slowing towers to handle them' },
-      [ENEMY_TYPES.EINHERJAR]: { label: '⚔ NEW: EINHERJAR', hint: 'Armored Viking — very tough, slow. Outlast with sustained DPS or wall it' },
-      [ENEMY_TYPES.MYLING]:    { label: '★ NEW: MYLING',     hint: 'Spectral flier — ignores walls; use ranged defenders' },
-      [ENEMY_TYPES.JOTUNN]:    { label: '★ NEW: JÖTUNN',     hint: 'Earth giant — massive HP but very slow; early upgrade focus' },
-      [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves' },
+      [ENEMY_TYPES.WARG]:      { label: '⚡ NEW: WARG',      hint: 'Fast wolf pack — use splash or slowing towers to handle them', category: 'beast'  },
+      [ENEMY_TYPES.EINHERJAR]: { label: '⚔ NEW: EINHERJAR', hint: 'Armored Viking — very tough, slow. Outlast with sustained DPS or wall it', category: 'undead' },
+      [ENEMY_TYPES.MYLING]:    { label: '★ NEW: MYLING',     hint: 'Spectral flier — ignores walls; use ranged defenders', category: 'spirit' },
+      [ENEMY_TYPES.JOTUNN]:    { label: '★ NEW: JÖTUNN',     hint: 'Earth giant — massive HP but very slow; early upgrade focus', category: 'giant'  },
+      [ENEMY_TYPES.MARA]:      { label: '★ NEW: MARA',       hint: 'Nightmare spirit — moderate HP; high threat at mid waves', category: 'spirit' },
     };
     const waveTypes = new Set(spawnQueue.map(e => e.__herald ? e.type : e).filter(t => typeof t === 'string'));
     _enemyIntroQueue = [];
     for (const [t, info] of Object.entries(_INTRO_TYPES)) {
       if (waveTypes.has(t) && !_enemyIntroSeen.has(t)) {
         _enemyIntroSeen.add(t);
-        _enemyIntroQueue.push({ label: info.label, hint: info.hint });
+        _enemyIntroQueue.push({ label: info.label, hint: info.hint, category: info.category });
       }
     }
     // Boss first-encounter banners
     const _BOSS_INTROS = {
-      10:  { label: '☠ DRAUGEN-JARL RISES', hint: 'Chieftain of the Dead — heavy HP, spawns minions. Focus fire.' },
-      25:  { label: '☠ JÖTUNHELM WALKER COMES', hint: 'Mountain giant — colossal HP, leaves shockwave. Siege damage preferred.' },
-      50:  { label: '☠ FENRIR UNCHAINED', hint: 'The Great Wolf — speed surges at each phase. AoE towers essential.' },
-      75:  { label: '☠ HATI & SKÖLL DESCEND', hint: 'Twin hunters — split and converge. Two-front defense required.' },
-      100: { label: '☠ SURTR, LORD OF FIRE', hint: 'The world-ender. All defenses to maximum. The north must hold.' },
+      10:  { label: '☠ DRAUGEN-JARL RISES',     hint: 'Chieftain of the Dead — heavy HP, spawns minions. Focus fire.',        category: 'boss' },
+      25:  { label: '☠ JÖTUNHELM WALKER COMES', hint: 'Mountain giant — colossal HP, leaves shockwave. Siege damage preferred.', category: 'boss' },
+      50:  { label: '☠ FENRIR UNCHAINED',        hint: 'The Great Wolf — speed surges at each phase. AoE towers essential.',    category: 'boss' },
+      75:  { label: '☠ HATI & SKÖLL DESCEND',   hint: 'Twin hunters — split and converge. Two-front defense required.',        category: 'boss' },
+      100: { label: '☠ SURTR, LORD OF FIRE',     hint: 'The world-ender. All defenses to maximum. The north must hold.',       category: 'boss' },
     };
     if (BOSS_WAVES.has(waveNumber) && _BOSS_INTROS[waveNumber]) {
       const _bKey = `boss_${waveNumber}`;
@@ -1397,7 +1397,7 @@ function startNextWave() {
 
     if (_enemyIntroQueue.length > 0) {
       const _first = _enemyIntroQueue.shift();
-      _enemyIntroBanner = { label: _first.label, hint: _first.hint, timer: 210, maxTimer: 210 };
+      _enemyIntroBanner = { label: _first.label, hint: _first.hint, timer: 210, maxTimer: 210, category: _first.category };
       sfxEnemyIntro();
     }
   }
@@ -3160,7 +3160,7 @@ canvas.addEventListener('mousedown', e => {
                   if (_survivor && !_survivor.scars?.includes('bond_grief')) {
                     if (!_survivor.scars) _survivor.scars = [];
                     _survivor.scars.push('bond_grief');
-                    sfxDismiss();
+                    sfxBondGrief();
                     _promotionQueue.push({
                       defenderName: _survivor.name,
                       rankLabel:    'BOND GRIEF',
@@ -3245,7 +3245,7 @@ canvas.addEventListener('mousedown', e => {
             _promotionQueue.shift();
             _promoBannerTimer = 0;
           } else if (btn.action === 'openBio') {
-            _showDefenderBio = { defenderId: btn.defenderId, bioText: null, revealChars: 0 };
+            _showDefenderBio = { defenderId: btn.defenderId, bioText: null, revealChars: 0, bioLines: null };
             sfxRune();
           } else if (btn.action === 'openRetire') {
             const retDef = _roster?.find(btn.defenderId);
@@ -5086,10 +5086,11 @@ function drawCommandNav() {
   const itemsStartY  = ny + 44;
 
   // Badge counts per nav item
+  const _hallTotal = ((_campaignState?.hallOfHonored?.length ?? 0) + (_campaignState?.hallOfFallen?.length ?? 0));
   const _badgeCounts = {
     warband:   _promotionQueue?.length ?? 0,
     chronicle: 0,
-    hall:      0,
+    hall:      _hallTotal > 0 ? _hallTotal : 0,
   };
 
   const t = performance.now() * 0.001;
@@ -5130,6 +5131,12 @@ function drawCommandNav() {
     ctx.font      = '5px monospace';
     ctx.fillStyle = isActive ? 'rgba(220,180,80,0.90)' : 'rgba(130,100,50,0.48)';
     ctx.fillText(item.label, nx + nw / 2, iy + 32);
+    // Secondary count for warband (defender count)
+    if (item.id === 'warband' && _roster && _roster.defenders.length > 0) {
+      ctx.font = '5px monospace';
+      ctx.fillStyle = isActive ? 'rgba(160,200,160,0.65)' : 'rgba(100,140,100,0.35)';
+      ctx.fillText(`${_roster.defenders.length}`, nx + nw / 2, iy + 40);
+    }
 
     // Badge dot
     const _bc = _badgeCounts[item.id] ?? 0;
@@ -6057,6 +6064,24 @@ function drawTopBar() {
     }
   }
 
+  // Active wave event chip — shown below wave label during combat
+  if (waveState === 'active' && currentWaveEvent) {
+    const _evPulse = 0.55 + Math.sin(performance.now() * 0.004) * 0.25;
+    ctx.font      = '7px monospace';
+    ctx.fillStyle = `rgba(255,200,80,${_evPulse})`;
+    ctx.fillText(`⚑ ${currentWaveEvent.label}`, midX, cy - 14);
+  }
+
+  // Endless depth tier label — shown below wave counter in endless mode
+  if (endlessMode && waveNumber > 100) {
+    const _depthTierNames = ['TITAN REALM', 'RAGNARÖK ETERNAL', 'BEYOND THE VEIL', 'JÖRMUNGANDR WAKES'];
+    const _depthIdx = Math.max(0, Math.floor((waveNumber - 101) / 25));
+    const _tierName = _depthTierNames[_depthIdx % _depthTierNames.length];
+    ctx.font      = '7px monospace';
+    ctx.fillStyle = 'rgba(200,160,255,0.50)';
+    ctx.fillText(`∞ ${_tierName}`, midX, cy - 14);
+  }
+
   // Phase line below wave label
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -6064,7 +6089,14 @@ function drawTopBar() {
     ctx.fillStyle   = autoNextWave ? `rgba(80,220,140,${readyPulse})` : `rgba(245,215,105,${readyPulse})`;
     ctx.shadowColor = autoNextWave ? 'rgba(50,200,100,0.6)' : 'rgba(220,180,40,0.5)';
     ctx.shadowBlur  = 4;
-    ctx.fillText(autoNextWave ? '— AUTO —' : '— READY —', midX, cy + 8);
+    // Auto countdown — show seconds remaining before auto-launch (fires when waveTimer > 60)
+    let _autoLabel = '— AUTO —';
+    if (autoNextWave && waveState === 'break') {
+      const _autoFramesLeft = Math.max(0, 60 - waveTimer);
+      const _autoSecs = Math.ceil(_autoFramesLeft / 30);
+      _autoLabel = _autoSecs > 0 ? `AUTO ${_autoSecs}s` : '— AUTO —';
+    }
+    ctx.fillText(autoNextWave ? _autoLabel : '— READY —', midX, cy + 8);
     ctx.shadowBlur  = 0;
   } else {
     const rem = spawnQueue.length + enemies.filter(e => e.alive).length;
@@ -7443,6 +7475,19 @@ function drawBossHpBar() {
   ctx.strokeStyle = ratio <= 0.30 ? 'rgba(255,255,200,0.95)' : 'rgba(255,80,40,0.80)';
   ctx.lineWidth   = 1.5;
   ctx.beginPath(); ctx.moveTo(barX + barW * 0.25, barY - 2); ctx.lineTo(barX + barW * 0.25, barY + barH + 2); ctx.stroke();
+  // Phase threshold percentage labels
+  ctx.textAlign = 'center';
+  ctx.font = '5px monospace';
+  if (ratio <= 0.50 && cfg?.phase75) {
+    ctx.fillStyle = 'rgba(240,190,30,0.60)';
+    ctx.fillText('75%', barX + barW * 0.75, barY - 3);
+  }
+  if (ratio > 0.50) {
+    ctx.fillStyle = 'rgba(200,140,20,0.55)';
+    ctx.fillText('50%', barX + barW * 0.5, barY - 3);
+  }
+  ctx.fillStyle = ratio <= 0.30 ? 'rgba(255,255,200,0.75)' : 'rgba(255,80,40,0.55)';
+  ctx.fillText('25%', barX + barW * 0.25, barY - 3);
 
   // Boss name — blinks rapidly when ENRAGED (≤50% HP)
   const enraged   = ratio <= 0.5;
@@ -7488,13 +7533,13 @@ function drawEnemyIntroBanner() {
     // Advance queue if more banners are waiting
     if (_enemyIntroQueue.length > 0) {
       const _next = _enemyIntroQueue.shift();
-      _enemyIntroBanner = { label: _next.label, hint: _next.hint, timer: 210, maxTimer: 210 };
+      _enemyIntroBanner = { label: _next.label, hint: _next.hint, timer: 210, maxTimer: 210, category: _next.category };
       sfxEnemyIntro();
     }
     return;
   }
   _enemyIntroBanner.timer--;
-  const { timer, maxTimer, label, hint } = _enemyIntroBanner;
+  const { timer, maxTimer, label, hint, category } = _enemyIntroBanner;
   // Fade in over 10 frames, fade out over last 40 frames
   const fadeIn  = Math.min(1, (maxTimer - timer) / 10);
   const fadeOut = timer < 40 ? timer / 40 : 1;
@@ -7505,17 +7550,27 @@ function drawEnemyIntroBanner() {
   const gridCenterX = GRID_LEFT + COLS * CELL_SIZE / 2;
   const bx = gridCenterX - bw / 2;
   const by = GRID_TOP + 6 + slideY;
+  // Category-based color accent
+  const _catColors = {
+    beast:   { border: 'rgba(180,200,60,0.65)',  accent: 'rgba(180,200,60,0.80)',  text: '#c8e060' },
+    undead:  { border: 'rgba(160,160,180,0.60)', accent: 'rgba(140,140,160,0.75)', text: '#c0c0d8' },
+    spirit:  { border: 'rgba(160,80,220,0.65)',  accent: 'rgba(140,60,200,0.80)',  text: '#c080ff' },
+    giant:   { border: 'rgba(160,110,60,0.65)',  accent: 'rgba(140,90,40,0.80)',   text: '#d0a060' },
+    boss:    { border: 'rgba(220,60,40,0.70)',   accent: 'rgba(200,40,20,0.85)',   text: '#ff8060' },
+    default: { border: 'rgba(60,120,200,0.60)',  accent: 'rgba(60,120,200,0.75)',  text: '#80b8ff' },
+  };
+  const _cc = _catColors[category ?? 'default'] ?? _catColors.default;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = 'rgba(4,8,22,0.97)';
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-  ctx.strokeStyle = 'rgba(60,120,200,0.60)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = _cc.border; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.stroke();
-  ctx.fillStyle = 'rgba(60,120,200,0.75)';
+  ctx.fillStyle = _cc.accent;
   ctx.fillRect(bx, by, 3, bh);
   ctx.textAlign = 'center';
-  ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#80b8ff';
-  ctx.shadowColor = '#4080ff'; ctx.shadowBlur = 5;
+  ctx.font = 'bold 9px monospace'; ctx.fillStyle = _cc.text;
+  ctx.shadowColor = _cc.text; ctx.shadowBlur = 5;
   ctx.fillText(label, gridCenterX, by + 14);
   ctx.shadowBlur = 0;
   ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,170,220,0.72)';
@@ -7712,6 +7767,21 @@ function drawChronicleOverlay() {
   const hallH     = _campaignState?.hallOfHonored ?? [];
   const hallF     = _campaignState?.hallOfFallen  ?? [];
 
+  // Campaign stats summary line
+  {
+    const _nBattles  = battles.length;
+    const _nBosses   = battles.reduce((s, b) => s + (b.bossKills?.length ?? 0), 0);
+    const _nBonds    = (_campaignState?.bonds ?? []).length;
+    const _nStars    = _campaignState?.stars ?? 0;
+    const _bits = [];
+    if (_nBattles)  _bits.push(`${_nBattles} battle${_nBattles !== 1 ? 's' : ''}`);
+    if (_nBosses)   _bits.push(`${_nBosses} boss${_nBosses !== 1 ? 'es' : ''} slain`);
+    if (_nBonds)    _bits.push(`⚭ ${_nBonds} bond${_nBonds !== 1 ? 's' : ''}`);
+    _bits.push(`✦ ${_nStars}`);
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,135,80,0.55)';
+    ctx.fillText(_bits.join('  ·  '), W / 2, PAD + 28);
+  }
+
   // ── Defender filter chips ─────────────────────────────────────────────────
   const uniqueDefs = [];
   const _seenIds   = new Set();
@@ -7725,7 +7795,7 @@ function drawChronicleOverlay() {
   }
   const CHIP_H = 14, CHIP_GAP = 3;
   let chipX = PAD;
-  const chipY = PAD + 28;
+  const chipY = PAD + 40;
   // "ALL" chip
   {
     const lbl = 'ALL';
@@ -7844,15 +7914,21 @@ function drawChronicleOverlay() {
     }
     y += 28; totalH += 28;
     for (const bond of _campaignBonds) {
-      const _bEntH = 22;
+      const _bEntH = 26;
       if (y + _bEntH > listTop && y < listTop + listH) {
         const _bA = _roster?.find(bond.defenderIds[0]);
         const _bB = _roster?.find(bond.defenderIds[1]);
         const _bNames = `${_bA?.name ?? bond.defenderIds[0]}  &  ${_bB?.name ?? bond.defenderIds[1]}`;
+        const _bondMeta = bond.formed ? `formed Battle ${bond.formed}` : '';
+        const _battleCnt = bond.battleCount ? `  ·  ${bond.battleCount} battles together` : '';
         ctx.font = 'bold 8px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.70)'; ctx.textAlign = 'left';
         ctx.fillText(`∞ ${bond.name ?? 'Bond'}`, PAD + 4, y + 10);
         ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(170,145,95,0.55)';
-        ctx.fillText(_bNames, PAD + 4, y + 20);
+        ctx.fillText(_bNames, PAD + 4, y + 19);
+        if (_bondMeta) {
+          ctx.fillStyle = 'rgba(140,120,75,0.40)';
+          ctx.fillText(_bondMeta + _battleCnt, PAD + 130, y + 19);
+        }
       }
       y += _bEntH; totalH += _bEntH;
     }
@@ -7984,10 +8060,14 @@ function drawDefenderBioOverlay(bioState) {
   }
   const bioText = bioState.bioText;
   if (bioState.revealChars === undefined) bioState.revealChars = 0;
-  if (bioState.revealChars < bioText.length) bioState.revealChars = Math.min(bioText.length, bioState.revealChars + 4);
+  if (bioState.revealChars < bioText.length) bioState.revealChars = Math.min(bioText.length, bioState.revealChars + 8);
   const displayText = bioText.slice(0, bioState.revealChars);
   ctx.font = '8px monospace';
-  const bioLines = wrapText(ctx, displayText, CW - 8);
+  // Cache wrapped lines after typewriter completes to skip per-frame wrapText
+  if (bioState.revealChars >= bioText.length && !bioState.bioLines) {
+    bioState.bioLines = wrapText(ctx, bioText, CW - 8);
+  }
+  const bioLines = bioState.bioLines ?? wrapText(ctx, displayText, CW - 8);
   let bioY = PAD + 62;
   ctx.fillStyle = 'rgba(190,165,115,0.80)'; ctx.textAlign = 'left';
   for (const line of bioLines) { ctx.fillText(line, PAD + 4, bioY); bioY += 11; }
@@ -8007,13 +8087,17 @@ function drawDefenderBioOverlay(bioState) {
     bioY += 13;
   }
 
-  // Bonds
+  // Bonds — show bond name and partner name
   const defBonds = (_campaignState?.bonds ?? []).filter(b => b.defenderIds.includes(def.defenderId));
   if (defBonds.length) {
-    ctx.font = 'italic 8px monospace'; ctx.fillStyle = '#c0b080';
-    ctx.fillText(`Bonds: ${defBonds.map(b => b.name).join(', ')}`, PAD + 4, bioY);
-    ctx.font = '8px monospace';
-    bioY += 13;
+    for (const bond of defBonds) {
+      const _partnerId = bond.defenderIds.find(id => id !== def.defenderId);
+      const _partner   = _roster?.find(_partnerId);
+      ctx.font = 'italic 8px monospace'; ctx.fillStyle = '#c0b080';
+      ctx.fillText(`∞ ${bond.name ?? 'Bond'}${_partner ? `  with  ${_partner.name}` : ''}`, PAD + 4, bioY);
+      ctx.font = '8px monospace';
+      bioY += 13;
+    }
   }
 
   // Titles
@@ -8466,6 +8550,7 @@ function applyCampaignEventChoice(eventId, choice) {
   const cs = _campaignState;
   if (!cs.seenEventIds) cs.seenEventIds = [];
   cs.seenEventIds.push(eventId);
+  const _goldBefore = goldReserve;
 
   if (choice === 'B') {
     if (eventId === 'volva') {
@@ -8563,8 +8648,18 @@ function applyCampaignEventChoice(eventId, choice) {
   }
 
   cs.defenders          = _roster.toJSON();
+  const _goldAfter      = goldReserve;
   cs.goldReserve        = goldReserve;
   try { saveCampaign(cs); } catch {}
+  // Show floater for gold spent on this event choice
+  if (_goldBefore !== undefined && _goldAfter < _goldBefore) {
+    const _spent = _goldBefore - _goldAfter;
+    dmgFloaters.push({
+      x: BASE_W / 2, y: GRID_TOP - 10,
+      val: `−${_spent}g reserve`, life: 150, maxLife: 150,
+      color: '#d0a040', large: false, suffix: '', vy: -0.4, raw: true,
+    });
+  }
   _lastResolvedEventTitle = _pendingCampaignEvent?.title ?? null;
   _pendingCampaignEvent = null;
   sfxEventResolve();
@@ -8870,9 +8965,11 @@ function drawBetweenBattles() {
   ctx.fillText('⚔  WARBAND ROSTER', rix, rpY + 24);
   ctx.shadowBlur = 0;
 
-  const rCount = _roster.defenders.length;
+  const rCount    = _roster.defenders.length;
+  const _rKills   = _roster.defenders.reduce((s, d) => s + (d.careerKills ?? 0), 0);
+  const _killsStr = _rKills > 0 ? `  ·  ${_rKills} kills` : '';
   ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)';
-  ctx.fillText(`${rCount} defender${rCount !== 1 ? 's' : ''} in warband`, rix, rpY + 37);
+  ctx.fillText(`${rCount} defender${rCount !== 1 ? 's' : ''} in warband${_killsStr}`, rix, rpY + 37);
 
   ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
   ctx.beginPath(); ctx.moveTo(rpX + 6, rpY + 44); ctx.lineTo(rpX + rpW - 6, rpY + 44); ctx.stroke();
@@ -9230,14 +9327,14 @@ function drawBetweenBattles() {
       }
     }
 
-    // Legacy bonus indicator — shown on undeployed new recruits with a pending bonus
+    // Legacy bonus indicator — shown for all defenders carrying a legacy bonus
     const _legArr2 = (_campaignState?.legacyBonuses ?? {})[def.type];
     const _legBonus2 = def.legacyBonus ?? (Array.isArray(_legArr2) ? _legArr2[0] : _legArr2);
-    if (_legBonus2 && def.battlesPlayed === 0) {
+    if (_legBonus2) {
       const _statLabel = _legBonus2.stat === 'dm' ? '+8% DMG' : _legBonus2.stat === 'rm' ? '+8% RNG' : '−7% CD';
-      const _extraLeg = Array.isArray(_legArr2) && !def.legacyBonus ? _legArr2.length - 1 : 0;
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.65)';
-      ctx.fillText(`✦ ${_legBonus2.fromName}'s Legacy (${_statLabel})${_extraLeg > 0 ? ` +${_extraLeg}` : ''}`, rix + 80, ry + 14);
+      const _legAlpha  = def.battlesPlayed === 0 ? 0.65 : 0.45; // dimmer once deployed
+      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(160,200,160,${_legAlpha})`;
+      ctx.fillText(`✦ ${_legBonus2.fromName}'s Legacy (${_statLabel})`, rix + 80, ry + 14);
     }
   });
 
@@ -9505,12 +9602,23 @@ function drawMapSelect() {
 
   // Bond pair display — show first formed bond below flavor text
   const _firstBond = (_campaignState?.bonds ?? [])[0];
+  let _mapContextY = 120;
   if (_firstBond) {
     const _bDefA = _roster.find(_firstBond.defenderIds[0]);
     const _bDefB = _roster.find(_firstBond.defenderIds[1]);
     if (_bDefA && _bDefB) {
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,80,0.42)';
-      ctx.fillText(`∞ ${_bDefA.name} & ${_bDefB.name} — ${_firstBond.name}`, W / 2, 120);
+      ctx.fillText(`∞ ${_bDefA.name} & ${_bDefB.name} — ${_firstBond.name}`, W / 2, _mapContextY);
+      _mapContextY += 11;
+    }
+  }
+  // Campaign event preview — tease upcoming event if available
+  if (_campaignState && battlesCompleted > 0) {
+    const _previewEvent = getAvailableEvent(_campaignState);
+    if (_previewEvent) {
+      const _evPulse = 0.45 + Math.sin(performance.now() * 0.003) * 0.20;
+      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(220,180,80,${_evPulse})`;
+      ctx.fillText(`⚑ Event awaits: ${_previewEvent.title}`, W / 2, _mapContextY);
     }
   }
 
