@@ -17,6 +17,7 @@ export const ENEMY_TYPES = {
   MARA:      'mara',
   WARG:      'warg',
   EINHERJAR: 'einherjar',
+  FOSSEGRIM: 'fossegrim',
 };
 
 export const ENEMY_DEFS = {
@@ -80,6 +81,17 @@ export const ENEMY_DEFS = {
     highlightColor: '#8090b8',   // steel-blue armour sheen
     flying:         false
   },
+  fossegrim: {
+    label:          'Fossegrim',
+    speed:          0.58,
+    hp:             210,
+    radius:         7,
+    reward:         22,
+    color:          '#1a7868',   // deep teal — river spirit
+    highlightColor: '#70e8c8',   // bright aqua glow
+    flying:         false,
+    healAura:       { radius: 52, amount: 8, cooldownFrames: 100 },
+  },
 };
 
 export class Enemy {
@@ -120,6 +132,10 @@ export class Enemy {
     this.staggerVX     = 0;
     this.staggerVY     = 0;
     this.staggerTimer  = 0;
+
+    // Fossegrim heal aura — counts down to next heal pulse
+    this.healTimer     = Math.floor((def.healAura?.cooldownFrames ?? 0) * 0.5);
+    this.healPulseVis  = 0;  // frames of visual ring remaining after a heal fires
 
     this.x = path[0].x;
     this.y = path[0].y;

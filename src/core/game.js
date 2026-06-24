@@ -170,9 +170,10 @@ let wallData          = {};  // `${col}_${row}` → {level, hp, maxHp}
 // Playtest UX
 let firstTowerPlaced  = false;  // hides build-bar arrow after first placement
 let firstKillDone     = false;  // triggers enhanced coin arc on first kill
-let mylingWarningTimer  = 0;    // frames remaining for first-Myling warning banner
-let maraEmpWarningTimer = 0;   // frames remaining for first-Mara EMP warning banner
-let jotunnWarningTimer  = 0;   // frames remaining for first-Jötunn warning banner
+let mylingWarningTimer    = 0;   // frames remaining for first-Myling warning banner
+let maraEmpWarningTimer   = 0;  // frames remaining for first-Mara EMP warning banner
+let jotunnWarningTimer    = 0;  // frames remaining for first-Jötunn warning banner
+let fossegrimWarningTimer = 0;  // frames remaining for first-Fossegrim warning banner
 let chainKillDone     = new Set();  // per-tower chain kill (catapult 3+), cleared each wave
 let _synergyDirty    = true;        // recompute synergy pairs on next tick
 let chainKillDisplay  = null;   // { x, y, life, maxLife, count }
@@ -595,9 +596,10 @@ function restartCombatState() {
 
   firstTowerPlaced  = false;
   firstKillDone     = false;
-  mylingWarningTimer  = 0;
-  maraEmpWarningTimer = 0;
-  jotunnWarningTimer  = 0;
+  mylingWarningTimer    = 0;
+  maraEmpWarningTimer   = 0;
+  jotunnWarningTimer    = 0;
+  fossegrimWarningTimer = 0;
   dragItem           = null;
   pendingSell        = null;
   _pendingDismiss    = null;
@@ -1201,6 +1203,7 @@ function waveComposition(num) {
     maras:     n >= 22 ? Math.min(Math.floor((n - 21) * 0.8), eliteCap) : 0,
     wargs:     n >= 15 ? Math.min(Math.floor((n - 14) * 1.2), 18) : 0,
     einherjars: n >= 40 ? Math.min(Math.floor((n - 39) * 0.6), 10) : 0,
+    fossegrims: n >= 43 ? Math.min(Math.floor((n - 42) * 0.25), 3) : 0,
   };
 }
 
@@ -1229,17 +1232,18 @@ function buildWave(num) {
   if (num === 14) return [...Array(5).fill(ENEMY_TYPES.WARG)];     // warg pack introduction
   if (num === 21) return [ENEMY_TYPES.MARA, ENEMY_TYPES.MARA];
   if (num === 38) return [...Array(3).fill(ENEMY_TYPES.EINHERJAR)]; // einherjar introduction
+  if (num === 43) return [ENEMY_TYPES.FOSSEGRIM, ...Array(6).fill(ENEMY_TYPES.DRAUGR)]; // fossegrim introduction
 
   // Rest waves — 2 easier waves after each boss (1st = very light, 2nd = moderate)
   if (num === 11 || num === 26 || num === 51 || num === 76 || num === 101) {
-    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re } = waveComposition(Math.min(num - 5, MAX_WAVES));
-    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR)];
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re, fossegrims: rf } = waveComposition(Math.min(num - 5, MAX_WAVES));
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR), ...Array(rf ?? 0).fill(ENEMY_TYPES.FOSSEGRIM)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
   }
   if (num === 27 || num === 52 || num === 77) {
-    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re } = waveComposition(Math.min(num - 3, MAX_WAVES));
-    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR)];
+    const { draugr: rd, mylings: rm, jotunn: rj, maras: ra, wargs: rw, einherjars: re, fossegrims: rf } = waveComposition(Math.min(num - 3, MAX_WAVES));
+    const rest = [...Array(rd).fill(ENEMY_TYPES.DRAUGR), ...Array(rm).fill(ENEMY_TYPES.MYLING), ...Array(rj).fill(ENEMY_TYPES.JOTUNN), ...Array(ra).fill(ENEMY_TYPES.MARA), ...Array(rw).fill(ENEMY_TYPES.WARG), ...Array(re).fill(ENEMY_TYPES.EINHERJAR), ...Array(rf ?? 0).fill(ENEMY_TYPES.FOSSEGRIM)];
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     return rest;
   }
@@ -1259,7 +1263,7 @@ function buildWave(num) {
     return q;
   }
 
-  const { draugr, mylings, jotunn, maras, wargs, einherjars } = waveComposition(num);
+  const { draugr, mylings, jotunn, maras, wargs, einherjars, fossegrims } = waveComposition(num);
   const queue = [
     ...Array(draugr).fill(ENEMY_TYPES.DRAUGR),
     ...Array(mylings).fill(ENEMY_TYPES.MYLING),
@@ -1267,6 +1271,7 @@ function buildWave(num) {
     ...Array(maras).fill(ENEMY_TYPES.MARA),
     ...Array(wargs).fill(ENEMY_TYPES.WARG),
     ...Array(einherjars).fill(ENEMY_TYPES.EINHERJAR),
+    ...Array(fossegrims ?? 0).fill(ENEMY_TYPES.FOSSEGRIM),
   ];
   // Inject wave-event bonus enemies
   const ev = WAVE_EVENTS[num];
@@ -2506,7 +2511,8 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
     newEnemy.reward += Math.min(18, Math.floor(waveNumber / 10) * 3);
   }
   if (newEnemy.flying && mylingWarningTimer === 0) mylingWarningTimer = 210;
-  if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss && jotunnWarningTimer === 0) jotunnWarningTimer = 210;
+  if (type === ENEMY_TYPES.JOTUNN      && !newEnemy.isBoss && jotunnWarningTimer    === 0) jotunnWarningTimer    = 210;
+  if (type === ENEMY_TYPES.FOSSEGRIM   && !newEnemy.isBoss && fossegrimWarningTimer === 0) fossegrimWarningTimer = 240;
 
   // Elite variant: larger, faster, higher reward — 15% chance past wave 15 for ground enemies
   if (waveNumber >= 15 && type !== ENEMY_TYPES.JOTUNN && Math.random() < 0.15) {
@@ -2531,7 +2537,7 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
 function estimateWaveHp(waveNum) {
   const comp  = waveComposition(Math.max(1, waveNum));
   const scale = getWaveBands(waveNum).hp;
-  return Math.round((comp.draugr * 130 + comp.mylings * 110 + comp.jotunn * 700 + comp.maras * 180 + (comp.wargs ?? 0) * 95 + (comp.einherjars ?? 0) * 460) * scale);
+  return Math.round((comp.draugr * 130 + comp.mylings * 110 + comp.jotunn * 700 + comp.maras * 180 + (comp.wargs ?? 0) * 95 + (comp.einherjars ?? 0) * 460 + (comp.fossegrims ?? 0) * 380) * scale);
 }
 
 function spawnBoss(waveNum) {
@@ -3629,10 +3635,30 @@ function update() {
     pendingSell.timer--;
     if (pendingSell.timer <= 0) pendingSell = null;
   }
-  if (mylingWarningTimer  > 0) mylingWarningTimer--;
-  if (maraEmpWarningTimer > 0) maraEmpWarningTimer--;
-  if (jotunnWarningTimer  > 0) jotunnWarningTimer--;
+  if (mylingWarningTimer    > 0) mylingWarningTimer--;
+  if (maraEmpWarningTimer   > 0) maraEmpWarningTimer--;
+  if (jotunnWarningTimer    > 0) jotunnWarningTimer--;
+  if (fossegrimWarningTimer > 0) fossegrimWarningTimer--;
   if (_firstChampionTooltipTimer > 0) _firstChampionTooltipTimer--;
+
+  // ── Fossegrim heal aura ───────────────────────────────────────────────────────
+  for (const fg of enemies) {
+    if (fg.type !== ENEMY_TYPES.FOSSEGRIM || !fg.alive || fg.reached) continue;
+    if (fg.healPulseVis > 0) fg.healPulseVis--;
+    if (fg.healTimer > 0) { fg.healTimer--; continue; }
+    const aura = ENEMY_DEFS.fossegrim.healAura;
+    let healed = false;
+    for (const en of enemies) {
+      if (!en.alive || en.reached || en === fg) continue;
+      const dx = en.x - fg.x, dy = en.y - fg.y;
+      if (dx * dx + dy * dy <= aura.radius * aura.radius) {
+        en.hp = Math.min(en.maxHp, en.hp + aura.amount);
+        healed = true;
+      }
+    }
+    if (healed) fg.healPulseVis = 22;
+    fg.healTimer = aura.cooldownFrames;
+  }
 
   updateWave();
 
@@ -4640,20 +4666,21 @@ function drawPath() {
       ctx.fillStyle = 'rgba(45,30,12,0.90)';
       ctx.fillRect(ox - 0.8, oy, 1.6, cs * 0.26);
 
-      // flame — solid tinted ellipse; avoids per-torch createRadialGradient each frame
-      ctx.save();
-      ctx.shadowColor = `rgba(255,120,20,${0.45 * flicker})`;
-      ctx.shadowBlur  = 3 + flicker * 2;
-      ctx.fillStyle   = `rgba(255,150,40,${0.75 * flicker})`;
-      ctx.beginPath();
-      ctx.ellipse(ox + Math.sin(t * 7 + c.idx) * 0.4, oy - fh * 0.4, fw, fh, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,230,100,${0.45 * flicker})`;
-      ctx.beginPath();
-      ctx.ellipse(ox, oy - fh * 0.15, fw * 0.45, fh * 0.38, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.restore();
+      // flame — radial glow halo + solid ellipse (no shadowBlur for perf)
+      const flameX  = ox + Math.sin(t * 7 + c.idx) * 0.4;
+      const flameY  = oy - fh * 0.4;
+      const glowR   = fh * 2.2;
+      const _fGrad  = ctx.createRadialGradient(flameX, flameY, 0, flameX, flameY, glowR);
+      _fGrad.addColorStop(0,   `rgba(255,180,60,${0.40 * flicker})`);
+      _fGrad.addColorStop(0.5, `rgba(255,100,20,${0.18 * flicker})`);
+      _fGrad.addColorStop(1,   'rgba(255,80,0,0)');
+      ctx.fillStyle = _fGrad;
+      ctx.beginPath(); ctx.arc(flameX, flameY, glowR, 0, Math.PI * 2); ctx.fill();
+      // Core flame ellipse
+      ctx.fillStyle = `rgba(255,155,45,${0.80 * flicker})`;
+      ctx.beginPath(); ctx.ellipse(flameX, flameY, fw, fh, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,235,110,${0.50 * flicker})`;
+      ctx.beginPath(); ctx.ellipse(ox, oy - fh * 0.15, fw * 0.45, fh * 0.38, 0, 0, Math.PI * 2); ctx.fill();
 
       // single drifting ember
       const ePhase = (t * 0.55 + c.idx * 1.37 + side * 0.7) % 1;
@@ -9842,6 +9869,31 @@ function draw() {
         ctx.shadowBlur = 0;
         ctx.restore();
       }
+
+      // Fossegrim — idle teal aura ring + expanding heal pulse
+      if (e.type === ENEMY_TYPES.FOSSEGRIM) {
+        const fPulse = 0.5 + Math.sin(_now * 0.006 + e.x * 0.2) * 0.5;
+        const aura   = ENEMY_DEFS.fossegrim.healAura;
+        ctx.save();
+        // Idle soft ring
+        ctx.strokeStyle = `rgba(50,220,170,${0.18 + fPulse * 0.14})`;
+        ctx.lineWidth   = 1.2;
+        ctx.shadowColor = 'rgba(40,200,160,0.5)'; ctx.shadowBlur = 4;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 3 + fPulse, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // Expanding heal-pulse ring
+        if (e.healPulseVis > 0) {
+          const prog  = e.healPulseVis / 22;
+          const rng   = aura.radius * (1 - prog) * 0.9 + e.radius;
+          const alpha = prog * 0.65;
+          ctx.strokeStyle = `rgba(70,240,190,${alpha})`;
+          ctx.lineWidth   = 1.5 * prog;
+          ctx.shadowColor = `rgba(50,200,160,${alpha})`; ctx.shadowBlur = 6;
+          ctx.beginPath(); ctx.arc(e.x, e.y, rng, 0, Math.PI * 2); ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+      }
     }
   }
 
@@ -10150,6 +10202,7 @@ function draw() {
   drawMylingWarning();
   drawMaraEmpWarning();
   drawJotunnWarning();
+  drawFossegrimWarning();
   drawWave1Hint();
   if (selectedTower && !gameOver) drawTowerPanel(selectedTower);
   drawPathBlockFlash();
@@ -10278,6 +10331,22 @@ function drawJotunnWarning() {
   ctx.shadowColor = `rgba(40,120,220,${fadeAlpha * 0.8})`;
   ctx.shadowBlur  = 10;
   ctx.fillText('◆ JÖTUNN — MASSIVE HP, RESISTS SLOWING', cx, by);
+  ctx.shadowBlur  = 0;
+  ctx.restore();
+}
+
+function drawFossegrimWarning() {
+  if (fossegrimWarningTimer <= 0) return;
+  const fadeAlpha = fossegrimWarningTimer < 60 ? fossegrimWarningTimer / 60 : 1;
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const by = GRID_TOP + 64;
+  ctx.save();
+  ctx.textAlign   = 'center';
+  ctx.font        = 'bold 11px monospace';
+  ctx.fillStyle   = `rgba(50,200,168,${fadeAlpha * 0.92})`;
+  ctx.shadowColor = `rgba(20,150,130,${fadeAlpha * 0.8})`;
+  ctx.shadowBlur  = 10;
+  ctx.fillText('◈ FOSSEGRIM — HEALS NEARBY ENEMIES', cx, by);
   ctx.shadowBlur  = 0;
   ctx.restore();
 }

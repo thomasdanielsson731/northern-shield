@@ -48,6 +48,19 @@ const TRAIT_BIO_CLOSE = {
   devout:     '{name} is Devout, and draws strength from a source the warband cannot name.',
 };
 
+// Combat style sentence per class (uses {name} placeholder)
+const CLASS_BIO_STYLE = {
+  berserk:  '{name} fights with two hands and no caution. The warband gets out of the way.',
+  valkyrie: '{name} fights in the shield wall, where the line is thinnest and the pressure hardest.',
+  military: '{name} fights with discipline — each movement deliberate, each kill measured.',
+  catapult: '{name} keeps to the high ground, lobbing ruin from beyond the reach of the melee.',
+  drakship: '{name} directs fire from the water\'s edge, choosing the moment the enemy bunches.',
+  piltorn:  '{name} is never hurried. They choose the moment, then act, and nothing remains after.',
+  blondie:  '{name} moves through the line like smoke — never where expected, always where it hurts.',
+  hydda:    '{name} speaks old words to the deep water, and something in the deep answers.',
+  isjatten: '{name} stands a full head taller than most. The enemy learns what this means.',
+};
+
 // Short trait clause for battle reports (appended to MVP/last-stand sentences)
 const TRAIT_REPORT_CLAUSE = {
   reckless:   ' They did not hold back.',
@@ -279,38 +292,53 @@ export function generateBio(defender, chronicle, classLabel) {
   const kills   = defender.careerKills ?? 0;
   const lvl     = defender.careerLevel ?? 0;
   const cls     = classLabel ?? defender.type;
+  const trait   = defender.trait;
+  const scars   = defender.scars ?? [];
+  const equip   = (defender.equipment ?? []).filter(Boolean);
   const prior   = chronicle?.battles ?? [];
   const lines   = [];
 
-  // Line 1: Class, rank, battles
+  // Line 1: Intro — varied by battle count
   if (battles === 0) {
     lines.push(`${n} is a ${cls} of the ${rank.label} rank, newly arrived at the Northern Shield.`);
   } else if (battles === 1) {
-    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has fought in one battle for the Northern Shield.`);
+    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has fought one battle for the Northern Shield. The blood on their blade is recent.`);
+  } else if (battles <= 3) {
+    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has stood in the line ${battles} times for the Northern Shield. The warband has begun to know their face.`);
+  } else if (battles <= 8) {
+    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has fought through ${battles} battles for the Northern Shield. They are known to the warband now.`);
   } else {
-    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has fought in ${battles} battles for the Northern Shield.`);
+    lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has held the line through ${battles} battles for the Northern Shield. Few in the warband have seen as much.`);
   }
 
-  // Line 2: Most notable title or scar
+  // Line 2: Class combat style (personality-specific fighting voice)
+  const styleTemplate = CLASS_BIO_STYLE[defender.type];
+  if (styleTemplate) lines.push(styleTemplate.replace('{name}', n));
+
+  // Line 3: Most notable title and/or scar(s)
   const pt = getPrimaryTitle(defender);
-  const scar = defender.scars?.length ? SCAR_DEFS[defender.scars[0]] : null;
-  if (pt && scar) {
-    lines.push(`${n} carries the ${scar.label} and holds the title of ${pt.label}.`);
+  if (pt && scars.length > 0) {
+    const scarLabel = scars.length > 1
+      ? `${SCAR_DEFS[scars[0]]?.label ?? scars[0]} and ${SCAR_DEFS[scars[1]]?.label ?? scars[1]}`
+      : (SCAR_DEFS[scars[0]]?.label ?? scars[0]);
+    lines.push(`${n} carries the ${scarLabel}, and holds the title of ${pt.label}.`);
   } else if (pt) {
     lines.push(`${n} holds the title of ${pt.label}. ${TITLE_DEFS[pt.id]?.desc ?? ''}`);
-  } else if (scar) {
-    lines.push(`${n} carries the ${scar.label}.`);
+  } else if (scars.length >= 2) {
+    const s1 = SCAR_DEFS[scars[0]]?.label ?? scars[0];
+    const s2 = SCAR_DEFS[scars[1]]?.label ?? scars[1];
+    lines.push(`${n} carries two marks: the ${s1} and the ${s2}.`);
+  } else if (scars.length === 1) {
+    lines.push(`${n} carries the ${SCAR_DEFS[scars[0]]?.label ?? scars[0]}.`);
   } else if (lvl >= 5) {
-    const _lvlRoman = ['I','II','III','IV','V','VI','VII','VIII','IX','X'][lvl-1] ?? `${lvl}`;
-    const _campNote = lvl > 1 ? `, the mark of a veteran over many campaigns` : `, earned through sustained service`;
-    lines.push(`${n} carries rank ${_lvlRoman}${_campNote}.`);
+    const _lvlRoman = ['I','II','III','IV','V','VI','VII','VIII','IX','X'][lvl - 1] ?? `${lvl}`;
+    lines.push(`${n} carries rank ${_lvlRoman}, the mark of sustained service across many campaigns.`);
   }
 
-  // Line 3: Notable deeds
-  const myBattles = prior.filter(b => b.defenders?.some(d => d.defenderId === defender.defenderId));
-  const mvpCount  = myBattles.filter(b => b.mvpId === defender.defenderId).length;
-  const myBossKills = myBattles.flatMap(b => b.bossKills ?? [])
-    .filter(bk => bk.killerId === defender.defenderId);
+  // Line 4: Notable deeds — scaled by magnitude
+  const myBattles    = prior.filter(b => b.defenders?.some(d => d.defenderId === defender.defenderId));
+  const mvpCount     = myBattles.filter(b => b.mvpId === defender.defenderId).length;
+  const myBossKills  = myBattles.flatMap(b => b.bossKills ?? []).filter(bk => bk.killerId === defender.defenderId);
   const uniqueBosses = [...new Set(myBossKills.map(bk => bk.boss))];
 
   if (uniqueBosses.length > 0 && mvpCount > 0) {
@@ -319,18 +347,31 @@ export function generateBio(defender, chronicle, classLabel) {
     lines.push(`${n} has struck the killing blow against ${uniqueBosses.length === 1 ? `the ${uniqueBosses[0]}` : `${uniqueBosses.length} different chieftains`}.`);
   } else if (mvpCount > 0) {
     lines.push(`${n} was named defender of the battle ${mvpCount} time${mvpCount !== 1 ? 's' : ''}, felling ${kills} enemies across their career.`);
+  } else if (kills >= 100) {
+    lines.push(`${n} has felled ${kills} enemies — a count the warband does not forget.`);
   } else if (kills > 0) {
     lines.push(`${n} has felled ${kills} enemies across their career.`);
   }
 
-  // Line 4: Bond mention
-  const bond = chronicle?._bonds?.find(b => b.defenderIds.includes(defender.defenderId));
-  if (bond) {
-    lines.push(`${n} fights beside a bonded shield-brother: "${bond.name}."`);
+  // Line 5: Equipment — brief note if well-outfitted
+  if (equip.length >= 2) {
+    lines.push(`${n} goes into battle well-equipped. The warband has seen to it.`);
+  } else if (equip.length === 1) {
+    lines.push(`${n} carries a piece of equipment earned in service.`);
   }
 
-  // Line 5: Trait closing
-  const trait = defender.trait;
+  // Line 6: Bond mention — richer if long-standing
+  const bond = chronicle?._bonds?.find(b => b.defenderIds.includes(defender.defenderId));
+  if (bond) {
+    const together = myBattles.length;
+    if (together > 5) {
+      lines.push(`${n} has long fought beside a bonded shield-brother: "${bond.name}." The warband has learned not to separate them.`);
+    } else {
+      lines.push(`${n} fights beside a bonded shield-brother: "${bond.name}."`);
+    }
+  }
+
+  // Line 7: Trait closing — unchanged
   if (trait && TRAIT_BIO_CLOSE[trait]) {
     lines.push(TRAIT_BIO_CLOSE[trait].replace('{name}', n));
   }
