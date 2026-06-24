@@ -312,6 +312,11 @@ export function generateBio(defender, chronicle, classLabel) {
     lines.push(`${n} is a ${cls} of the ${rank.label} rank, who has held the line through ${battles} battles for the Northern Shield. Few in the warband have seen as much.`);
   }
 
+  if (lvl >= 1) {
+    const _roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    lines.push(`The Roman numeral ${_roman[lvl] ?? lvl} marks ${lvl} campaign${lvl > 1 ? 's' : ''} of service — each battle survived deepens their legend.`);
+  }
+
   // Line 2: Class combat style (personality-specific fighting voice)
   const styleTemplate = CLASS_BIO_STYLE[defender.type];
   if (styleTemplate) lines.push(styleTemplate.replace('{name}', n));

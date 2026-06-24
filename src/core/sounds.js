@@ -137,9 +137,30 @@ export function sfxWaveClear() {
   [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.12, 0.09, 'sine', i * 0.10));
 }
 
-export function sfxPlace(isWall) {
-  if (isWall) { tone(160, 0.07, 0.13, 'square'); }
-  else        { tone(220, 0.06, 0.10, 'square'); tone(330, 0.04, 0.07, 'square', 0.04); }
+export function sfxPlace(kind = 'tower') {
+  if (kind === 'wall' || kind === true) {
+    tone(160, 0.07, 0.13, 'square');
+    tone(120, 0.05, 0.08, 'sine', 0.03);
+    return;
+  }
+  if (kind === 'reinforce') {
+    tone(140, 0.06, 0.11, 'square');
+    tone(200, 0.04, 0.07, 'triangle', 0.04);
+    return;
+  }
+  if (kind === 'siege') {
+    tone(180, 0.08, 0.12, 'square');
+    tone(260, 0.06, 0.09, 'square', 0.05);
+    tone(90,  0.10, 0.10, 'sine',   0.02);
+    return;
+  }
+  if (kind === 'outpost') {
+    tone(240, 0.06, 0.10, 'triangle');
+    tone(360, 0.05, 0.08, 'sine', 0.04);
+    return;
+  }
+  tone(220, 0.06, 0.10, 'square');
+  tone(330, 0.04, 0.07, 'square', 0.04);
 }
 
 export function sfxLifeLost() {
