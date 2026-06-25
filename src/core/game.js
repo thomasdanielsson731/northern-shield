@@ -78,6 +78,7 @@ import {
   isStructureWallTarget,
   shouldPrioritizeFortressGates,
 } from '../combat/assaultTargeting.js';
+import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
@@ -1629,6 +1630,8 @@ function activateSlot(slotIndex) {
 
   _campaignState = loadCampaign(localStorage, slotIndex) ?? createNewCampaign();
   if (_campaignState.uiHints) Object.assign(_hintSeen, _campaignState.uiHints);
+  _chronicleDefFilter = _campaignState.uiHints?.chronicleDefFilter ?? null;
+  _chronicleBattleFilter = _campaignState.uiHints?.chronicleBattleFilter ?? null;
   ensureCampaignProgress();
   loadRosterFromCampaignState();
   battlesCompleted = _campaignState.battlesCompleted ?? 0;
@@ -4958,9 +4961,17 @@ canvas.addEventListener('mousedown', e => {
             if (_cb.action === 'filterDef') {
               _chronicleDefFilter = _chronicleDefFilter === _cb.defenderId ? null : _cb.defenderId;
               _chronicleScrollY = 0;
+              if (_campaignState) {
+                _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), chronicleDefFilter: _chronicleDefFilter };
+                try { persistCampaign(); } catch {}
+              }
             } else if (_cb.action === 'filterBattle') {
               _chronicleBattleFilter = _chronicleBattleFilter === _cb.battleFilter ? null : _cb.battleFilter;
               _chronicleScrollY = 0;
+              if (_campaignState) {
+                _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), chronicleBattleFilter: _chronicleBattleFilter };
+                try { persistCampaign(); } catch {}
+              }
             }
             return;
           }
@@ -13177,6 +13188,22 @@ function drawNodeMap() {
     ctx.fillText('ᛟ', cx + sx * 4, cy + sy * 4);
   }
   ctx.restore();
+
+  // Compass rose (north indicator)
+  {
+    const nx = mapX + mapW - 28, ny = mapY + 28;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,160,80,0.35)';
+    ctx.fillStyle = 'rgba(200,160,80,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(nx, ny - 10); ctx.lineTo(nx + 4, ny + 2); ctx.lineTo(nx, ny); ctx.lineTo(nx - 4, ny + 2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', nx, ny + 12);
+    ctx.restore();
+  }
 
   const mapName = meta?.name ?? 'REGION';
   if (_commandMapView === 'front' && _selectedFrontId) {

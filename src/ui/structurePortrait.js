@@ -93,6 +93,38 @@ export function drawProceduralStructureIcon(ctx, cx, cy, itemId, size, affordabl
     ctx.beginPath();
     ctx.arc(cx + s * 0.45, cy - s * 0.15, s * 0.22, 0, Math.PI * 2);
     ctx.fill();
+  } else if (itemId === 'piltorn') {
+    ctx.fillStyle = '#3a4a38';
+    ctx.fillRect(cx - s * 0.2, cy - s * 0.15, s * 0.4, s * 0.95);
+    ctx.fillStyle = UI_COLORS.fortress;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s * 0.85);
+    ctx.lineTo(cx + s * 0.42, cy - s * 0.1);
+    ctx.lineTo(cx - s * 0.42, cy - s * 0.1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = UI_COLORS.gold;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.55, cy + s * 0.35);
+    ctx.lineTo(cx + s * 0.55, cy + s * 0.35);
+    ctx.stroke();
+  } else if (itemId === 'drakship') {
+    ctx.fillStyle = '#2a3848';
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.65, cy + s * 0.2);
+    ctx.lineTo(cx + s * 0.55, cy + s * 0.05);
+    ctx.lineTo(cx + s * 0.35, cy - s * 0.25);
+    ctx.lineTo(cx - s * 0.45, cy - s * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = UI_COLORS.magic;
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.2, cy - s * 0.35);
+    ctx.lineTo(cx + s * 0.05, cy - s * 0.75);
+    ctx.lineTo(cx + s * 0.25, cy - s * 0.3);
+    ctx.closePath();
+    ctx.fill();
   } else {
     ctx.font = `${Math.floor(size * 0.50)}px sans-serif`;
     ctx.textAlign = 'center';

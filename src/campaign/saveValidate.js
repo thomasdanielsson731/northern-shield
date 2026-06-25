@@ -1,4 +1,9 @@
 import { CAMPAIGN_MAP_COUNT } from './campaignMaps.js';
+import { FORTRESS_DEFS } from '../fortress/fortress.js';
+
+const DEFAULT_FORTRESS_UPGRADES = Object.fromEntries(
+  Object.keys(FORTRESS_DEFS).map(k => [k, 0])
+);
 
 /** Clamp and sanitize campaign save on load (client-side tamper deterrence). */
 export function validateCampaignState(state) {
@@ -23,6 +28,13 @@ export function validateCampaignState(state) {
   if (!Array.isArray(s.defenders)) s.defenders = [];
   if (!Array.isArray(s.equipmentInventory)) s.equipmentInventory = [];
   if (!s.uiHints || typeof s.uiHints !== 'object') s.uiHints = {};
+
+  const fu = { ...DEFAULT_FORTRESS_UPGRADES, ...(s.fortressUpgrades ?? {}) };
+  for (const key of Object.keys(DEFAULT_FORTRESS_UPGRADES)) {
+    const max = FORTRESS_DEFS[key]?.maxLevel ?? 3;
+    fu[key] = Math.max(0, Math.min(max, Math.floor(Number(fu[key]) || 0)));
+  }
+  s.fortressUpgrades = fu;
 
   return s;
 }

@@ -37,6 +37,34 @@ export function validateSessionState(raw) {
   return s;
 }
 
+/** Lightweight checksum for mid-battle session tamper deterrence. */
+export function simpleSessionChecksum(session) {
+  const c = session?.combat;
+  const payload = `${session?.gamePhase ?? ''}|${session?.campaignMapIndex ?? 0}|${session?.campaignNodeIndex ?? 0}|${c?.gold ?? 0}|${c?.lives ?? 0}|${c?.waveNumber ?? 0}`;
+  let h = 0;
+  for (let i = 0; i < payload.length; i++) h = ((h << 5) - h + payload.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+
+/** Verify session checksum; clamp inflated combat economy if tampered. */
+export function verifySessionChecksum(raw) {
+  if (!raw) return { ok: false, state: null };
+  if (raw._ck == null) {
+    const validated = validateSessionState(raw);
+    return { ok: !!validated, state: validated };
+  }
+  const { _ck, ...rest } = raw;
+  const expected = simpleSessionChecksum(rest);
+  const validated = validateSessionState(rest);
+  if (!validated) return { ok: false, state: null };
+  if (_ck === expected) return { ok: true, state: validated };
+  if (validated.combat) {
+    validated.combat.gold = Math.min(validated.combat.gold ?? 0, 200);
+    validated.combat.lives = Math.min(validated.combat.lives ?? 0, 8);
+  }
+  return { ok: false, state: validated };
+}
+
 function clampInt(v, min, max) {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n)) return min;

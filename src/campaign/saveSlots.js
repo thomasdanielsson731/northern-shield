@@ -1,6 +1,6 @@
 import { getMapDisplayName } from './campaignMaps.js';
 import { loadCampaign, saveCampaign, createNewCampaign } from './save.js';
-import { validateSessionState } from './sessionSave.js';
+import { validateSessionState, verifySessionChecksum, simpleSessionChecksum } from './sessionSave.js';
 
 export const SLOT_COUNT = 10;
 export const SLOTS_META_KEY = 'ns-slots-meta-v1';
@@ -39,7 +39,7 @@ export function saveSlotsMeta(meta, storage = localStorage) {
 export function loadSession(slotIndex, storage = localStorage) {
   try {
     const raw = JSON.parse(storage.getItem(slotSessionKey(slotIndex)));
-    return validateSessionState(raw);
+    return verifySessionChecksum(raw).state;
   } catch {
     return null;
   }
@@ -47,7 +47,8 @@ export function loadSession(slotIndex, storage = localStorage) {
 
 export function saveSession(session, slotIndex, storage = localStorage) {
   try {
-    storage.setItem(slotSessionKey(slotIndex), JSON.stringify({ ...session, version: 1 }));
+    const payload = { ...session, version: 1, _ck: simpleSessionChecksum({ ...session, version: 1 }) };
+    storage.setItem(slotSessionKey(slotIndex), JSON.stringify(payload));
   } catch {}
 }
 

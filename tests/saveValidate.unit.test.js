@@ -35,4 +35,12 @@ describe('saveValidate', () => {
     expect(state.goldReserve).toBe(400);
     expect(state.stars).toBe(40);
   });
+
+  it('migrates missing fortress upgrade keys on load', () => {
+    const s = createNewCampaign();
+    delete s.fortressUpgrades.treasury;
+    const v = validateCampaignState(s);
+    expect(v.fortressUpgrades.treasury).toBe(0);
+    expect(v.fortressUpgrades.barracks).toBe(0);
+  });
 });
