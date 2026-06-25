@@ -5083,6 +5083,15 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'mapSelect') {
             gamePhase = 'campaignSelect';
             _betweenSubtab = 'recruit';
+          } else if (btn.action === 'buyRune') {
+            if (stars >= btn.cost && (runeInventory[btn.runeId] ?? 0) < (RUNE_DEFS.find(r => r.id === btn.runeId)?.maxOwned ?? 0)) {
+              stars -= btn.cost;
+              runeInventory[btn.runeId] = (runeInventory[btn.runeId] ?? 0) + 1;
+              _campaignState.stars = stars;
+              _campaignState.runeInventory = { ...runeInventory };
+              try { persistCampaign(); } catch {}
+              sfxRune();
+            }
           } else if (btn.action === 'warChestDonate') {
             const cost = getWarChestCost(false);
             if (goldReserve >= cost) {
@@ -12467,6 +12476,43 @@ function drawBetweenBattles() {
     }
     ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
     _wcCursor += 10;
+  }
+
+  // Rune Carver — warband tab, War Camp only; shows when player has stars to spend
+  if (_warCampTab === 'warband' && stars > 0) {
+    ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#c8a8ff';
+    ctx.fillText('✦ RUNE CARVER', rix, _wcCursor + 9);
+    ctx.textAlign = 'right'; ctx.font = '8px monospace'; ctx.fillStyle = '#f0d040';
+    ctx.fillText(`${stars} ★`, rix + riW, _wcCursor + 9);
+    ctx.textAlign = 'left';
+    _wcCursor += 14;
+    const slotW = Math.floor((riW - (RUNE_DEFS.length - 1) * 3) / RUNE_DEFS.length);
+    for (let _ri = 0; _ri < RUNE_DEFS.length; _ri++) {
+      const rd = RUNE_DEFS[_ri];
+      const count = runeInventory[rd.id] ?? 0;
+      const canBuy = stars >= rd.cost && count < rd.maxOwned;
+      const rx2 = rix + _ri * (slotW + 3);
+      ctx.fillStyle = canBuy ? 'rgba(36,18,58,0.85)' : 'rgba(18,10,28,0.6)';
+      ctx.strokeStyle = canBuy ? `rgba(${rd.color ? '180,130,255' : '120,90,180'},0.55)` : 'rgba(70,50,90,0.30)';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.roundRect(rx2, _wcCursor, slotW, 30, 2); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = '7px monospace'; ctx.fillStyle = canBuy ? '#c8a8ff' : 'rgba(130,100,170,0.55)';
+      const _lbl = rd.label.length > 7 ? rd.symbol : rd.symbol;
+      ctx.fillText(rd.symbol, rx2 + slotW / 2, _wcCursor + 10);
+      ctx.font = '6px monospace'; ctx.fillStyle = canBuy ? '#f0d040' : 'rgba(150,130,70,0.5)';
+      ctx.fillText(`${rd.cost}★`, rx2 + slotW / 2, _wcCursor + 19);
+      ctx.fillStyle = count > 0 ? 'rgba(160,200,120,0.7)' : 'rgba(100,90,70,0.45)';
+      ctx.fillText(`[${count}/${rd.maxOwned}]`, rx2 + slotW / 2, _wcCursor + 27);
+      ctx.textAlign = 'left';
+      if (canBuy) {
+        _betweenBtns.push({ x: rx2, y: _wcCursor, w: slotW, h: 30, action: 'buyRune', runeId: rd.id, cost: rd.cost });
+      }
+    }
+    _wcCursor += 36;
+    ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
+    _wcCursor += 8;
   }
 
   // Promotion banner — warband tab only

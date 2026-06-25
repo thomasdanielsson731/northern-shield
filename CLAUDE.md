@@ -22,8 +22,6 @@ npx vitest            # run tests in watch mode
 npx vitest run tests/tower.unit.test.js   # run a single test file
 ```
 
-> **Note:** An old accidental nested clone lived at `tower-defense/tower-defense/`. It was removed 2026-06-25. If you still `cd` there, go **one directory up**.
-
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
 
 CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test` on every push/PR.
@@ -54,7 +52,7 @@ src/
     defender.js        — Defender class (career XP, careerLevel, career stats); XP/level table; careerBonusForLevel()
     roster.js          — Roster class: link() veteran to a Tower, grantBattleXP(), releaseAll(), load/toJSON
     items.js           — ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses(); equipment slots: 'weapon' | 'armor'
-    heroMovement.js    — melee advance / ranged positioning for pathless combat
+    heroMovement.js    — melee advance / ranged positioning for pathless combat; sight range 12 cells; heroes drift back to deploy cell when no enemy in range
     warbandComposition.js — squad presets, deploy hints, composition warnings, structure count warnings
     heroRoles.js       — fortress role zones (gate/wall/core), role damage mult
     traitGameplay.js   — trait combat modifiers (getTraitModifiers)
@@ -65,6 +63,7 @@ src/
   ui/
     uiTheme.js         — UI_COLORS palette, War Room top bar chrome, stat chips
     assaultPanels.js   — deployed field card HP bars, status labels
+    structurePortrait.js — drawProceduralStructureIcon() — procedural icons for build dock
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); slot-aware keys via saveSlots
     saveSlots.js       — 10 slots, ns-slots-meta-v1, migrateLegacyToSlots(), deleteSlot(), slot meta summaries
@@ -74,6 +73,10 @@ src/
     campaignFronts.js  — four-front command map, assault codenames, per-front unlock, getNextAvailableAssault()
     campaignRun.js     — field persistence (10 heroes + 10 structures), assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
     campaignDeploy.js  — isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults(); prep-only placement rules
+    onboarding.js      — ONBOARDING steps enum, getOnboardingHint(), advanceOnboarding(), resolveOnboardingHint()
+    saveValidate.js    — validateCampaignState(), verifySaveChecksum(), simpleSaveChecksum()
+  combat/
+    assaultTargeting.js — hasLivingFortressGates(), buildAssaultTargetPriority(); gate-priority for pathless enemies
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
   chronicle/
@@ -102,9 +105,17 @@ tests/
   assaultPanels.unit.test.js
   roster.unit.test.js
   saveSlots.unit.test.js
+  saveValidate.unit.test.js
+  sessionSave.unit.test.js
+  onboarding.unit.test.js
+  assaultTargeting.unit.test.js
+  structurePortrait.unit.test.js
+  heroRoles.unit.test.js
+  warbandComposition.unit.test.js
+  gameImports.smoke.test.js
 ```
 
-**133 tests** — run `npx vitest run` from repo root.
+**162 tests** — run `npx vitest run` from repo root.
 
 ### Key facts about game.js
 
@@ -224,7 +235,7 @@ Skirmish / non-pathless presets still use Shield Wall + Reinforce Wall where app
 
 ### Rune system
 
-Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars persist in campaign state (`_campaignState.stars`). Rune Carver was removed from the assault right panel (2026-06-25); star spending may move to War Camp / dedicated screen in a future pass.
+Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars persist in campaign state (`_campaignState.stars`). **Rune Carver is campaign-only in War Camp** (WARBAND tab, shown when `stars > 0`) — not visible during assault. In skirmish, the chip appears between waves as before. Equipping purchased runes to specific heroes happens via the tower detail panel during the assault deploy phase.
 
 Five rune types defined in `RUNE_DEFS`:
 
@@ -258,7 +269,9 @@ Active synergies are shown in the tower detail panel and rendered as a colored g
 
 **Default campaign flow:** `campaignSelect` → **command map** (`nodeMap`) → `startCampaignNodeBattle()` → `playing` (2–3 waves; waves 2+ auto-advance) → `debrief` → **War Camp** (`betweenBattles`) → command map or next assault. **Skirmish Mode** → `mapSelect` → legacy 3-map skirmish.
 
-**War Camp UI:** Right panel tabs `WAR_CAMP_TABS` — `warband` (roster + equip), `recruit`, `fortress` (field structures + fortress upgrade nodes). Left panel: battle report. Content starts at `META_SCREEN_TOP` (below slim meta bar). No duplicate center meta banner on campaign screens.
+**War Camp UI:** Right panel tabs `WAR_CAMP_TABS` — `warband` (roster + equip + **Rune Carver when stars > 0**), `recruit`, `fortress` (field structures + fortress upgrade nodes). Left panel: battle report. Content starts at `META_SCREEN_TOP` (below slim meta bar). No duplicate center meta banner on campaign screens.
+
+**New campaign starter warband:** `activateSlot()` seeds three defenders (Berserker, Archer, Valkyrie) on first slot creation so the first assault is immediately playable.
 
 **Persistence:** `persistCampaign()` writes slot campaign + session; `serializeGameSession()` / `restoreGameSession()` for mid-assault resume. Keys: `ns-slots-meta-v1`, `ns-campaign-v2-slot-{0–9}`, `ns-session-v1-slot-{0–9}`; legacy `ns-campaign-v2` → slot 0 via `migrateLegacyToSlots()`.
 
@@ -511,4 +524,4 @@ See [ART_DIRECTION.md](ART_DIRECTION.md) before generating any sprite. All asset
 
 ### Grid zoom
 
-`gridZoom` (1.0–4.0) applies only to the grid/playground area — the frame, top bar, right panel, and build bar are always drawn at `gameScale` (window-fit). Wheel zoom is blocked outside the grid rect. Middle-click drags `gridPanX/gridPanY`. Press `z` to reset. `FRAME_THICK = 32` is a module-level constant shared by `drawFrames`, `drawTopBar`, and `getBuildButtons` — change it in one place only.
+`gridZoom` (1.0–4.0) applies only to the grid/playground area — the frame, top bar, right panel, and build bar are always drawn at `gameScale` (window-fit). Wheel zoom is blocked outside the grid rect. Middle-click drags `gridPanX/gridPanY`. Press `z` to reset. `FRAME_THICK = 16` is a module-level constant shared by `drawFrames`, `drawTopBar`, and `getBuildButtons` — change it in one place only.
