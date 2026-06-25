@@ -7709,6 +7709,25 @@ function drawEventOutcomeToast() {
   if (_eventOutcomeToast.timer <= 0) _eventOutcomeToast = null;
 }
 
+function drawGoldPoolsHint() {
+  if (_goldPoolsHintTimer <= 0) return;
+  _goldPoolsHintTimer--;
+  const alpha = Math.min(1, _goldPoolsHintTimer / 40);
+  const cx = BASE_W - FRAME_THICK - 120;
+  const cy = FRAME_THICK + 52;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '6.5px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(6,3,14,0.92)';
+  const txt = 'RESERVE → War Camp spending';
+  const tw = ctx.measureText(txt).width;
+  ctx.beginPath(); ctx.roundRect(cx - tw - 8, cy - 10, tw + 16, 18, 3); ctx.fill();
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText(txt, cx, cy + 2);
+  ctx.restore();
+}
+
 function drawTopBar() {
   autoNextBtn = null;
   const FT  = FRAME_THICK;
@@ -13617,6 +13636,7 @@ function draw() {
     drawTopBar();
     drawUiToast();
     drawOnboardingBanner();
+    drawGoldPoolsHint();
   }
   ctx.restore();
 }
