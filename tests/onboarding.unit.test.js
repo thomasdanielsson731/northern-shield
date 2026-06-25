@@ -23,4 +23,9 @@ describe('onboarding', () => {
     expect(resolveOnboardingHint(ONBOARDING.PICK_FRONT, { frontView: true })?.title).toBe('LAUNCH ASSAULT');
     expect(resolveOnboardingHint(ONBOARDING.PICK_FRONT, { frontView: false })?.title).toBe('SELECT FRONT');
   });
+
+  it('stays on deploy after gate placed until hero placed', () => {
+    expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedGate')).toBe(ONBOARDING.DEPLOY);
+    expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedHero')).toBe(ONBOARDING.DONE);
+  });
 });

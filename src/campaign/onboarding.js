@@ -29,6 +29,7 @@ export function advanceOnboarding(step, action) {
   if (step === ONBOARDING.PICK_FRONT && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.LAUNCH && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.DEPLOY && action === 'placedHero') return ONBOARDING.DONE;
+  if (step === ONBOARDING.DEPLOY && action === 'placedGate') return step;
   return step;
 }
 

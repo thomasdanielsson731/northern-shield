@@ -250,6 +250,15 @@ function drawHorizTabs(px, py, pw, tabs, activeId, outBtns, opts = {}) {
       ctx.fillStyle = '#c8901a';
       ctx.fillRect(tx, py + DOCK_TAB_H - 2, tabW, 2);
     }
+    if (opts.pulseId === tab.id) {
+      const pulse = 0.45 + Math.sin(performance.now() * 0.008) * 0.4;
+      ctx.strokeStyle = `rgba(240,200,80,${0.35 + pulse * 0.55})`;
+      ctx.lineWidth = 1.2 + pulse * 0.8;
+      ctx.shadowColor = 'rgba(240,200,80,0.45)';
+      ctx.shadowBlur = 4 + pulse * 6;
+      ctx.beginPath(); ctx.roundRect(tx - 1, py - 1, tabW + 2, DOCK_TAB_H + 2, 3); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
     ctx.font = 'bold 6px monospace';
     ctx.fillStyle = active ? '#f0d080' : 'rgba(130,100,50,0.55)';
     ctx.textAlign = 'center';
@@ -324,6 +333,14 @@ function _drawStructureDockCard(item, cardX, cardY, cardW, cardH, isBuildSel) {
 
   ctx.fillStyle = `rgba(${glowRgb},${affordable ? 0.45 : 0.15})`;
   ctx.beginPath(); ctx.roundRect(cardX + 4, cardY + cardH - 3, cardW - 8, 2, [0, 0, 2, 2]); ctx.fill();
+
+  if (item.id === 'gate' && _onboardingStep === ONBOARDING.DEPLOY && !assaultFieldHasGate()) {
+    ctx.font = 'bold 6px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#f0d060';
+    ctx.fillText('PORT', cardX + cardW - 6, cardY + 9);
+    ctx.textAlign = 'left';
+  }
 
   const gate = TOWER_STAR_GATES[item.id];
   if (gate && stars < gate) {
@@ -586,6 +603,10 @@ let _eventOutcomeToast   = null;      // { text, timer, color }
 let _chronicleBattleFilter = null;    // null | 'victory' | 'defeat' | 'boss'
 let _goldPoolsHintTimer  = 0;
 let _warCampWelcomeTimer = 0;
+let _skirmishDiscoveryTimer = 0;
+let _warCampTabPulse       = null;   // 'recruit' | 'fortress' — pulse tab on first visits
+let _structuresTabPulse    = 0;      // frames — pulse STRUCTURES tab during deploy onboarding
+let _equipSparkles         = [];     // { x, y, vx, vy, life, color }
 let _autoMoveHintFrames  = 0;
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
 let _prevSynergyMap      = new Map();  // tower ID → previous _synergy key (for change detection)
@@ -1624,6 +1645,7 @@ function activateSlot(slotIndex) {
     ensureCampaignProgress();
     loadRosterFromCampaignState();
     gamePhase = 'campaignSelect';
+    if (!_hintSeen.skirmishDiscovery) _skirmishDiscoveryTimer = 420;
     persistCampaign();
     return;
   }
@@ -1632,6 +1654,9 @@ function activateSlot(slotIndex) {
   if (_campaignState.uiHints) Object.assign(_hintSeen, _campaignState.uiHints);
   _chronicleDefFilter = _campaignState.uiHints?.chronicleDefFilter ?? null;
   _chronicleBattleFilter = _campaignState.uiHints?.chronicleBattleFilter ?? null;
+  if (_campaignState.uiHints?.skirmishDiscovery) _hintSeen.skirmishDiscovery = true;
+  if (_campaignState.uiHints?.recruitTab) _hintSeen.recruitTab = true;
+  if (_campaignState.uiHints?.fortressTab) _hintSeen.fortressTab = true;
   ensureCampaignProgress();
   loadRosterFromCampaignState();
   battlesCompleted = _campaignState.battlesCompleted ?? 0;
@@ -1643,6 +1668,9 @@ function activateSlot(slotIndex) {
     _campaignState.runeInventory ?? {}
   );
   restoreGameSession(loadSession(slotIndex));
+  if (!_hintSeen.skirmishDiscovery && battlesCompleted === 0) {
+    _skirmishDiscoveryTimer = 420;
+  }
   persistCampaign();
 }
 
@@ -1925,6 +1953,9 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
     }
   }
   if (isTutorialNode(mapIndex, nodeIndex)) _tutorialBannerTimer = 360;
+  if (_onboardingStep === ONBOARDING.DEPLOY && !assaultFieldHasGate()) {
+    _structuresTabPulse = 120;
+  }
   waveNumber = 0;
   endlessMode = false;
 }
@@ -1982,6 +2013,11 @@ function enterCampaignWarCamp() {
       _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), warCamp: true };
       try { persistCampaign(); } catch {}
     }
+  }
+  if (battlesCompleted === 1 && !_hintSeen.recruitTab) {
+    _warCampTabPulse = 'recruit';
+  } else if (battlesCompleted >= 3 && !_hintSeen.fortressTab && _warCampTab !== 'fortress') {
+    _warCampTabPulse = 'fortress';
   }
   gamePhase = 'betweenBattles';
 }
@@ -4396,7 +4432,13 @@ function tryPlaceAt(col, row, mode, towerType) {
     }
   }
   if (mode === CELL.TOWER) { firstTowerPlaced = true; pathChevronsTimer = 0; }
-  if (mode === CELL.GATE)  { _hintSeen.firstPlacement = true; }
+  if (mode === CELL.GATE)  {
+    _hintSeen.firstPlacement = true;
+    _structuresTabPulse = 0;
+    if (_onboardingStep === ONBOARDING.DEPLOY) {
+      _onboardingStep = advanceOnboarding(_onboardingStep, 'placedGate');
+    }
+  }
   return true;
 }
 
@@ -4747,7 +4789,10 @@ canvas.addEventListener('mousedown', e => {
           mouseY >= tb.y && mouseY <= tb.y + tb.h) {
         _leftDockTab = tb.id;
         _buildBtnsCache = null;
-        if (tb.id === 'structures') _structureScrollY = 0;
+        if (tb.id === 'structures') {
+          _structureScrollY = 0;
+          _structuresTabPulse = 0;
+        }
         return;
       }
     }
@@ -4822,6 +4867,12 @@ canvas.addEventListener('mousedown', e => {
             const maxPage = Math.ceil(CAMPAIGN_MAP_COUNT / CAMPAIGN_MAPS_PER_PAGE) - 1;
             _campaignMapPage = Math.min(maxPage, _campaignMapPage + 1);
           } else if (btn.action === 'skirmish') {
+            _hintSeen.skirmishDiscovery = true;
+            _skirmishDiscoveryTimer = 0;
+            if (_campaignState) {
+              _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), skirmishDiscovery: true };
+              try { persistCampaign(); } catch {}
+            }
             _campaignRegionActive = false;
             _mapAutoStartEnabled = true;
             gamePhase = 'mapSelect';
@@ -4862,6 +4913,12 @@ canvas.addEventListener('mousedown', e => {
             _pendingNextAssaultNode = getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex ?? null;
             enterCampaignWarCamp();
           } else if (btn.action === 'skirmish') {
+            _hintSeen.skirmishDiscovery = true;
+            _skirmishDiscoveryTimer = 0;
+            if (_campaignState) {
+              _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), skirmishDiscovery: true };
+              try { persistCampaign(); } catch {}
+            }
             _campaignRegionActive = false;
             _mapAutoStartEnabled  = false;
             gamePhase = 'mapSelect';
@@ -5204,10 +5261,11 @@ canvas.addEventListener('mousedown', e => {
                   sfxEquipItem();
                   _equipFlash = {
                     defenderId: def.defenderId,
-                    timer: 56,
+                    timer: 72,
                     color: nextId ? (RARITY_COLOR[ITEM_DEFS[nextId]?.rarity] ?? '#c0a0ff') : '#88aa88',
                     itemName: nextId ? (ITEM_DEFS[nextId]?.name ?? null) : null,
                   };
+                  spawnEquipSparkles(_equipFlash.color);
                   _campaignState.defenders = _roster.toJSON();
                   _campaignState.equipmentInventory = _equipmentInventory.slice();
                   try { persistCampaign(); } catch {}
@@ -5248,6 +5306,22 @@ canvas.addEventListener('mousedown', e => {
             _warCampTab = btn.tab;
             _betweenSubtab = btn.tab;
             _rosterScrollOffset = 0;
+            if (_warCampTabPulse === btn.tab) {
+              _warCampTabPulse = null;
+              if (btn.tab === 'recruit') {
+                _hintSeen.recruitTab = true;
+                if (_campaignState) {
+                  _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), recruitTab: true };
+                }
+              }
+              if (btn.tab === 'fortress') {
+                _hintSeen.fortressTab = true;
+                if (_campaignState) {
+                  _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), fortressTab: true };
+                }
+              }
+              try { persistCampaign(); } catch {}
+            }
           } else if (btn.action === 'upgradeFortress') {
             const fDef = FORTRESS_DEFS[btn.key];
             const upgrades = _campaignState.fortressUpgrades ?? {};
@@ -7408,6 +7482,23 @@ function _handleNavClick(id) {
     _warCampTab = id;
     _betweenSubtab = id;
     _rosterScrollOffset = 0;
+    if (_warCampTabPulse === id) {
+      _warCampTabPulse = null;
+      if (id === 'recruit') {
+        _hintSeen.recruitTab = true;
+        if (_campaignState) {
+          _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), recruitTab: true };
+          try { persistCampaign(); } catch {}
+        }
+      }
+      if (id === 'fortress') {
+        _hintSeen.fortressTab = true;
+        if (_campaignState) {
+          _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), fortressTab: true };
+          try { persistCampaign(); } catch {}
+        }
+      }
+    }
     return;
   }
   _navActiveId = id;
@@ -8414,9 +8505,13 @@ function drawCampaignMetaBar(center) {
     subtitle = getCampaignMapMeta(_campaignMapIndex)?.name ?? 'COMMAND MAP';
   } else if (gamePhase === 'betweenBattles') {
     subtitle = isCampaignWarCamp()
-      ? (_warCampWelcomeTimer > 0
-        ? 'War Camp — tabs: Warband · Recruit · Fortress'
-        : 'War Camp')
+      ? (_warCampTabPulse === 'recruit'
+        ? 'War Camp — hire defenders in RECRUIT tab'
+        : _warCampTabPulse === 'fortress'
+          ? 'War Camp — upgrade field structures in FORTRESS'
+          : (_warCampWelcomeTimer > 0
+            ? 'War Camp — tabs: Warband · Recruit · Fortress'
+            : 'War Camp'))
       : 'Between battles';
   } else if (gamePhase === 'debrief') {
     subtitle = 'AFTER ACTION';
@@ -8551,18 +8646,44 @@ function drawOnboardingBanner() {
 }
 
 function drawEquipCeremony() {
+  tickEquipCeremony();
   if (!_equipFlash || _equipFlash.timer <= 0) return;
-  if (_equipFlash.timer > 36) {
-    const alpha = Math.min(0.22, (_equipFlash.timer - 36) / 12 * 0.22);
+  const def = _roster?.defenders?.find(d => d.defenderId === _equipFlash.defenderId);
+  const prog = 1 - _equipFlash.timer / 72;
+  if (_equipFlash.timer > 48) {
+    const alpha = Math.min(0.24, (_equipFlash.timer - 48) / 16 * 0.24);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = _equipFlash.color;
     ctx.fillRect(GRID_LEFT, 12, BASE_W - GRID_LEFT - 4, BASE_H - 24);
     ctx.restore();
   }
-  const def = _roster?.defenders?.find(d => d.defenderId === _equipFlash.defenderId);
-  if (def && _equipFlash.timer > 20) {
-    const alpha = Math.min(1, (_equipFlash.timer - 20) / 15);
+  if (def) {
+    const ringR = 28 + prog * 42;
+    const ringA = Math.max(0, 1 - prog * 1.2) * 0.55;
+    if (ringA > 0.02) {
+      ctx.save();
+      ctx.globalAlpha = ringA;
+      ctx.strokeStyle = _equipFlash.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(BASE_W / 2, 122, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  for (const p of _equipSparkles) {
+    const a = Math.min(1, p.life / 24);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.5 + a, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (def && _equipFlash.timer > 24) {
+    const alpha = Math.min(1, (_equipFlash.timer - 24) / 18);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
@@ -9132,7 +9253,10 @@ function drawLeftDock() {
     const ph = leftDockPanelHeight();
 
     if (canModifyWarbandDeployment()) {
-      drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns, { transparent: true });
+      drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns, {
+        transparent: true,
+        pulseId: _structuresTabPulse > 0 && _leftDockTab !== 'structures' ? 'structures' : null,
+      });
       if (_leftDockTab === 'structures') {
         drawStructuresDockContent(px, py, pw, ph);
       } else {
@@ -9161,7 +9285,9 @@ function drawLeftDock() {
     ctx.restore();
   }
 
-  drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns);
+  drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns, {
+    pulseId: _structuresTabPulse > 0 && _leftDockTab !== 'structures' ? 'structures' : null,
+  });
 
   if (_leftDockTab === 'structures') {
     drawStructuresDockContent(px, py, pw, ph);
@@ -10508,6 +10634,9 @@ function drawHelpOverlay() {
   if (_assault) {
     shortcuts.push(['—', 'Enemies target PORT until one gate falls']);
     shortcuts.push(['—', 'Fallen heroes return with full HP on new assault']);
+  } else if (gamePhase === 'campaignSelect' || gamePhase === 'mapSelect' || gamePhase === 'slotSelect') {
+    shortcuts.push(['—', 'Skirmish = classic 100-wave maze TD (no campaign progress)']);
+    shortcuts.push(['—', 'Campaign = regional assaults with persistent warband']);
   }
   const pw = 320, ph = 36 + shortcuts.length * 18 + 20;
   const px = width / 2 - pw / 2, py = height / 2 - ph / 2;
@@ -10551,9 +10680,21 @@ function drawPauseOverlay() {
   ctx.shadowBlur  = 20;
   ctx.fillText('PAUSED', width / 2, height / 2 - 10);
   ctx.shadowBlur  = 0;
+  ctx.font        = '10px monospace';
+  ctx.fillStyle   = '#a08060';
+  const _phaseLbl = {
+    playing: isPathlessMode() ? 'Assault' : 'Skirmish',
+    betweenBattles: 'War Camp',
+    debrief: 'Debrief',
+    nodeMap: 'Command Map',
+    campaignSelect: 'Region Select',
+    mapSelect: 'Skirmish Select',
+    slotSelect: 'Save Slots',
+  }[gamePhase] ?? gamePhase;
+  ctx.fillText(_phaseLbl, width / 2, height / 2 + 4);
   ctx.font        = '13px monospace';
   ctx.fillStyle   = '#806050';
-  ctx.fillText('Press P to continue', width / 2, height / 2 + 18);
+  ctx.fillText('Press P to continue', width / 2, height / 2 + 22);
   ctx.restore();
 }
 
@@ -11430,8 +11571,9 @@ function drawDebrief() {
     const mvpRgb = defenderGlowRgb(_mvpT);
     const mvpDmg = Math.round(_mvpT.damageDealt ?? 0);
     const mvpKills = _mvpT.killCount ?? 0;
+    const mvpPulse = _debriefTimer < 90 ? 0.85 + Math.sin(_debriefTimer * 0.14) * 0.15 : 1;
     ctx.font      = 'bold 11px monospace';
-    ctx.fillStyle = `rgba(${mvpRgb},0.90)`;
+    ctx.fillStyle = `rgba(${mvpRgb},${(0.90 * mvpPulse).toFixed(2)})`;
     ctx.textAlign = 'left';
     ctx.fillText(_mvpT.name ?? TOWER_DEFS[_mvpT.type]?.label ?? _mvpT.type, panX + 30, hy);
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(180,155,110,0.65)';
@@ -11819,7 +11961,7 @@ function drawBetweenBattles() {
   ctx.globalAlpha = fadeAlpha;
 
   drawBtAmbientParticles();
-  if (_equipFlash?.timer > 0) _equipFlash.timer--;
+  tickEquipCeremony();
 
   // Starfield background
   const t = performance.now() * 0.001;
@@ -11926,6 +12068,13 @@ function drawBetweenBattles() {
     if (_bits.length > 0) _lpLine(_bits.join('  ·  '), 'rgba(180,150,100,0.55)', '8px monospace');
   }
   const _damagedWalls = Object.values(wallData).filter(w => !w.temporary && w.hp < w.maxHp);
+  if (isCampaignWarCamp() && _campaignMapIndex != null) {
+    const _na = getNextAvailableAssault(ensureCampaignProgress(), _campaignMapIndex, null);
+    const _nai = _na ? getAssaultInfo(_campaignMapIndex, _na.nodeIndex) : null;
+    if (_nai) {
+      _lpLine(`Next assault: ${_nai.codename} (${_nai.tierLabel})`, 'rgba(160,200,140,0.72)', '8px monospace');
+    }
+  }
   if (_damagedWalls.length > 0) {
     _lpLine(`⚠ ${_damagedWalls.length} gate${_damagedWalls.length !== 1 ? 's' : ''} damaged`, 'rgba(220,140,60,0.65)', '8px monospace');
   }
@@ -12213,7 +12362,7 @@ function drawBetweenBattles() {
   // ── RIGHT PANEL: War Camp tabs (one view at a time) ─────────
   const rpX = lpX + lpW + 8, rpY = META_SCREEN_TOP, rpW = W - (lpX + lpW + 8) - 12, rpH = _contentBot - META_SCREEN_TOP;
   _navBtns = [];
-  const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns);
+  const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns, { pulseId: _warCampTabPulse });
   const rpContentY = rpY + _bbNavH + 4;
   const rpContentH = rpH - _bbNavH - 4;
   const rpY0 = rpContentY;
@@ -12894,6 +13043,71 @@ function drawBetweenBattles() {
   ctx.restore(); // fade-in globalAlpha
 }
 
+function drawGuidedPulse(x, y, w, h, radius = 6) {
+  const pulse = 0.45 + Math.sin(performance.now() * 0.007) * 0.35;
+  ctx.save();
+  ctx.strokeStyle = `rgba(240,200,80,${0.35 + pulse * 0.55})`;
+  ctx.lineWidth = 1.4 + pulse;
+  ctx.shadowColor = 'rgba(240,200,80,0.5)';
+  ctx.shadowBlur = 5 + pulse * 8;
+  ctx.beginPath(); ctx.roundRect(x - 2, y - 2, w + 4, h + 4, radius); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function assaultFieldHasGate() {
+  return towers.some(t => t.type === 'gate')
+    || (wallData ?? []).some(w => w?.type === 'gate');
+}
+
+function spawnEquipSparkles(color) {
+  _equipSparkles = Array.from({ length: 14 }, () => ({
+    x: BASE_W / 2 + (Math.random() - 0.5) * 100,
+    y: 118 + (Math.random() - 0.5) * 24,
+    vx: (Math.random() - 0.5) * 1.8,
+    vy: -0.6 - Math.random() * 1.4,
+    life: 32 + Math.random() * 24,
+    color,
+  }));
+}
+
+function tickEquipCeremony() {
+  if (_equipFlash?.timer > 0) _equipFlash.timer--;
+  if (!_equipSparkles.length) return;
+  for (const p of _equipSparkles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.life--;
+  }
+  _equipSparkles = _equipSparkles.filter(p => p.life > 0);
+}
+
+function _drawCommandMapFortressHub(cx, cy) {
+  ctx.save();
+  for (const [hx, hy, rx, ry] of [[cx - 42, cy + 10, 14, 7], [cx + 38, cy + 8, 12, 6], [cx, cy - 30, 10, 5]]) {
+    ctx.fillStyle = 'rgba(40,60,30,0.22)';
+    ctx.beginPath(); ctx.ellipse(hx, hy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#4a3828';
+  ctx.fillRect(cx - 20, cy - 12, 40, 30);
+  ctx.strokeStyle = 'rgba(200,160,80,0.45)'; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - 20.5, cy - 12.5, 41, 31);
+  for (const dx of [-15, 15]) {
+    ctx.fillStyle = UI_COLORS.fortress;
+    ctx.beginPath();
+    ctx.moveTo(cx + dx, cy - 26);
+    ctx.lineTo(cx + dx + 9, cy - 10);
+    ctx.lineTo(cx + dx - 9, cy - 10);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(232,215,181,0.38)';
+  ctx.fillRect(cx - 6, cy + 4, 12, 14);
+  ctx.font = 'bold 7px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText('P', cx, cy - 2);
+  ctx.restore();
+}
+
 const MAP_SELECT_FLAVOR = [
   'The first scouts have been spotted. Your warband stands ready.',
   'They have learned your walls. Expect them to come in greater numbers.',
@@ -12976,6 +13190,7 @@ function drawSlotSelect() {
   ctx.textAlign = 'center';
   ctx.font = '7px monospace';
   ctx.fillStyle = 'rgba(120,100,70,0.45)';
+  ctx.fillText('Campaign assaults per slot · Skirmish = separate classic maze mode', W / 2, H - 34);
   ctx.fillText('Start a new campaign in any empty slot · × removes a save', W / 2, H - 22);
 
   if (_slotDeleteConfirm != null) {
@@ -13087,6 +13302,15 @@ function drawCampaignSelect() {
   ctx.fillStyle = '#e8c060';
   ctx.fillText('SKIRMISH MODE', W / 2, skY + 17);
   _campaignSelectBtns.push({ x: skX, y: skY, w: 144, h: 26, action: 'skirmish' });
+
+  if (_skirmishDiscoveryTimer > 0) {
+    _skirmishDiscoveryTimer--;
+    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
+    drawGuidedPulse(skX - 2, skY - 2, 148, 30, 6);
+    ctx.font = '7px monospace';
+    ctx.fillStyle = `rgba(240,210,120,${0.50 + pulse * 0.40})`;
+    ctx.fillText('↑ Optional: classic 100-wave maze TD', W / 2, skY - 10);
+  }
 
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,100,0.65)';
   ctx.fillText('Classic 100-wave maze TD — separate from campaign assaults', W / 2, H - 30);
@@ -13246,8 +13470,7 @@ function _drawCommandMapOverview(progress, run, mapX, mapY, mapW, mapH, portalCo
   ctx.fillText(mapName.toUpperCase(), cx, mapY + 22);
 
   // Fortress hub
-  ctx.font = '22px monospace';
-  ctx.fillText('🏰', cx, cy + 4);
+  _drawCommandMapFortressHub(cx, cy);
   ctx.font = '8px monospace';
   ctx.fillStyle = '#a09060';
   ctx.fillText('Fortress', cx, cy + 22);
@@ -13291,11 +13514,14 @@ function _drawCommandMapOverview(progress, run, mapX, mapY, mapW, mapH, portalCo
       ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.roundRect(pos.x + 1, pos.y + 1, cardW - 2, cardH - 2, 5); ctx.stroke();
     }
+    if (_onboardingStep === ONBOARDING.COMMAND_MAP && frontId === 'west' && hasActive) {
+      drawGuidedPulse(pos.x, pos.y, cardW, cardH, 6);
+    }
 
     ctx.textAlign = 'center';
     ctx.font = 'bold 8px monospace';
     ctx.fillStyle = secured ? '#80c060' : hasActive ? '#e8d090' : '#706050';
-    ctx.fillText(FRONT_LABELS[frontId], pos.x + cardW / 2, pos.y + 16);
+    ctx.fillText(`${{ west: '← ', east: '→ ', north: '↑ ', south: '↓ ' }[frontId] ?? ''}${FRONT_LABELS[frontId]}`, pos.x + cardW / 2, pos.y + 16);
 
     ctx.font = '7px monospace';
     ctx.fillStyle = hasActive ? '#d8c080' : '#908060';
@@ -13342,6 +13568,10 @@ function _drawFrontAssaultPanel(progress, layout, run, mapX, mapY, mapW, mapH, f
     if (isNext) {
       ctx.fillStyle = 'rgba(200,160,50,0.08)';
       ctx.beginPath(); ctx.roundRect(listX - 8, rowY - 14, rowW + 16, rowH - 4, 4); ctx.fill();
+      if (_onboardingStep === ONBOARDING.LAUNCH
+        || (_onboardingStep === ONBOARDING.PICK_FRONT && _commandMapView === 'front')) {
+        drawGuidedPulse(listX - 8, rowY - 16, rowW + 16, rowH, 4);
+      }
     }
 
     ctx.textAlign = 'left';
@@ -15159,6 +15389,7 @@ function gameLoop() {
     }
   }
   _frameTick++;
+  if (_structuresTabPulse > 0) _structuresTabPulse--;
   // 1x=30 ticks/s (alt frames), 2x=60 ticks/s (every frame), 4x=120 ticks/s (2 per frame)
   const _ticks = gameSpeed >= 4 ? 2 : (gameSpeed >= 2 || _frameTick % 2 === 1) ? 1 : 0;
   for (let _i = 0; _i < _ticks; _i++) update();
