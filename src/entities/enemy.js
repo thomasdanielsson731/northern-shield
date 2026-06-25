@@ -30,7 +30,7 @@ export const ENEMY_DEFS = {
     color:          '#6018b8',   // vivid deep purple — nightmare spirit
     highlightColor: '#b060e0',   // saturated violet glow
     flying:         false,
-    targetPriority: 'warband',
+    targetPriority: ['warband', 'structures', 'goal'],
   },
   draugr: {
     label:          'Draugr',
@@ -40,7 +40,8 @@ export const ENEMY_DEFS = {
     reward:         9,
     color:          '#3a6888',   // more saturated blue-slate — undead corpse warrior
     highlightColor: '#90c0de',   // brighter ice-blue highlight
-    flying:         false
+    flying:         false,
+    targetPriority: ['warband', 'structures', 'goal'],
   },
   myling: {
     label:          'Myling',
@@ -50,7 +51,9 @@ export const ENEMY_DEFS = {
     reward:         12,
     color:          '#2878e0',   // vivid spectral blue — corrupted child spirit
     highlightColor: '#aacfff',   // bright ghostly highlight
-    flying:         true
+    flying:         true,
+    targetPriority: ['goal', 'warband'],
+    plunderMult:    1.65,
   },
   jotunn: {
     label:          'Jötunn',
@@ -61,7 +64,7 @@ export const ENEMY_DEFS = {
     color:          '#5c4030',   // stone-brown — Norse earth giant
     highlightColor: '#ff9030',   // bright amber-orange volcanic heat
     flying:         false,
-    targetPriority: 'structures',
+    targetPriority: ['structures', 'warband', 'goal'],
   },
   warg: {
     label:          'Warg',
@@ -72,7 +75,7 @@ export const ENEMY_DEFS = {
     color:          '#4a3828',   // dark grey-brown — Norse shadow wolf
     highlightColor: '#e08830',   // amber eye-glow highlight
     flying:         false,
-    targetPriority: 'warband',
+    targetPriority: ['warband', 'structures', 'goal'],
   },
   einherjar: {
     label:          'Einherjar',
@@ -83,7 +86,7 @@ export const ENEMY_DEFS = {
     color:          '#58506a',   // iron grey with purple tint — armored fallen warrior
     highlightColor: '#8090b8',   // steel-blue armour sheen
     flying:         false,
-    targetPriority: 'structures',
+    targetPriority: ['structures', 'warband', 'goal'],
   },
   fossegrim: {
     label:          'Fossegrim',
@@ -94,9 +97,46 @@ export const ENEMY_DEFS = {
     color:          '#1a7868',   // deep teal — river spirit
     highlightColor: '#70e8c8',   // bright aqua glow
     flying:         false,
+    targetPriority: ['goal', 'warband'],
+    plunderMult:    1.4,
     healAura:       { radius: 52, amount: 8, cooldownFrames: 100 },
   },
 };
+
+/** Normalize legacy string priorities to ordered target kinds. */
+export function getEnemyTargetPriority(typeOrEnemy) {
+  const type = typeof typeOrEnemy === 'string' ? typeOrEnemy : typeOrEnemy?.type;
+  const p = ENEMY_DEFS[type]?.targetPriority;
+  if (Array.isArray(p)) return p;
+  if (p === 'warband') return ['warband', 'structures', 'goal'];
+  if (p === 'structures') return ['structures', 'warband', 'goal'];
+  return ['goal'];
+}
+
+/** Primary target kind for telegraph badges. */
+export function getEnemyPrimaryTarget(type) {
+  return getEnemyTargetPriority(type)[0] ?? 'goal';
+}
+
+/** Gold plundered when an enemy breaches the fortress hoard. Scales with enemy reward. */
+export function getEnemyGoldSteal(enemy, currentGold = Infinity) {
+  if (!enemy || currentGold <= 0) return 0;
+  const def = ENEMY_DEFS[enemy.type] ?? ENEMY_DEFS[ENEMY_TYPES.DRAUGR];
+  const base = Number.isFinite(enemy.reward) ? enemy.reward : def.reward;
+  const mult = def.plunderMult ?? 1.25;
+  const amount = Math.round(base * mult);
+  return Math.min(currentGold, Math.max(1, amount));
+}
+
+/** Extra gold lost when an assault ends in defeat (sack + remaining raiders). */
+export function computeAssaultDefeatGoldRaid(remainingGold, aliveEnemies = []) {
+  if (remainingGold <= 0) return 0;
+  let raid = Math.floor(remainingGold * 0.55);
+  for (const e of aliveEnemies) {
+    if (e?.alive && !e.reached) raid += getEnemyGoldSteal(e, remainingGold - raid);
+  }
+  return Math.min(remainingGold, Math.max(0, raid));
+}
 
 export class Enemy {
   constructor(path, type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
@@ -323,9 +363,9 @@ export class Enemy {
     if (hpRatio < 0.50) ctx.filter = 'none';  // only reset when filter was applied
     ctx.restore();
 
-    // Warband / structure priority telegraph (Warg, Mara, Jötunn)
-    const _prio = ENEMY_DEFS[this.type]?.targetPriority;
-    if ((_prio === 'warband' || _prio === 'structures') && !this.isBoss && this.alive) {
+    // Target-priority telegraph (first priority in chain)
+    const _prio = getEnemyPrimaryTarget(this.type);
+    if (!this.isBoss && this.alive && _prio !== 'goal') {
       const pulse = 0.5 + Math.sin(performance.now() * 0.012 + this.x * 0.1) * 0.5;
       const icon  = _prio === 'warband' ? '⚔' : '▣';
       const label = _prio === 'warband' ? 'HEROES' : 'WALLS';
@@ -338,6 +378,15 @@ export class Enemy {
       ctx.font = '5px monospace';
       ctx.fillStyle = `rgba(232,215,181,${0.35 + pulse * 0.35})`;
       ctx.fillText(label, this.x, this.y - this.radius - 2);
+    } else if (!this.isBoss && this.alive && _prio === 'goal') {
+      const pulse = 0.5 + Math.sin(performance.now() * 0.014 + this.x * 0.1) * 0.5;
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(240,180,50,${0.55 + pulse * 0.45})`;
+      ctx.fillText('◎', this.x, this.y - this.radius - 9);
+      ctx.font = '5px monospace';
+      ctx.fillStyle = `rgba(232,215,181,${0.35 + pulse * 0.35})`;
+      ctx.fillText('GOLD', this.x, this.y - this.radius - 2);
     }
 
     // Wounded shimmer — slow red outline (25-50% HP)

@@ -41,7 +41,9 @@ src/
     traitGameplay.js   trait combat hooks
     names.js           Procedural Norse name pool
   campaign/
-    save.js            Campaign state load/save (ns-campaign-v2)
+    save.js            Campaign state load/save (slot-aware)
+    saveSlots.js       10 slots, meta, legacy migration, delete
+    sessionSave.js     Per-slot session resume blobs
     events.js          Named between-battle events
     campaignMaps.js    100 maps, assaults, waves, portal/boss tiers
     campaignFronts.js  four-front command map, assault names, per-front unlock
@@ -52,11 +54,14 @@ src/
     fortress.js        Fortress upgrade nodes + bonus aggregation
 ```
 
-### Persistence
+### Persistence (localStorage)
 
-| Key | Content |
-|---|---|
-| `ns-campaign-v2` | Full campaign: roster, stars, gold reserve, fortress levels, bonds, chronicle, **`campaignProgress`** |
+| Key | Purpose |
+|-----|---------|
+| `ns-slots-meta-v1` | 10-slot summary metadata |
+| `ns-campaign-v2-slot-{0–9}` | Full campaign per slot: roster, stars, gold reserve, fortress, bonds, chronicle, **`campaignProgress`** |
+| `ns-session-v1-slot-{0–9}` | Resume blob (gamePhase, map, node, combat) per slot |
+| `ns-campaign-v2` | Legacy single save — migrated to slot 0 once |
 | `northern-shield-hs` | Leaderboard (8 entries) — skirmish |
 | `northern-shield-ach` | Achievement IDs |
 | `northern-shield-map-best` | Per-map best records — skirmish |
@@ -77,7 +82,7 @@ src/
 }
 ```
 
-Mid-battle state is not saved — refresh during an assault resets that assault. Field state between assaults is saved on assault victory (fallen heroes' slots merged back into `fieldState`).
+Mid-battle state **can** be resumed via `sessionSave.js` per slot (`beforeunload` + phase transitions). Refresh without session blob still resets the current assault. Field state between assaults is saved on assault victory (fallen heroes' slots merged back into `fieldState`).
 
 ### Domain model (implemented)
 
@@ -94,7 +99,8 @@ campaignFronts        procedural assault layout per map (four fronts, boss on so
 ### Game phases
 
 ```
-campaignSelect → nodeMap (command map) → playing → debrief → betweenBattles (War Camp) → nodeMap
+slotSelect → campaignSelect → nodeMap (command map) → playing → debrief → betweenBattles (War Camp) → nodeMap
+     ↑ SAVES button / boot
                     ↓ (optional anytime)
               betweenBattles (WAR CAMP button on command map)
                     ↓
@@ -145,12 +151,13 @@ Roguelite full-reset is not a goal. Maze-building is **skirmish-only**; campaign
 
 ---
 
-## 6. Migration status (2026-06-24)
+## 6. Migration status (2026-06-25)
 
 | Planned (original doc) | Status |
 |---|---|
 | Defender entity + roster | ✅ `src/roster/` |
 | Campaign save | ✅ `src/campaign/save.js` |
+| **10 save slots + session resume** | ✅ `saveSlots.js`, `sessionSave.js` |
 | **100-map campaign** | ✅ `campaignMaps.js`, `campaignRun.js` |
 | Chronicle | ✅ `src/chronicle/` |
 | Fortress upgrades | ✅ `src/fortress/` |
@@ -158,7 +165,9 @@ Roguelite full-reset is not a goal. Maze-building is **skirmish-only**; campaign
 | Story systems (bonds, scars, retirement, legacy) | ✅ |
 | Combat UI: left dock tabs | ✅ WARBAND \| STRUCTURES |
 | Pathless campaign combat | ✅ |
-| Between-battles as roster home | ✅ War Camp mandatory between assaults |
+| Between-battles as roster home | ✅ War Camp mandatory; tabbed Warband/Recruit/Fortress |
+| Fortress gates (campaign) | ✅ `CELL.GATE` in ring gaps; skirmish walls unchanged |
+| Gold plunder on breach | ✅ `getEnemyGoldSteal()` |
 | Command map (four fronts) | ✅ `campaignFronts.js` |
 | Assault casualty respawn | ✅ `mergeFallenHeroesIntoFieldState` |
 | Hero movement (pathless) | ✅ `heroMovement.js` |
@@ -173,7 +182,7 @@ Run from `tower-defense/` (repo root):
 npx vitest run
 ```
 
-Covers towers, enemies, bullets, pathing, campaign save, campaign maps/fronts, hero movement, roster logic, hero/structure levels, UI theme (**118 tests**).
+Covers towers, enemies, bullets, pathing, campaign save, **save slots**, campaign maps/fronts, hero movement, roster logic, hero/structure levels, UI theme, gold plunder (**133 tests**).
 
 ---
 

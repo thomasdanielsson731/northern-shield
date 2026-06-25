@@ -1,9 +1,9 @@
 import { createEmptyCampaignProgress } from './campaignMaps.js';
-import { validateCampaignState } from './saveValidate.js';
+import { validateCampaignState, simpleSaveChecksum } from './saveValidate.js';
+import { slotCampaignKey } from './saveSlots.js';
 
 export const CAMPAIGN_KEY = 'ns-campaign-v2';
 export const SETTINGS_KEY = 'ns-settings';
-
 const LEGACY_HS_KEY       = 'northern-shield-hs';
 const LEGACY_ACH_KEY      = 'northern-shield-ach';
 const LEGACY_MAP_BEST_KEY = 'northern-shield-map-best';
@@ -12,8 +12,8 @@ export function createNewCampaign() {
   return {
     version:            2,
     campaignId:         generateId(),
-    battlesCompleted:   0,
-    goldReserve:        0,
+    createdAt:          Date.now(),
+    battlesCompleted:   0,    goldReserve:        0,
     stars:              0,
     defenders:          [],
     fortressUpgrades:   { barracks: 0, armory: 0, watchtower: 0, wallworks: 0 },
@@ -26,23 +26,28 @@ export function createNewCampaign() {
     bonds:              [],
     coDeployments:      {},
     legacyBonuses:      {},
+    uiHints:            {},
     campaignProgress:   createEmptyCampaignProgress(),
   };
 }
 
 // storage parameter is injectable for testing; defaults to the global localStorage
-export function saveCampaign(state, storage = localStorage) {
-  try { storage.setItem(CAMPAIGN_KEY, JSON.stringify(state)); } catch {}
+export function saveCampaign(state, storage = localStorage, slotIndex = null) {
+  try {
+    const payload = { ...state, _ck: simpleSaveChecksum(state) };
+    const key = slotIndex != null ? slotCampaignKey(slotIndex) : CAMPAIGN_KEY;
+    storage.setItem(key, JSON.stringify(payload));
+  } catch {}
 }
 
-export function loadCampaign(storage = localStorage) {
+export function loadCampaign(storage = localStorage, slotIndex = null) {
   try {
-    const raw = JSON.parse(storage.getItem(CAMPAIGN_KEY));
+    const key = slotIndex != null ? slotCampaignKey(slotIndex) : CAMPAIGN_KEY;
+    const raw = JSON.parse(storage.getItem(key));
     return validateCampaignState(raw);
   } catch {}
   return null;
 }
-
 // Reads v1 keys, writes a v2 campaign, deletes v1 keys.
 // Returns the v2 campaign (existing or newly created).
 export function migrateLegacySaves(storage = localStorage) {

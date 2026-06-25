@@ -42,7 +42,8 @@ export const CELL = {
   WALL:  1,
   SPAWN: 2,
   GOAL:  3,
-  TOWER: 4
+  TOWER: 4,
+  GATE:  5,
 };
 
 export class Grid {
@@ -74,7 +75,7 @@ export class Grid {
 
   isWalkable(col, row) {
     const cell = this.getCell(col, row);
-    return cell !== null && cell !== CELL.WALL && cell !== CELL.TOWER;
+    return cell !== null && cell !== CELL.WALL && cell !== CELL.GATE && cell !== CELL.TOWER;
   }
 
   pixelToCell(x, y) {
@@ -154,6 +155,8 @@ export class Grid {
         if (type === CELL.WALL) {
           const adj = this._wallAdjacency(col, row);
           this._drawWallBlock(ctx, x, y, cs, adj);
+        } else if (type === CELL.GATE) {
+          this._drawGate(ctx, x, y, cs, time);
         } else if (type === CELL.SPAWN) {
           this._drawSpawn(ctx, x, y, cs, time);
         } else if (type === CELL.GOAL) {
@@ -1033,8 +1036,40 @@ export class Grid {
     }
   }
 
+  _drawGate(ctx, x, y, cs, time) {
+    const cx = x + cs / 2;
+    const cy = y + cs / 2;
+    const pulse = 0.45 + Math.sin(time * 2.2) * 0.25;
+    ctx.save();
+    ctx.fillStyle = '#120a04';
+    ctx.fillRect(x, y, cs, cs);
+    // Stone posts flanking the opening
+    ctx.fillStyle = '#4a3828';
+    ctx.fillRect(x + 1, y + 2, cs * 0.22, cs - 4);
+    ctx.fillRect(x + cs - cs * 0.22 - 1, y + 2, cs * 0.22, cs - 4);
+    // Portcullis bars
+    ctx.strokeStyle = `rgba(180,140,70,${0.55 + pulse * 0.35})`;
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) {
+      const bx = x + cs * 0.28 + i * cs * 0.14;
+      ctx.beginPath();
+      ctx.moveTo(bx, y + cs * 0.18);
+      ctx.lineTo(bx, y + cs * 0.82);
+      ctx.stroke();
+    }
+    // Lantern glow
+    ctx.fillStyle = `rgba(255,200,80,${0.35 + pulse * 0.25})`;
+    ctx.beginPath();
+    ctx.arc(cx, y + cs * 0.22, cs * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   _wallAdjacency(col, row) {
-    const w = (c, r) => { const t = this.getCell(c, r); return t === CELL.WALL || t === CELL.TOWER; };
+    const w = (c, r) => {
+      const t = this.getCell(c, r);
+      return t === CELL.WALL || t === CELL.GATE || t === CELL.TOWER;
+    };
     return (w(col, row - 1) ? 1 : 0)   // N
          | (w(col + 1, row) ? 2 : 0)   // E
          | (w(col, row + 1) ? 4 : 0)   // S

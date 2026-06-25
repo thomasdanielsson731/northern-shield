@@ -66,7 +66,9 @@ src/
     uiTheme.js         — UI_COLORS palette, War Room top bar chrome, stat chips
     assaultPanels.js   — deployed field card HP bars, status labels
   campaign/
-    save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
+    save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); slot-aware keys via saveSlots
+    saveSlots.js       — 10 slots, ns-slots-meta-v1, migrateLegacyToSlots(), deleteSlot(), slot meta summaries
+    sessionSave.js     — validateSessionState(), per-slot ns-session-v1-slot-N resume blobs
     events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
     campaignMaps.js    — 100 campaign maps, assault/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
     campaignFronts.js  — four-front command map, assault codenames, per-front unlock, getNextAvailableAssault()
@@ -99,9 +101,10 @@ tests/
   uiTheme.unit.test.js
   assaultPanels.unit.test.js
   roster.unit.test.js
+  saveSlots.unit.test.js
 ```
 
-**118 tests** — run `npx vitest run` from repo root.
+**133 tests** — run `npx vitest run` from repo root.
 
 ### Key facts about game.js
 
@@ -125,7 +128,7 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 
 Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL={col:24, row:15}` (fortress at center), `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100` (skirmish only). `BASE_W` and `BASE_H` derived from constants; `computeScale()` prefers filling viewport height.
 
-**Campaign combat:** `pathless: true` on campaign presets — no `drawPath()`, no BFS on placement. Heroes place anywhere; structures/walls only in fortress zone (Chebyshev ≤10 from `GOAL`). Enemies use direct targeting (`pickEnemyTarget`, `targetPriority` in `ENEMY_DEFS`).
+**Campaign combat:** `pathless: true` on campaign presets — no `drawPath()`, no BFS on placement. Heroes place anywhere; structures/gates only in fortress zone (Chebyshev ≤10 from `GOAL`). Enemies use direct targeting (`pickEnemyTarget`, `targetPriority` in `ENEMY_DEFS`). Breach steals gold via `getEnemyGoldSteal()`.
 
 **Skirmish combat:** BFS path validation on every tower/wall placement. Path drawn. Multi-portal maps (`multiPortal:true`) reserve extra `CELL.SPAWN` cells; all portal paths validated on placement.
 
@@ -196,16 +199,28 @@ Two towers are gated behind stars earned in the current run: `isjatten` requires
 
 Sell = 50% of base cost. High scores persist to `localStorage` under key `northern-shield-hs` (max 8 entries).
 
-### Wall system
+### Fortress gate system (campaign)
 
-Two wall types in `TOWER_BUILD_ITEMS`:
+Campaign build bar exposes **Fortress Gate** only (`TOWER_BUILD_ITEMS` → `CELL.GATE`):
+
+| Constant | Value | Notes |
+|---|---|---|
+| `GATE_COST` | 28g | Purchased in fortress zone |
+| `GATE_HP` | 120 | Gate combat HP |
+| `FORTRESS_RING_R` | 5 | Chebyshev radius of pre-placed fortress wall ring |
+
+Gates may be placed only in **ring gap cells** (fixed outer ring with openings). `wallData` still keys `'${col}_${row}'` entries for ring walls and gates (`isGate` flag). Skirmish mode retains legacy player-placed walls (`CELL.WALL`) with BFS validation.
+
+### Wall system (skirmish)
+
+Skirmish / non-pathless presets still use Shield Wall + Reinforce Wall where applicable:
 
 | Type | Key | Cost | Behaviour |
 |---|---|---|---|
-| Shield Wall | `1` | `WALL_COST=12` | Permanent; 4 upgrade levels; HP `[100,120,140,160,180]`; upgrade costs `[8,14,20,28]`; loses `WALL_WAVE_DAMAGE=5` HP each wave if adjacent to path |
-| Reinforce Wall | `2` | `REINFORCE_COST=30` | Temporary; crumbles after `REINFORCE_WAVES=3` wave-end ticks; `wallData[key].reinforce` countdown; no upgrade path |
+| Shield Wall | `1` | `WALL_COST=12` | Permanent; 4 upgrade levels; HP `[100,120,140,160,180]` |
+| Reinforce Wall | `2` | `REINFORCE_COST=30` | Temporary; crumbles after `REINFORCE_WAVES=3` |
 
-`wallData` is a `'${col}_${row}'`-keyed object. Each entry: `{ level, hp, maxHp, reinforce? }`. `wallFrostCells` is a cached list of cells adjacent to walls (rebuilt when `wallFrostDirty=true`).
+`wallFrostCells` caches cells adjacent to walls (rebuilt when `wallFrostDirty=true`). Wallworks fortress upgrade still reduces wall cost / adds adjacent slow on skirmish walls.
 
 ### Rune system
 
@@ -237,9 +252,15 @@ Active synergies are shown in the tower detail panel and rendered as a colored g
 
 ### Campaign boundary and game phases
 
-`gamePhase`: `'campaignSelect' | 'nodeMap' | 'mapSelect' | 'playing' | 'debrief' | 'betweenBattles'`.
+`gamePhase`: `'slotSelect' | 'campaignSelect' | 'nodeMap' | 'mapSelect' | 'playing' | 'debrief' | 'betweenBattles'`.
 
-**Default flow:** `campaignSelect` → **command map** (`nodeMap`) → `startCampaignNodeBattle()` → `playing` (2–3 waves; waves 2+ auto-advance) → `debrief` → **War Camp** (`betweenBattles`) → command map or next assault. **Skirmish Mode** → `mapSelect` → legacy 3-map skirmish.
+**Boot flow:** `slotSelect` → pick/create/delete slot → `campaignSelect` or resume session → …
+
+**Default campaign flow:** `campaignSelect` → **command map** (`nodeMap`) → `startCampaignNodeBattle()` → `playing` (2–3 waves; waves 2+ auto-advance) → `debrief` → **War Camp** (`betweenBattles`) → command map or next assault. **Skirmish Mode** → `mapSelect` → legacy 3-map skirmish.
+
+**War Camp UI:** Right panel tabs `WAR_CAMP_TABS` — `warband` (roster + equip), `recruit`, `fortress` (field structures + fortress upgrade nodes). Left panel: battle report. Content starts at `META_SCREEN_TOP` (below slim meta bar). No duplicate center meta banner on campaign screens.
+
+**Persistence:** `persistCampaign()` writes slot campaign + session; `serializeGameSession()` / `restoreGameSession()` for mid-assault resume. Keys: `ns-slots-meta-v1`, `ns-campaign-v2-slot-{0–9}`, `ns-session-v1-slot-{0–9}`; legacy `ns-campaign-v2` → slot 0 via `migrateLegacyToSlots()`.
 
 Player-facing term: **Assault** (code still uses `nodeIndex` / `nodesCleared` in saves).
 
@@ -327,7 +348,7 @@ The wave status line in the HUD is colored by threat: boss waves are red (`#ff40
 
 **Skirmish / non-pathless presets only:** Before any wall or tower placement, BFS checks that a valid path from `SPAWN` to `GOAL` still exists (and all active portal paths on multi-portal maps). Rejected placements show `pathBlockFlash`.
 
-**Campaign pathless mode:** No BFS check. Structures/walls restricted to fortress zone (`isInFortressZone`). Heroes place anywhere on empty cells. Field caps: max 10 heroes + 10 structures (`campaignRun.js`).
+**Campaign pathless mode:** No BFS check. Structures/gates restricted to fortress zone (`isInFortressZone`). Heroes place anywhere on empty cells. Field caps: max 10 heroes + 10 structures (`campaignRun.js`). Breach plunder: `gold -= getEnemyGoldSteal(enemy, gold)`; tracked as `goldStolen` for debrief.
 
 ### Design philosophy
 
@@ -337,7 +358,7 @@ For code work, the relevant constraints:
 
 **Non-negotiable rules:**
 - **Path validity (skirmish)** — BFS check before every placement when `!isPathlessMode()`. Never bypass on skirmish presets.
-- **Fortress zone (campaign)** — structures/walls only near GOAL; heroes anywhere.
+- **Fortress zone (campaign)** — structures/gates only near GOAL; heroes anywhere.
 - **Field caps (campaign)** — max 10 heroes + 10 structures on field; persisted in `campaignProgress.mapRuns[].fieldState`.
 - **Node casualties** — hero deaths during node assault go to `_nodeCasualties`; cleared on node victory. Roster defender persists.
 - **Battle vs. campaign separation** — `initBattle()` resets combat state; field restored via `restoreCampaignField()`. Never add cross-node state to `restartCombatState()` incorrectly.
@@ -348,7 +369,7 @@ For code work, the relevant constraints:
 - `saveCampaign()` must never be called synchronously inside `requestAnimationFrame` or the game tick — localStorage serialization blocks the main thread.
 - Defender progression state (XP, career level, talents, equipment) lives on the `Defender` entity (`src/roster/defender.js`). The `Tower` class mirrors only what it needs for combat (`_careerLevel`, `name`, `defenderId`).
 - The `Tower` class is a **combat instance**; `Defender` is a **character entity**. Keep them separate — `Tower` holds position/firestate; `Defender` holds career/XP.
-- `localStorage` writes use the `ns-campaign-v2` schema (see ARCHITECTURE.md §3.3). Include a `version` field. Provide a migration path from v1 keys.
+- `localStorage` writes use per-slot campaign keys (`ns-campaign-v2-slot-N`) and session keys (`ns-session-v1-slot-N`). Include a `version` field. Legacy `ns-campaign-v2` migrates to slot 0.
 
 ### Roster and career system
 

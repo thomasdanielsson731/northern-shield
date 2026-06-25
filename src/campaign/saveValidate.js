@@ -22,6 +22,16 @@ export function validateCampaignState(state) {
 
   if (!Array.isArray(s.defenders)) s.defenders = [];
   if (!Array.isArray(s.equipmentInventory)) s.equipmentInventory = [];
+  if (!s.uiHints || typeof s.uiHints !== 'object') s.uiHints = {};
 
   return s;
+}
+
+/** Lightweight client checksum — tamper deterrence only. */
+export function simpleSaveChecksum(state) {
+  const p = state?.campaignProgress;
+  const payload = `${state?.goldReserve ?? 0}|${state?.stars ?? 0}|${p?.mapsUnlocked ?? 1}|${(p?.clearedMaps ?? []).length}`;
+  let h = 0;
+  for (let i = 0; i < payload.length; i++) h = ((h << 5) - h + payload.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
 }

@@ -24,29 +24,30 @@ export function hexRgb(hex) {
 }
 
 /** War Room top bar — iron panel with gold corner trims and bottom accent. */
-export function drawWarRoomBarBg(ctx, x, y, w, h) {
+export function drawWarRoomBarBg(ctx, x, y, w, h, opacity = 1) {
   const { r, g, b } = hexRgb(UI_COLORS.iron);
+  const o = Math.max(0, Math.min(1, opacity));
 
   // Drop shadow under bar
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.65)';
   ctx.shadowBlur = 6;
   ctx.shadowOffsetY = 2;
-  ctx.fillStyle = `rgba(${r},${g},${b},0.98)`;
+  ctx.fillStyle = `rgba(${r},${g},${b},${0.98 * o})`;
   ctx.fillRect(x, y, w, h);
   ctx.restore();
 
   const grad = ctx.createLinearGradient(x, y, x, y + h);
-  grad.addColorStop(0, `rgba(${r + 28},${g + 24},${b + 30},1)`);
-  grad.addColorStop(0.35, `rgba(${r + 8},${g + 6},${b + 10},0.98)`);
-  grad.addColorStop(1, `rgba(${Math.max(0, r - 6)},${Math.max(0, g - 4)},${Math.max(0, b - 2)},1)`);
+  grad.addColorStop(0, `rgba(${r + 28},${g + 24},${b + 30},${o})`);
+  grad.addColorStop(0.35, `rgba(${r + 8},${g + 6},${b + 10},${0.98 * o})`);
+  grad.addColorStop(1, `rgba(${Math.max(0, r - 6)},${Math.max(0, g - 4)},${Math.max(0, b - 2)},${o})`);
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
   // Gold frame outline — makes palette change obvious vs old dark glass
   ctx.strokeStyle = UI_COLORS.gold;
   ctx.lineWidth = 1.2;
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 0.92 * o;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
   ctx.globalAlpha = 1;
 
@@ -71,8 +72,8 @@ export function drawWarRoomBarBg(ctx, x, y, w, h) {
   ctx.shadowColor = 'rgba(212,175,55,0.55)';
   ctx.shadowBlur = 4;
   const corners = [
-    [[x, y + cl, x, y, x + cl, y]],
-    [[x + w, y + cl, x + w, y, x + w - cl, y]],
+    [[x, y + cl], [x, y], [x + cl, y]],
+    [[x + w, y + cl], [x + w, y], [x + w - cl, y]],
   ];
   for (const [a, b, c] of corners) {
     ctx.beginPath();
@@ -159,26 +160,41 @@ export function drawTopBarShield(ctx, cx, cy, size, fill = UI_COLORS.warband) {
   ctx.restore();
 }
 
+/** Compact campaign meta screens — sits below frame, above content. */
+export const META_TOP_BAR_COMPACT_H = 28;
+
 /** War Room header strip for campaign meta screens (select, command map, War Camp, debrief). */
-export function drawMetaTopBar(ctx, baseW, frameThick, { subtitle, center, chips = [] }) {
-  const ph = 40;
+export function drawMetaTopBar(ctx, baseW, frameThick, { subtitle, center, chips = [], compact = true }) {
+  const ph = compact ? META_TOP_BAR_COMPACT_H : 40;
   const y = frameThick;
   const w = baseW - frameThick * 2;
   drawWarRoomBarBg(ctx, frameThick, y, w, ph);
   const barMid = y + Math.round(ph / 2);
+  const shieldR = compact ? 5 : 7;
+  const textY1 = barMid - (compact ? 2 : 4);
+  const textY2 = compact ? barMid + 5 : barMid + 6;
 
-  drawTopBarShield(ctx, frameThick + 14, barMid, 7);
-  drawTopBarTextBlock(ctx, frameThick + 28, barMid - 4, 'NORTHERN SHIELD', subtitle ?? '', {
-    line1Color: UI_COLORS.gold,
-    line2Color: 'rgba(232,215,181,0.55)',
-  });
+  drawTopBarShield(ctx, frameThick + 12, barMid, shieldR);
+  ctx.textAlign = 'left';
+  ctx.font = compact ? 'bold 7.5px monospace' : 'bold 8px monospace';
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText('NORTHERN SHIELD', frameThick + 24, textY1);
+  if (subtitle) {
+    ctx.font = compact ? '6px monospace' : '6.5px monospace';
+    ctx.fillStyle = 'rgba(232,215,181,0.55)';
+    ctx.fillText(subtitle, frameThick + 24, textY2);
+  }
 
   if (center?.line1) {
-    drawTopBarTextBlock(ctx, baseW / 2, barMid - 4, center.line1, center.line2 ?? '', {
-      line1Color: center.color ?? UI_COLORS.parchment,
-      line2Color: center.line2Color ?? 'rgba(232,215,181,0.55)',
-      align: 'center',
-    });
+    ctx.textAlign = 'center';
+    ctx.font = compact ? 'bold 7.5px monospace' : 'bold 8px monospace';
+    ctx.fillStyle = center.color ?? UI_COLORS.parchment;
+    ctx.fillText(center.line1, baseW / 2, textY1);
+    if (center.line2) {
+      ctx.font = compact ? '6px monospace' : '6.5px monospace';
+      ctx.fillStyle = center.line2Color ?? 'rgba(232,215,181,0.55)';
+      ctx.fillText(center.line2, baseW / 2, textY2);
+    }
   }
 
   const chipH = ph - 6;
