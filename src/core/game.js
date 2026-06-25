@@ -13,10 +13,13 @@ import {
 } from '../ui/uiTheme.js';
 import {
   drawDeployedFieldCard,
+  drawPanelHpBar,
   getFieldUnitStatus,
   getHeroHpFrac,
   getStructureHpFrac,
 } from '../ui/assaultPanels.js';
+import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
+import { ONBOARDING, getOnboardingHint, advanceOnboarding } from '../campaign/onboarding.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { migrateLegacySaves, saveCampaign } from '../campaign/save.js';
 import { getAvailableEvent } from '../campaign/events.js';
@@ -545,7 +548,11 @@ let _finalKillRings      = [];         // white expanding rings at last-enemy ki
 let _uiToast             = null;       // { text, timer, color } — placement / cap feedback
 let _mapUnlockFx         = null;       // { name, timer } — region unlock celebration
 let _commandMapHintTimer = 0;          // first command-map onboarding
+let _onboardingStep      = ONBOARDING.NONE;
 let _mapAutoStartEnabled = false;      // skirmish mapSelect 10s auto-start only
+let _eventOutcomeToast   = null;      // { text, timer, color }
+let _chronicleBattleFilter = null;    // null | 'victory' | 'defeat' | 'boss'
+let _goldPoolsHintTimer  = 0;
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
 let _prevSynergyMap      = new Map();  // tower ID → previous _synergy key (for change detection)
 let _panelDirty          = true;       // redraw right panel flag
@@ -1383,16 +1390,19 @@ function drawHeroCombatHpBar(tower) {
   if (tower.combatHp == null || tower.combatMaxHp == null) return;
   if (!isPathlessMode()) return;
   const frac = Math.max(0, Math.min(1, tower.combatHp / tower.combatMaxHp));
-  const barW = CELL_SIZE * 0.85;
-  const barH = 3;
+  const barW = CELL_SIZE * 0.9;
+  const barH = frac < 0.25 ? 4 : 3;
   const bx = tower.x - barW / 2;
-  const by = tower.y + CELL_SIZE * 0.38;
+  const by = tower.y + CELL_SIZE * 0.36;
+  const accent = frac > 0.5 ? UI_COLORS.fortress : frac > 0.25 ? UI_COLORS.gold : UI_COLORS.threat;
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(bx, by, barW, barH);
-  const col = frac > 0.5 ? '#50e870' : frac > 0.25 ? '#e8c040' : '#ff5040';
-  ctx.fillStyle = col;
-  ctx.fillRect(bx, by, barW * frac, barH);
+  drawPanelHpBar(ctx, bx, by, barW, barH, frac, accent);
+  if (frac < 0.25 && frac > 0) {
+    const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
+    ctx.strokeStyle = `rgba(169,50,38,${0.35 + pulse * 0.45})`;
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(bx - 1, by - 1, barW + 2, barH + 2);
+  }
   ctx.restore();
 }
 
@@ -3723,6 +3733,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     if (towerType === TOWER_TYPES.BARRACKS) _buildBtnsCache = null;
     _synergyDirty = true;
     _hintSeen.firstPlacement = true;  // dismiss first-placement hint on any tower placed
+    if (_isHeroType) _onboardingStep = advanceOnboarding(_onboardingStep, 'placedHero');
     // Synergy ring: Berserker placed next to a wall
     if (towerType === TOWER_TYPES.BERSERK) {
       const adjBW = [[col-1,row],[col+1,row],[col,row-1],[col,row+1]];
@@ -4107,6 +4118,9 @@ canvas.addEventListener('mousedown', e => {
               _commandMapHintTimer = 480;
               _hintSeen.commandMap = true;
             }
+            if (btn.mapIndex === 0 && (battlesCompleted === 0 || !(ensureCampaignProgress().mapRuns[0]?.nodesCleared?.length))) {
+              _onboardingStep = ONBOARDING.COMMAND_MAP;
+            }
             gamePhase = 'nodeMap';
           }
           return;
@@ -4127,12 +4141,14 @@ canvas.addEventListener('mousedown', e => {
             _pendingNextAssaultNode = getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex ?? null;
             enterCampaignWarCamp();
           } else if (btn.action === 'openFront') {
+            _onboardingStep = advanceOnboarding(_onboardingStep, 'openFront');
             _commandMapView = 'front';
             _selectedFrontId = btn.frontId;
           } else if (btn.action === 'closeFront') {
             _commandMapView = 'overview';
             _selectedFrontId = null;
           } else if (btn.action === 'attack') {
+            _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
             startCampaignNodeBattle(_campaignMapIndex, btn.nodeIndex);
           }
           return;
@@ -4219,6 +4235,9 @@ canvas.addEventListener('mousedown', e => {
               mouseY >= _cb.y && mouseY <= _cb.y + _cb.h) {
             if (_cb.action === 'filterDef') {
               _chronicleDefFilter = _chronicleDefFilter === _cb.defenderId ? null : _cb.defenderId;
+              _chronicleScrollY = 0;
+            } else if (_cb.action === 'filterBattle') {
+              _chronicleBattleFilter = _chronicleBattleFilter === _cb.battleFilter ? null : _cb.battleFilter;
               _chronicleScrollY = 0;
             }
             return;
@@ -5704,8 +5723,7 @@ function drawStructurePortrait(cx, cy, itemId, size, affordable) {
     return;
   }
   const glyphs = {
-    wall: null, reinforce: null, mine: '◆', watchtower: '◎',
-    ballista: '⟫', runeshrine: 'ᛟ', barracks: '⚑',
+    wall: null, reinforce: null,
   };
   if (itemId === 'wall' || itemId === 'reinforce') {
     ctx.save();
@@ -5723,13 +5741,7 @@ function drawStructurePortrait(cx, cy, itemId, size, affordable) {
     ctx.restore();
     return;
   }
-  ctx.save();
-  if (!affordable) ctx.globalAlpha = 0.42;
-  ctx.font = `${Math.floor(size * 0.50)}px sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(glyphs[itemId] ?? '◆', cx, cy + 1);
-  ctx.textBaseline = 'alphabetic';
-  ctx.restore();
+  drawProceduralStructureIcon(ctx, cx, cy, itemId, size, affordable);
 }
 
 /** Mockup-style threat intel card on the battlefield during active waves. */
@@ -7631,6 +7643,72 @@ function drawCommandMapHint() {
   ctx.restore();
 }
 
+function drawOnboardingBanner() {
+  if (_onboardingStep <= ONBOARDING.NONE || _onboardingStep >= ONBOARDING.DONE) return;
+  if (gamePhase !== 'nodeMap' && gamePhase !== 'playing') return;
+  const hint = getOnboardingHint(_onboardingStep);
+  if (!hint) return;
+  const W = BASE_W;
+  const y = gamePhase === 'playing' ? GRID_TOP + 14 : 58;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(8,6,14,0.90)';
+  ctx.beginPath(); ctx.roundRect(48, y - 10, W - 96, 28, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(212,175,55,0.45)'; ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.font = 'bold 7px monospace';
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText(hint.title, W / 2, y + 2);
+  ctx.font = '6.5px monospace';
+  ctx.fillStyle = UI_COLORS.parchment;
+  ctx.fillText(hint.line, W / 2, y + 12);
+  ctx.restore();
+}
+
+function drawEquipCeremony() {
+  if (!_equipFlash || _equipFlash.timer <= 0) return;
+  if (_equipFlash.timer > 36) {
+    const alpha = Math.min(0.22, (_equipFlash.timer - 36) / 12 * 0.22);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = _equipFlash.color;
+    ctx.fillRect(GRID_LEFT, 12, BASE_W - GRID_LEFT - 4, BASE_H - 24);
+    ctx.restore();
+  }
+  const def = _roster?.defenders?.find(d => d.id === _equipFlash.defenderId);
+  if (def && _equipFlash.timer > 20) {
+    const alpha = Math.min(1, (_equipFlash.timer - 20) / 15);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = _equipFlash.color;
+    ctx.shadowColor = _equipFlash.color;
+    ctx.shadowBlur = 10;
+    ctx.fillText(`⚔ ${def.name} — EQUIPPED`, BASE_W / 2, 120);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+function drawEventOutcomeToast() {
+  if (!_eventOutcomeToast || _eventOutcomeToast.timer <= 0) return;
+  _eventOutcomeToast.timer--;
+  const alpha = Math.min(1, _eventOutcomeToast.timer / 20);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 9px monospace';
+  const tw = ctx.measureText(_eventOutcomeToast.text).width;
+  const cx = BASE_W / 2, cy = 100;
+  ctx.fillStyle = 'rgba(6,3,14,0.92)';
+  ctx.beginPath(); ctx.roundRect(cx - tw / 2 - 14, cy - 14, tw + 28, 26, 5); ctx.fill();
+  ctx.fillStyle = _eventOutcomeToast.color ?? UI_COLORS.gold;
+  ctx.fillText(_eventOutcomeToast.text, cx, cy + 2);
+  ctx.restore();
+  if (_eventOutcomeToast.timer <= 0) _eventOutcomeToast = null;
+}
+
 function drawTopBar() {
   autoNextBtn = null;
   const FT  = FRAME_THICK;
@@ -7922,7 +8000,10 @@ function drawTopBar() {
   ];
   if (goldReserve > 0) {
     chips.push({ w: 44, icon: '◈', value: `${goldReserve}g`, label: 'RESERVE', accent: UI_COLORS.parchment, pulse: 0.7 });
-    if (!_hintSeen.goldPools && battlesCompleted <= 1) _hintSeen.goldPools = true;
+    if (!_hintSeen.goldPools && battlesCompleted <= 1) {
+      _goldPoolsHintTimer = 200;
+      _hintSeen.goldPools = true;
+    }
   }
   if (stars > 0 || waveState !== 'active') {
     chips.push({ w: 44, icon: '✦', value: String(stars), label: 'STARS', accent: UI_COLORS.gold, pulse: 0.9 });
@@ -9834,20 +9915,51 @@ function drawChronicleOverlay() {
     chipX += cw + CHIP_GAP;
   }
 
-  ctx.strokeStyle = 'rgba(180,140,60,0.25)'; ctx.lineWidth = 0.6;
-  ctx.beginPath(); ctx.moveTo(PAD, chipY + CHIP_H + 4); ctx.lineTo(W - PAD, chipY + CHIP_H + 4); ctx.stroke();
+  // Battle-type filter row (boss / all battles)
+  const typeY = chipY + CHIP_H + 5;
+  const typeChips = [
+    { id: null, lbl: 'ALL B' },
+    { id: 'boss', lbl: 'BOSS' },
+  ];
+  let typeX = PAD;
+  ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(120,100,70,0.45)';
+  ctx.textAlign = 'left';
+  ctx.fillText('BATTLES:', PAD, typeY + 9);
+  typeX = PAD + 44;
+  for (const tc of typeChips) {
+    const cw = ctx.measureText(tc.lbl).width + 10;
+    const isActive = _chronicleBattleFilter === tc.id;
+    ctx.fillStyle   = isActive ? 'rgba(200,120,60,0.25)' : 'rgba(30,20,10,0.5)';
+    ctx.strokeStyle = isActive ? 'rgba(200,120,60,0.7)' : 'rgba(80,60,30,0.3)';
+    ctx.lineWidth   = isActive ? 1 : 0.5;
+    ctx.beginPath(); ctx.roundRect(typeX, typeY, cw, CHIP_H, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isActive ? '#e8a040' : 'rgba(140,120,70,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText(tc.lbl, typeX + cw / 2, typeY + 10);
+    _chronicleBtns.push({ x: typeX, y: typeY, w: cw, h: CHIP_H, action: 'filterBattle', battleFilter: tc.id });
+    typeX += cw + CHIP_GAP;
+  }
 
-  const listTop = chipY + CHIP_H + 10;
+  ctx.strokeStyle = 'rgba(180,140,60,0.25)'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(PAD, typeY + CHIP_H + 4); ctx.lineTo(W - PAD, typeY + CHIP_H + 4); ctx.stroke();
+
+  const listTop = typeY + CHIP_H + 10;
   const listH   = H - listTop - 18;
 
   // Filtered battle list for cache key + build call
-  const filteredBattles = _chronicleDefFilter
-    ? [...battles].reverse().filter(b =>
-        b.defenders?.some(d => d.defenderId === _chronicleDefFilter) ||
-        b.mvpId === _chronicleDefFilter ||
-        b.lastStand?.defenderId === _chronicleDefFilter ||
-        b.bossKills?.some(bk => bk.killerId === _chronicleDefFilter))
-    : [...battles].reverse();
+  const filteredBattles = (() => {
+    let list = _chronicleDefFilter
+      ? [...battles].reverse().filter(b =>
+          b.defenders?.some(d => d.defenderId === _chronicleDefFilter) ||
+          b.mvpId === _chronicleDefFilter ||
+          b.lastStand?.defenderId === _chronicleDefFilter ||
+          b.bossKills?.some(bk => bk.killerId === _chronicleDefFilter))
+      : [...battles].reverse();
+    if (_chronicleBattleFilter === 'boss') {
+      list = list.filter(b => (b.bossKills?.length ?? 0) > 0);
+    }
+    return list;
+  })();
 
   // Invalidate prose line cache on new battle
   if (_chronicleProseCache.size > 0 && _chronicleProseCache.get('__battleCount') !== battles.length) {
@@ -9858,7 +9970,7 @@ function drawChronicleOverlay() {
   const _campaignBonds = _campaignState?.bonds ?? [];
 
   // ── Offscreen canvas cache ────────────────────────────────────────────────
-  const _ocKey = `${filteredBattles.length}_${_chronicleDefFilter ?? ''}_${hallH.length}_${hallF.length}_${_campaignBonds.length}`;
+  const _ocKey = `${filteredBattles.length}_${_chronicleDefFilter ?? ''}_${_chronicleBattleFilter ?? ''}_${hallH.length}_${hallF.length}_${_campaignBonds.length}`;
   if (!_chronicleOC) {
     _chronicleOC    = document.createElement('canvas');
     _chronicleOCCtx = _chronicleOC.getContext('2d');
@@ -10211,7 +10323,7 @@ function drawDebrief() {
       ctx.fillText(`⚔ BOSS LOOT: ${_lootDef.name.toUpperCase()}`, hx, hy);
       ctx.shadowBlur = 0;
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,170,120,0.55)';
-      ctx.fillText(_lootDef.desc ?? '', hx, hy + 10);
+      ctx.fillText(`${_lootDef.desc ?? ''}  ·  Equip in War Camp`, hx, hy + 10);
       hy += 18;
     }
   }
@@ -10691,6 +10803,12 @@ function applyCampaignEventChoice(eventId, choice) {
     });
   }
   _lastResolvedEventTitle = _pendingCampaignEvent?.title ?? null;
+  const _spent = _goldBefore !== undefined && goldReserve < _goldBefore ? _goldBefore - goldReserve : 0;
+  _eventOutcomeToast = {
+    text: _spent > 0 ? `${_lastResolvedEventTitle} — −${_spent}g reserve` : `${_lastResolvedEventTitle} resolved`,
+    timer: 120,
+    color: UI_COLORS.gold,
+  };
   _pendingCampaignEvent = null;
   sfxEventResolve();
 }
@@ -11859,6 +11977,15 @@ function drawCampaignSelect() {
   _campaignSelectBtns = [];
   const W = BASE_W, H = BASE_H;
   const progress = ensureCampaignProgress();
+  if (!_hintSeen.campaignPager) {
+    for (let i = 0; i < CAMPAIGN_MAP_COUNT; i++) {
+      if (i < progress.mapsUnlocked && !progress.clearedMaps.includes(i)) {
+        _campaignMapPage = Math.floor(i / CAMPAIGN_MAPS_PER_PAGE);
+        break;
+      }
+    }
+    _hintSeen.campaignPager = true;
+  }
   const pageStart = _campaignMapPage * CAMPAIGN_MAPS_PER_PAGE;
   const pageEnd   = Math.min(CAMPAIGN_MAP_COUNT, pageStart + CAMPAIGN_MAPS_PER_PAGE);
 
@@ -12071,7 +12198,9 @@ function _drawCommandMapOverview(progress, run, mapX, mapY, mapW, mapH, portalCo
       hasActive ? 0.88 : secured ? 0.7 : 0.45, 6);
 
     if (hasActive) {
-      ctx.strokeStyle = 'rgba(220,170,60,0.55)'; ctx.lineWidth = 1;
+      const pulse = 0.45 + Math.sin(performance.now() * 0.006) * 0.35;
+      ctx.strokeStyle = `rgba(220,170,60,${0.30 + pulse * 0.50})`;
+      ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.roundRect(pos.x + 1, pos.y + 1, cardW - 2, cardH - 2, 5); ctx.stroke();
     }
 
@@ -12494,6 +12623,7 @@ function draw() {
   if (gamePhase === 'nodeMap') {
     drawNodeMap();
     drawCommandMapHint();
+    drawOnboardingBanner();
     drawMapUnlockCelebration();
     drawFrames();
     drawCampaignMetaBar({ line1: 'COMMAND MAP', line2: 'Select front · launch assault', color: UI_COLORS.fortress });
@@ -12523,6 +12653,8 @@ function draw() {
 
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
+    drawEquipCeremony();
+    drawEventOutcomeToast();
     drawFrames();
     drawCampaignMetaBar({ line1: 'WAR CAMP', line2: 'Recruit · upgrade · equip', color: UI_COLORS.gold });
     if (_showChronicle)    drawChronicleOverlay();
@@ -13484,6 +13616,7 @@ function draw() {
   if (gamePhase === 'playing') {
     drawTopBar();
     drawUiToast();
+    drawOnboardingBanner();
   }
   ctx.restore();
 }

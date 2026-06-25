@@ -1,4 +1,5 @@
 import { createEmptyCampaignProgress } from './campaignMaps.js';
+import { validateCampaignState } from './saveValidate.js';
 
 export const CAMPAIGN_KEY = 'ns-campaign-v2';
 export const SETTINGS_KEY = 'ns-settings';
@@ -37,7 +38,7 @@ export function saveCampaign(state, storage = localStorage) {
 export function loadCampaign(storage = localStorage) {
   try {
     const raw = JSON.parse(storage.getItem(CAMPAIGN_KEY));
-    if (raw?.version === 2) return raw;
+    return validateCampaignState(raw);
   } catch {}
   return null;
 }
