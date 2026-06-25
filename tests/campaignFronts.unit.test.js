@@ -5,6 +5,8 @@ import {
   getAssaultCodename,
   isAssaultUnlocked,
   getNextAvailableAssault,
+  getFrontStatusLine,
+  getFrontStatusSymbol,
 } from '../src/campaign/campaignFronts.js';
 import { createEmptyCampaignProgress, getNodeCountForMap } from '../src/campaign/campaignMaps.js';
 
@@ -74,5 +76,16 @@ describe('campaignFronts', () => {
       );
       expect(active).toBe(true);
     }
+  });
+
+  it('front status lines include non-color symbols for a11y', () => {
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    const west = layout.fronts.west;
+    expect(getFrontStatusSymbol(west, p, 0)).toBe('▶');
+    expect(getFrontStatusLine(west, p, 0, 1)).toMatch(/^▶ /);
+    p.mapRuns[0] = { nodesCleared: west.assaults.map(a => a.nodeIndex), fieldState: null };
+    expect(getFrontStatusSymbol(west, p, 0)).toBe('✓');
+    expect(getFrontStatusLine(west, p, 0, 1)).toBe('✓ SECURED');
   });
 });

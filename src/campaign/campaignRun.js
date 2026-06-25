@@ -91,6 +91,7 @@ export function clearNodeCasualties(casualties) {
 
 /** After node victory — update campaign progress and save field. */
 export function completeNode(progress, mapIndex, nodeIndex, fieldState) {
+  const prevMapsUnlocked = progress.mapsUnlocked;
   const run = getMapRun(progress, mapIndex);
   if (!run.nodesCleared.includes(nodeIndex)) {
     run.nodesCleared.push(nodeIndex);
@@ -98,20 +99,24 @@ export function completeNode(progress, mapIndex, nodeIndex, fieldState) {
   }
   run.fieldState = fieldState;
 
+  let mapCompleted = false;
+  let newRegionUnlocked = null;
   const meta = getCampaignMapMeta(mapIndex);
   if (meta && isMapComplete(progress, mapIndex)) {
+    mapCompleted = true;
     if (!progress.clearedMaps.includes(mapIndex)) {
       progress.clearedMaps.push(mapIndex);
       progress.clearedMaps.sort((a, b) => a - b);
     }
     const nextUnlock = mapIndex + 2;
-    if (nextUnlock > progress.mapsUnlocked) {
+    if (nextUnlock > prevMapsUnlocked) {
       progress.mapsUnlocked = Math.min(nextUnlock, 100);
+      newRegionUnlocked = progress.mapsUnlocked - 1;
     }
   }
   progress.currentMapIndex  = mapIndex;
   progress.currentNodeIndex = null;
-  return progress;
+  return { progress, mapCompleted, newRegionUnlocked };
 }
 
 export function startNodeAttack(progress, mapIndex, nodeIndex) {

@@ -323,6 +323,23 @@ export class Enemy {
     if (hpRatio < 0.50) ctx.filter = 'none';  // only reset when filter was applied
     ctx.restore();
 
+    // Warband / structure priority telegraph (Warg, Mara, Jötunn)
+    const _prio = ENEMY_DEFS[this.type]?.targetPriority;
+    if ((_prio === 'warband' || _prio === 'structures') && !this.isBoss && this.alive) {
+      const pulse = 0.5 + Math.sin(performance.now() * 0.012 + this.x * 0.1) * 0.5;
+      const icon  = _prio === 'warband' ? '⚔' : '▣';
+      const label = _prio === 'warband' ? 'HEROES' : 'WALLS';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = _prio === 'warband'
+        ? `rgba(224,128,64,${0.55 + pulse * 0.45})`
+        : `rgba(128,160,192,${0.55 + pulse * 0.45})`;
+      ctx.fillText(icon, this.x, this.y - this.radius - 9);
+      ctx.font = '5px monospace';
+      ctx.fillStyle = `rgba(232,215,181,${0.35 + pulse * 0.35})`;
+      ctx.fillText(label, this.x, this.y - this.radius - 2);
+    }
+
     // Wounded shimmer — slow red outline (25-50% HP)
     if (hpRatio >= 0.25 && hpRatio < 0.50) {
       const shimmer = 0.5 + Math.sin(performance.now() * 0.007) * 0.5;

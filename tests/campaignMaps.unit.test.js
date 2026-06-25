@@ -129,11 +129,14 @@ describe('campaignRun field limits', () => {
   it('completeNode unlocks next map when final node cleared', () => {
     const p = createEmptyCampaignProgress();
     const nodeCount = getNodeCountForMap(0);
+    let lastResult = null;
     for (let n = 0; n < nodeCount; n++) {
-      completeNode(p, 0, n, { gold: 100, towers: [], walls: {} });
+      lastResult = completeNode(p, 0, n, { gold: 100, towers: [], walls: {} });
     }
     expect(p.mapsUnlocked).toBe(2);
     expect(p.clearedMaps).toContain(0);
+    expect(lastResult.mapCompleted).toBe(true);
+    expect(lastResult.newRegionUnlocked).toBe(1);
   });
 
   it('mergeFallenHeroesIntoFieldState restores fallen deploy slots', () => {

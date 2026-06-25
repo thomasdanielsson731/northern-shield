@@ -158,3 +158,35 @@ export function drawTopBarShield(ctx, cx, cy, size, fill = UI_COLORS.warband) {
   ctx.fillText('✦', cx, cy + 2);
   ctx.restore();
 }
+
+/** War Room header strip for campaign meta screens (select, command map, War Camp, debrief). */
+export function drawMetaTopBar(ctx, baseW, frameThick, { subtitle, center, chips = [] }) {
+  const ph = 40;
+  const y = frameThick;
+  const w = baseW - frameThick * 2;
+  drawWarRoomBarBg(ctx, frameThick, y, w, ph);
+  const barMid = y + Math.round(ph / 2);
+
+  drawTopBarShield(ctx, frameThick + 14, barMid, 7);
+  drawTopBarTextBlock(ctx, frameThick + 28, barMid - 4, 'NORTHERN SHIELD', subtitle ?? '', {
+    line1Color: UI_COLORS.gold,
+    line2Color: 'rgba(232,215,181,0.55)',
+  });
+
+  if (center?.line1) {
+    drawTopBarTextBlock(ctx, baseW / 2, barMid - 4, center.line1, center.line2 ?? '', {
+      line1Color: center.color ?? UI_COLORS.parchment,
+      line2Color: center.line2Color ?? 'rgba(232,215,181,0.55)',
+      align: 'center',
+    });
+  }
+
+  const chipH = ph - 6;
+  const chipY = y + 3;
+  let chipRight = baseW - frameThick - 6;
+  for (let i = chips.length - 1; i >= 0; i--) {
+    const c = chips[i];
+    drawTopStatChip(ctx, chipRight - c.w, chipY, c.w, chipH, c);
+    chipRight -= c.w + 4;
+  }
+}

@@ -9,6 +9,7 @@ import {
   drawTopStatChip,
   drawTopBarTextBlock,
   drawTopBarShield,
+  drawMetaTopBar,
 } from '../ui/uiTheme.js';
 import {
   drawDeployedFieldCard,
@@ -540,6 +541,11 @@ let _equipFlash          = null;     // { defenderId, timer, color } equip cerem
 let _btParticles         = null;     // ambient snow/ember pool (betweenBattles)
 let _starDeployFanfare   = new Set(); // star-gated types that already played unlock fanfare
 let _waveDoneRingFx      = null;       // { x, y, r, alpha } — expanding ring on last-kill
+let _finalKillRings      = [];         // white expanding rings at last-enemy kill coords
+let _uiToast             = null;       // { text, timer, color } — placement / cap feedback
+let _mapUnlockFx         = null;       // { name, timer } — region unlock celebration
+let _commandMapHintTimer = 0;          // first command-map onboarding
+let _mapAutoStartEnabled = false;      // skirmish mapSelect 10s auto-start only
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
 let _prevSynergyMap      = new Map();  // tower ID → previous _synergy key (for change detection)
 let _panelDirty          = true;       // redraw right panel flag
@@ -947,6 +953,7 @@ function restartCombatState() {
   _bossLootBanner    = null;
   _lastBossLootItemId = null;
   _waveDoneRingFx   = null;
+  _finalKillRings   = [];
   _prevSynergyMap.clear();
   _frostTrailCells.clear();
   _panelDirty       = true;
@@ -1497,7 +1504,15 @@ function finishCampaignNodeVictory() {
   if (_assaultDeploySnapshot) {
     field = mergeFallenHeroesIntoFieldState(field, _assaultDeploySnapshot);
   }
-  completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
+  const _completeMeta = completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
+  progress = _completeMeta.progress;
+  if (_completeMeta.newRegionUnlocked != null) {
+    const _unlockMeta = getCampaignMapMeta(_completeMeta.newRegionUnlocked);
+    _mapUnlockFx = {
+      name: _unlockMeta?.name ?? `Region ${_completeMeta.newRegionUnlocked + 1}`,
+      timer: 300,
+    };
+  }
   _campaignState.campaignProgress = progress;
   _campaignState.stars = stars;
   _campaignState.runeInventory = { ...runeInventory };
@@ -1586,6 +1601,7 @@ function killHeroInCombat(tower) {
     val: tower.name ? `${tower.name} FALLEN` : 'FALLEN',
     life: 120, maxLife: 120, color: '#ff4040', large: true, suffix: '', raw: true,
   });
+  screenShake = Math.max(screenShake, 4);
   spawnParticles(tower.x, tower.y, '#ff3030', 14);
   const def = _roster?.find(tower.defenderId);
   if (def) def.deployed = false;
@@ -1953,6 +1969,27 @@ function drawImpactFlashes() {
     _wrf.r     += 2.4;
     _wrf.alpha -= 0.020;
     if (_wrf.alpha <= 0) _waveDoneRingFx = null;
+  }
+
+  // Final-kill white ring at enemy death location (FENRIR-23)
+  let _fkr = _finalKillRings.length;
+  while (_fkr--) {
+    const ring = _finalKillRings[_fkr];
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,255,255,${ring.alpha})`;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = `rgba(255,255,255,${ring.alpha * 0.7})`;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    ring.r += 3.2;
+    ring.alpha -= 0.028;
+    if (ring.alpha <= 0) {
+      _finalKillRings[_fkr] = _finalKillRings[_finalKillRings.length - 1];
+      _finalKillRings.length--;
+    }
   }
 }
 
@@ -3569,8 +3606,14 @@ function tryPlaceAt(col, row, mode, towerType) {
   }
 
   if (_campaignNodeMode) {
-    if (_isHeroType && !canPlaceHero(towers)) return false;
-    if (_isStructure && !canPlaceStructure(towers)) return false;
+    if (_isHeroType && !canPlaceHero(towers)) {
+      _uiToast = { text: `FIELD FULL — ${MAX_FIELD_HEROES}/${MAX_FIELD_HEROES} heroes deployed`, timer: 100, color: UI_COLORS.warband };
+      return false;
+    }
+    if (_isStructure && !canPlaceStructure(towers)) {
+      _uiToast = { text: `FIELD FULL — ${MAX_FIELD_STRUCTURES}/${MAX_FIELD_STRUCTURES} structures deployed`, timer: 100, color: UI_COLORS.fortress };
+      return false;
+    }
   }
 
   const fp = (mode === CELL.TOWER) ? (TOWER_DEFS[towerType]?.footprint ?? {w:1,h:1}) : {w:1,h:1};
@@ -4052,6 +4095,7 @@ canvas.addEventListener('mousedown', e => {
             _campaignMapPage = Math.min(maxPage, _campaignMapPage + 1);
           } else if (btn.action === 'skirmish') {
             _campaignRegionActive = false;
+            _mapAutoStartEnabled = true;
             gamePhase = 'mapSelect';
             mapAutoTimerStart = performance.now();
           } else if (btn.action === 'openMap') {
@@ -4059,6 +4103,10 @@ canvas.addEventListener('mousedown', e => {
             _campaignRegionActive = true;
             _commandMapView = 'overview';
             _selectedFrontId = null;
+            if (btn.mapIndex === 0 && !_hintSeen.commandMap) {
+              _commandMapHintTimer = 480;
+              _hintSeen.commandMap = true;
+            }
             gamePhase = 'nodeMap';
           }
           return;
@@ -4101,9 +4149,13 @@ canvas.addEventListener('mousedown', e => {
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
           if (selectedMapIdx === btn.idx) {
             initGame(PRESET_MAPS[btn.idx]);
+            _mapAutoStartEnabled = false;
+            mapAutoTimerStart = 0;
+          } else if (_mapAutoStartEnabled) {
+            selectedMapIdx = btn.idx;
+            mapAutoTimerStart = performance.now();
           } else {
             selectedMapIdx = btn.idx;
-            mapAutoTimerStart = performance.now(); // reset on card switch
           }
           return;
         }
@@ -4461,7 +4513,7 @@ canvas.addEventListener('mousedown', e => {
           mouseX >= restartBtn.x && mouseX <= restartBtn.x + restartBtn.w &&
           mouseY >= restartBtn.y && mouseY <= restartBtn.y + restartBtn.h) {
         if (restartBtn.action === 'back') { showTopList = false; }
-        else                             { gamePhase = 'mapSelect'; mapAutoTimerStart = performance.now(); selectedMapIdx = 0; }
+        else                             { gamePhase = 'mapSelect'; _mapAutoStartEnabled = true; mapAutoTimerStart = performance.now(); selectedMapIdx = 0; }
       }
       if (!showTopList && toplistBtn &&
           mouseX >= toplistBtn.x && mouseX <= toplistBtn.x + toplistBtn.w &&
@@ -5136,6 +5188,7 @@ function update() {
           spawnParticles(killX, killY, '#f5d030', 22);
           spawnParticles(killX, killY, '#ffffff', 8);
           impactFlashes.push({ x: killX, y: killY, maxR: 36, life: 1, color: '#f5d030' });
+          _finalKillRings.push({ x: killX, y: killY, r: 4, alpha: 1.0 });
         }
       }
     }
@@ -7489,6 +7542,95 @@ function drawRuneCartridge(rx, ry, rw, rh) {
   ctx.textAlign = 'left';
 }
 
+function _metaBarChips() {
+  const chips = [];
+  if (stars > 0) {
+    chips.push({ w: 44, icon: '✦', value: String(stars), label: 'STARS', accent: UI_COLORS.gold, pulse: 0.9 });
+  }
+  if (goldReserve > 0) {
+    chips.push({ w: 48, icon: '◈', value: `${goldReserve}g`, label: 'RESERVE', accent: UI_COLORS.parchment, pulse: 0.75 });
+  }
+  return chips;
+}
+
+function drawCampaignMetaBar(center) {
+  let subtitle = 'CAMPAIGN';
+  if (gamePhase === 'nodeMap') {
+    subtitle = getCampaignMapMeta(_campaignMapIndex)?.name ?? 'COMMAND MAP';
+  } else if (gamePhase === 'betweenBattles') {
+    subtitle = isCampaignWarCamp() ? 'WAR CAMP' : 'BETWEEN BATTLES';
+  } else if (gamePhase === 'debrief') {
+    subtitle = 'AFTER ACTION';
+  } else if (gamePhase === 'mapSelect') {
+    subtitle = 'SKIRMISH MODE';
+  } else if (gamePhase === 'campaignSelect') {
+    subtitle = '100 REGIONS';
+  }
+  drawMetaTopBar(ctx, BASE_W, FRAME_THICK, { subtitle, center, chips: _metaBarChips() });
+}
+
+function drawUiToast() {
+  if (!_uiToast || _uiToast.timer <= 0) return;
+  _uiToast.timer--;
+  const alpha = Math.min(1, _uiToast.timer / 25);
+  const cx = GRID_LEFT + (COLS * CELL_SIZE) / 2;
+  const cy = GRID_TOP + 18;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  const tw = ctx.measureText(_uiToast.text).width;
+  ctx.fillStyle = 'rgba(6,3,14,0.92)';
+  ctx.beginPath(); ctx.roundRect(cx - tw / 2 - 12, cy - 12, tw + 24, 22, 4); ctx.fill();
+  ctx.fillStyle = _uiToast.color ?? UI_COLORS.gold;
+  ctx.fillText(_uiToast.text, cx, cy + 3);
+  ctx.restore();
+  if (_uiToast.timer <= 0) _uiToast = null;
+}
+
+function drawMapUnlockCelebration() {
+  if (!_mapUnlockFx || _mapUnlockFx.timer <= 0) return;
+  _mapUnlockFx.timer--;
+  const alpha = Math.min(1, _mapUnlockFx.timer / 40);
+  const W = BASE_W, H = BASE_H;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(4,2,10,0.72)';
+  ctx.fillRect(0, H * 0.35, W, 80);
+  ctx.font = 'bold 16px monospace';
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.shadowColor = 'rgba(212,175,55,0.8)';
+  ctx.shadowBlur = 12;
+  ctx.fillText('NEW REGION UNLOCKED', W / 2, H * 0.35 + 32);
+  ctx.font = '11px monospace';
+  ctx.fillStyle = UI_COLORS.parchment;
+  ctx.shadowBlur = 4;
+  ctx.fillText(_mapUnlockFx.name, W / 2, H * 0.35 + 52);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  if (_mapUnlockFx.timer <= 0) _mapUnlockFx = null;
+}
+
+function drawCommandMapHint() {
+  if (_commandMapHintTimer <= 0 || gamePhase !== 'nodeMap') return;
+  _commandMapHintTimer--;
+  const alpha = Math.min(1, _commandMapHintTimer / 60);
+  const W = BASE_W;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(6,12,6,0.88)';
+  ctx.beginPath(); ctx.roundRect(40, 58, W - 80, 36, 5); ctx.fill();
+  ctx.font = 'bold 8px monospace';
+  ctx.fillStyle = '#a0e090';
+  ctx.fillText('COMMAND MAP — pick a front (N/E/S/W) then launch your first assault', W / 2, 74);
+  ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(140,200,120,0.85)';
+  ctx.fillText('War Camp opens after each victory for recruit · upgrade · equip', W / 2, 86);
+  ctx.restore();
+}
+
 function drawTopBar() {
   autoNextBtn = null;
   const FT  = FRAME_THICK;
@@ -9641,8 +9783,8 @@ function drawChronicleOverlay() {
   let chipX = PAD;
   const chipY = PAD + 40;
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.50)'; ctx.textAlign = 'left';
-  ctx.fillText('FILTER:', PAD, chipY + 10);
-  chipX = PAD + 42;
+  ctx.fillText(uniqueDefs.length > 0 ? 'FILTER ▾' : 'FILTER:', PAD, chipY + 10);
+  chipX = PAD + (uniqueDefs.length > 0 ? 52 : 42);
   // Build or reuse chip width cache (skip measureText every frame)
   if (!_chronicleChipCache || _chronicleChipCache.battleCount !== battles.length) {
     ctx.font = '7px monospace';
@@ -10649,9 +10791,14 @@ function drawBetweenBattles() {
   ctx.fillText(isCampaignWarCamp()
     ? `Assault waves: ${waveNumber}${_nodeWavePlan ? ` / ${_nodeWavePlan.waves.length}` : ''}`
     : `Waves cleared: ${waveNumber}`, lcx, lpY + 90);
+  if (isCampaignWarCamp() && _lastAssaultCasualtyCount > 0 && isVictory) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(255,120,100,0.85)';
+    ctx.fillText(`⚔ ${_lastAssaultCasualtyCount} fallen — rally at deploy slots next assault`, lcx, lpY + 104);
+  }
   ctx.fillStyle = 'rgba(200,170,100,0.8)';
-  ctx.fillText(`Enemies slain: ${slain}`, lcx, lpY + 105);
-  ctx.fillText(`Gold earned: +${goldEarned}g  (+${_reserveContrib}g reserve)`, lcx, lpY + 120);
+  ctx.fillText(`Enemies slain: ${slain}`, lcx, lpY + (_lastAssaultCasualtyCount > 0 && isCampaignWarCamp() && isVictory ? 119 : 105));
+  ctx.fillText(`Gold earned: +${goldEarned}g  (+${_reserveContrib}g reserve)`, lcx, lpY + (_lastAssaultCasualtyCount > 0 && isCampaignWarCamp() && isVictory ? 134 : 120));
   if (goldReserve > 0) {
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,60,0.40)';
     ctx.fillText(`◆ ${goldReserve}g total in treasury`, lcx, lpY + 130);
@@ -12298,7 +12445,7 @@ function drawMapSelect() {
     ctx.fillText(selected ? '▶  PLAY' : 'SELECT', btnX + btnW / 2, btnY + btnH / 2 + 4);
 
     // Auto-start countdown arc on the selected card's PLAY button
-    if (selected && mapAutoTimerStart > 0) {
+    if (selected && _mapAutoStartEnabled && mapAutoTimerStart > 0) {
       const acx = btnX + btnW / 2, acy = btnY + btnH / 2;
       const ar  = btnW / 2 + 6;
       const startA = -Math.PI / 2;
@@ -12321,7 +12468,7 @@ function drawMapSelect() {
   ctx.fillText('Click to select  ·  click again to play', W / 2, startY + cardH + 20);
 
   // Auto-start countdown text
-  if (mapAutoTimerStart > 0 && autoRemaining > 0) {
+  if (_mapAutoStartEnabled && mapAutoTimerStart > 0 && autoRemaining > 0) {
     const autoSecs = Math.ceil(autoRemaining / 1000);
     ctx.font      = '10px monospace';
     ctx.fillStyle = `rgba(200,160,60,${0.45 + (1 - autoFrac) * 0.45})`;
@@ -12339,13 +12486,17 @@ function draw() {
   if (gamePhase === 'campaignSelect') {
     drawCampaignSelect();
     drawFrames();
+    drawCampaignMetaBar({ line1: 'CAMPAIGN', line2: 'Pathless assaults + War Camp', color: UI_COLORS.gold });
     ctx.restore();
     return;
   }
 
   if (gamePhase === 'nodeMap') {
     drawNodeMap();
+    drawCommandMapHint();
+    drawMapUnlockCelebration();
     drawFrames();
+    drawCampaignMetaBar({ line1: 'COMMAND MAP', line2: 'Select front · launch assault', color: UI_COLORS.fortress });
     ctx.restore();
     return;
   }
@@ -12353,13 +12504,19 @@ function draw() {
   if (gamePhase === 'mapSelect') {
     drawMapSelect();
     drawFrames();
+    drawCampaignMetaBar({ line1: 'CLASSIC TD', line2: '100-wave maze skirmish', color: UI_COLORS.warband });
     ctx.restore();
     return;
   }
 
   if (gamePhase === 'debrief') {
     drawDebrief();
+    drawMapUnlockCelebration();
     drawFrames();
+    const _dai = getAssaultInfo(_campaignMapIndex, _campaignNodeIndex);
+    drawCampaignMetaBar(_returnToNodeMapAfterDebrief && _dai
+      ? { line1: _dai.codename.toUpperCase(), line2: 'ASSAULT COMPLETE', color: UI_COLORS.threat }
+      : { line1: 'DEBRIEF', line2: `${waveNumber} waves cleared`, color: UI_COLORS.parchment });
     ctx.restore();
     return;
   }
@@ -12367,6 +12524,7 @@ function draw() {
   if (gamePhase === 'betweenBattles') {
     drawBetweenBattles();
     drawFrames();
+    drawCampaignMetaBar({ line1: 'WAR CAMP', line2: 'Recruit · upgrade · equip', color: UI_COLORS.gold });
     if (_showChronicle)    drawChronicleOverlay();
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
     if (_retirementCeremony) drawRetirementCeremony(_retirementCeremony);
@@ -13323,7 +13481,10 @@ function draw() {
   drawHelpOverlay();
 
   drawFrames();
-  if (gamePhase === 'playing') drawTopBar();
+  if (gamePhase === 'playing') {
+    drawTopBar();
+    drawUiToast();
+  }
   ctx.restore();
 }
 
@@ -13744,10 +13905,12 @@ function drawDragGhost() {
 function gameLoop() {
   // Terrain is always procedural — no sprite rebake needed
   // Auto-launch countdown on map select screen
-  if (gamePhase === 'mapSelect') {
+  if (gamePhase === 'mapSelect' && _mapAutoStartEnabled) {
     if (mapAutoTimerStart === 0) mapAutoTimerStart = performance.now();
     if (performance.now() - mapAutoTimerStart >= MAP_AUTO_DELAY) {
       initGame(PRESET_MAPS[selectedMapIdx]);
+      _mapAutoStartEnabled = false;
+      mapAutoTimerStart = 0;
     }
   }
   _frameTick++;

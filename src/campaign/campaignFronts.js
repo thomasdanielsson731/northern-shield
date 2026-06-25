@@ -157,27 +157,41 @@ export function getNextAvailableAssault(progress, mapIndex, preferFrontId = null
   return null;
 }
 
-/** Short status line for command map front card. */
-export function getFrontStatusLine(front, progress, mapIndex, portalCount) {
+/** Non-color status prefix — SECURED/BLOCKED/active (accessibility). */
+export function getFrontStatusSymbol(front, progress, mapIndex) {
   const run = getMapRun(progress, mapIndex);
   const { cleared, total } = getFrontProgress(front, run.nodesCleared);
-  if (cleared >= total) return 'SECURED';
+  if (cleared >= total) return '✓';
+  const active = front.assaults.find(
+    a => !run.nodesCleared.includes(a.nodeIndex)
+      && isAssaultUnlocked(progress, mapIndex, a.nodeIndex)
+  );
+  if (!active) return '✕';
+  return '▶';
+}
+
+/** Short status line for command map front card. */
+export function getFrontStatusLine(front, progress, mapIndex, portalCount) {
+  const sym = getFrontStatusSymbol(front, progress, mapIndex);
+  const run = getMapRun(progress, mapIndex);
+  const { cleared, total } = getFrontProgress(front, run.nodesCleared);
+  if (cleared >= total) return `${sym} SECURED`;
 
   const active = front.assaults.find(
     a => !run.nodesCleared.includes(a.nodeIndex)
       && isAssaultUnlocked(progress, mapIndex, a.nodeIndex)
   );
-  if (!active) return 'BLOCKED';
+  if (!active) return `${sym} BLOCKED`;
 
-  if (active.isBoss) return active.codename;
+  if (active.isBoss) return `${sym} ${active.codename}`;
 
   const frontId = front.assaults[0]?.frontId;
-  if (frontId === 'west') return active.tierLabel;
-  if (frontId === 'north' && portalCount >= 2) return 'Portal 2';
-  if (frontId === 'east' && portalCount >= 1) return 'Portal 1';
-  if (frontId === 'south' && !active.isBoss) return 'Cult activity';
+  if (frontId === 'west') return `${sym} ${active.tierLabel}`;
+  if (frontId === 'north' && portalCount >= 2) return `${sym} Portal 2`;
+  if (frontId === 'east' && portalCount >= 1) return `${sym} Portal 1`;
+  if (frontId === 'south' && !active.isBoss) return `${sym} Cult activity`;
 
-  return active.codename;
+  return `${sym} ${active.codename}`;
 }
 
 export function getFrontSubtitle(front, progress, mapIndex, portalCount) {
