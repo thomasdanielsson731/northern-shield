@@ -16,6 +16,11 @@ export const TRAIT_DEFS = {
   impulsive:  { id: 'impulsive',  label: 'Impulsive',  desc: 'Strikes before planning' },
   vengeful:   { id: 'vengeful',   label: 'Vengeful',   desc: 'Remembers every loss' },
   devout:     { id: 'devout',     label: 'Devout',     desc: 'Draws strength from faith' },
+  fearless:   { id: 'fearless',   label: 'Fearless',   desc: 'Holds the gate without flinching' },
+  builder:    { id: 'builder',    label: 'Builder',    desc: 'Thinks in stone and timber' },
+  guardian:   { id: 'guardian',   label: 'Guardian',   desc: 'The hoard is their oath' },
+  lucky:      { id: 'lucky',      label: 'Lucky',      desc: 'Fortune favors them' },
+  tactician:  { id: 'tactician',  label: 'Tactician',  desc: 'Reads the battle early' },
 };
 
 // Weighted trait pools per class — more common traits listed multiple times

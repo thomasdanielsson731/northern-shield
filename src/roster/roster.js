@@ -1,5 +1,6 @@
 import { Defender } from './defender.js';
 import { getRandomTrait } from '../chronicle/chronicle.js';
+import { getDefaultFortressRole } from './heroRoles.js';
 
 export class Roster {
   constructor() {
@@ -21,6 +22,7 @@ export class Roster {
     if (!def) {
       def = new Defender({ defenderId: towerId, name: towerName, type: towerType });
       if (!def.trait) def.trait = getRandomTrait(towerType);
+      if (!def.fortressRole) def.fortressRole = getDefaultFortressRole(towerType);
       this.defenders.push(def);
     }
     def.deployed = true;

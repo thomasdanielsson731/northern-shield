@@ -57,8 +57,24 @@ export function serializeFieldState(towers, wallData, gold) {
   };
 }
 
+/** Re-add fallen heroes from assault start so they respawn on the next assault. */
+export function mergeFallenHeroesIntoFieldState(fieldState, deploySnapshot) {
+  if (!deploySnapshot?.towers?.length) return fieldState;
+  const livingIds = new Set(
+    fieldState.towers.filter(t => t.defenderId).map(t => t.defenderId)
+  );
+  const merged = { ...fieldState, towers: [...fieldState.towers] };
+  for (const t of deploySnapshot.towers) {
+    if (!t.defenderId || !isHeroTowerType(t.type)) continue;
+    if (livingIds.has(t.defenderId)) continue;
+    merged.towers.push({ ...t });
+    livingIds.add(t.defenderId);
+  }
+  return merged;
+}
+
 /**
- * Mark a defender as a node casualty (dead until node ends).
+ * Mark a defender as an assault casualty (dead until this assault ends).
  * @param {Set<string>} casualties defenderId set
  */
 export function markNodeCasualty(casualties, defenderId) {

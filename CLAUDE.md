@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Northern Shield** — a Norse dark fantasy **Fortress Defense RPG** built with vanilla JS, HTML5 Canvas, and ES Modules. No game engine. Goal: fast iteration, simple architecture.
 
 **Two play modes:**
-- **Campaign (default):** 100 regions, 10–30 nodes each, 2–3 waves per node, boss on last node. Pathless combat — no maze path, no BFS on placement. Field persists between nodes (max 10 heroes + 10 structures).
+- **Campaign (default):** 100 regions, 10–30 **assaults** each, 2–3 waves per assault, boss on last assault. Pathless combat — no maze path, no BFS on placement. Field persists between assaults (max 10 heroes + 10 structures). **Command map** with four fronts (`campaignFronts.js`).
 - **Skirmish (optional):** Classic 3-map / 100-wave maze TD via **Skirmish Mode** on the campaign select screen. BFS path validation, drawn path, `WAVE_EVENTS`, endless mode after wave 100.
 
 ## Commands
@@ -51,12 +51,17 @@ src/
     defender.js        — Defender class (career XP, careerLevel, career stats); XP/level table; careerBonusForLevel()
     roster.js          — Roster class: link() veteran to a Tower, grantBattleXP(), releaseAll(), load/toJSON
     items.js           — ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses(); equipment slots: 'weapon' | 'armor'
+    heroMovement.js    — melee advance / ranged positioning for pathless combat
+    warbandComposition.js — squad presets, deploy hints, composition warnings
+    heroRoles.js       — fortress role zones (gate/wall/core), role damage mult
+    traitGameplay.js   — trait combat modifiers (getTraitModifiers)
     talents.js         — TALENT_DEFS, CLASS_TALENTS, getTalentBonuses(); 4 talents per class, auto-unlocked at career levels 3/5/8/10
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
     events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
-    campaignMaps.js    — 100 campaign maps, node/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
-    campaignRun.js     — field persistence (10 heroes + 10 structures), node casualties, completeNode()
+    campaignMaps.js    — 100 campaign maps, assault/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
+    campaignFronts.js  — four-front command map, assault codenames, per-front unlock, getNextAvailableAssault()
+    campaignRun.js     — field persistence (10 heroes + 10 structures), assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
   chronicle/
@@ -76,6 +81,8 @@ tests/
   pathing.functional.test.js
   campaign.unit.test.js
   campaignMaps.unit.test.js
+  campaignFronts.unit.test.js
+  heroMovement.unit.test.js
   roster.unit.test.js
 ```
 
@@ -206,17 +213,20 @@ Active synergies are shown in the tower detail panel and rendered as a colored g
 
 `gamePhase`: `'campaignSelect' | 'nodeMap' | 'mapSelect' | 'playing' | 'debrief' | 'betweenBattles'`.
 
-**Default flow:** `campaignSelect` → `nodeMap` → `startCampaignNodeBattle()` → `playing` → `debrief` → `nodeMap`. **War Camp** on node map opens `betweenBattles` for recruit/upgrade/equip (meta layer — buying towers and upgrading chars happens here, not during node assault). **Skirmish Mode** button → `mapSelect` → legacy 3-map skirmish.
+**Default flow:** `campaignSelect` → **command map** (`nodeMap`) → `startCampaignNodeBattle()` → `playing` (2–3 waves; waves 2+ auto-advance) → `debrief` → **War Camp** (`betweenBattles`) → command map or next assault. **Skirmish Mode** → `mapSelect` → legacy 3-map skirmish.
 
-Campaign state (`stars`, `runeInventory`, `battlesCompleted`, Roster, `campaignProgress`) persists across boundaries; combat state resets per node assault (field restored from `mapRuns[].fieldState`).
+Player-facing term: **Assault** (code still uses `nodeIndex` / `nodesCleared` in saves).
+
+Campaign state (`stars`, `runeInventory`, `battlesCompleted`, Roster, `campaignProgress`) persists across boundaries. Combat state resets per assault; field restored from `mapRuns[].fieldState`. Fallen heroes during an assault respawn at their deploy slots on the next assault (`mergeFallenHeroesIntoFieldState` on victory).
 
 Key functions:
-- `startCampaignNodeBattle(mapIndex, nodeIndex)` — loads field, sets `_campaignNodeMode`, builds `_nodeWavePlan`
-- `finishCampaignNodeVictory()` — `completeNode()`, saves `serializeFieldState()`, returns to debrief → node map
+- `getFrontLayout()` / `isAssaultUnlocked()` — command map fronts (`campaignFronts.js`)
+- `startCampaignNodeBattle(mapIndex, nodeIndex)` — snapshots deploy, loads field, `_campaignNodeMode`, `_nodeWavePlan`
+- `finishCampaignNodeVictory()` — merges fallen heroes into field, `completeNode()`, `recordBattleResult(..., { skipDebrief: true })`, debrief
+- `enterCampaignWarCamp()` — debrief → `betweenBattles` for roster management
+- `restoreCampaignField()` — replays saved towers/walls; sets `def.deployed = true`
 - `initCampaign(preset)` — loads `ns-campaign-v2` save, restores stars/runes/roster, calls `initBattle`
-- `initBattle(preset)` — sets map geometry, calls `restartCombatState()`, sets `gamePhase = 'playing'`
-- `restartCombatState()` — clears enemies; returns equipped runes; does NOT touch stars, roster, or campaign field (restored separately in campaign)
-- `recordBattleResult(result)` — skirmish/between-battles outcome; grants XP, saves campaign
+- `recordBattleResult(result, { skipDebrief })` — XP/chronicle; campaign assaults use `skipDebrief` then custom debrief buttons
 
 **Skirmish maps** (via `mapSelect`):
 

@@ -5,11 +5,14 @@ import {
   getPortalCountForMap,
   getWaveCountForNode,
   buildNodeWavePlan,
-  isNodeUnlocked,
   createEmptyCampaignProgress,
   buildCampaignNodeSpawnQueue,
   difficultyToEquivWave,
+  getNodeDifficulty,
+  isTutorialNode,
+  getMarchSuppliesGold,
 } from '../src/campaign/campaignMaps.js';
+import { isAssaultUnlocked, getFrontLayout } from '../src/campaign/campaignFronts.js';
 import {
   MAX_FIELD_HEROES,
   MAX_FIELD_STRUCTURES,
@@ -17,6 +20,8 @@ import {
   canPlaceStructure,
   countFieldHeroes,
   completeNode,
+  serializeFieldState,
+  mergeFallenHeroesIntoFieldState,
 } from '../src/campaign/campaignRun.js';
 
 describe('campaignMaps', () => {
@@ -32,11 +37,37 @@ describe('campaignMaps', () => {
     }
   });
 
-  it('portal count scales with map tier', () => {
+  it('portal count scales with map tier (delayed second portal)', () => {
     expect(getPortalCountForMap(0)).toBe(1);
+    expect(getPortalCountForMap(15)).toBe(1);
     expect(getPortalCountForMap(20)).toBe(2);
     expect(getPortalCountForMap(50)).toBe(3);
     expect(getPortalCountForMap(80)).toBe(4);
+  });
+
+  it('tutorial node is map 0 node 0 only', () => {
+    expect(isTutorialNode(0, 0)).toBe(true);
+    expect(isTutorialNode(0, 1)).toBe(false);
+    expect(isTutorialNode(1, 0)).toBe(false);
+  });
+
+  it('map 0 node 0 has gentler difficulty than before', () => {
+    const diff = getNodeDifficulty(0, 0, getNodeCountForMap(0));
+    expect(diff).toBeLessThan(0.25);
+    const equiv = difficultyToEquivWave(diff * 0.85, 1);
+    expect(equiv).toBeLessThanOrEqual(12);
+  });
+
+  it('tutorial spawn queue is small', () => {
+    const plan = buildNodeWavePlan(0, 0);
+    const q = buildCampaignNodeSpawnQueue(plan.waves[0], 0);
+    expect(q.length).toBeLessThanOrEqual(8);
+    expect(q.every(t => typeof t === 'string')).toBe(true);
+  });
+
+  it('march supplies scale with map index and reserve', () => {
+    expect(getMarchSuppliesGold(0, 0)).toBe(0);
+    expect(getMarchSuppliesGold(10, 200)).toBeGreaterThan(20);
   });
 
   it('each node has 2–3 waves; last node ends with boss', () => {
@@ -54,12 +85,17 @@ describe('campaignMaps', () => {
     }
   });
 
-  it('unlocks nodes sequentially', () => {
+  it('unlocks assaults per front (first on each front open)', () => {
     const p = createEmptyCampaignProgress();
-    expect(isNodeUnlocked(p, 0, 0)).toBe(true);
-    expect(isNodeUnlocked(p, 0, 1)).toBe(false);
-    p.mapRuns[0] = { nodesCleared: [0], fieldState: null };
-    expect(isNodeUnlocked(p, 0, 1)).toBe(true);
+    const layout = getFrontLayout(0);
+    expect(isAssaultUnlocked(p, 0, 0)).toBe(true);
+    expect(isAssaultUnlocked(p, 0, 1)).toBe(true);
+    const westSecond = layout.fronts.west.assaults[1];
+    if (westSecond) {
+      expect(isAssaultUnlocked(p, 0, westSecond.nodeIndex)).toBe(false);
+      p.mapRuns[0] = { nodesCleared: [layout.fronts.west.assaults[0].nodeIndex], fieldState: null };
+      expect(isAssaultUnlocked(p, 0, westSecond.nodeIndex)).toBe(true);
+    }
   });
 
   it('difficulty maps to sensible wave equivalents', () => {
@@ -92,5 +128,25 @@ describe('campaignRun field limits', () => {
     }
     expect(p.mapsUnlocked).toBe(2);
     expect(p.clearedMaps).toContain(0);
+  });
+
+  it('mergeFallenHeroesIntoFieldState restores fallen deploy slots', () => {
+    const snapshot = {
+      gold: 50,
+      towers: [
+        { type: 'berserk', col: 5, row: 5, level: 1, defenderId: 'a', name: 'Erik' },
+        { type: 'valkyrie', col: 8, row: 5, level: 1, defenderId: 'b', name: 'Saga' },
+      ],
+      walls: {},
+    };
+    const afterBattle = {
+      gold: 80,
+      towers: [snapshot.towers[0]],
+      walls: {},
+    };
+    const merged = mergeFallenHeroesIntoFieldState(afterBattle, snapshot);
+    expect(merged.towers).toHaveLength(2);
+    expect(merged.towers.some(t => t.defenderId === 'b')).toBe(true);
+    expect(merged.gold).toBe(80);
   });
 });

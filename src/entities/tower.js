@@ -4,6 +4,7 @@ import { getSpriteScale } from '../config.js';
 import { getDefenderName } from '../roster/names.js';
 import { careerBonusForLevel } from '../roster/defender.js';
 import { getTalentBonuses } from '../roster/talents.js';
+import { isHeroTowerType } from '../campaign/campaignRun.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -543,25 +544,31 @@ export class Tower {
     const _now = performance.now();
     const t    = _now * 0.001;
     const def  = TOWER_DEFS[this.type];
+    const isHero = isHeroTowerType(this.type);
 
-    // Colored baseplate — scaled to footprint
+    // Colored baseplate — structures/siege only (warband heroes walk freely)
+    if (!isHero) {
+      const fpW = this.footprint.w * 14;
+      const fpH = this.footprint.h * 14;
+      ctx.save();
+      ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.32;
+      ctx.fillStyle   = def.color;
+      ctx.beginPath();
+      ctx.roundRect(this.x - fpW / 2, this.y - fpH / 2, fpW, fpH, 3);
+      ctx.fill();
+      ctx.globalAlpha = this.disabledTimer > 0 ? 0.05 : 0.22;
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth   = this.footprint.w > 1 || this.footprint.h > 1 ? 1.5 : 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Ground shadow
     const fpW = this.footprint.w * 14;
     const fpH = this.footprint.h * 14;
-    ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.10 : 0.32;
-    ctx.fillStyle   = def.color;
-    ctx.beginPath();
-    ctx.roundRect(this.x - fpW / 2, this.y - fpH / 2, fpW, fpH, 3);
-    ctx.fill();
-    // Inner highlight rim
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.05 : 0.22;
-    ctx.strokeStyle = def.color;
-    ctx.lineWidth   = this.footprint.w > 1 || this.footprint.h > 1 ? 1.5 : 1;
-    ctx.stroke();
-    ctx.restore();
-
-    // Ground shadow — soft ellipse beneath the sprite; gradient cached by shadowR
-    const shadowR = Math.max(fpW, fpH) / 2 + 2;
+    const shadowR = isHero
+      ? Math.max(6, this.radius + 3)
+      : Math.max(fpW, fpH) / 2 + 2;
     if (shadowR !== this._shadowR) {
       this._shadowR    = shadowR;
       const g = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
@@ -571,7 +578,7 @@ export class Tower {
       this._shadowGrad = g;
     }
     ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.52;
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : (isHero ? 0.38 : 0.52);
     ctx.fillStyle = this._shadowGrad;
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
@@ -992,18 +999,8 @@ export class Tower {
     ctx.fill();
     if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 72, 'rgba(220,180,60,0.9)', this.level)) return;
 
-    const glow    = 0.7 + Math.sin(t * 2.2) * 0.3;
+    const glow     = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
-
-    // Stone pedestal — warm Norse gold-stone
-    ctx.fillStyle = '#8a7030';
-    ctx.fillRect(x - 8, y + 5, 16, 4);
-    ctx.fillStyle = '#604820';
-    ctx.fillRect(x - 8, y + 8, 16, 1);
-    ctx.fillStyle = 'rgba(255,220,120,0.3)';
-    ctx.fillRect(x - 8, y + 5, 16, 1.2);
-
-    // Wings — warm off-white feathers, gold glow
     ctx.save();
     ctx.shadowColor = 'rgba(220,190,100,0.75)';
     ctx.shadowBlur  = 14 * glow;
@@ -1151,14 +1148,6 @@ export class Tower {
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
     if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 62, 'rgba(90,140,190,0.75)', this.level)) return;
-
-    // Stone base
-    ctx.fillStyle = '#9aaa9a';
-    ctx.fillRect(x - 7, y + 5, 14, 4);
-    ctx.fillStyle = '#687868';
-    ctx.fillRect(x - 7, y + 8, 14, 1);
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(x - 7, y + 5, 14, 1);
 
     // Legs
     ctx.fillStyle = '#2e1008';
@@ -1393,14 +1382,6 @@ export class Tower {
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
-
-    // Pink marble base
-    ctx.fillStyle = '#4a1030';
-    ctx.fillRect(x - 7, y + 5, 14, 4);
-    ctx.fillStyle = '#2e0820';
-    ctx.fillRect(x - 7, y + 8, 14, 1);
-    ctx.fillStyle = 'rgba(255,180,220,0.2)';
-    ctx.fillRect(x - 7, y + 5, 14, 1.2);
 
     // White marble column
     ctx.fillStyle = '#f0d8ec';
@@ -1698,24 +1679,6 @@ export class Tower {
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
     if (drawSpriteFrame(ctx, 'isjatten', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 72, 'rgba(100,190,255,0.9)', this.level)) return;
-
-    // Stone base pedestal
-    ctx.fillStyle = '#3a2a1e';
-    ctx.fillRect(x - 8, y + 5, 16, 5);
-    ctx.fillStyle = 'rgba(180,140,80,0.22)';
-    ctx.fillRect(x - 8, y + 5, 16, 1.5);
-    ctx.strokeStyle = 'rgba(160,120,60,0.30)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x - 8 + 0.5, y + 5.5, 15, 4);
-    // Amber rune carved into pedestal
-    ctx.save();
-    ctx.strokeStyle = `rgba(220,160,50,${0.55 + pulse * 0.35})`;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(x - 2, y + 6); ctx.lineTo(x, y + 9); ctx.lineTo(x + 2, y + 6);
-    ctx.moveTo(x, y + 7); ctx.lineTo(x, y + 9);
-    ctx.stroke();
-    ctx.restore();
 
     // Giant icy body — large crystalline form
     ctx.save();

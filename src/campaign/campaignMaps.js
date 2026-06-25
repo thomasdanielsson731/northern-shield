@@ -39,10 +39,15 @@ export function getNodeCountForMap(mapIndex) {
   return MIN_NODES_PER_MAP + Math.floor(rng() * span);
 }
 
+/** First assault on map 0 — gentler onboarding. */
+export function isTutorialNode(mapIndex, nodeIndex) {
+  return mapIndex === 0 && nodeIndex === 0;
+}
+
 /** Active portal count scales with campaign map tier (1 → 4). */
 export function getPortalCountForMap(mapIndex) {
-  if (mapIndex < 15)  return 1;
-  if (mapIndex < 40)  return 2;
+  if (mapIndex < 20)  return 1;
+  if (mapIndex < 50)  return 2;
   if (mapIndex < 70)  return 3;
   return 4;
 }
@@ -54,6 +59,7 @@ export function getMapDisplayName(mapIndex) {
 }
 
 export function getWaveCountForNode(mapIndex, nodeIndex) {
+  if (isTutorialNode(mapIndex, nodeIndex)) return 2;
   const rng = createRng(getMapSeed(mapIndex) + nodeIndex * 131);
   return MIN_WAVES_PER_NODE + Math.floor(rng() * (MAX_WAVES_PER_NODE - MIN_WAVES_PER_NODE + 1));
 }
@@ -62,7 +68,13 @@ export function getWaveCountForNode(mapIndex, nodeIndex) {
 export function getNodeDifficulty(mapIndex, nodeIndex, nodeCount) {
   const mapTier   = mapIndex / Math.max(1, CAMPAIGN_MAP_COUNT - 1);
   const nodeTier  = nodeIndex / Math.max(1, nodeCount - 1);
-  return 0.35 + mapTier * 0.45 + nodeTier * 0.35;
+  return 0.12 + mapTier * 0.50 + nodeTier * 0.38;
+}
+
+/** Gold bonus when starting a fresh map assault (node 0, empty field). */
+export function getMarchSuppliesGold(mapIndex, goldReserve = 0) {
+  const fromReserve = Math.min(80, Math.floor(goldReserve * 0.15));
+  return fromReserve + mapIndex * 2;
 }
 
 /** Boss config keyed by map tier — rotates through boss archetypes. */
@@ -87,13 +99,14 @@ export function getNodeBossConfig(mapIndex) {
 
 /**
  * Build wave plan for a node attack.
- * @returns {{ waves: Array<{ waveInNode: number, isBoss: boolean, difficulty: number }>, nodeCount, isLastNode }}
+ * @returns {{ waves: Array<{ waveInNode: number, isBoss: boolean, difficulty: number, tutorial?: boolean }>, nodeCount, isLastNode }}
  */
 export function buildNodeWavePlan(mapIndex, nodeIndex) {
   const nodeCount   = getNodeCountForMap(mapIndex);
   const waveCount   = getWaveCountForNode(mapIndex, nodeIndex);
   const isLastNode  = nodeIndex >= nodeCount - 1;
   const difficulty = getNodeDifficulty(mapIndex, nodeIndex, nodeCount);
+  const tutorial   = isTutorialNode(mapIndex, nodeIndex);
 
   const waves = [];
   for (let w = 1; w <= waveCount; w++) {
@@ -101,9 +114,10 @@ export function buildNodeWavePlan(mapIndex, nodeIndex) {
       waveInNode: w,
       isBoss:     isLastNode && w === waveCount,
       difficulty: difficulty * (0.85 + (w - 1) * 0.12),
+      tutorial:   tutorial && !isLastNode,
     });
   }
-  return { waves, nodeCount, isLastNode, waveCount };
+  return { waves, nodeCount, isLastNode, waveCount, tutorial };
 }
 
 /** Full map metadata (lazy — generate nodes on demand). */
@@ -137,13 +151,6 @@ export function getMapRun(progress, mapIndex) {
   return progress.mapRuns[mapIndex];
 }
 
-export function isNodeUnlocked(progress, mapIndex, nodeIndex) {
-  if (mapIndex >= progress.mapsUnlocked) return false;
-  if (nodeIndex === 0) return true;
-  const run = progress.mapRuns[mapIndex];
-  return run?.nodesCleared?.includes(nodeIndex - 1) ?? false;
-}
-
 export function isMapComplete(progress, mapIndex) {
   const meta = getCampaignMapMeta(mapIndex);
   if (!meta) return false;
@@ -154,7 +161,7 @@ export function isMapComplete(progress, mapIndex) {
 
 /** Map difficulty (0–1) to an equivalent skirmish wave number for composition. */
 export function difficultyToEquivWave(difficulty, waveInNode = 1) {
-  return Math.max(3, Math.min(95, Math.round(8 + difficulty * 70 + (waveInNode - 1) * 6)));
+  return Math.max(5, Math.min(95, Math.round(5 + difficulty * 50 + (waveInNode - 1) * 4)));
 }
 
 const ENEMY_TYPES_REF = {
@@ -162,11 +169,22 @@ const ENEMY_TYPES_REF = {
   WARG: 'warg', EINHERJAR: 'einherjar', FOSSEGRIM: 'fossegrim',
 };
 
+const TUTORIAL_WAVE_MIX = [
+  ENEMY_TYPES_REF.DRAUGR, ENEMY_TYPES_REF.DRAUGR,
+  ENEMY_TYPES_REF.WARG,   ENEMY_TYPES_REF.WARG,
+  ENEMY_TYPES_REF.DRAUGR, ENEMY_TYPES_REF.DRAUGR,
+  ENEMY_TYPES_REF.WARG,   ENEMY_TYPES_REF.WARG,
+];
+
 /**
  * Spawn queue for one campaign node wave.
  * Boss waves on the last node end with a node boss marker.
  */
 export function buildCampaignNodeSpawnQueue(waveSpec, mapIndex) {
+  if (waveSpec.tutorial && !waveSpec.isBoss) {
+    return TUTORIAL_WAVE_MIX.slice(0, 6 + waveSpec.waveInNode);
+  }
+
   const equiv = difficultyToEquivWave(waveSpec.difficulty, waveSpec.waveInNode);
   if (waveSpec.isBoss) {
     const heraldCount = 4 + Math.floor(waveSpec.difficulty * 6);

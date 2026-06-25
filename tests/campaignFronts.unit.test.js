@@ -1,0 +1,57 @@
+import { describe, it, expect } from 'vitest';
+import {
+  FRONT_IDS,
+  getFrontLayout,
+  getAssaultCodename,
+  isAssaultUnlocked,
+  getNextAvailableAssault,
+} from '../src/campaign/campaignFronts.js';
+import { createEmptyCampaignProgress, getNodeCountForMap } from '../src/campaign/campaignMaps.js';
+
+describe('campaignFronts', () => {
+  it('generates deterministic assault codenames', () => {
+    const a = getAssaultCodename(0, 0);
+    const b = getAssaultCodename(0, 0);
+    expect(a).toMatch(/^[A-Za-zäöüÄÖÜ]+ [A-Za-z]+$/);
+    expect(a).toBe(b);
+    expect(getAssaultCodename(0, 1)).not.toBe(a);
+  });
+
+  it('places boss on south front', () => {
+    const layout = getFrontLayout(0);
+    const bossIndex = getNodeCountForMap(0) - 1;
+    expect(layout.nodeToAssault[bossIndex].frontId).toBe('south');
+    const southBoss = layout.fronts.south.assaults.find(a => a.isBoss);
+    expect(southBoss?.nodeIndex).toBe(bossIndex);
+  });
+
+  it('unlocks first assault on each front', () => {
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    for (const frontId of FRONT_IDS) {
+      const first = layout.fronts[frontId].assaults[0];
+      if (first) {
+        expect(isAssaultUnlocked(p, 0, first.nodeIndex)).toBe(true);
+      }
+    }
+  });
+
+  it('requires prior assault on same front before unlocking next', () => {
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    const west = layout.fronts.west.assaults;
+    if (west.length < 2) return;
+    expect(isAssaultUnlocked(p, 0, west[1].nodeIndex)).toBe(false);
+    p.mapRuns[0] = { nodesCleared: [west[0].nodeIndex], fieldState: null };
+    expect(isAssaultUnlocked(p, 0, west[1].nodeIndex)).toBe(true);
+  });
+
+  it('getNextAvailableAssault prefers same front', () => {
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    const west0 = layout.fronts.west.assaults[0];
+    p.mapRuns[0] = { nodesCleared: [west0.nodeIndex], fieldState: null };
+    const next = getNextAvailableAssault(p, 0, 'west');
+    expect(next?.frontId).toBe('west');
+  });
+});

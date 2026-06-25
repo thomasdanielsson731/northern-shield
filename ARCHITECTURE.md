@@ -1,6 +1,6 @@
 # Northern Shield — Architecture Review
 
-*Last updated: 2026-06-24 (design specs session). Written against the Fortress Defense RPG vision. For day-to-day coding rules see [CLAUDE.md](CLAUDE.md).*
+*Last updated: 2026-06-22 (campaign assault UX). Written against the Fortress Defense RPG vision. For day-to-day coding rules see [CLAUDE.md](CLAUDE.md).*
 
 ---
 
@@ -8,7 +8,7 @@
 
 Northern Shield is a **Fortress Defense RPG** with two combat modes:
 
-1. **Campaign (primary):** 100 procedural maps, node chains, pathless assaults, persistent field state between nodes.
+1. **Campaign (primary):** 100 procedural maps, **assault** chains on a four-front command map, pathless combat, persistent field state between assaults.
 2. **Skirmish (secondary):** 3 preset maps, 100-wave maze TD, BFS pathfinding, endless mode.
 
 All four domain layers (Combat / Roster / Fortress / Meta Progression) are implemented.
@@ -35,12 +35,17 @@ src/
     roster.js          Roster collection + persistence helpers
     talents.js         Career talent definitions
     items.js           Equipment definitions
+    heroMovement.js    pathless hero advance / ranged positioning
+    heroRoles.js       fortress placement roles + zone bonuses
+    warbandComposition.js  deploy hints, squad presets
+    traitGameplay.js   trait combat hooks
     names.js           Procedural Norse name pool
   campaign/
     save.js            Campaign state load/save (ns-campaign-v2)
     events.js          Named between-battle events
-    campaignMaps.js    100 maps, nodes, waves, portal/boss tiers
-    campaignRun.js     Field persistence, node casualties, completeNode()
+    campaignMaps.js    100 maps, assaults, waves, portal/boss tiers
+    campaignFronts.js  four-front command map, assault names, per-front unlock
+    campaignRun.js     Field persistence, assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
   chronicle/
     chronicle.js       Battle history prose + hall of honored/fallen
   fortress/
@@ -72,15 +77,16 @@ src/
 }
 ```
 
-Mid-battle state is not saved — refresh during a node assault resets that assault. Field state between nodes is saved on node victory.
+Mid-battle state is not saved — refresh during an assault resets that assault. Field state between assaults is saved on assault victory (fallen heroes' slots merged back into `fieldState`).
 
 ### Domain model (implemented)
 
 ```
 Defender (roster)     persistent identity — name, career level, talents, equipment, scars
-Tower (combat)        deployed instance linked via defenderId; combatHp for node casualties
+Tower (combat)        deployed instance linked via defenderId; combatHp for assault casualties (respawn next assault)
 _campaignState        stars, goldReserve, fortressUpgrades, bonds, legacyBonuses, chronicle
-campaignProgress      map/node unlocks, per-map field persistence
+campaignProgress      map/assault unlocks, per-map field persistence
+campaignFronts        procedural assault layout per map (four fronts, boss on south)
 ```
 
 `HERO_BUILD_ITEMS` vs `TOWER_BUILD_ITEMS` split warband deploy from structure build in the left dock (WARBAND | STRUCTURES tabs).
@@ -88,9 +94,9 @@ campaignProgress      map/node unlocks, per-map field persistence
 ### Game phases
 
 ```
-campaignSelect → nodeMap → playing → debrief → nodeMap
-                    ↓
-              betweenBattles (War Camp — recruit, upgrade, equip)
+campaignSelect → nodeMap (command map) → playing → debrief → betweenBattles (War Camp) → nodeMap
+                    ↓ (optional anytime)
+              betweenBattles (WAR CAMP button on command map)
                     ↓
               mapSelect (Skirmish Mode only)
 ```
@@ -115,14 +121,15 @@ Roguelite full-reset is not a goal. Maze-building is **skirmish-only**; campaign
 | Placement validation | Fortress zone + field caps | BFS path validity |
 | Hero placement | Anywhere on grid | Path-dependent (legacy) |
 | Enemy movement | Direct targeting + melee | Path follow |
-| Wave count | 2–3 per node | Up to 100 + endless |
+| Wave count | 2–3 per assault (auto-advance waves 2+) | Up to 100 + endless |
+| Hero movement | `heroMovement.js` — melee advance, ranged stop distance | Stationary towers on path |
 | Wave events | Disabled | `WAVE_EVENTS` |
 
 ---
 
 ## 4. Monolithic `game.js`
 
-`game.js` holds the render loop, all canvas UI (left dock, right panel, campaign select, node map, between-battles screens), and input routing. New **systems** belong in new files under `src/campaign/` etc.; new **UI panels** may stay in `game.js` until extraction is justified.
+`game.js` holds the render loop, all canvas UI (left dock, right panel, campaign select, **command map**, between-battles screens), and input routing. New **systems** belong in new files under `src/campaign/` etc.; new **UI panels** may stay in `game.js` until extraction is justified.
 
 ---
 
@@ -151,7 +158,10 @@ Roguelite full-reset is not a goal. Maze-building is **skirmish-only**; campaign
 | Story systems (bonds, scars, retirement, legacy) | ✅ |
 | Combat UI: left dock tabs | ✅ WARBAND \| STRUCTURES |
 | Pathless campaign combat | ✅ |
-| Between-battles as roster home | ✅ War Camp from node map |
+| Between-battles as roster home | ✅ War Camp mandatory between assaults |
+| Command map (four fronts) | ✅ `campaignFronts.js` |
+| Assault casualty respawn | ✅ `mergeFallenHeroesIntoFieldState` |
+| Hero movement (pathless) | ✅ `heroMovement.js` |
 
 ---
 
@@ -163,7 +173,7 @@ Run from `tower-defense/tower-defense/`:
 npx vitest run
 ```
 
-Covers towers, enemies, bullets, pathing, campaign save, **campaign maps**, roster logic (66 tests).
+Covers towers, enemies, bullets, pathing, campaign save, campaign maps/fronts, hero movement, roster logic (**90 tests**).
 
 ---
 
@@ -173,25 +183,23 @@ Covers towers, enemies, bullets, pathing, campaign save, **campaign maps**, rost
 
 | System | Status | Key file (when built) |
 |--------|--------|------------------------|
-| **Hero domain** | Spec | `src/roster/hero.js` — rename Defender; fortress role slot |
-| **Fortress roles** | Spec | `src/roster/heroRoles.js` — 6 MVP roles, zone bonuses |
-| **Warband composition** | Spec | War Camp presets + deploy hints |
-| **Traits (50)** | Spec | Extend `chronicle.js` `TRAIT_DEFS` + gameplay hooks |
-| **Difficulty tuning** | Spec | `campaignMaps.js` — lower early curve (see below) |
+| **Hero domain** | Partial | `defender.js` + `fortressRole`; UI says Hero |
+| **Fortress roles** | MVP ✅ | `src/roster/heroRoles.js` — 6 roles, zone bonuses |
+| **Warband composition** | MVP ✅ | `src/roster/warbandComposition.js` — presets, deploy hints |
+| **Traits (50)** | Partial | `traitGameplay.js` + 13 traits in `TRAIT_DEFS` |
+| **Difficulty tuning** | P1–P3 ✅ | `campaignMaps.js` — softer curve, tutorial, march supplies |
 
-### Difficulty balance (known issues)
+### Difficulty balance (2026-06-25)
 
-- Map 0 node 0 fights at ~skirmish wave 29 equivalent — **too hard** for 120g / no veterans.
-- Each new map resets `fieldState` while difficulty rises with `mapIndex` — **map-start spike**.
-- Portal count jumps at maps 15 / 40 / 70 — stacks with above.
-
-**Recommended P1:** `getNodeDifficulty` base `0.12`; `difficultyToEquivWave` use `×50` not `×70`. **P2:** march supplies on map start. **P3:** tutorial cap on map 0 node 0.
-
-Full analysis: outer repo `design/DIFFICULTY_BALANCE.md`.
+- Tutorial node 0:0 — capped spawns, 2 waves, lower difficulty curve.
+- `getNodeDifficulty` base `0.12`; `difficultyToEquivWave` uses `×50`.
+- March supplies on fresh map start (`getMarchSuppliesGold`).
+- Portals: 2nd at map 20, 3rd at 50, 4th at 70.
 
 ### Implementation order
 
-1. Difficulty P1–P3  
-2. Fortress roles MVP (6) + War Camp picker  
-3. Hero UI rename + composition meter  
-4. Trait gameplay (expand from 8 → 20, then 50)
+1. ~~Difficulty P1–P3~~ ✅  
+2. ~~Fortress roles MVP (6) + War Camp picker~~ ✅  
+3. ~~Hero UI + composition meter~~ ✅  
+4. Trait gameplay expand to 50 (v2)  
+5. 6 active + 4 reserve squad (v2)

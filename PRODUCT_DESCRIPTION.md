@@ -37,18 +37,24 @@ The player commands a living warband. Defenders earn names, experience, and scar
 ```
 Select region (1–100 maps)
 ↓
-Node map — prepare in War Camp (recruit, upgrade, equip)
+Command map — four fronts (W/N/E/S), pick assault
 ↓
-Node assault (2–3 waves, boss on last node)
+Assault (2–3 waves; waves 2+ auto-advance)
 ↓
-Field persists (max 10 heroes + 10 structures)
+Debrief → War Camp (recruit, upgrade, equip, XP)
+↓
+Next assault or return to command map
+↓
+Field persists (max 10 heroes + 10 structures; fallen heroes respawn next assault)
 ↓
 Clear map → unlock next region
 ```
 
-**Combat:** Pathless — warband places anywhere; structures/walls only near fortress. Enemies target warband or structures by type.
+**Combat:** Pathless — warband places anywhere and **moves** (melee advance, ranged positioning); structures/walls only near fortress.
 
-**Roadmap (Tactical Squad Management):** Hero domain, fortress roles, warband composition presets, 50-trait system, campaign difficulty tuning — see design specs in workspace `design/`.
+**Meta UI:** Procedural assault names (e.g. Draugr Incursion). Per-front unlock chains. Boss on south front.
+
+**Implemented (2026-06-22):** Fortress roles MVP, warband composition meter, difficulty P1–P3, trait gameplay hooks — see `design/README.md`.
 
 ### Skirmish (optional — classic maze TD)
 

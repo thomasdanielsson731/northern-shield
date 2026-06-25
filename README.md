@@ -1,10 +1,10 @@
 # Northern Shield
 
-Norse dark-fantasy **Fortress Defense RPG** built on HTML5 Canvas. Command a persistent warband across **100 campaign maps** (node chains, pathless combat) or optional **skirmish** classic maze TD.
+Norse dark-fantasy **Fortress Defense RPG** built on HTML5 Canvas. Command a persistent warband across **100 campaign maps** (four-front command map, pathless assaults) or optional **skirmish** classic maze TD.
 
 ## Modes
 
-- **Campaign (default):** 100 regions, 10–30 nodes each, 2–3 waves/node, boss finale. Field persists between nodes (max 10 heroes + 10 structures).
+- **Campaign (default):** 100 regions, 10–30 **assaults** each, 2–3 waves/assault. Command map + War Camp between assaults. Field persists (max 10 heroes + 10 structures); fallen heroes respawn next assault.
 - **Skirmish:** 3 maps, 100-wave maze TD with BFS path validation — via Skirmish Mode on campaign select.
 
 ## Core Fantasy

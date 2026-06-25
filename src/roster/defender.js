@@ -50,6 +50,7 @@ export class Defender {
     this.scars           = [];           // IDs of battle scars earned
     this.breachesDeployed = 0;           // times deployed when fortress was breached (for Rampart Wound)
     this.legacyBonus     = null;         // { fromName, fromRank, stat, value } from a retired predecessor
+    this.fortressRole    = null;         // gatekeeper | wallkeeper | scout | quartermaster | rune_keeper | chieftain_hunter
   }
 
   // Returns { earned, newTalentIds } — newTalentIds is empty unless a milestone was crossed.
@@ -90,6 +91,7 @@ export class Defender {
       scars:            this.scars,
       breachesDeployed: this.breachesDeployed,
       legacyBonus:      this.legacyBonus,
+      fortressRole:     this.fortressRole,
     };
   }
 
@@ -107,6 +109,7 @@ export class Defender {
     d.scars            = data.scars             ?? [];
     d.breachesDeployed = data.breachesDeployed  ?? 0;
     d.legacyBonus      = data.legacyBonus       ?? null;
+    d.fortressRole     = data.fortressRole      ?? null;
     return d;
   }
 }
