@@ -1644,6 +1644,15 @@ function activateSlot(slotIndex) {
     if (_campaignState.uiHints) Object.assign(_hintSeen, _campaignState.uiHints);
     ensureCampaignProgress();
     loadRosterFromCampaignState();
+    // Seed the starting warband — three veterans ready for the first assault
+    for (const type of ['berserk', 'military', 'valkyrie']) {
+      const id  = _generateId();
+      const def = new Defender({ defenderId: id, name: getDefenderName(type), type });
+      def.trait        = getRandomTrait(type);
+      def.fortressRole = getDefaultFortressRole(type);
+      _roster.defenders.push(def);
+    }
+    _campaignState.defenders = _roster.toJSON();
     gamePhase = 'campaignSelect';
     if (!_hintSeen.skirmishDiscovery) _skirmishDiscoveryTimer = 420;
     persistCampaign();
@@ -2301,6 +2310,7 @@ function updateWarbandMovement() {
     updateHeroMovement(t, enemies, fieldW, fieldH, {
       warband: towers,
       isCasualty: (id) => isNodeCasualty(_nodeCasualties, id),
+      cellSize: CELL_SIZE,
     });
   }
 }
@@ -8347,8 +8357,8 @@ function drawRightPanel() {
     nextWaveBtn = null;
   }
 
-  // Rune Carver — between waves ([R] or chip above march dock)
-  if (!gameOver && waveState !== 'active' && stars > 0) {
+  // Rune Carver — skirmish only; in campaign, rune management is in War Camp
+  if (!gameOver && waveState !== 'active' && stars > 0 && !isCampaignCombat()) {
     const cartridgeH = 14 + Math.ceil(RUNE_DEFS.length / 2) * 20 + 8;
     if (showRuneMenu) {
       const cartridgeY = Math.max(innerY + 4, dockMarchY - cartridgeH - 4);

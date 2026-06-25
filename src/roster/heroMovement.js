@@ -1,16 +1,23 @@
 /**
  * Warband hero combat movement — melee closes to contact, ranged holds at attack range,
  * healers chase wounded allies then advance with the line.
+ *
+ * Sight model: heroes detect enemies within HERO_SIGHT_CELLS of their current position.
+ * When no enemy is in range the hero drifts back toward their deploy cell so warband
+ * stays clustered near the fortress rather than chasing enemies across the whole map.
  */
 
 import { isHeroTowerType } from '../campaign/campaignRun.js';
 import { findWoundedWarbandTarget, HYDDA_HEAL_RANGE } from './warbandHeal.js';
 
-const MELEE_TYPES = new Set(['berserk']);
-const HEALER_TYPES  = new Set(['hydda']);
+const MELEE_TYPES  = new Set(['berserk']);
+const HEALER_TYPES = new Set(['hydda']);
 
 const MOVE_SPEED_MELEE  = 1.85;
 const MOVE_SPEED_RANGED = 1.45;
+
+// Heroes disengage / return home when no enemy is closer than this many cells.
+const HERO_SIGHT_CELLS = 12;
 
 export function isHeroMeleeType(type) {
   return MELEE_TYPES.has(type);
@@ -30,9 +37,10 @@ export function getHeroMoveSpeed(type) {
   return isHeroMeleeType(type) ? MOVE_SPEED_MELEE : MOVE_SPEED_RANGED;
 }
 
-export function findNearestLivingEnemy(tower, enemies) {
-  let best = null;
-  let bestD  = Infinity;
+/** Find nearest living enemy within maxDist px (default: full sight range). */
+export function findNearestLivingEnemy(tower, enemies, maxDist = Infinity) {
+  let best  = null;
+  let bestD = maxDist * maxDist;
   for (const e of enemies) {
     if (!e.alive || e.reached) continue;
     const d = (e.x - tower.x) ** 2 + (e.y - tower.y) ** 2;
@@ -55,7 +63,14 @@ function advanceToward(tower, tx, ty, stopDist, speed, fieldW, fieldH) {
   tower.y = Math.max(margin, Math.min(fieldH - margin, tower.y + (dy / len) * step));
 }
 
-function updateHealerMovement(healer, enemies, fieldW, fieldH, { warband = [], isCasualty = () => false } = {}) {
+/** Move hero back toward their deploy cell when idle. */
+function driftTowardDeploy(tower, cellSize, fieldW, fieldH) {
+  const dx = tower.col * cellSize + cellSize / 2;
+  const dy = tower.row * cellSize + cellSize / 2;
+  advanceToward(tower, dx, dy, cellSize * 0.5, getHeroMoveSpeed(tower.type) * 0.7, fieldW, fieldH);
+}
+
+function updateHealerMovement(healer, enemies, fieldW, fieldH, { warband = [], isCasualty = () => false, cellSize = 14 } = {}) {
   const wounded = findWoundedWarbandTarget(healer, warband, { isCasualty });
   if (wounded) {
     advanceToward(
@@ -67,8 +82,9 @@ function updateHealerMovement(healer, enemies, fieldW, fieldH, { warband = [], i
     return;
   }
 
-  const hit = findNearestLivingEnemy(healer, enemies);
-  if (!hit) return;
+  const sightPx = HERO_SIGHT_CELLS * cellSize;
+  const hit = findNearestLivingEnemy(healer, enemies, sightPx);
+  if (!hit) { driftTowardDeploy(healer, cellSize, fieldW, fieldH); return; }
   advanceToward(
     healer, hit.enemy.x, hit.enemy.y,
     getHeroStopDistance(healer),
@@ -79,19 +95,24 @@ function updateHealerMovement(healer, enemies, fieldW, fieldH, { warband = [], i
 
 /**
  * Advance hero toward the nearest enemy during active combat.
+ * Heroes only detect enemies within HERO_SIGHT_CELLS. When no enemy is in range
+ * they drift back toward their deploy cell.
  * Healers prioritize wounded warband allies, then follow the line toward enemies.
  * Updates tower.x/y and aimAngle; does not mutate grid occupancy.
  */
 export function updateHeroMovement(tower, enemies, fieldW, fieldH, opts = {}) {
   if (!isHeroTowerType(tower.type)) return;
 
+  const { cellSize = 14 } = opts;
+
   if (HEALER_TYPES.has(tower.type)) {
     updateHealerMovement(tower, enemies, fieldW, fieldH, opts);
     return;
   }
 
-  const hit = findNearestLivingEnemy(tower, enemies);
-  if (!hit) return;
+  const sightPx = HERO_SIGHT_CELLS * cellSize;
+  const hit = findNearestLivingEnemy(tower, enemies, sightPx);
+  if (!hit) { driftTowardDeploy(tower, cellSize, fieldW, fieldH); return; }
 
   advanceToward(
     tower, hit.enemy.x, hit.enemy.y,
