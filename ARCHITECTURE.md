@@ -167,13 +167,13 @@ Roguelite full-reset is not a goal. Maze-building is **skirmish-only**; campaign
 
 ## 7. Testing
 
-Run from `tower-defense/tower-defense/`:
+Run from `tower-defense/` (repo root):
 
 ```
 npx vitest run
 ```
 
-Covers towers, enemies, bullets, pathing, campaign save, campaign maps/fronts, hero movement, roster logic (**90 tests**).
+Covers towers, enemies, bullets, pathing, campaign save, campaign maps/fronts, hero movement, roster logic, hero/structure levels, UI theme (**118 tests**).
 
 ---
 
@@ -185,7 +185,9 @@ Covers towers, enemies, bullets, pathing, campaign save, campaign maps/fronts, h
 |--------|--------|------------------------|
 | **Hero domain** | Partial | `defender.js` + `fortressRole`; UI says Hero |
 | **Fortress roles** | MVP ✅ | `src/roster/heroRoles.js` — 6 roles, zone bonuses |
-| **Warband composition** | MVP ✅ | `src/roster/warbandComposition.js` — presets, deploy hints |
+| **Warband composition** | MVP ✅ | `src/roster/warbandComposition.js` — presets, deploy hints, structure warnings |
+| **UI theme / assault panels** | ✅ | `src/ui/uiTheme.js`, `src/ui/assaultPanels.js` — War Room topbar, FIELD dock |
+| **Hero / structure levels** | ✅ | L100 heroes, L30 structures; War Camp upgrades only |
 | **Traits (50)** | Partial | `traitGameplay.js` + 13 traits in `TRAIT_DEFS` |
 | **Difficulty tuning** | P1–P3 ✅ | `campaignMaps.js` — softer curve, tutorial, march supplies |
 

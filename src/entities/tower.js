@@ -5,6 +5,18 @@ import { getDefenderName } from '../roster/names.js';
 import { careerBonusForLevel } from '../roster/defender.js';
 import { getTalentBonuses } from '../roster/talents.js';
 import { isHeroTowerType } from '../campaign/campaignRun.js';
+import {
+  MAX_HERO_LEVEL,
+  getHeroLevelStatMultipliers,
+  getHeroUpgradeCost,
+  getHyddaHealCount,
+  isHeroLevelMilestone,
+} from '../roster/heroLevel.js';
+import {
+  getMaxLevelForTowerType,
+  getStructureLevelStatMultipliers,
+  getStructureUpgradeCost,
+} from '../roster/structureLevel.js';
 
 // Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
 function angleToRow(angle) {
@@ -90,9 +102,9 @@ export const TOWER_DEFS = {
     color:        '#3a8830',
     glowRgb:      '50,180,60',
     rangeColor:   'rgba(80,120,170,0.26)',
-    cost:         48,
+    cost:         52,
     range:        80,
-    fireRate:     8,
+    fireRate:     9,
     damage:       22,
     radius:       7,
     bulletSpeed:  11,
@@ -112,7 +124,7 @@ export const TOWER_DEFS = {
     radius:       9,
     bulletSpeed:  3.5,
     splashRadius: 44,
-    splashDamage: 52,
+    splashDamage: 58,
     bulletShape:  'rock',
     fireFlashDuration: 22,
     footprint:    { w: 2, h: 2 },
@@ -204,10 +216,10 @@ export const TOWER_DEFS = {
     color:             '#5a4028',
     glowRgb:           '160,100,40',
     rangeColor:        'rgba(140,90,40,0.24)',
-    cost:              70,
+    cost:              68,
     range:             160,
-    fireRate:          95,
-    damage:            200,
+    fireRate:          90,
+    damage:            215,
     radius:            7,
     bulletSpeed:       18,
     bulletShape:       'arrow',
@@ -276,7 +288,7 @@ export const TOWER_DEFS = {
   },
 };
 
-const MAX_LEVEL = 10;
+const MAX_LEVEL = MAX_HERO_LEVEL;
 
 function generateId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -345,15 +357,16 @@ export class Tower {
   }
 
   _applyLevel() {
-    const n   = this.level - 1;
     const def = TOWER_DEFS[this.type];
-    // Diminishing returns at levels 6-10: +15%/+5%/-3% instead of +25%/+8%/-5%
-    const dmgMult   = n < 5 ? 1 + n * 0.25  : 1.25 + (n - 5) * 0.15;
-    const rangeMult = n < 5 ? 1 + n * 0.08  : 1.40 + (n - 5) * 0.05;
-    const rateMult  = n < 5 ? 1 - n * 0.05  : 0.75 - (n - 5) * 0.03;
-    this.damage       = Math.round(this.baseDamage   * dmgMult);
-    this.range        = Math.round(this.baseRange    * rangeMult);
-    this.fireRate     = Math.max(4, Math.round(this.baseFireRate * rateMult));
+    const passive = def?.passive;
+    const mults = isHeroTowerType(this.type)
+      ? getHeroLevelStatMultipliers(this.level)
+      : passive
+        ? { dmgMult: 1, rangeMult: 1, rateMult: 1 }
+        : getStructureLevelStatMultipliers(this.level);
+    this.damage       = Math.round(this.baseDamage   * mults.dmgMult);
+    this.range        = Math.round(this.baseRange    * mults.rangeMult);
+    this.fireRate     = Math.max(4, Math.round(this.baseFireRate * mults.rateMult));
     this.slowFactor   = def.slowFactor   ?? 1;
     this.slowDuration = def.slowDuration ?? 0;
     if (this.slowDuration > 0) this.slowDuration = Math.round(this.slowDuration * (1 + (this.level - 1) * 0.10));
@@ -414,7 +427,8 @@ export class Tower {
 
   get upgradeCost() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
-    return Math.min(Math.floor(base * this.level * 0.75), base * 3);
+    if (isHeroTowerType(this.type)) return getHeroUpgradeCost(base, this.level);
+    return getStructureUpgradeCost(base, this.level);
   }
   get sellValue() {
     const base = TOWER_DEFS[this.type]?.cost ?? 20;
@@ -422,13 +436,15 @@ export class Tower {
     for (let i = 1; i < this.level; i++) total += Math.floor(base * Math.sqrt(i) * 0.90);
     return Math.floor(total * 0.70);
   }
-  get maxed()       { return this.level >= MAX_LEVEL; }
+  get maxed()       { return this.level >= getMaxLevelForTowerType(this.type); }
 
   upgrade() {
     if (this.maxed) return false;
     this.level++;
     this._applyLevel();
-    if (this.level === 5 || this.level === 10) this.levelFlash = 55;
+    if (isHeroLevelMilestone(this.level) || (!isHeroTowerType(this.type) && [10, 20, 30].includes(this.level))) {
+      this.levelFlash = 55;
+    }
     return true;
   }
 
@@ -461,7 +477,7 @@ export class Tower {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
-      return { type: 'heal', count: this.level >= 5 ? 2 : 1 };
+      return { type: 'heal', count: getHyddaHealCount(this.level) };
     }
 
     // ── Isjätte: AoE ice nova — damages & slows all enemies in range ─────────

@@ -54,4 +54,25 @@ describe('campaignFronts', () => {
     const next = getNextAvailableAssault(p, 0, 'west');
     expect(next?.frontId).toBe('west');
   });
+
+  it('blocks assaults on locked maps (matches campaign select)', () => {
+    const p = createEmptyCampaignProgress();
+    p.mapsUnlocked = 1;
+    const layout = getFrontLayout(1);
+    const first = layout.fronts.west.assaults[0];
+    expect(isAssaultUnlocked(p, 1, first.nodeIndex)).toBe(false);
+    expect(isAssaultUnlocked(p, 0, layout.fronts.west.assaults[0].nodeIndex)).toBe(true);
+  });
+
+  it('each front has an active assault on a fresh map 0 run', () => {
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    for (const frontId of FRONT_IDS) {
+      const front = layout.fronts[frontId];
+      const active = front.assaults.some(
+        a => isAssaultUnlocked(p, 0, a.nodeIndex)
+      );
+      expect(active).toBe(true);
+    }
+  });
 });

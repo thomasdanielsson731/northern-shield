@@ -12,14 +12,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-All commands run from `c:\dev\tower-defence\tower-defense\tower-defense\` (the nested project root where `package.json` lives).
+All commands run from the **repository root** (`tower-defense/` — where `package.json` and `index.html` live):
 
 ```
+cd tower-defense
 npx vite              # start dev server
 npx vitest run        # run all tests once
 npx vitest            # run tests in watch mode
 npx vitest run tests/tower.unit.test.js   # run a single test file
 ```
+
+> **Note:** An old accidental nested clone lived at `tower-defense/tower-defense/`. It was removed 2026-06-25. If you still `cd` there, go **one directory up**.
 
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
 
@@ -52,16 +55,23 @@ src/
     roster.js          — Roster class: link() veteran to a Tower, grantBattleXP(), releaseAll(), load/toJSON
     items.js           — ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses(); equipment slots: 'weapon' | 'armor'
     heroMovement.js    — melee advance / ranged positioning for pathless combat
-    warbandComposition.js — squad presets, deploy hints, composition warnings
+    warbandComposition.js — squad presets, deploy hints, composition warnings, structure count warnings
     heroRoles.js       — fortress role zones (gate/wall/core), role damage mult
     traitGameplay.js   — trait combat modifiers (getTraitModifiers)
     talents.js         — TALENT_DEFS, CLASS_TALENTS, getTalentBonuses(); 4 talents per class, auto-unlocked at career levels 3/5/8/10
+    heroLevel.js       — MAX_HERO_LEVEL=100, upgrade costs, Hydda heal count scaling
+    structureLevel.js  — MAX_STRUCTURE_LEVEL=30, structure HP, passive scaling (~68% of hero growth)
+    warbandHeal.js     — Hydda warband HP heal in pathless/campaign
+  ui/
+    uiTheme.js         — UI_COLORS palette, War Room top bar chrome, stat chips
+    assaultPanels.js   — deployed field card HP bars, status labels
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); injectable storage for tests
     events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
     campaignMaps.js    — 100 campaign maps, assault/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
     campaignFronts.js  — four-front command map, assault codenames, per-front unlock, getNextAvailableAssault()
     campaignRun.js     — field persistence (10 heroes + 10 structures), assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
+    campaignDeploy.js  — isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults(); prep-only placement rules
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
   chronicle/
@@ -83,8 +93,15 @@ tests/
   campaignMaps.unit.test.js
   campaignFronts.unit.test.js
   heroMovement.unit.test.js
+  heroLevel.unit.test.js
+  structureLevel.unit.test.js
+  warbandHeal.unit.test.js
+  uiTheme.unit.test.js
+  assaultPanels.unit.test.js
   roster.unit.test.js
 ```
+
+**118 tests** — run `npx vitest run` from repo root.
 
 ### Key facts about game.js
 
@@ -98,11 +115,13 @@ The game loop runs at 60 fps. Game logic ticks at 30 ticks/sec (every other fram
 
 | Region | Position |
 |---|---|
-| Top command bar | y=0, h=GRID_TOP (`FRAME_THICK+32` = 48) |
-| Left dock (WARBAND \| STRUCTURES tabs) | x=FRAME_THICK=16, w=LEFT_DOCK_W=172 |
-| Grid | GRID_LEFT=188, GRID_TOP=48, **48×30** cells at CELL_SIZE=14 → 672×420 px |
+| Top command bar (War Room) | y=0, h=GRID_TOP (`FRAME_THICK+40` = **56**) |
+| Left dock | x=FRAME_THICK=16, w=LEFT_DOCK_W=172 |
+| Grid | GRID_LEFT=188, GRID_TOP=**56**, **48×30** cells at CELL_SIZE=14 → 672×420 px |
 | Right panel | x=right of grid, w=188 (`RIGHT_PANEL_W`) |
-| Ornamental frame | 16 px thick (`FRAME_THICK`), drawn last |
+| Ornamental frame | 16 px thick (`FRAME_THICK`), drawn before top bar text |
+
+**Assault combat UI:** Left dock shows **FIELD** panel (deployed units + HP bars) when `isCampaignCombat()` or `waveState === 'active'`. Skirmish prep still uses WARBAND \| STRUCTURES tabs. Right panel sections: INCOMING · FORTRESS · TREASURY · CAMPAIGN · DEFENDER STATS. Palette: `src/ui/uiTheme.js` (see `assets_new/colorsandtopbar.png`).
 
 Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL={col:24, row:15}` (fortress at center), `STARTING_GOLD=120`, `STARTING_LIVES=8`, `WALL_COST=12`, `MAX_WAVES=100` (skirmish only). `BASE_W` and `BASE_H` derived from constants; `computeScale()` prefers filling viewport height.
 
@@ -119,9 +138,10 @@ Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL=
 3. `drawPath()` — **skirmish only** (`isPathlessMode()` returns early)
 4. Towers → selection ring → bullets → enemies → particles
 5. Portal flash, screen shake, vignette
-6. Left dock (`drawLeftDock`), right panel, HUD
-7. Coins, boss warning, wave announcement, tower detail panel, drag ghost
-8. `drawFrames()` — ornamental sprite frame, drawn last
+6. Left dock (`drawLeftDock`), right panel, HUD (dossier only)
+7. Coins, boss warning, tower detail panel, drag ghost
+8. `drawFrames()` — ornamental sprite frame
+9. `drawTopBar()` — War Room command strip (**after** frame so gold trim stays visible)
 
 ### Pathfinding
 
@@ -168,7 +188,13 @@ Two towers are gated behind stars earned in the current run: `isjatten` requires
 
 ### Tower upgrades and economy
 
-Towers upgrade to level 10: +25% damage, +8% range, −5% cooldown per level. Sell = 50% of base cost. High scores persist to `localStorage` under key `northern-shield-hs` (max 8 entries).
+**Skirmish:** Towers upgrade to level 10 in-combat: +25% damage, +8% range, −5% cooldown per level.
+
+**Campaign heroes:** Field level up to **100** (`heroLevel.js`). Upgrades spend **gold reserve** in **War Camp only** (`canUpgradeHeroLevelBetweenAssaults`). Not during active assault.
+
+**Campaign structures:** Field level up to **30** (`structureLevel.js`). War Camp upgrade via gold reserve. Structure combat HP scales with level.
+
+Sell = 50% of base cost. High scores persist to `localStorage` under key `northern-shield-hs` (max 8 entries).
 
 ### Wall system
 
@@ -183,7 +209,7 @@ Two wall types in `TOWER_BUILD_ITEMS`:
 
 ### Rune system
 
-Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars now persist across battles as part of campaign state (`_campaignState.stars`). Press `R` between waves to open the Rune Forge overlay (`showRuneMenu`).
+Stars are earned during a run (1 per flawless wave, bonus for boss kills). Stars persist in campaign state (`_campaignState.stars`). Rune Carver was removed from the assault right panel (2026-06-25); star spending may move to War Camp / dedicated screen in a future pass.
 
 Five rune types defined in `RUNE_DEFS`:
 
@@ -221,6 +247,10 @@ Campaign state (`stars`, `runeInventory`, `battlesCompleted`, Roster, `campaignP
 
 Key functions:
 - `getFrontLayout()` / `isAssaultUnlocked()` — command map fronts (`campaignFronts.js`)
+**Deploy rules (campaign):** Placement, recall, and reposition only during prep (`isAssaultDeployPhase`: `waveNumber === 0 && waveState === 'countdown'`). No hero/structure level upgrades during assault — War Camp only (`campaignDeploy.js`). Recruitment (new roster members) happens between assaults, not from the FIELD panel.
+
+**Hydda:** Heals deployed warband `combatHp` in pathless mode (`warbandHeal.js`). Warband returns to deploy slots between waves (`snapWarbandToDeploy`).
+
 - `startCampaignNodeBattle(mapIndex, nodeIndex)` — snapshots deploy, loads field, `_campaignNodeMode`, `_nodeWavePlan`
 - `finishCampaignNodeVictory()` — merges fallen heroes into field, `completeNode()`, `recordBattleResult(..., { skipDebrief: true })`, debrief
 - `enterCampaignWarCamp()` — debrief → `betweenBattles` for roster management

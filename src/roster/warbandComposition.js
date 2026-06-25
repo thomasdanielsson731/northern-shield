@@ -92,6 +92,40 @@ export function getCompositionWarnings(analysis, portalCount, waveCount, isBossN
   return w;
 }
 
+const SIEGE_STRUCTURE_TYPES = new Set(['ballista', 'catapult', 'piltorn', 'drakship']);
+const PASSIVE_STRUCTURE_TYPES = new Set(['mine', 'barracks', 'runeshrine', 'watchtower']);
+
+/** Siege + economy structures to place near fortress (not walls). */
+export function getRecommendedStructureCount(portalCount, isBossNode) {
+  let n = 1 + Math.floor((portalCount ?? 1) / 2);
+  if (isBossNode) n += 1;
+  return Math.min(5, Math.max(1, n));
+}
+
+export function getStructureWarnings(fieldTowers = [], portalCount, equivWave = 15, isBossNode = false) {
+  const w = [];
+  const towers = fieldTowers ?? [];
+  const siege   = towers.filter(t => SIEGE_STRUCTURE_TYPES.has(t.type));
+  const passive = towers.filter(t => PASSIVE_STRUCTURE_TYPES.has(t.type));
+  const recommended = getRecommendedStructureCount(portalCount, isBossNode);
+
+  if (siege.length < 1) {
+    w.push('Add a siege structure (Ballista / Catapult) near the fortress');
+  } else if (portalCount >= 2 && siege.length < 2) {
+    w.push('Multi-portal: place 2+ ranged structures');
+  }
+  if (towers.length < recommended) {
+    w.push(`Field has ${towers.length}/${recommended} structures — heroes need fortress support`);
+  }
+  if (equivWave >= 22 && passive.length < 1 && towers.length >= 2) {
+    w.push('Mid-campaign: a Mine or Barracks pays for hero upgrades');
+  }
+  if (isBossNode && siege.length < 2) {
+    w.push('Boss assault: bring heavy siege (Ballista / Dragonship)');
+  }
+  return w;
+}
+
 export function applySquadPreset(presetId, defenders) {
   const preset = SQUAD_PRESETS.find(p => p.id === presetId);
   if (!preset) return;

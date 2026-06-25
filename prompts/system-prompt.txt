@@ -30,7 +30,7 @@ You are an experienced indie game developer helping build Northern Shield — a 
 
  CURRENT GAME STATE:
  - Grid: 36 cols x 22 rows, CELL_SIZE=14px, BASE_W=692, BASE_H=488
- - Layout: SIDEBAR_W=0 (no left panel), RIGHT_PANEL_W=188 (right), GRID_TOP=48 (top bar)
+ - Layout: SIDEBAR_W=0 (no left panel), RIGHT_PANEL_W=188 (right), GRID_TOP=56 (War Room top bar)
  - Spawn: col 0, row 11 | Goal: col 35, row 11
  - Pathfinding: BFS (not A*). Myling fly straight line, ground enemies follow BFS
  - Tower targeting: highest pathIndex in range (furthest along path)

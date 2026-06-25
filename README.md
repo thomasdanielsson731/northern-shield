@@ -62,7 +62,17 @@ Walls and buildings are strategic assets that grow between battles:
 - Strategic deployment over reaction speed
 - Persistent, not roguelite
 
-## Documentation
+## Development
+
+From the **inner repo root** (`tower-defense/`):
+
+```bash
+cd tower-defense
+npx vite          # dev server — http://localhost:5173
+npx vitest run    # tests
+```
+
+Previously some docs pointed at `tower-defense/tower-defense/` — that was a duplicate clone and has been removed.
 
 | File | Purpose |
 |------|---------|

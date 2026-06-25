@@ -105,7 +105,7 @@ export function getFrontLayout(mapIndex) {
   return layout;
 }
 
-/** First assault on each front is open; later assaults need prior on same front cleared. */
+/** Map must be unlocked in campaign select; assaults use per-front chains. */
 export function isAssaultUnlocked(progress, mapIndex, nodeIndex) {
   if (mapIndex >= progress.mapsUnlocked) return false;
   const layout = getFrontLayout(mapIndex);

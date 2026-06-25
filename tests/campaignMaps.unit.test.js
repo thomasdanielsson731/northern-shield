@@ -11,6 +11,7 @@ import {
   getNodeDifficulty,
   isTutorialNode,
   getMarchSuppliesGold,
+  getMapDisplayName,
 } from '../src/campaign/campaignMaps.js';
 import { isAssaultUnlocked, getFrontLayout } from '../src/campaign/campaignFronts.js';
 import {
@@ -27,6 +28,11 @@ import {
 describe('campaignMaps', () => {
   it('defines 100 campaign maps', () => {
     expect(CAMPAIGN_MAP_COUNT).toBe(100);
+  });
+
+  it('map 0 display name is MIDGARD', () => {
+    expect(getMapDisplayName(0)).toBe('MIDGARD');
+    expect(getMapDisplayName(10)).toBe('MIDGARD 2');
   });
 
   it('node counts stay within 10–30', () => {

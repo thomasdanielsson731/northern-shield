@@ -40,8 +40,8 @@ Debug Northern Shield systematically using evidence from the code.
      Use ctx.save() / ctx.restore() or explicitly reset after each use.
 
  HUD layout (for reference):
-     Canvas fills window. Grid starts at (GRID_LEFT, GRID_TOP) = (52, 48).
-     SIDEBAR_W=52 (left), RIGHT_PANEL_W=188 (right), GRID_TOP=48 (top).
+     Canvas fills window. Grid starts at (GRID_LEFT, GRID_TOP) = (188, 56).
+     LEFT_DOCK_W=172 (left), RIGHT_PANEL_W=188 (right), GRID_TOP=56 (War Room top bar).
      Grid pixel size: 50*14 = 700px wide, 30*14 = 420px tall.
 
  DEBUGGING PROCESS:
