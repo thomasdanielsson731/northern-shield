@@ -4345,7 +4345,10 @@ function tryPlaceAt(col, row, mode, towerType) {
   const cost = _isGate
     ? GATE_COST
     : Math.max(5, TOWER_DEFS[towerType].cost - _barracksDiscount);
-  if (gold < cost) return false;
+  // Deploying a roster hero during campaign assault prep is free — they are your warband, not new hires
+  const _isBenchDeploy = _campaignNodeMode && _isHeroType && canModifyWarbandDeployment();
+  const _effectiveCost = _isBenchDeploy ? 0 : cost;
+  if (gold < _effectiveCost) return false;
 
   // Mark all footprint cells
   for (let dc = 0; dc < fp.w; dc++) {
@@ -4380,8 +4383,8 @@ function tryPlaceAt(col, row, mode, towerType) {
     pathDirty = true;
     rerouteActiveEnemies();
   }
-  goldSpent += cost;
-  gold      -= cost;
+  goldSpent += _effectiveCost;
+  gold      -= _effectiveCost;
   wallFrostDirty = true;
 
   if (mode === CELL.GATE) {
@@ -7218,7 +7221,8 @@ function drawPath() {
 function drawFortressZoneRing() {
   if (!isPathlessMode() || gamePhase !== 'playing' || !canModifyWarbandDeployment()) return;
   const cs   = CELL_SIZE;
-  const half = gridScreenCell(FORTRESS_ZONE_RADIUS * cs);
+  const R    = FORTRESS_ZONE_RADIUS;
+  const half = gridScreenCell(R * cs);
   const gx   = GOAL.col * cs + cs / 2;
   const gy   = GOAL.row * cs + cs / 2;
   const cx   = gridScreenX(gx);
@@ -7227,15 +7231,29 @@ function drawFortressZoneRing() {
   ctx.beginPath();
   ctx.rect(playfieldLeft(), GRID_TOP, playfieldWidth(), playfieldHeight());
   ctx.clip();
-  ctx.strokeStyle = `rgba(90,150,70,${0.22 + Math.sin(performance.now() * 0.005) * 0.12})`;
-  ctx.lineWidth = 1.5;
+
+  // Subtle green tint on empty cells inside the fortress zone — shows where structures go
+  const cellPx = gridScreenCell(cs);
+  ctx.fillStyle = 'rgba(60,160,80,0.09)';
+  for (let dc = -R; dc <= R; dc++) {
+    for (let dr = -R; dr <= R; dr++) {
+      const c = GOAL.col + dc, r = GOAL.row + dr;
+      if (c < 0 || c >= COLS || r < 0 || r >= ROWS) continue;
+      if (grid.getCell(c, r) !== CELL.EMPTY) continue;
+      ctx.fillRect(gridScreenX(c * cs), gridScreenY(r * cs), cellPx, cellPx);
+    }
+  }
+
+  const _pulse = 0.22 + Math.sin(performance.now() * 0.005) * 0.12;
+  ctx.strokeStyle = `rgba(90,170,80,${_pulse + 0.1})`;
+  ctx.lineWidth = 1.8;
   ctx.setLineDash([5, 4]);
   ctx.strokeRect(cx - half, cy - half, half * 2, half * 2);
   ctx.setLineDash([]);
-  ctx.font = '7px monospace';
-  ctx.fillStyle = 'rgba(100,160,80,0.45)';
+  ctx.font = 'bold 8px monospace';
+  ctx.fillStyle = `rgba(120,200,100,${_pulse + 0.25})`;
   ctx.textAlign = 'center';
-  ctx.fillText('FORTRESS ZONE', cx, cy - half - 4);
+  ctx.fillText('FORTRESS ZONE — place structures here', cx, cy - half - 5);
   ctx.restore();
 }
 
@@ -9136,9 +9154,19 @@ function drawAssaultWarbandOverlay(topInset = 0) {
   const maxScore = scored.length ? scored[0].score : 0;
 
   if (scored.length === 0) {
-    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(232,215,181,0.40)';
-    ctx.fillText(canModifyWarbandDeployment() ? 'Drag from bar above' : 'No heroes fielded', sX + 2, ly + 10);
-    ly += 14;
+    if (canModifyWarbandDeployment()) {
+      const pulse = 0.55 + Math.sin(performance.now() * 0.004) * 0.30;
+      ctx.font = 'bold 9px monospace'; ctx.fillStyle = `rgba(212,175,55,${pulse})`;
+      ctx.fillText('⬆ DRAG HERO', sX + 2, ly + 10);
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,180,140,0.55)';
+      ctx.fillText('from bar above', sX + 2, ly + 21);
+      ctx.fillText('to the field', sX + 2, ly + 31);
+      ly += 36;
+    } else {
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(232,215,181,0.40)';
+      ctx.fillText('No heroes fielded', sX + 2, ly + 10);
+      ly += 14;
+    }
   } else {
     for (const { t } of scored) {
       if (ly + 35 > py + ph - 8) break;
@@ -9191,52 +9219,70 @@ function drawAssaultWarbandOverlay(topInset = 0) {
 
 /** Deploy bench overlay — prep phase only, top strip so bottom playfield stays clear. */
 function drawAssaultDeployOverlay() {
-  const barH = 42;
-  const barW = Math.min(440, playfieldWidth() - 20);
+  const barH = 70;
+  const barW = Math.min(480, playfieldWidth() - 20);
   const barX = playfieldLeft() + (playfieldWidth() - barW) / 2;
   let barY = GRID_TOP + 5;
   if (_tutorialBannerTimer > 0) barY = GRID_TOP + 38;
   const _glass = assaultUiGlass();
 
   ctx.save();
-  ctx.fillStyle = `rgba(6,3,14,${0.48 * _glass})`;
+  ctx.fillStyle = `rgba(6,3,14,${0.62 * _glass})`;
   ctx.beginPath();
-  ctx.roundRect(barX, barY, barW, barH, 5);
+  ctx.roundRect(barX, barY, barW, barH, 6);
   ctx.fill();
-  ctx.strokeStyle = `rgba(212,175,55,${0.28 * _glass})`;
-  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = `rgba(212,175,55,${0.45 * _glass})`;
+  ctx.lineWidth = 1.2;
   ctx.stroke();
 
-  ctx.font = 'bold 7px monospace';
+  ctx.font = 'bold 10px monospace';
   ctx.textAlign = 'left';
   ctx.fillStyle = UI_COLORS.gold;
-  ctx.fillText('DEPLOY', barX + 10, barY + 12);
-  ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(232,215,181,0.50)';
+  ctx.fillText('DEPLOY WARBAND', barX + 12, barY + 15);
+  ctx.font = '8px monospace';
+  ctx.fillStyle = 'rgba(232,215,181,0.65)';
   const heroes = towers.filter(t => isHeroTowerType(t.type)).length;
   const structs = towers.filter(t => !isHeroTowerType(t.type)).length;
-  ctx.fillText(`${heroes}/${MAX_FIELD_HEROES} heroes · ${structs}/${MAX_FIELD_STRUCTURES} siege`, barX + 52, barY + 12);
+  ctx.fillText(`${heroes}/${MAX_FIELD_HEROES} heroes · ${structs}/${MAX_FIELD_STRUCTURES} siege`, barX + 148, barY + 15);
   ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(200,170,120,0.55)';
-  ctx.fillText('Portal → Fortress', barX + barW - 10, barY + 12);
+  ctx.fillStyle = 'rgba(200,170,120,0.60)';
+  ctx.fillText('Drag hero to field', barX + barW - 12, barY + 15);
   ctx.textAlign = 'left';
 
   const benchDefs = _roster.defenders.filter(d =>
     !isNodeCasualty(_nodeCasualties, d.defenderId)
     && !towers.some(t => t.defenderId === d.defenderId)
   );
-  let bx = barX + 10;
-  const by = barY + 18;
-  const slot = 24;
-  for (const item of benchDefs.slice(0, 5)) {
+
+  if (benchDefs.length === 0 && towers.filter(t => isHeroTowerType(t.type)).length === 0) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(232,215,181,0.45)';
+    ctx.fillText('No heroes available', barX + 12, barY + 50);
+  }
+
+  let bx = barX + 12;
+  const by = barY + 22;
+  const slot = 38;
+  for (const item of benchDefs.slice(0, 8)) {
     const heroItem = HERO_BUILD_ITEMS.find(h => h.id === item.type);
     if (!heroItem) continue;
     const sel = !selectedTower && selectedTowerType === item.type && buildMode === CELL.TOWER;
-    ctx.fillStyle = sel ? `rgba(${TOWER_DEFS[item.type]?.glowRgb ?? '74,111,165'},0.35)` : 'rgba(43,47,54,0.85)';
+    const rgb = TOWER_DEFS[item.type]?.glowRgb ?? '74,111,165';
+    ctx.fillStyle = sel ? `rgba(${rgb},0.40)` : 'rgba(28,32,38,0.92)';
     ctx.beginPath();
-    ctx.roundRect(bx, by, slot, slot, 3);
+    ctx.roundRect(bx, by, slot, slot, 4);
     ctx.fill();
-    drawMiniDefenderPortrait(bx + slot / 2, by + slot / 2 + 1, item.type, 8);
+    ctx.strokeStyle = sel ? `rgba(${rgb},0.80)` : `rgba(${rgb},0.30)`;
+    ctx.lineWidth = sel ? 1.5 : 0.8;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, slot, slot, 4);
+    ctx.stroke();
+    drawMiniDefenderPortrait(bx + slot / 2, by + slot / 2 - 3, item.type, 11);
+    ctx.font = '7px monospace';
+    ctx.fillStyle = 'rgba(220,200,160,0.72)';
+    ctx.textAlign = 'center';
+    ctx.fillText((item.name ?? item.type).slice(0, 6), bx + slot / 2, by + slot - 3);
+    ctx.textAlign = 'left';
     _rosterPanelBtns.push({
       ...heroItem,
       cost: 0,
@@ -9246,16 +9292,16 @@ function drawAssaultDeployOverlay() {
       deployed: false,
       defenderId: item.defenderId,
     });
-    bx += slot + 3;
+    bx += slot + 4;
   }
-  if (benchDefs.length > 5) {
-    ctx.font = '6px monospace';
-    ctx.fillStyle = 'rgba(232,215,181,0.45)';
-    ctx.fillText(`+${benchDefs.length - 5}`, bx + 2, by + 16);
+  if (benchDefs.length > 8) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(232,215,181,0.50)';
+    ctx.fillText(`+${benchDefs.length - 8}`, bx + 2, by + slot / 2 + 4);
   }
-  ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(100,180,120,0.65)';
-  ctx.fillText('Gates & siege → STRUCTURES tab (left)', barX + 10, barY + barH - 4);
+  ctx.font = '8px monospace';
+  ctx.fillStyle = 'rgba(100,200,130,0.75)';
+  ctx.fillText('Siege & gates: STRUCTURES tab (left panel)', barX + 12, barY + barH - 6);
   ctx.restore();
 }
 
@@ -15428,8 +15474,9 @@ function drawDragGhost() {
   ctx.fillText(dragItem.label, cx, gy + 31);
 
   ctx.font      = '10px monospace';
-  ctx.fillStyle = gold >= dragItem.cost ? '#e8c040' : '#ff6060';
-  ctx.fillText(`◆${dragItem.cost}`, cx, gy + gh - 3);
+  const _isBenchHero = dragItem.cost === 0 && dragItem.defenderId != null;
+  ctx.fillStyle = _isBenchHero ? '#60e878' : (gold >= dragItem.cost ? '#e8c040' : '#ff6060');
+  ctx.fillText(_isBenchHero ? 'FREE' : `◆${dragItem.cost}`, cx, gy + gh - 3);
   ctx.restore();
 }
 
