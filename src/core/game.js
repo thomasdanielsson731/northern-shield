@@ -330,6 +330,7 @@ let _chokeCells = new Set(); // active choke cells for current map
 
 const STARTING_GOLD  = 120;
 const RECRUIT_COST   = 30;    // goldReserve cost to recruit a new defender between battles
+const WAR_CHEST_COST = 50;    // optional gold sink — morale donation in War Camp
 let   STARTING_LIVES = 8;
 
 const grid = new Grid(COLS, ROWS, CELL_SIZE);
@@ -547,6 +548,7 @@ let _waveDoneRingFx      = null;       // { x, y, r, alpha } — expanding ring 
 let _finalKillRings      = [];         // white expanding rings at last-enemy kill coords
 let _uiToast             = null;       // { text, timer, color } — placement / cap feedback
 let _mapUnlockFx         = null;       // { name, timer } — region unlock celebration
+let _regionClearFx       = null;       // { timer } — map fully secured fanfare
 let _commandMapHintTimer = 0;          // first command-map onboarding
 let _onboardingStep      = ONBOARDING.NONE;
 let _mapAutoStartEnabled = false;      // skirmish mapSelect 10s auto-start only
@@ -1522,6 +1524,9 @@ function finishCampaignNodeVictory() {
       name: _unlockMeta?.name ?? `Region ${_completeMeta.newRegionUnlocked + 1}`,
       timer: 300,
     };
+  }
+  if (_completeMeta.mapCompleted) {
+    _regionClearFx = { name: getCampaignMapMeta(_campaignMapIndex)?.name ?? 'REGION', timer: 360 };
   }
   _campaignState.campaignProgress = progress;
   _campaignState.stars = stars;
@@ -3903,6 +3908,12 @@ window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
 
   // Debrief — space/enter to advance after gate
+  if (gamePhase === 'campaignSelect') {
+    const maxPage = Math.ceil(CAMPAIGN_MAP_COUNT / CAMPAIGN_MAPS_PER_PAGE) - 1;
+    if (e.key === 'ArrowLeft') { _campaignMapPage = Math.max(0, _campaignMapPage - 1); return; }
+    if (e.key === 'ArrowRight') { _campaignMapPage = Math.min(maxPage, _campaignMapPage + 1); return; }
+  }
+
   if (gamePhase === 'debrief') {
     if ((e.key === ' ' || e.key === 'Enter') && _debriefTimer >= 60) {
       e.preventDefault();
@@ -4283,6 +4294,14 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'mapSelect') {
             gamePhase = 'campaignSelect';
             _betweenSubtab = 'recruit';
+          } else if (btn.action === 'warChestDonate') {
+            if (goldReserve >= WAR_CHEST_COST) {
+              goldReserve -= WAR_CHEST_COST;
+              _campaignState.goldReserve = goldReserve;
+              try { saveCampaign(_campaignState); } catch {}
+              _eventOutcomeToast = { text: 'War Chest filled — warband stands ready', timer: 110, color: UI_COLORS.fortress };
+              sfxUpgrade('barracks');
+            }
           } else if (btn.action === 'upgradeFieldHero') {
             upgradeFieldHeroAtWarCamp(btn.defenderId);
           } else if (btn.action === 'upgradeFieldStructure') {
@@ -6330,7 +6349,7 @@ function drawFortressZoneRing() {
   ctx.beginPath();
   ctx.rect(GRID_LEFT, GRID_TOP, COLS * CELL_SIZE, ROWS * CELL_SIZE);
   ctx.clip();
-  ctx.strokeStyle = 'rgba(90,150,70,0.30)';
+  ctx.strokeStyle = `rgba(90,150,70,${0.22 + Math.sin(performance.now() * 0.005) * 0.12})`;
   ctx.lineWidth = 1.5;
   ctx.setLineDash([5, 4]);
   ctx.strokeRect(cx - half, cy - half, half * 2, half * 2);
@@ -7622,6 +7641,24 @@ function drawMapUnlockCelebration() {
   ctx.shadowBlur = 0;
   ctx.restore();
   if (_mapUnlockFx.timer <= 0) _mapUnlockFx = null;
+}
+
+function drawRegionClearFanfare() {
+  if (!_regionClearFx || _regionClearFx.timer <= 0) return;
+  _regionClearFx.timer--;
+  const alpha = Math.min(1, _regionClearFx.timer / 50);
+  const W = BASE_W;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillStyle = UI_COLORS.fortress;
+  ctx.fillText(`✓ ${_regionClearFx.name} SECURED`, W / 2, 130);
+  ctx.font = '8px monospace';
+  ctx.fillStyle = UI_COLORS.parchment;
+  ctx.fillText('All fronts cleared — choose your next region', W / 2, 146);
+  ctx.restore();
+  if (_regionClearFx.timer <= 0) _regionClearFx = null;
 }
 
 function drawCommandMapHint() {
@@ -9578,6 +9615,7 @@ function drawHelpOverlay() {
     ['1-9',         'Select tower / wall'],
     ['Esc',         'Deselect / close'],
     ['? / H',       'This cheatsheet'],
+    ['—',           'Heroes auto-move to engage (pathless assault)'],
   ];
   const pw = 320, ph = 36 + shortcuts.length * 18 + 20;
   const px = width / 2 - pw / 2, py = height / 2 - ph / 2;
@@ -10939,6 +10977,15 @@ function drawBetweenBattles() {
   if (goldReserve > 0) {
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,60,0.40)';
     ctx.fillText(`◆ ${goldReserve}g total in treasury`, lcx, lpY + 130);
+    if (isCampaignWarCamp() && goldReserve >= WAR_CHEST_COST) {
+      const wcX = lcx - 70, wcY = lpY + 148, wcW = 140, wcH = 20;
+      drawFantasyPanel(wcX, wcY, wcW, wcH, 'rgba(20,30,14,0.95)', 0.65, 4);
+      ctx.font = '7px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#90c070';
+      ctx.fillText(`WAR CHEST −${WAR_CHEST_COST}g`, lcx, wcY + 13);
+      _betweenBtns.push({ x: wcX, y: wcY, w: wcW, h: wcH, action: 'warChestDonate' });
+      ctx.textAlign = 'center';
+    }
     // Cheapest available fortress upgrade hint
     const _fortressState = _campaignState?.fortressLevels ?? {};
     const _cheapestUpgrade = Object.entries(FORTRESS_DEFS).map(([key, def]) => {
@@ -12644,6 +12691,7 @@ function draw() {
     drawCommandMapHint();
     drawOnboardingBanner();
     drawMapUnlockCelebration();
+    drawRegionClearFanfare();
     drawFrames();
     drawCampaignMetaBar({ line1: 'COMMAND MAP', line2: 'Select front · launch assault', color: UI_COLORS.fortress });
     ctx.restore();
