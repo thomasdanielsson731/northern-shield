@@ -15,6 +15,33 @@ export function getHyddaHealAmount(healerLevel = 1) {
  * Pick up to `count` warband heroes in heal range, lowest HP% first.
  * @returns {{ target: object, amount: number }[]}
  */
+/** Nearest warband hero that needs healing (lowest HP% first). */
+export function findWoundedWarbandTarget(healer, towers, { isCasualty = () => false } = {}) {
+  let best = null;
+  let bestFrac = Infinity;
+  let bestDistSq = Infinity;
+
+  for (const t of towers) {
+    if (t === healer) continue;
+    if (!isHeroTowerType(t.type)) continue;
+    if (isCasualty(t.defenderId)) continue;
+    if ((t.combatHp ?? 1) <= 0) continue;
+    if (t.combatMaxHp == null || t.combatHp == null) continue;
+    if (t.combatHp >= t.combatMaxHp) continue;
+
+    const frac = t.combatHp / t.combatMaxHp;
+    const dx = t.x - healer.x;
+    const dy = t.y - healer.y;
+    const distSq = dx * dx + dy * dy;
+    if (frac < bestFrac || (frac === bestFrac && distSq < bestDistSq)) {
+      best = t;
+      bestFrac = frac;
+      bestDistSq = distSq;
+    }
+  }
+  return best;
+}
+
 export function pickWarbandHealTargets(healer, towers, count, {
   healRange = HYDDA_HEAL_RANGE,
   healAmount = getHyddaHealAmount(healer.level),

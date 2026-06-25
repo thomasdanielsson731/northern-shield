@@ -27,6 +27,22 @@ export function validateCampaignState(state) {
   return s;
 }
 
+/** Verify checksum written by saveCampaign; clamp inflated values if tampered. */
+export function verifySaveChecksum(raw) {
+  if (!raw || raw._ck == null) {
+    const validated = validateCampaignState(raw);
+    return { ok: true, state: validated };
+  }
+  const { _ck, ...rest } = raw;
+  const expected = simpleSaveChecksum(rest);
+  const validated = validateCampaignState(rest);
+  if (!validated) return { ok: false, state: null };
+  if (_ck === expected) return { ok: true, state: validated };
+  validated.goldReserve = Math.min(validated.goldReserve, 400);
+  validated.stars       = Math.min(validated.stars, 40);
+  return { ok: false, state: validated };
+}
+
 /** Lightweight client checksum — tamper deterrence only. */
 export function simpleSaveChecksum(state) {
   const p = state?.campaignProgress;

@@ -23,6 +23,8 @@ import {
   completeNode,
   serializeFieldState,
   mergeFallenHeroesIntoFieldState,
+  attachDeploySnapshot,
+  prepareFieldForNewAssault,
 } from '../src/campaign/campaignRun.js';
 
 describe('campaignMaps', () => {
@@ -157,5 +159,33 @@ describe('campaignRun field limits', () => {
     expect(merged.towers).toHaveLength(2);
     expect(merged.towers.some(t => t.defenderId === 'b')).toBe(true);
     expect(merged.gold).toBe(80);
+  });
+
+  it('prepareFieldForNewAssault restores fallen heroes from deploySnapshot', () => {
+    const deploySnapshot = {
+      gold: 50,
+      towers: [
+        { type: 'berserk', col: 5, row: 5, level: 1, defenderId: 'a', name: 'Erik' },
+        { type: 'valkyrie', col: 8, row: 5, level: 1, defenderId: 'b', name: 'Saga' },
+      ],
+      walls: {},
+    };
+    const saved = {
+      gold: 80,
+      towers: [{ ...deploySnapshot.towers[0], combatHp: 12, combatMaxHp: 100 }],
+      walls: { '3_3': { level: 0, hp: 40, maxHp: 100 } },
+      deploySnapshot,
+    };
+    const ready = prepareFieldForNewAssault(saved);
+    expect(ready.towers).toHaveLength(2);
+    expect(ready.towers.some(t => t.defenderId === 'b')).toBe(true);
+    expect(ready.towers[0].combatHp).toBeUndefined();
+    expect(ready.walls['3_3'].hp).toBe(100);
+  });
+
+  it('attachDeploySnapshot stores layout for next assault', () => {
+    const snapshot = { gold: 0, towers: [{ type: 'hydda', col: 1, row: 1, defenderId: 'h1' }], walls: {} };
+    const field = attachDeploySnapshot({ gold: 10, towers: [], walls: {} }, snapshot);
+    expect(field.deploySnapshot.towers).toHaveLength(1);
   });
 });

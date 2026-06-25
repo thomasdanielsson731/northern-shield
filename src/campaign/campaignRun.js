@@ -61,9 +61,9 @@ export function serializeFieldState(towers, wallData, gold) {
 export function mergeFallenHeroesIntoFieldState(fieldState, deploySnapshot) {
   if (!deploySnapshot?.towers?.length) return fieldState;
   const livingIds = new Set(
-    fieldState.towers.filter(t => t.defenderId).map(t => t.defenderId)
+    (fieldState.towers ?? []).filter(t => t.defenderId).map(t => t.defenderId)
   );
-  const merged = { ...fieldState, towers: [...fieldState.towers] };
+  const merged = { ...fieldState, towers: [...(fieldState.towers ?? [])] };
   for (const t of deploySnapshot.towers) {
     if (!t.defenderId || !isHeroTowerType(t.type)) continue;
     if (livingIds.has(t.defenderId)) continue;
@@ -71,6 +71,30 @@ export function mergeFallenHeroesIntoFieldState(fieldState, deploySnapshot) {
     livingIds.add(t.defenderId);
   }
   return merged;
+}
+
+/** Persist assault-start layout so the next assault can restore fallen heroes. */
+export function attachDeploySnapshot(fieldState, deploySnapshot) {
+  if (!fieldState || !deploySnapshot?.towers?.length) return fieldState;
+  return { ...fieldState, deploySnapshot };
+}
+
+/** Strip combat vitals and restore fallen slots before a fresh assault. */
+export function prepareFieldForNewAssault(fieldState) {
+  if (!fieldState) return { gold: 0, towers: [], walls: {} };
+  let field = fieldState.deploySnapshot
+    ? mergeFallenHeroesIntoFieldState(fieldState, fieldState.deploySnapshot)
+    : { ...fieldState, towers: [...(fieldState.towers ?? [])] };
+  const walls = {};
+  for (const [key, w] of Object.entries(field.walls ?? {})) {
+    const maxHp = w.maxHp ?? w.hp ?? 100;
+    walls[key] = { ...w, hp: maxHp, maxHp };
+  }
+  const towers = (field.towers ?? []).map(t => {
+    const { combatHp, combatMaxHp, structureHp, structureMaxHp, ...rest } = t;
+    return rest;
+  });
+  return { ...field, towers, walls };
 }
 
 /**

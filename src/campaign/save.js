@@ -1,5 +1,5 @@
 import { createEmptyCampaignProgress } from './campaignMaps.js';
-import { validateCampaignState, simpleSaveChecksum } from './saveValidate.js';
+import { simpleSaveChecksum, verifySaveChecksum } from './saveValidate.js';
 import { slotCampaignKey } from './saveSlots.js';
 
 export const CAMPAIGN_KEY = 'ns-campaign-v2';
@@ -16,7 +16,7 @@ export function createNewCampaign() {
     battlesCompleted:   0,    goldReserve:        0,
     stars:              0,
     defenders:          [],
-    fortressUpgrades:   { barracks: 0, armory: 0, watchtower: 0, wallworks: 0 },
+    fortressUpgrades:   { barracks: 0, armory: 0, watchtower: 0, wallworks: 0, treasury: 0 },
     equipmentInventory: [],
     achievements:       [],
     battleHistory:      [],
@@ -44,7 +44,7 @@ export function loadCampaign(storage = localStorage, slotIndex = null) {
   try {
     const key = slotIndex != null ? slotCampaignKey(slotIndex) : CAMPAIGN_KEY;
     const raw = JSON.parse(storage.getItem(key));
-    return validateCampaignState(raw);
+    return verifySaveChecksum(raw).state;
   } catch {}
   return null;
 }

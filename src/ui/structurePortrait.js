@@ -67,6 +67,32 @@ export function drawProceduralStructureIcon(ctx, cx, cy, itemId, size, affordabl
     ctx.fillStyle = UI_COLORS.magic;
     ctx.fillText('ᛟ', cx, cy + 1);
     ctx.textBaseline = 'alphabetic';
+  } else if (itemId === 'gate') {
+    ctx.fillStyle = '#6a5030';
+    ctx.fillRect(cx - s * 0.55, cy - s * 0.45, s * 1.1, s * 0.9);
+    ctx.strokeStyle = UI_COLORS.gold;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(cx - s * 0.55, cy - s * 0.45, s * 1.1, s * 0.9);
+    ctx.fillStyle = 'rgba(232,215,181,0.35)';
+    ctx.fillRect(cx - s * 0.12, cy - s * 0.05, s * 0.24, s * 0.35);
+    ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = UI_COLORS.gold;
+    ctx.fillText('P', cx, cy - s * 0.55);
+    ctx.textBaseline = 'alphabetic';
+  } else if (itemId === 'catapult') {
+    ctx.fillStyle = '#4a3828';
+    ctx.fillRect(cx - s * 0.5, cy + s * 0.1, s * 1.0, s * 0.25);
+    ctx.strokeStyle = '#5a4838';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx - s * 0.35, cy + s * 0.1, s * 0.35, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = UI_COLORS.gold;
+    ctx.beginPath();
+    ctx.arc(cx + s * 0.45, cy - s * 0.15, s * 0.22, 0, Math.PI * 2);
+    ctx.fill();
   } else {
     ctx.font = `${Math.floor(size * 0.50)}px sans-serif`;
     ctx.textAlign = 'center';

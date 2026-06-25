@@ -30,7 +30,7 @@ describe('createNewCampaign', () => {
     expect(Array.isArray(c.achievements)).toBe(true);
     expect(Array.isArray(c.battleHistory)).toBe(true);
     expect(Array.isArray(c.equipmentInventory)).toBe(true);
-    expect(c.fortressUpgrades).toEqual({ barracks: 0, armory: 0, watchtower: 0, wallworks: 0 });
+    expect(c.fortressUpgrades).toEqual({ barracks: 0, armory: 0, watchtower: 0, wallworks: 0, treasury: 0 });
   });
 
   it('generates a unique campaignId per call', () => {

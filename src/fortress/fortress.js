@@ -77,7 +77,41 @@ export const FORTRESS_DEFS = {
       'Wall −3g  ·  slow +10%',
     ],
   },
+
+  treasury: {
+    label:    'Treasury',
+    icon:     '◆',
+    desc:     'Raises march supplies and reduces War Chest donation cost',
+    maxLevel: 3,
+    cost:     [70, 150, 260],
+    bonuses:  [
+      { marchSuppliesBonus: 0, warChestDiscount: 0 },
+      { marchSuppliesBonus: 8, warChestDiscount: 10 },
+      { marchSuppliesBonus: 16, warChestDiscount: 20 },
+      { marchSuppliesBonus: 24, warChestDiscount: 30 },
+    ],
+    levelDesc: [
+      'March +8g  ·  War Chest −10g',
+      'March +16g  ·  War Chest −20g',
+      'March +24g  ·  War Chest −30g',
+    ],
+  },
 };
+
+/** Cheapest affordable fortress node upgrade, or null if none. */
+export function getNextFortressUpgradeOffer(upgrades = {}, goldReserve = 0) {
+  let best = null;
+  for (const [key, def] of Object.entries(FORTRESS_DEFS)) {
+    const lvl = upgrades[key] ?? 0;
+    if (lvl >= def.maxLevel) continue;
+    const cost = def.cost[lvl];
+    if (goldReserve < cost) continue;
+    if (!best || cost < best.cost) {
+      best = { key, label: def.label, cost, nextLevel: lvl + 1 };
+    }
+  }
+  return best;
+}
 
 // Compute the combined effect of all fortress upgrades.
 // upgrades: { barracks: 0-3, armory: 0-3, watchtower: 0-3, wallworks: 0-3 }
@@ -88,6 +122,8 @@ export function getFortressBonuses(upgrades = {}) {
   let eventPreviewBonus    = 0;
   let wallCostReduction    = 0;
   let wallSlowBonus        = 0.00;
+  let marchSuppliesBonus   = 0;
+  let warChestDiscount     = 0;
 
   for (const [key, def] of Object.entries(FORTRESS_DEFS)) {
     const lvl = Math.min(upgrades[key] ?? 0, def.maxLevel);
@@ -95,11 +131,16 @@ export function getFortressBonuses(upgrades = {}) {
     const b = def.bonuses[lvl];
     recruitCostReduction += b.recruitCostReduction ?? 0;
     startingGoldBonus    += b.startingGoldBonus    ?? 0;
+    marchSuppliesBonus   += b.marchSuppliesBonus   ?? 0;
+    warChestDiscount     += b.warChestDiscount     ?? 0;
     if (b.equipDmMult          !== undefined) equipDmMult       = b.equipDmMult;
     if (b.eventPreviewBonus    !== undefined) eventPreviewBonus = b.eventPreviewBonus;
     wallCostReduction          += b.wallCostReduction            ?? 0;
     wallSlowBonus              += b.wallSlowBonus                ?? 0;
   }
 
-  return { recruitCostReduction, startingGoldBonus, equipDmMult, eventPreviewBonus, wallCostReduction, wallSlowBonus };
+  return {
+    recruitCostReduction, startingGoldBonus, equipDmMult, eventPreviewBonus,
+    wallCostReduction, wallSlowBonus, marchSuppliesBonus, warChestDiscount,
+  };
 }

@@ -17,7 +17,7 @@ export function getOnboardingHint(step) {
     case ONBOARDING.LAUNCH:
       return { title: 'LAUNCH ASSAULT', line: 'Press LAUNCH on the highlighted assault row' };
     case ONBOARDING.DEPLOY:
-      return { title: 'DEPLOY WARBAND', line: 'Place 2–3 heroes · structures go in the fortress zone' };
+      return { title: 'DEPLOY WARBAND', line: 'PORT at wall opening first · then 2–3 heroes · siege in fortress ring' };
     default:
       return null;
   }
@@ -25,8 +25,17 @@ export function getOnboardingHint(step) {
 
 export function advanceOnboarding(step, action) {
   if (step >= ONBOARDING.DONE) return step;
-  if (step === ONBOARDING.COMMAND_MAP && action === 'openFront') return ONBOARDING.LAUNCH;
+  if (step === ONBOARDING.COMMAND_MAP && action === 'openFront') return ONBOARDING.PICK_FRONT;
+  if (step === ONBOARDING.PICK_FRONT && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.LAUNCH && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.DEPLOY && action === 'placedHero') return ONBOARDING.DONE;
   return step;
+}
+
+/** Context-aware hint — front panel shows LAUNCH step after a front is picked. */
+export function resolveOnboardingHint(step, context = {}) {
+  if (step === ONBOARDING.PICK_FRONT && context.frontView) {
+    return getOnboardingHint(ONBOARDING.LAUNCH);
+  }
+  return getOnboardingHint(step);
 }

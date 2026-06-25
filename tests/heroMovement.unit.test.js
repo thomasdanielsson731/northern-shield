@@ -42,11 +42,31 @@ describe('heroMovement', () => {
     expect(tower.y).toBe(10 * 14 + 7);
   });
 
-  it('hydda stays at deploy cell during combat', () => {
-    const tower = { type: 'hydda', range: 0, x: 100, y: 100, col: 7, row: 7 };
-    const enemies = [{ x: 200, y: 100, alive: true, reached: false }];
-    for (let i = 0; i < 50; i++) updateHeroMovement(tower, enemies, 672, 420);
-    expect(tower.x).toBe(100);
-    expect(tower.y).toBe(100);
+  it('hydda moves toward wounded warband ally', () => {
+    const healer = { type: 'hydda', range: 0, x: 100, y: 100, col: 7, row: 7, level: 1 };
+    const ally = {
+      type: 'berserk', x: 250, y: 100, col: 17, row: 7,
+      combatHp: 30, combatMaxHp: 100, defenderId: 'a',
+    };
+    const warband = [healer, ally];
+    const enemies = [{ x: 400, y: 100, alive: true, reached: false }];
+    for (let i = 0; i < 40; i++) {
+      updateHeroMovement(healer, enemies, 672, 420, { warband });
+    }
+    expect(healer.x).toBeGreaterThan(100);
+    expect(Math.hypot(ally.x - healer.x, ally.y - healer.y)).toBeLessThan(250 - 100);
+  });
+
+  it('hydda advances toward enemies when warband is healthy', () => {
+    const healer = { type: 'hydda', range: 0, x: 100, y: 100, col: 7, row: 7, level: 1 };
+    const ally = {
+      type: 'berserk', x: 120, y: 100, col: 8, row: 7,
+      combatHp: 100, combatMaxHp: 100, defenderId: 'a',
+    };
+    const enemies = [{ x: 300, y: 100, alive: true, reached: false }];
+    for (let i = 0; i < 30; i++) {
+      updateHeroMovement(healer, enemies, 672, 420, { warband: [healer, ally] });
+    }
+    expect(healer.x).toBeGreaterThan(100);
   });
 });

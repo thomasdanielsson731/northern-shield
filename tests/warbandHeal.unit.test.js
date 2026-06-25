@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   pickWarbandHealTargets,
   getHyddaHealAmount,
+  findWoundedWarbandTarget,
   HYDDA_HEAL_RANGE,
 } from '../src/roster/warbandHeal.js';
 
@@ -9,6 +10,16 @@ describe('warbandHeal', () => {
   it('scales heal amount with level', () => {
     expect(getHyddaHealAmount(1)).toBe(40);
     expect(getHyddaHealAmount(5)).toBe(88);
+  });
+
+  it('findWoundedWarbandTarget picks lowest HP% ally', () => {
+    const healer = { type: 'hydda', x: 0, y: 0 };
+    const towers = [
+      healer,
+      { type: 'berserk', x: 50, y: 0, combatHp: 80, combatMaxHp: 100, defenderId: 'a' },
+      { type: 'military', x: 60, y: 0, combatHp: 15, combatMaxHp: 100, defenderId: 'b' },
+    ];
+    expect(findWoundedWarbandTarget(healer, towers)?.defenderId).toBe('b');
   });
 
   it('heals lowest-HP allies in range first', () => {
