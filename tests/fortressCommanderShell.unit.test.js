@@ -3,8 +3,11 @@ import {
   createPrepShellState,
   getHornBlockReason,
   applyPanelAction,
+  applyFirstSagaAssaultRewards,
   defaultPrepFieldMeta,
   syncPrepMetaForAssault,
+  A2_DEBRIEF_WOOD_BUNDLE,
+  FIRST_SAGA_A2_NODE,
   GATE_REPAIR_WOOD_COST,
   PREP_HOTSPOTS,
   hotspotRect,
@@ -54,10 +57,22 @@ describe('fortressCommanderShell', () => {
     expect(repairAnim).toBeGreaterThan(0);
   });
 
-  it('syncs scar after A2 progression', () => {
-    const m = syncPrepMetaForAssault(defaultPrepFieldMeta(), 3, 2);
+  it('applies A2 debrief scar and timber to field state', () => {
+    const field = applyFirstSagaAssaultRewards({ gold: 0, towers: [], walls: {} }, FIRST_SAGA_A2_NODE);
+    expect(field.westGateScarred).toBe(true);
+    expect(field.wood).toBe(A2_DEBRIEF_WOOD_BUNDLE);
+  });
+
+  it('does not scar gate before A3 prep', () => {
+    const m = syncPrepMetaForAssault(defaultPrepFieldMeta(), 2, 2);
+    expect(m.westGateScarred).toBe(false);
+    expect(m.wood).toBe(0);
+  });
+
+  it('bootstraps legacy saves entering A3 prep', () => {
+    const m = syncPrepMetaForAssault(defaultPrepFieldMeta(), 3, 3);
     expect(m.westGateScarred).toBe(true);
-    expect(m.wood).toBe(15);
+    expect(m.wood).toBe(A2_DEBRIEF_WOOD_BUNDLE);
   });
 
   it('defines five hotspot layouts', () => {

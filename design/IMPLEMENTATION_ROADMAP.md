@@ -18,22 +18,24 @@
 ## Phase 2 — `fortressPrep` game phase (inner repo) — in progress
 
 - [x] `gamePhase === 'fortressPrep'` replaces `_fieldPrepMode`
-- [x] Post picker left panel + markers on schematic grid
+- [x] Fortress Commander shell (click-zoom-panel-horn, 5 hotspots)
 - [x] `launchFieldPrepAssault()` uses `buildTowerPlacements`
-- [ ] Session save resume for `fortressPrep`
-- [ ] Full schematic UI (no STRUCTURES tab in prep)
+- [x] Session save resume for `fortressPrep`
+- [x] A2 debrief → gate scar + wood bundle on field state
+- [x] Wood chip in prep meta strip (A3+)
+- [ ] Full schematic UI polish (sprites replace procedural rects)
 
-## Phase 3 — War Camp purity (inner repo)
+## Phase 3 — War Camp purity (inner repo) ✅
 
-- [ ] Remove field structure list from War Camp FORTRESS tab (meta only)
-- [ ] Remove grid/backdrop from betweenBattles
-- [ ] War Camp CTAs: Prepare Fortress / Command only
+- [x] Remove field structure list from War Camp FORTRESS tab (meta only)
+- [x] Remove grid/backdrop from betweenBattles (hearth backdrop; no field upgrades in roster)
+- [x] War Camp CTAs: Prepare Fortress / Command only
 
-## Phase 4 — Battle strip (inner repo)
+## Phase 4 — Battle strip (inner repo) ✅
 
-- [ ] Remove build docks in campaign combat
-- [ ] Remove rune shop chip during assault
-- [ ] Right panel: combat HUD only (no WAR BAND / FORTRESS tabs in campaign)
+- [x] Remove build docks in campaign combat
+- [x] Remove rune shop chip during assault
+- [x] Right panel: combat HUD only (no WAR BAND / FORTRESS tabs in campaign)
 
 ## Phase 5 — After Action & chronicle (inner repo)
 

@@ -16,6 +16,9 @@ export const PREP_HOTSPOTS = {
 };
 
 export const GATE_REPAIR_WOOD_COST = 10;
+export const A2_DEBRIEF_WOOD_BUNDLE = 15;
+export const FIRST_SAGA_A2_NODE = 2;
+export const FIRST_SAGA_A3_NODE = 3;
 export const CAMERA_DURATION_MS = 400;
 export const HORN_ANIM_MS = 500;
 
@@ -74,14 +77,34 @@ export function mergePrepFieldMeta(fieldState, meta) {
   };
 }
 
-/** Sync scar/repair with assault progression (First Saga). */
-export function syncPrepMetaForAssault(meta, assaultNodeIndex, battlesCompletedOnMap = 0) {
+/** Apply First Saga rewards when an assault node is cleared (A2 → scar + timber). */
+export function applyFirstSagaAssaultRewards(fieldState, clearedNodeIndex) {
+  if (clearedNodeIndex !== FIRST_SAGA_A2_NODE) return fieldState;
+  const meta = loadPrepFieldMeta(fieldState);
+  meta.westGateScarred = true;
+  meta.wood = Math.max(meta.wood, A2_DEBRIEF_WOOD_BUNDLE);
+  return mergePrepFieldMeta(fieldState, meta);
+}
+
+/** Bootstrap prep meta for saves that predate explicit A2 debrief wiring. */
+export function syncPrepMetaForAssault(meta, assaultNodeIndex, battlesCompleted = 0) {
   const next = { ...meta };
-  if (assaultNodeIndex != null && assaultNodeIndex >= 2 && battlesCompletedOnMap >= 2) {
-    if (!next.westGateRepaired) next.westGateScarred = true;
+  if (
+    assaultNodeIndex != null
+    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
+    && battlesCompleted >= 3
+    && !next.westGateRepaired
+    && !next.westGateScarred
+  ) {
+    next.westGateScarred = true;
   }
-  if (assaultNodeIndex != null && assaultNodeIndex >= 3 && next.westGateScarred && next.wood === 0) {
-    next.wood = 15;
+  if (
+    assaultNodeIndex != null
+    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
+    && next.westGateScarred
+    && next.wood === 0
+  ) {
+    next.wood = A2_DEBRIEF_WOOD_BUNDLE;
   }
   return next;
 }
