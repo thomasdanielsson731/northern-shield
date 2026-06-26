@@ -3,10 +3,12 @@ import {
   FRONT_IDS,
   getFrontLayout,
   getAssaultCodename,
+  getAssaultTierLabel,
   isAssaultUnlocked,
   getNextAvailableAssault,
   getFrontStatusLine,
   getFrontStatusSymbol,
+  getFrontSubtitle,
 } from '../src/campaign/campaignFronts.js';
 import { createEmptyCampaignProgress, getNodeCountForMap } from '../src/campaign/campaignMaps.js';
 import { FIRST_SAGA_A4_NODE } from '../src/campaign/firstSaga.js';
@@ -88,5 +90,17 @@ describe('campaignFronts', () => {
     p.mapRuns[0] = { nodesCleared: west.assaults.map(a => a.nodeIndex), fieldState: null };
     expect(getFrontStatusSymbol(west, p, 0)).toBe('✓');
     expect(getFrontStatusLine(west, p, 0, 1)).toBe('✓ SECURED');
+  });
+
+  it('tier labels and subtitles for assault rows', () => {
+    expect(getAssaultTierLabel(0, false)).toMatch(/Raid/);
+    expect(getAssaultTierLabel(2, false)).toMatch(/Skirmish/);
+    expect(getAssaultTierLabel(0, true)).toBe('Boss');
+    const p = createEmptyCampaignProgress();
+    const layout = getFrontLayout(0);
+    const west = layout.fronts.west;
+    expect(getFrontSubtitle(west, p, 0, 1)).toMatch(/█/);
+    p.mapRuns[0] = { nodesCleared: west.assaults.map(a => a.nodeIndex), fieldState: null };
+    expect(getFrontSubtitle(west, p, 0, 1)).toBe('SECURED');
   });
 });
