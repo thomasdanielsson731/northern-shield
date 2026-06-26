@@ -4,7 +4,7 @@
 
 > Build and command a living Viking fortress that evolves from a tiny wooden village into the last magical citadel protecting the North.
 
-**Before implementing any feature**, read [north_star.md](north_star.md) and [the_first_saga.md](the_first_saga.md) (active vertical slice).
+**Before implementing any feature**, read **[PROJECT_STATE.md](PROJECT_STATE.md)** (live implementation state), then [north_star.md](north_star.md) and [the_first_saga.md](the_first_saga.md) (active vertical slice).
 
 ---
 
@@ -12,7 +12,9 @@
 
 | Document | Purpose |
 |----------|---------|
+| **[PROJECT_STATE.md](PROJECT_STATE.md)** | **Current sprint, metrics, risks — read first** |
 | **[the_first_saga.md](the_first_saga.md)** | **Vertical slice — The First Saga** (canonical until shipped) |
+| [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) | Fortress Commander code phase tracker |
 | [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md) | Freeze notice + rules |
 | [moments_to_protect.md](moments_to_protect.md) | Sacred beats — do not sacrifice |
 

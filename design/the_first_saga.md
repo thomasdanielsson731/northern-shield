@@ -374,15 +374,17 @@ Finale BELONGING (settlement) ──► HOPE (recruit #2)
 
 | Slice need | Prototype today | Gap |
 |------------|-----------------|-----|
-| fortressPrep + posts | 🟡 Early | Limit to 2 posts; hide siege |
-| War Camp no field | 🟡 | Remove field list |
-| Prose debrief | 🟡 | Saga-specific copy |
-| Gate scar persist | Partial | West gate only |
-| Wood repair | ❌ | New campaign resource UI |
+| fortressPrep + posts | ✅ | Phase 1–2 shipped |
+| War Camp no field | ✅ | Phase 3 — meta only |
+| Prose debrief | ✅ | Phase 5 — `debriefReport.js` |
+| Gate scar persist | ✅ | A2 debrief → west gate scar |
+| Wood repair | 🟡 | Salvage in debrief/prep; spend UI thin |
 | Linear 6-node map | ❌ | Region 1 script |
 | Settlement ceremony | ❌ | New modal |
 | Boss A4 | ✅ | Retune for slice |
-| Recruit gate | ✅ | Lock until finale |
+| Recruit gate | ✅ | Lock until finale (ceremony missing) |
+
+*Last board review: 2026-06-22 Session 18 — see `agents/boards/sessions/2026-06-22-all-agents-board-18.md`.*
 
 ---
 

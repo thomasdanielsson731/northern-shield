@@ -6,6 +6,11 @@
 
 import { UI_COLORS } from '../ui/uiTheme.js';
 import { validateAssignments } from '../fortress/defensivePosts.js';
+import {
+  getDefenderPromotionTitle,
+  getSkaldPostCounsel,
+  getPreferredPostLabel,
+} from '../roster/postTitles.js';
 
 export const PREP_HOTSPOTS = {
   WEST_GATE: 'west_gate',
@@ -191,26 +196,49 @@ export function getHornBlockReason(ctx) {
 function advisorLines(hotspot, ctx) {
   const { prepMeta, assault, postAssignments, roster, goldReserve } = ctx;
   const gateHero = postAssignments?.west_gate?.defenderId;
+  const towerHero = postAssignments?.watch_tower?.defenderId;
   const def = gateHero ? roster?.find?.(gateHero) : null;
+  const towerDef = towerHero ? roster?.find?.(towerHero) : null;
   const heroName = def?.name || def?.type || 'your fighter';
 
   switch (hotspot) {
-    case PREP_HOTSPOTS.WEST_GATE:
+    case PREP_HOTSPOTS.WEST_GATE: {
+      const gateTitle = gateHero ? getDefenderPromotionTitle(gateHero, postAssignments) : null;
+      const skald = def ? getSkaldPostCounsel(def, 'west_gate') : null;
       return {
-        advisor: 'captain',
+        advisor: gateHero ? 'skald' : 'captain',
         title: 'West Gate',
         lines: gateHero
-          ? [`${heroName} holds the threshold.`, 'The plan starts here.']
-          : ['The west road stirs.', 'Put a defender on the gate.'],
+          ? [
+              gateTitle ? `${heroName} — ${gateTitle}.` : `${heroName} holds the threshold.`,
+              skald
+                ? skald.replace(/^The skald[^:]+:\s*"?/, '').replace(/"?\.$/, '.')
+                : 'The plan starts here.',
+            ]
+          : [
+              'The west road stirs.',
+              `Favor a gatekeeper — the ${getPreferredPostLabel('berserk')} first.`,
+            ],
       };
-    case PREP_HOTSPOTS.WATCH_TOWER:
+    }
+    case PREP_HOTSPOTS.WATCH_TOWER: {
+      const towerTitle = towerHero ? getDefenderPromotionTitle(towerHero, postAssignments) : null;
+      const tSkald = towerDef ? getSkaldPostCounsel(towerDef, 'watch_tower') : null;
       return {
-        advisor: 'scout',
+        advisor: towerHero ? 'skald' : 'scout',
         title: 'Watch Tower',
-        lines: assault
-          ? [`${assault.codename} — ${assault.tierLabel ?? 'assault'}.`, 'They come from the west.']
-          : ['High ground. Clear eyes.', 'Read the road before the horn.'],
+        lines: towerHero
+          ? [
+              towerTitle ? `${towerDef?.name ?? 'Scout'} — ${towerTitle}.` : 'Eyes on the treeline.',
+              tSkald
+                ? tSkald.replace(/^The skald[^:]+:\s*"?/, '').replace(/"?\.$/, '.')
+                : 'They come from the west.',
+            ]
+          : assault
+            ? [`${assault.codename} — ${assault.tierLabel ?? 'assault'}.`, 'They come from the west.']
+            : ['High ground. Clear eyes.', `The skald favors the ${getPreferredPostLabel('valkyrie')}.`],
       };
+    }
     case PREP_HOTSPOTS.WALL_SCAR:
       return {
         advisor: 'builder',
@@ -223,7 +251,10 @@ function advisorLines(hotspot, ctx) {
       return {
         advisor: 'skald',
         title: 'Longhouse',
-        lines: ['Stories by the fire.', 'Names matter more than numbers.'],
+        lines: [
+          `${roster?.defenders?.length ?? 0} names by the fire.`,
+          'Stories outlive stone.',
+        ],
       };
     case PREP_HOTSPOTS.TREASURY:
       return {
@@ -304,6 +335,21 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
 
+  const cx = pf.x + pf.w * 0.5;
+  const cy = pf.y + pf.h * 0.48;
+  const ringRx = pf.w * 0.34;
+  const ringRy = pf.h * 0.28;
+  ctx.strokeStyle = 'rgba(80,100,120,0.22)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, ringRx, ringRy, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(40,55,40,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + pf.h * 0.06, ringRx * 0.92, ringRy * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+
   const drawRect = (r, fill, stroke, lw = 1) => {
     const tl = transformPoint(r.x, r.y, pf, cam);
     const br = transformPoint(r.x + r.w, r.y + r.h, pf, cam);
@@ -333,10 +379,22 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   ctx.fill();
 
   const tr = hotspotRect(pf, PREP_HOTSPOTS.TREASURY);
-  drawRect(tr, '#3a3010', '#8a7030');
+  const trBox = drawRect(tr, '#3a3010', '#8a7030');
+  ctx.fillStyle = '#6a5020';
+  ctx.fillRect(trBox.x + trBox.w * 0.25, trBox.y + trBox.h * 0.35, trBox.w * 0.5, trBox.h * 0.4);
+  ctx.strokeStyle = '#c8a040';
+  ctx.strokeRect(trBox.x + trBox.w * 0.25, trBox.y + trBox.h * 0.35, trBox.w * 0.5, trBox.h * 0.4);
 
   const tower = hotspotRect(pf, PREP_HOTSPOTS.WATCH_TOWER);
-  drawRect(tower, '#4a3828', '#6a5848', 2);
+  const towerBox = drawRect(tower, '#4a3828', '#6a5848', 2);
+  ctx.fillStyle = 'rgba(180,50,50,0.55)';
+  const flagX = towerBox.x + towerBox.w * 0.7;
+  ctx.fillRect(flagX, towerBox.y - 10, 2, 12);
+  ctx.beginPath();
+  ctx.moveTo(flagX + 2, towerBox.y - 10);
+  ctx.lineTo(flagX + 10, towerBox.y - 6);
+  ctx.lineTo(flagX + 2, towerBox.y - 2);
+  ctx.fill();
 
   const gate = hotspotRect(pf, PREP_HOTSPOTS.WEST_GATE);
   const gateBox = drawRect(
@@ -345,6 +403,11 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
     state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE ? '#e8d060' : '#6a5030',
     state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE ? 2.5 : 1.5,
   );
+  ctx.strokeStyle = 'rgba(100,80,50,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(gateBox.x + gateBox.w / 2, gateBox.y + gateBox.h * 0.55, gateBox.w * 0.22, Math.PI, 0);
+  ctx.stroke();
 
   if (prepMeta.westGateScarred && !prepMeta.westGateRepaired) {
     ctx.strokeStyle = 'rgba(180,60,40,0.85)';

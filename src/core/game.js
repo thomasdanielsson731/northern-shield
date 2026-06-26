@@ -74,6 +74,15 @@ import {
   canUpgradeHeroLevelBetweenAssaults,
 } from '../campaign/campaignDeploy.js';
 import {
+  getSagaDebriefProse,
+  getSagaDebriefTitle,
+  buildFortressDamageReport,
+  formatDebriefCompactStats,
+} from '../campaign/debriefReport.js';
+import {
+  formatDefenderPostBadge,
+} from '../roster/postTitles.js';
+import {
   buildAssaultTargetPriority,
   isGateWallTarget,
   isStructureWallTarget,
@@ -12138,6 +12147,170 @@ function drawCampaignVictoryOverlay() {
 }
 
 // ── Post-battle debrief screen ────────────────────────────────────────────────
+
+function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
+  const panW = 480, panH = 340;
+  const panX = Math.round((W - panW) / 2);
+  const panY = Math.round((H - panH) / 2) - 6;
+  const slideY = panY + Math.round((1 - fadeT) * 24);
+  const hx = panX + panW / 2;
+
+  drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+
+  const nodeIndex = _campaignNodeIndex ?? 0;
+  const assault = getAssaultInfo(_campaignMapIndex, nodeIndex);
+  const field = _campaignMapIndex != null
+    ? getMapRun(ensureCampaignProgress(), _campaignMapIndex).fieldState
+    : null;
+  const postAssignments = field?.postAssignments ?? _postAssignments ?? {};
+  const gateHeroId = postAssignments.west_gate?.defenderId;
+  const gateDef = gateHeroId ? _roster?.find(gateHeroId) : null;
+  const secondDef = _roster?.defenders?.find(d => d.defenderId !== gateHeroId);
+  const chronicleEntry = _campaignState?.chronicle?.battles?.at(-1);
+
+  const prose = getSagaDebriefProse(nodeIndex, isVictory, {
+    gateHeroName: gateDef?.name ?? pickBattleMvp()?.name,
+    secondHeroName: secondDef?.name,
+    chronicleProse: chronicleEntry?.prose,
+  });
+  const sagaTitle = getSagaDebriefTitle(nodeIndex);
+
+  const damage = buildFortressDamageReport(wallData, field, {
+    goal: GOAL,
+    ringR: FORTRESS_RING_R,
+    frontId: assault?.frontId ?? 'west',
+    lives,
+    breachFlag: _chronBreached || _lastDefeatReason === 'ramparts',
+  });
+
+  let hy = slideY + 22;
+  const rColor = isVictory ? '#f0c840' : '#e04040';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(160,130,80,0.55)';
+  ctx.fillText(sagaTitle.toUpperCase(), hx, hy);
+  hy += 16;
+
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = rColor;
+  ctx.shadowColor = isVictory ? 'rgba(240,180,20,0.5)' : 'rgba(220,40,40,0.5)';
+  ctx.shadowBlur = 10;
+  ctx.fillText(isVictory ? '— VICTORY —' : '— DEFEATED —', hx, hy);
+  ctx.shadowBlur = 0;
+  hy += 14;
+
+  if (assault) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(180,150,90,0.60)';
+    ctx.fillText(`${assault.codename} · ${assault.tierLabel} · ${assault.frontId?.toUpperCase() ?? 'WEST'} FRONT`, hx, hy);
+    hy += 14;
+  }
+
+  ctx.strokeStyle = 'rgba(140,110,60,0.28)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(panX + 24, hy);
+  ctx.lineTo(panX + panW - 24, hy);
+  ctx.stroke();
+  hy += 12;
+
+  ctx.font = '8.5px monospace';
+  ctx.fillStyle = 'rgba(210,190,150,0.88)';
+  ctx.textAlign = 'left';
+  const proseX = panX + 28;
+  const proseW = panW - 56;
+  const proseLines = wrapText(ctx, `"${prose}"`, proseW);
+  for (const line of proseLines.slice(0, 4)) {
+    ctx.fillText(line, proseX, hy);
+    hy += 13;
+  }
+  hy += 6;
+
+  ctx.font = 'bold 7.5px monospace';
+  ctx.fillStyle = 'rgba(160,130,80,0.55)';
+  ctx.fillText('FORTRESS REPORT', proseX, hy);
+  hy += 12;
+
+  const toneColor = {
+    hold: '#90c890',
+    wounded: '#e8a060',
+    critical: '#e06050',
+    scar: '#d09060',
+    mended: '#a0c8a0',
+    resource: '#c0a060',
+  };
+  ctx.font = '7.5px monospace';
+  for (const row of damage.lines.slice(0, 4)) {
+    ctx.fillStyle = 'rgba(160,135,90,0.55)';
+    ctx.fillText(row.label, proseX, hy);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = toneColor[row.tone] ?? '#d8c89a';
+    ctx.fillText(row.value, panX + panW - 28, hy);
+    ctx.textAlign = 'left';
+    hy += 12;
+  }
+  hy += 4;
+
+  const compact = formatDebriefCompactStats({
+    waveNumber,
+    waveTotal: _nodeWavePlan?.waves?.length,
+    slain,
+    goldEarned,
+    lives,
+    maxLives: STARTING_LIVES,
+    mvpName: pickBattleMvp()?.name,
+  });
+  ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(140,120,80,0.48)';
+  ctx.textAlign = 'center';
+  ctx.fillText(compact, hx, hy + 4);
+
+  _debriefBtns = [];
+  const _canContinue = _debriefTimer >= 60;
+  const btnY = slideY + panH - 40;
+  const btnH = 28;
+  const btnW = 132;
+  const gap = 10;
+  const prepNode = isVictory ? _pendingNextAssaultNode : _campaignNodeIndex;
+  const showPrep = prepNode != null;
+  const btnCount = showPrep ? 3 : 2;
+  const totalW = btnCount * btnW + (btnCount - 1) * gap;
+  let btnX = hx - totalW / 2;
+
+  if (_canContinue) {
+    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.7, 6);
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#90c070';
+    ctx.fillText('WAR CAMP', btnX + btnW / 2, btnY + 18);
+    _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'warCamp' });
+    btnX += btnW + gap;
+
+    if (showPrep) {
+      drawFantasyPanel(btnX, btnY, btnW, btnH,
+        isVictory ? 'rgba(28,40,16,0.97)' : 'rgba(40,16,16,0.97)', 0.75, 6);
+      ctx.fillStyle = isVictory ? '#a8e070' : '#e08060';
+      ctx.fillText('PREPARE FORTRESS', btnX + btnW / 2, btnY + 18);
+      _debriefBtns.push({
+        x: btnX, y: btnY, w: btnW, h: btnH,
+        action: isVictory ? 'nextAssault' : 'retryAssault',
+        nodeIndex: prepNode,
+      });
+      btnX += btnW + gap;
+    }
+
+    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(12,8,4,0.97)', 0.7, 6);
+    ctx.fillStyle = '#c0a060';
+    ctx.fillText('COMMAND MAP', btnX + btnW / 2, btnY + 18);
+    _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'commandMap' });
+  } else {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(140,120,80,0.45)';
+    ctx.fillText('…', hx, btnY + 18);
+  }
+  ctx.textAlign = 'left';
+}
+
 function drawDebrief() {
   _debriefTimer++;
   // First frame: play level-up SFX if any defender leveled up this battle
@@ -12161,6 +12334,12 @@ function drawDebrief() {
   const slideY = panY + Math.round((1 - _t) * 24);
 
   ctx.globalAlpha = _t;
+  if (_returnToNodeMapAfterDebrief) {
+    drawCampaignAssaultDebrief(W, H, isVictory, _t);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    return;
+  }
   drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
 
   // ── Result header ────────────────────────────────────────────────────────────
@@ -12726,13 +12905,15 @@ function applyCampaignEventChoice(eventId, choice) {
   sfxEventResolve();
 }
 
-/** Campaign War Camp backdrop — hearth warmth, no battlefield grid. */
-function drawWarCampBackdrop() {
+/** Campaign War Camp backdrop — hearth warmth; evolves with fortress upgrades. */
+function drawWarCampBackdrop(fortressUpgrades = {}) {
   const W = BASE_W, H = BASE_H;
   const top = META_SCREEN_TOP;
+  const tier = Object.values(fortressUpgrades).reduce((s, v) => s + (v ?? 0), 0);
+  const warm = Math.min(1, 0.35 + tier * 0.08);
   const g = ctx.createLinearGradient(0, top, 0, H);
   g.addColorStop(0, '#0c0818');
-  g.addColorStop(0.5, '#120a0e');
+  g.addColorStop(0.45, `rgb(${12 + tier}, ${8 + tier}, ${14 + tier * 2})`);
   g.addColorStop(1, '#080610');
   ctx.fillStyle = g;
   ctx.fillRect(0, top, W, H - top);
@@ -12741,26 +12922,45 @@ function drawWarCampBackdrop() {
   const hearthX = W * 0.58;
   const hearthY = top + (H - top) * 0.52;
   const pulse = 0.55 + Math.sin(t * 1.4) * 0.12;
-  const glow = ctx.createRadialGradient(hearthX, hearthY, 0, hearthX, hearthY, 180);
-  glow.addColorStop(0, `rgba(200,120,50,${0.14 * pulse})`);
-  glow.addColorStop(0.45, `rgba(120,60,30,${0.06 * pulse})`);
+  const glow = ctx.createRadialGradient(hearthX, hearthY, 0, hearthX, hearthY, 180 + tier * 12);
+  glow.addColorStop(0, `rgba(200,120,50,${warm * pulse})`);
+  glow.addColorStop(0.45, `rgba(120,60,30,${0.06 + tier * 0.02})`);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, top, W, H - top);
 
   ctx.fillStyle = 'rgba(30,20,12,0.35)';
-  ctx.fillRect(hearthX - 48, hearthY + 8, 96, 28);
+  ctx.fillRect(hearthX - 48 - tier * 4, hearthY + 8, 96 + tier * 8, 28);
   ctx.fillStyle = 'rgba(50,32,18,0.5)';
   ctx.beginPath();
-  ctx.moveTo(hearthX - 36, hearthY + 8);
-  ctx.lineTo(hearthX - 28, hearthY - 22);
-  ctx.lineTo(hearthX + 28, hearthY - 22);
-  ctx.lineTo(hearthX + 36, hearthY + 8);
+  ctx.moveTo(hearthX - 36 - tier * 2, hearthY + 8);
+  ctx.lineTo(hearthX - 28, hearthY - 22 - tier * 3);
+  ctx.lineTo(hearthX + 28 + tier * 2, hearthY - 22 - tier * 2);
+  ctx.lineTo(hearthX + 36 + tier * 4, hearthY + 8);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = `rgba(255,140,50,${0.25 + pulse * 0.2})`;
+  if (tier >= 2) {
+    ctx.fillStyle = 'rgba(40,28,18,0.45)';
+    ctx.fillRect(hearthX - 90, hearthY - 8, 36, 22);
+    ctx.fillStyle = 'rgba(60,45,25,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(hearthX - 82, hearthY - 8);
+    ctx.lineTo(hearthX - 74, hearthY - 24);
+    ctx.lineTo(hearthX - 58, hearthY - 24);
+    ctx.lineTo(hearthX - 50, hearthY - 8);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (tier >= 4) {
+    ctx.strokeStyle = 'rgba(140,160,180,0.25)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(hearthX + 52, hearthY - 18, 24, 32);
+    ctx.fillStyle = 'rgba(80,90,100,0.2)';
+    ctx.fillRect(hearthX + 56, hearthY - 28, 8, 12);
+  }
+  ctx.fillStyle = `rgba(255,140,50,${0.25 + pulse * 0.2 + tier * 0.03})`;
   ctx.beginPath();
-  ctx.arc(hearthX, hearthY - 6, 5 + Math.sin(t * 2.2) * 1.5, 0, Math.PI * 2);
+  ctx.arc(hearthX, hearthY - 6, 5 + Math.sin(t * 2.2) * 1.5 + tier * 0.5, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -12786,7 +12986,7 @@ function drawBetweenBattles() {
   tickEquipCeremony();
 
   if (isCampaignWarCamp()) {
-    drawWarCampBackdrop();
+    drawWarCampBackdrop(_campaignState?.fortressUpgrades ?? {});
   } else {
     const t = performance.now() * 0.001;
     for (const s of STARS) {
@@ -13469,11 +13669,17 @@ function drawBetweenBattles() {
     const _rTitle = getPrimaryTitle(def);
     const _rankPart  = defRank.id !== 'greenhorn' ? `${defRank.label}  ·  ` : '';
     const _classPart = tDef?.label ?? def.type;
+    let _postPart = '';
+    if (isCampaignWarCamp() && _campaignMapIndex != null) {
+      const _wcPosts = getMapRun(ensureCampaignProgress(), _campaignMapIndex).fieldState?.postAssignments
+        ?? _postAssignments ?? {};
+      _postPart = `  ·  ${formatDefenderPostBadge(def, _wcPosts)}`;
+    }
     const _titlePart = _rTitle ? `  ·  ✦ ${_rTitle.label}` : '';
     const _traitPart = (!_rTitle && def.trait) ? `  ·  ${TRAIT_DEFS[def.trait]?.label ?? def.trait}` : '';
     ctx.font = '8px monospace';
     ctx.fillStyle = _rTitle ? 'rgba(160,130,200,0.65)' : defRank.id !== 'greenhorn' ? (defRank.color ?? 'rgba(160,140,100,0.55)') : 'rgba(160,140,100,0.55)';
-    ctx.fillText(`${_rankPart}${_classPart}${_titlePart}${_traitPart}`, rix, ry + 26);
+    ctx.fillText(`${_rankPart}${_classPart}${_postPart}${_titlePart}${_traitPart}`, rix, ry + 26);
 
     // XP bar (ry+20)
     const nextXP = CAREER_XP[Math.min(def.careerLevel + 1, CAREER_XP.length - 1)];

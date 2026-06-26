@@ -15,7 +15,7 @@
 - [x] Extend `serializeFieldState` / `fieldState` with `postAssignments`
 - [x] `ensurePostAssignments` / `inferPostAssignmentsFromTowers` for save migration
 
-## Phase 2 — `fortressPrep` game phase (inner repo) — in progress
+## Phase 2 — `fortressPrep` game phase (inner repo) ✅
 
 - [x] `gamePhase === 'fortressPrep'` replaces `_fieldPrepMode`
 - [x] Fortress Commander shell (click-zoom-panel-horn, 5 hotspots)
@@ -23,7 +23,7 @@
 - [x] Session save resume for `fortressPrep`
 - [x] A2 debrief → gate scar + wood bundle on field state
 - [x] Wood chip in prep meta strip (A3+)
-- [ ] Full schematic UI polish (sprites replace procedural rects)
+- [x] Schematic art pass (ring, gate arch, flag, chest — procedural)
 
 ## Phase 3 — War Camp purity (inner repo) ✅
 
@@ -37,19 +37,19 @@
 - [x] Remove rune shop chip during assault
 - [x] Right panel: combat HUD only (no WAR BAND / FORTRESS tabs in campaign)
 
-## Phase 5 — After Action & chronicle (inner repo)
+## Phase 5 — After Action & chronicle (inner repo) ✅
 
-- [ ] Prose-first debrief layout
-- [ ] Fortress damage report (gate %, wall facing)
-- [ ] Route buttons only: War Camp / Prep / Command
+- [x] Prose-first debrief layout
+- [x] Fortress damage report (gate %, wall facing)
+- [x] Route buttons only: War Camp / Prep / Command
 
-## Phase 6 — Polish
+## Phase 6 — Polish ✅
 
-- [ ] Advisor skald lines linked to posts
-- [ ] Preferred post on hero cards
-- [ ] Promotion titles (Gate Captain)
-- [ ] War Camp fortress backdrop evolution
-- [ ] Art pass on schematic
+- [x] Advisor skald lines linked to posts
+- [x] Preferred post on hero cards
+- [x] Promotion titles (Gate Captain)
+- [x] War Camp fortress backdrop evolution
+- [x] Art pass on schematic
 
 ## Test gates
 
