@@ -3,6 +3,8 @@
  * Nodes have 2–3 waves; the final node ends with a boss wave.
  */
 
+import { isFirstSagaMap, buildFirstSagaWavePlan, getFirstSagaAssault, getFirstSagaBossConfig, FIRST_SAGA_ASSAULT_COUNT } from './firstSaga.js';
+
 export const CAMPAIGN_MAP_COUNT = 100;
 export const MIN_NODES_PER_MAP  = 10;
 export const MAX_NODES_PER_MAP  = 30;
@@ -34,6 +36,7 @@ export function getMapSeed(mapIndex) {
 }
 
 export function getNodeCountForMap(mapIndex) {
+  if (isFirstSagaMap(mapIndex)) return FIRST_SAGA_ASSAULT_COUNT;
   const rng = createRng(getMapSeed(mapIndex));
   const span = MAX_NODES_PER_MAP - MIN_NODES_PER_MAP + 1;
   return MIN_NODES_PER_MAP + Math.floor(rng() * span);
@@ -46,6 +49,7 @@ export function isTutorialNode(mapIndex, nodeIndex) {
 
 /** Active portal count scales with campaign map tier (1 → 4). */
 export function getPortalCountForMap(mapIndex) {
+  if (isFirstSagaMap(mapIndex)) return 1;
   if (mapIndex < 20)  return 1;
   if (mapIndex < 50)  return 2;
   if (mapIndex < 70)  return 3;
@@ -59,6 +63,9 @@ export function getMapDisplayName(mapIndex) {
 }
 
 export function getWaveCountForNode(mapIndex, nodeIndex) {
+  if (isFirstSagaMap(mapIndex)) {
+    return getFirstSagaAssault(nodeIndex)?.waveCount ?? MIN_WAVES_PER_NODE;
+  }
   if (isTutorialNode(mapIndex, nodeIndex)) return 2;
   const rng = createRng(getMapSeed(mapIndex) + nodeIndex * 131);
   return MIN_WAVES_PER_NODE + Math.floor(rng() * (MAX_WAVES_PER_NODE - MIN_WAVES_PER_NODE + 1));
@@ -87,6 +94,7 @@ const NODE_BOSS_TIERS = [
 ];
 
 export function getNodeBossConfig(mapIndex) {
+  if (isFirstSagaMap(mapIndex)) return getFirstSagaBossConfig();
   const tier = Math.min(NODE_BOSS_TIERS.length - 1, Math.floor(mapIndex / 20));
   const base = NODE_BOSS_TIERS[tier];
   const scale = 1 + mapIndex * 0.04;
@@ -102,6 +110,10 @@ export function getNodeBossConfig(mapIndex) {
  * @returns {{ waves: Array<{ waveInNode: number, isBoss: boolean, difficulty: number, tutorial?: boolean }>, nodeCount, isLastNode }}
  */
 export function buildNodeWavePlan(mapIndex, nodeIndex) {
+  if (isFirstSagaMap(mapIndex) && nodeIndex < FIRST_SAGA_ASSAULT_COUNT) {
+    const plan = buildFirstSagaWavePlan(nodeIndex);
+    if (plan) return plan;
+  }
   const nodeCount   = getNodeCountForMap(mapIndex);
   const waveCount   = getWaveCountForNode(mapIndex, nodeIndex);
   const isLastNode  = nodeIndex >= nodeCount - 1;

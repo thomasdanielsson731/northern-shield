@@ -378,11 +378,11 @@ Finale BELONGING (settlement) ──► HOPE (recruit #2)
 | War Camp no field | ✅ | Phase 3 — meta only |
 | Prose debrief | ✅ | Phase 5 — `debriefReport.js` |
 | Gate scar persist | ✅ | A2 debrief → west gate scar |
-| Wood repair | 🟡 | Salvage in debrief/prep; spend UI thin |
-| Linear 6-node map | ❌ | Region 1 script |
-| Settlement ceremony | ❌ | New modal |
-| Boss A4 | ✅ | Retune for slice |
-| Recruit gate | ✅ | Lock until finale (ceremony missing) |
+| Wood repair | ✅ | Prep shell repair action + horn gate A3+ |
+| Linear 6-node map | ✅ | `firstSaga.js` west road UI |
+| Settlement ceremony | ✅ | `settlementCeremony` phase |
+| Boss A4 | ✅ | Ash-Warden on west front |
+| Recruit gate | ✅ | Locked until Settlement Oath |
 
 *Last board review: 2026-06-22 Session 18 — see `agents/boards/sessions/2026-06-22-all-agents-board-18.md`.*
 

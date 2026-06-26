@@ -1,5 +1,6 @@
 const VALID_PHASES = new Set([
   'campaignSelect', 'nodeMap', 'betweenBattles', 'debrief', 'playing', 'mapSelect',
+  'fortressPrep', 'settlementCeremony',
 ]);
 
 /** Sanitize persisted navigation / resume state for a save slot. */
@@ -17,6 +18,15 @@ export function validateSessionState(raw) {
     selectedMapIdx: clampInt(raw.selectedMapIdx, 0, 9),
     returnToNodeMapAfterDebrief: !!raw.returnToNodeMapAfterDebrief,
   };
+
+  if (raw.settlementCeremony && typeof raw.settlementCeremony === 'object') {
+    const sc = raw.settlementCeremony;
+    s.settlementCeremony = {
+      step: Math.max(0, Math.min(5, clampInt(sc.step, 0, 5))),
+      recruitType: typeof sc.recruitType === 'string' ? sc.recruitType : null,
+      nameDraft: typeof sc.nameDraft === 'string' ? sc.nameDraft.slice(0, 16) : '',
+    };
+  }
 
   if (raw.combat && typeof raw.combat === 'object') {
     const c = raw.combat;

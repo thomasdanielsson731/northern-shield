@@ -9,6 +9,7 @@ import {
   getFrontStatusSymbol,
 } from '../src/campaign/campaignFronts.js';
 import { createEmptyCampaignProgress, getNodeCountForMap } from '../src/campaign/campaignMaps.js';
+import { FIRST_SAGA_A4_NODE } from '../src/campaign/firstSaga.js';
 
 describe('campaignFronts', () => {
   it('generates deterministic assault codenames', () => {
@@ -19,23 +20,22 @@ describe('campaignFronts', () => {
     expect(getAssaultCodename(0, 1)).not.toBe(a);
   });
 
-  it('places boss on south front', () => {
+  it('places boss on west front for first saga map 0', () => {
     const layout = getFrontLayout(0);
-    const bossIndex = getNodeCountForMap(0) - 1;
-    expect(layout.nodeToAssault[bossIndex].frontId).toBe('south');
-    const southBoss = layout.fronts.south.assaults.find(a => a.isBoss);
-    expect(southBoss?.nodeIndex).toBe(bossIndex);
+    expect(layout.firstSaga).toBe(true);
+    const bossIndex = FIRST_SAGA_A4_NODE;
+    expect(layout.nodeToAssault[bossIndex].frontId).toBe('west');
+    const westBoss = layout.fronts.west.assaults.find(a => a.isBoss);
+    expect(westBoss?.nodeIndex).toBe(bossIndex);
+    expect(westBoss?.codename).toBe('Ash-Warden');
   });
 
-  it('unlocks first assault on each front', () => {
+  it('unlocks first assault on west front only for saga map 0', () => {
     const p = createEmptyCampaignProgress();
     const layout = getFrontLayout(0);
-    for (const frontId of FRONT_IDS) {
-      const first = layout.fronts[frontId].assaults[0];
-      if (first) {
-        expect(isAssaultUnlocked(p, 0, first.nodeIndex)).toBe(true);
-      }
-    }
+    const westFirst = layout.fronts.west.assaults[0];
+    expect(isAssaultUnlocked(p, 0, westFirst.nodeIndex)).toBe(true);
+    expect(layout.fronts.north.assaults).toHaveLength(0);
   });
 
   it('requires prior assault on same front before unlocking next', () => {
@@ -66,16 +66,17 @@ describe('campaignFronts', () => {
     expect(isAssaultUnlocked(p, 0, layout.fronts.west.assaults[0].nodeIndex)).toBe(true);
   });
 
-  it('each front has an active assault on a fresh map 0 run', () => {
+  it('only west front has assaults on fresh saga map 0', () => {
     const p = createEmptyCampaignProgress();
     const layout = getFrontLayout(0);
-    for (const frontId of FRONT_IDS) {
-      const front = layout.fronts[frontId];
-      const active = front.assaults.some(
-        a => isAssaultUnlocked(p, 0, a.nodeIndex)
-      );
-      expect(active).toBe(true);
+    expect(layout.fronts.west.assaults.length).toBeGreaterThan(0);
+    for (const frontId of ['north', 'east', 'south']) {
+      expect(layout.fronts[frontId].assaults).toHaveLength(0);
     }
+    const active = layout.fronts.west.assaults.some(
+      a => isAssaultUnlocked(p, 0, a.nodeIndex)
+    );
+    expect(active).toBe(true);
   });
 
   it('front status lines include non-color symbols for a11y', () => {

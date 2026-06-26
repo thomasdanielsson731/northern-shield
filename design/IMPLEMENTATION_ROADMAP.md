@@ -51,6 +51,14 @@
 - [x] War Camp fortress backdrop evolution
 - [x] Art pass on schematic
 
+## Sprint 4 — Vertical slice closure ✅
+
+- [x] Linear 6-node Region 1 west road (`firstSaga.js`, `firstSagaUI.js`)
+- [x] Settlement Oath ceremony (`settlementCeremony.js`)
+- [x] Wood repair spend UI (prep shell — horn blocked until repair A3+)
+- [x] Recruit #2 gate (Valkyrie / Military after ceremony)
+- [x] Region 2+ locked on campaign select (Saga II+)
+
 ## Test gates
 
 Run `npx vitest run` after each phase. Manual: slot → command → prep → assign → battle → debrief.

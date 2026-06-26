@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Sprint 3 close — Fortress Commander Phases 0–6)  
+**Last updated:** 2026-06-22 (Sprint 4 — Vertical Slice closure)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -14,9 +14,9 @@
 | **Project** | Northern Shield |
 | **Genre** | Fortress Commander RPG |
 | **Current Target** | The First Saga (vertical slice) |
-| **Current Version** | `0.2.0-dev` |
-| **Current Phase** | Production |
-| **Current Sprint** | Sprint 3 — Vertical Slice Closure |
+| **Current Version** | `0.3.0-dev` |
+| **Current Phase** | Production (Vertical Slice RC candidate) |
+| **Current Sprint** | Sprint 4 — Vertical Slice Closure ✅ |
 
 **Design authority:** [north_star.md](north_star.md) · [the_first_saga.md](the_first_saga.md) · [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md)
 
@@ -52,38 +52,37 @@ Summarized from [north_star.md](north_star.md) — non-negotiable principles:
 | Fortress Commander pivot | 2026-06-25 | Genre: Fortress Commander RPG, not TD |
 | Sprint 1 — Prep shell | 2026-06-25 | `fortressPrep` phase, Commander shell (`1246947`) |
 | Sprint 2 — Phases 2–4 | 2026-06-25 | War Camp purity, campaign combat HUD (`d9f2236`) |
-| Sprint 3 — Phases 5–6 | 2026-06-22 | Prose debrief, post titles, polish (uncommitted) |
+| Sprint 3 — Phases 5–6 | 2026-06-22 | Prose debrief, post titles (`4f24dc7`) |
+| Sprint 4 — Vertical slice closure | 2026-06-22 | 6-node map, Settlement ceremony, recruit gate |
 | All Agents Board Session 18 | 2026-06-22 | Fortress Commander implementation ✅; slice RC blocked |
 
 ## Current milestone
 
 **The First Saga — vertical slice playable end-to-end** (Age I → Settlement ceremony → recruit #2)
 
-Status: **In progress** — Fortress Commander arc complete; three slice blockers remain (see §17 [the_first_saga.md](the_first_saga.md)).
+Status: **RC candidate** — code complete; manual fresh-save playtest recommended before Vertical Slice sign-off.
 
 ## Current sprint
 
-**Sprint 3 — Vertical Slice Closure**
+**Sprint 5 — Vertical Slice RC** (playtest + board sign-off)
 
-Objective: Close gap between Fortress Commander implementation and shippable First Saga journey.
+Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice board.
 
 ## Recently completed work
 
-- `debriefReport.js` — saga prose, fortress damage report, compact stats
-- `postTitles.js` — Gate Captain, preferred post, skald counsel
-- `drawCampaignAssaultDebrief()` — prose-first; routes WAR CAMP · PREPARE FORTRESS · COMMAND MAP
-- Post-linked advisor lines in Fortress Commander shell
-- War Camp post badges + evolving fortress backdrop by upgrade tier
-- Procedural schematic art pass (ring, gate arch, flag, chest, smoke)
-- `IMPLEMENTATION_ROADMAP.md` Phases 0–6 marked complete
-- All Agents Board Session 18 logged
+- `firstSaga.js` — linear A0–A4 west assault chain, boss Ash-Warden
+- `firstSagaUI.js` — west road command map (6 nodes) + ceremony screens
+- `settlementCeremony.js` — Settlement Oath flow, recruit #2 unlock
+- Region 2+ locked on campaign select (Saga II+)
+- Wood repair enforced before A3 horn; wall_scar auto-focus on A3 prep
+- Recruit tab locked until ceremony; Valkyrie/Military only in slice
+- **229** unit tests passing
 
 ## Current implementation focus
 
-1. Commit Phase 5–6 (inner + outer submodule sync)
-2. Linear 6-node Region 1 assault chain (west front only)
-3. Settlement ceremony modal (post-A4 finale)
-4. Wood repair spend UI (A3 teach minimum)
+1. Manual fresh-save playtest A0 → Settlement → recruit #2
+2. Vertical Slice board (11 reviewers)
+3. Commit Sprint 4 (inner + outer)
 
 ---
 
@@ -95,7 +94,7 @@ Checklist for **The First Saga** scope. ✅ = playable in campaign flow · 🟡 
 |---------|--------|
 | Save slots (10) + session resume | ✅ |
 | Campaign region select | ✅ |
-| Command map (multi-front UI) | ✅ (slice needs linear 6-node west chain) |
+| Command map (multi-front UI) | ✅ (slice uses linear west road on map 0) |
 | War Camp (roster, heal, meta) | ✅ |
 | War Camp purity (no field grid) | ✅ |
 | Fortress Commander prep (`fortressPrep`) | ✅ |
@@ -104,17 +103,17 @@ Checklist for **The First Saga** scope. ✅ = playable in campaign flow · 🟡 
 | Campaign assault combat (no build docks) | ✅ |
 | PORT / gate targeting | ✅ |
 | Gate scar persistence (A2) | ✅ |
-| Wood salvage meta (A3+) | 🟡 visible; spend UI thin |
+| Wood salvage meta (A3+) | ✅ |
 | Prose-first After Action debrief | ✅ |
 | Fortress damage report | ✅ |
 | Chronicle / battle history | ✅ |
 | Post promotion titles (Gate Captain) | ✅ |
 | Skald advisor counsel | ✅ |
 | Boss A4 (Ash-Warden) | ✅ |
-| Linear 6-node saga map | ⬜ |
-| Settlement ceremony | ⬜ |
-| Recruit #2 unlock (post-ceremony) | ⬜ (gate exists; ceremony missing) |
-| Stone wall ceremony | ⬜ |
+| Linear 6-node saga map | ✅ |
+| Settlement ceremony | ✅ |
+| Recruit #2 unlock (post-ceremony) | ✅ |
+| Stone wall ceremony | ✅ (in Settlement Oath) |
 | Fortress upgrade tree (slice subset) | 🟡 meta exists; slice ceremony not wired |
 | Skirmish mode | ✅ (CUT from onboarding; separate entry) |
 | Rune shop / stars in campaign | ✅ CUT — disabled in assault |
@@ -174,9 +173,9 @@ Real debt only — not aspirational refactors.
 | `game.js` monolith (~16k lines) | Low | Large | Post-slice; split only with domain trigger |
 | Legacy bonus stores name/rank but no stat applied | Medium | Small | Post-slice (CHAMPION retire loop not in First Saga) |
 | Structure dock PNG sprites (#33 backlog) | Low | Medium | Polish / asset sprint |
-| Command map still multi-front UI vs slice linear 6-node | High | Medium | **Current sprint** |
-| Wood repair spend flow incomplete | High | Small | **Current sprint** (A3 teach) |
-| Settlement ceremony not implemented | High | Medium | **Current sprint** |
+| Command map still multi-front UI vs slice linear 6-node | — | — | Resolved Sprint 4 |
+| Wood repair spend flow incomplete | — | — | Resolved Sprint 4 |
+| Settlement ceremony not implemented | — | — | Resolved Sprint 4 |
 | Bio typewriter / class-differentiated recruit SFX | Low | Small | Polish board backlog |
 
 ---
@@ -189,10 +188,7 @@ Real debt only — not aspirational refactors.
 
 ## Major
 
-| Issue | Notes |
-|-------|-------|
-| First Saga not completable end-to-end | Missing 6-node linear map + Settlement ceremony — design gap, not a crash |
-| Wood repair teach incomplete | A3 assault expects repair action; salvage visible but spend UX thin |
+*None logged — slice flow code-complete; manual playtest pending.*
 
 ## Minor
 
@@ -227,7 +223,7 @@ Chronological log — **do not remove** historical entries.
 | 15 | Runes, stars, siege CUT from slice | Accepted | `the_first_saga.md` §18 |
 | 16 | Gate scar + wood bundle on A2 win debrief | Accepted | Scar teach moment; not on prep entry |
 | 17 | Promotion titles tied to post assignment | Accepted | Gate Captain etc.; `postTitles.js` |
-| 18 | Procedural schematic acceptable until Settlement ships | Accepted | Session 18; PNG is polish not blocker |
+| 19 | Settlement ceremony as `settlementCeremony` game phase | Accepted | Post-A4 finale; recruit #2 unlock |
 
 ---
 
@@ -235,45 +231,32 @@ Chronological log — **do not remove** historical entries.
 
 ## Objective
 
-Ship the smallest set of changes that let a **fresh save** complete The First Saga A0→Settlement (recruit #2).
+Validate The First Saga with a fresh save and convene Vertical Slice review board.
 
 ## Definition of Done
 
-- [ ] Phase 5–6 committed (inner `fortress-commander:` + outer submodule)
-- [ ] Linear 6-node west-front assault chain on Region 1 command map
-- [ ] Settlement ceremony modal fires after A4 victory
-- [ ] Wood repair action available on scarred west gate before A3 horn
-- [ ] `the_first_saga.md` §17 alignment table all ✅ or documented 🟡
-- [ ] Fresh-save manual playtest logged to `agents/boards/sessions/`
-- [ ] `npx vitest run` green
+- [ ] Fresh-save manual playtest logged (human)
+- [ ] Vertical Slice board Session 19 — 11 reviewers ✅
+- [ ] Sprint 4 committed (inner + outer)
+- [ ] `npx vitest run` green (229+)
 
 ## Success Criteria
 
-Player can complete: slot → Region 1 → A0…A4 → Settlement Oath → recruit #2 named — without encountering CUT systems or screen-law violations.
+Human playtest confirms A0→Settlement→recruit #2 without screen-law violations.
 
 ## Blocked By
 
-- Phase 5–6 uncommitted at sprint start (resolve first)
-- Settlement ceremony spec in `the_first_saga.md` §14 (design ready; code missing)
-- Linear map script vs existing multi-front command map (needs slice-only filter)
+- Manual playtest not yet run
 
 ## Next Review Board
 
-**Vertical Slice review** — 11 required reviewers per [REVIEW_MATRIX.md](../../agents/REVIEW_MATRIX.md): BJORN · SKJOLD · RUNE · BASTION · GARDR · EINHERI · WITNESS · GRID · SKALD · VAULT · DROTT
+**Vertical Slice RC** — BJORN · SKJOLD · RUNE · BASTION · GARDR · EINHERI · WITNESS · GRID · SKALD · VAULT · DROTT
 
-Convene after Sprint 3 DoD met. Latest full review: [Session 18](../../agents/boards/sessions/2026-06-22-all-agents-board-18.md).
+## Next Recommended Work
 
----
-
-# Next Recommended Work
-
-*Smallest production steps only — no post-slice systems.*
-
-1. **Commit Phase 5–6** — `debriefReport.js`, `postTitles.js`, debrief UI, War Camp badges, roadmap sync (inner + outer).
-2. **Linear 6-node Region 1 map** — west front only; assault chain A0→A4 per `the_first_saga.md` §3; hide/disable non-slice fronts.
-3. **Settlement ceremony modal** — post-A4 non-combat beat; unlock recruit #2; wire War Camp RECRUIT tab gate.
-
-*Do not start:* four-front command map, rune shop, siege platforms, Region 2+, food economy.
+1. **Manual fresh-save playtest** — log results to `agents/boards/sessions/`
+2. **Vertical Slice board** — convene after playtest
+3. **Promote structure PNGs** (#33) — polish, not blocking RC
 
 ---
 
@@ -282,16 +265,16 @@ Convene after Sprint 3 DoD met. Latest full review: [Session 18](../../agents/bo
 | Metric | Value | As of |
 |--------|-------|-------|
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
-| First Saga vertical slice completion | ~72% (6/9 §17 items ✅, 1 🟡, 2 ❌) | 2026-06-22 |
-| Playable end-to-end (First Saga finale) | No | 2026-06-22 |
-| Tests passing | **221** / 221 | 2026-06-22 |
-| Test files | 27 | 2026-06-22 |
+| First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
+| Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
+| Tests passing | **229** / 229 | 2026-06-22 |
+| Test files | 28 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
-| Open bugs (major) | 2 | 2026-06-22 |
-| Inner repo commits ahead of `origin/main` | 8 (+ uncommitted Phase 5–6) | 2026-06-22 |
-| Implemented slice features (checklist) | 18 ✅ · 4 🟡 · 4 ⬜ | 2026-06-22 |
-| Technical debt items tracked | 7 | 2026-06-22 |
-| Active design decisions | 18 | 2026-06-22 |
+| Open bugs (major) | 0 | 2026-06-22 |
+| Inner repo commits ahead of `origin/main` | 9 (+ uncommitted Sprint 4) | 2026-06-22 |
+| Implemented slice features (checklist) | 22 ✅ · 2 🟡 · 0 ⬜ | 2026-06-22 |
+| Technical debt items tracked | 4 | 2026-06-22 |
+| Active design decisions | 19 | 2026-06-22 |
 | Last board session | [2026-06-22-all-agents-board-18](../../agents/boards/sessions/2026-06-22-all-agents-board-18.md) | 2026-06-22 |
 
 ---
@@ -302,14 +285,14 @@ Convene after Sprint 3 DoD met. Latest full review: [Session 18](../../agents/bo
 
 - **Game:** Northern Shield — Fortress Commander RPG (Vanilla JS + Canvas, Vite, inner repo `tower-defense/`).
 - **Target:** Ship **The First Saga** only — 1 hero → 2, west gate + watch tower, A0–A4 + Settlement ceremony.
-- **Done:** Fortress Commander Phases 0–6 — prep shell, War Camp purity, campaign combat strip, prose debrief, post titles.
-- **Not done:** Linear 6-node map, Settlement ceremony, wood repair spend UI.
+- **Done:** Sprint 4 — linear west road, Settlement Oath, recruit gate, wood repair.
+- **Not done:** Human fresh-save playtest; Vertical Slice board sign-off.
 - **Phase flow:** War Camp (`betweenBattles`) → Prep (`fortressPrep`) → Combat (`playing`) → Debrief → routes back.
 - **Posts:** `defensivePosts.js` — player assigns heroes to posts; `buildTowerPlacements` feeds combat grid silently.
 - **CUT in slice:** runes, stars, siege, 4 fronts, skirmish onboarding, food, Region 2+.
 - **Screen laws:** one question per screen; no grid in War Camp; no shop in battle; no recruit in prep.
 - **Key files:** `game.js` (phases), `fortressCommanderShell.js`, `debriefReport.js`, `postTitles.js`.
-- **Tests:** run from `tower-defense/` → `npx vitest run` (221 passing).
+- **Tests:** run from `tower-defense/` → `npx vitest run` (229 passing).
 - **Commits:** Phase 5–6 may be uncommitted — check `git status` before assuming shipped.
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.

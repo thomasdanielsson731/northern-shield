@@ -150,6 +150,25 @@ import {
   startHornAnimation,
   getHornBlockReason,
 } from '../preparation/fortressCommanderShell.js';
+import {
+  isFirstSagaMap,
+  FIRST_SAGA_A3_NODE,
+  FIRST_SAGA_A4_NODE,
+  isFirstSagaRecruitUnlocked,
+  isFirstSagaSliceLockedRegion,
+  isFirstSagaSettlementComplete,
+  ensureFirstSagaState,
+} from '../campaign/firstSaga.js';
+import {
+  shouldOfferSettlementCeremony,
+  applySettlementComplete,
+  validateSettlementName,
+} from '../campaign/settlementCeremony.js';
+import {
+  drawFirstSagaCommandMap,
+  drawSettlementCeremony,
+  SETTLEMENT_STAGE_COUNT,
+} from '../campaign/firstSagaUI.js';
 
 const COLS = 48;
 const ROWS = 30;
@@ -687,6 +706,11 @@ let _nodeWaveIndex      = 0;
 let _fortressGateBreached = false;
 let _gateBreachBannerTimer = 0;
 let _returnToNodeMapAfterDebrief = false;
+let _pendingSettlementCeremony = false;
+let _settlementCeremonyStep = 0;
+let _settlementCeremonyBtns = [];
+let _settlementRecruitType = null;
+let _settlementNameDraft = '';
 const CAMPAIGN_MAPS_PER_PAGE = 10;
 let selectedMapIdx   = 0;
 let mapSelectBtns    = [];       // hit areas for map cards
@@ -1600,6 +1624,12 @@ function serializeGameSession() {
       postAssignments: { ..._postAssignments },
       shellHotspot: _prepShell?.selectedHotspot ?? null,
     };
+  } else if (gamePhase === 'settlementCeremony') {
+    session.settlementCeremony = {
+      step: _settlementCeremonyStep,
+      recruitType: _settlementRecruitType,
+      nameDraft: _settlementNameDraft,
+    };
   } else if (gamePhase === 'playing' && _campaignNodeMode) {
     session.combat = {
       mapIndex: _campaignMapIndex,
@@ -1696,6 +1726,14 @@ function restoreGameSession(session) {
       _debriefTimer = 60;
       gameOver = false;
       break;
+    case 'settlementCeremony':
+      _settlementCeremonyStep = session.settlementCeremony?.step ?? 0;
+      _settlementRecruitType = session.settlementCeremony?.recruitType ?? null;
+      _settlementNameDraft = session.settlementCeremony?.nameDraft ?? '';
+      gamePhase = 'settlementCeremony';
+      gameOver = false;
+      victory = false;
+      break;
     case 'mapSelect':
       gamePhase = 'mapSelect';
       _mapAutoStartEnabled = false;
@@ -1724,14 +1762,13 @@ function activateSlot(slotIndex) {
     if (_campaignState.uiHints) Object.assign(_hintSeen, _campaignState.uiHints);
     ensureCampaignProgress();
     loadRosterFromCampaignState();
-    // Seed the starting warband — three veterans ready for the first assault
-    for (const type of ['berserk', 'military', 'valkyrie']) {
-      const id  = _generateId();
-      const def = new Defender({ defenderId: id, name: getDefenderName(type), type });
-      def.trait        = getRandomTrait(type);
-      def.fortressRole = getDefaultFortressRole(type);
-      _roster.defenders.push(def);
-    }
+    // First Saga — one unnamed Berserker (naming after A0 survival)
+    const id = _generateId();
+    const def = new Defender({ defenderId: id, name: '', type: 'berserk' });
+    def.trait = getRandomTrait('berserk');
+    def.fortressRole = getDefaultFortressRole('berserk');
+    _roster.defenders.push(def);
+    ensureFirstSagaState(_campaignState);
     _campaignState.defenders = _roster.toJSON();
     gamePhase = 'campaignSelect';
     if (!_hintSeen.skirmishDiscovery) _skirmishDiscoveryTimer = 420;
@@ -2071,6 +2108,14 @@ function finishCampaignNodeVictory() {
   field = applyFirstSagaAssaultRewards(field, _campaignNodeIndex);
   const _completeMeta = completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
   const updatedProgress = _completeMeta.progress;
+  if (isFirstSagaMap(_campaignMapIndex) && !isFirstSagaSettlementComplete(_campaignState)) {
+    updatedProgress.mapsUnlocked = 1;
+    _completeMeta.newRegionUnlocked = null;
+    _completeMeta.mapCompleted = false;
+  }
+  if (shouldOfferSettlementCeremony(_campaignState, _campaignMapIndex, _campaignNodeIndex)) {
+    _pendingSettlementCeremony = true;
+  }
   if (_completeMeta.newRegionUnlocked != null) {
     const _unlockMeta = getCampaignMapMeta(_completeMeta.newRegionUnlocked);
     _mapUnlockFx = {
@@ -2116,7 +2161,7 @@ function enterCampaignWarCamp() {
       try { persistCampaign(); } catch {}
     }
   }
-  if (battlesCompleted === 1 && !_hintSeen.recruitTab) {
+  if (battlesCompleted === 1 && !_hintSeen.recruitTab && isFirstSagaRecruitUnlocked(_campaignState)) {
     _warCampTabPulse = 'recruit';
   } else if (battlesCompleted >= 3 && !_hintSeen.fortressTab && _warCampTab !== 'fortress') {
     _warCampTabPulse = 'fortress';
@@ -2129,6 +2174,58 @@ function enterCampaignWarCamp() {
 
 function isCampaignWarCamp() {
   return _campaignRegionActive && _campaignMapIndex != null;
+}
+
+function beginSettlementCeremony() {
+  ensureFirstSagaState(_campaignState);
+  _settlementCeremonyStep = 0;
+  _settlementRecruitType = null;
+  _settlementNameDraft = '';
+  _settlementCeremonyBtns = [];
+  _pendingSettlementCeremony = false;
+  gamePhase = 'settlementCeremony';
+  sfxChapterBanner();
+}
+
+function completeSettlementCeremony() {
+  if (!_campaignState || !_settlementRecruitType || !validateSettlementName(_settlementNameDraft)) return;
+  const name = _settlementNameDraft.trim();
+  applySettlementComplete(_campaignState, { recruitType: _settlementRecruitType, recruitName: name });
+  const id = `def_${Date.now()}`;
+  const def = new Defender({ defenderId: id, name, type: _settlementRecruitType });
+  def.trait = getRandomTrait(_settlementRecruitType);
+  def.fortressRole = getDefaultFortressRole(_settlementRecruitType);
+  if (!_roster) _roster = new Roster();
+  _roster.defenders.push(def);
+  _campaignState.defenders = _roster.toJSON();
+  const progress = ensureCampaignProgress();
+  const mapIdx = _campaignMapIndex ?? 0;
+  const run = getMapRun(progress, mapIdx);
+  if (run.fieldState) {
+    run.fieldState.stoneWestFace = true;
+  }
+  if (!progress.clearedMaps.includes(mapIdx)) {
+    progress.clearedMaps.push(mapIdx);
+    progress.clearedMaps.sort((a, b) => a - b);
+  }
+  progress.mapsUnlocked = 1;
+  _campaignState.campaignProgress = progress;
+  _regionClearFx = { name: 'SAGA I — THE SETTLEMENT', timer: 420 };
+  try { persistCampaign(); } catch {}
+  gamePhase = 'nodeMap';
+  _commandMapView = 'overview';
+  _selectedFrontId = null;
+}
+
+function canRecruitInCampaignWarCamp() {
+  if (!isCampaignWarCamp() || !isFirstSagaMap(_campaignMapIndex)) return { ok: true };
+  if (!isFirstSagaRecruitUnlocked(_campaignState)) {
+    return { ok: false, reason: 'Recruitment opens after the Settlement Oath.' };
+  }
+  if ((_roster?.defenders?.length ?? 0) >= 2) {
+    return { ok: false, reason: 'The saga warband is full for this chapter.' };
+  }
+  return { ok: true };
 }
 
 function canModifyWarbandDeployment() {
@@ -2220,6 +2317,14 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   dragItem = null;
   _placingDefenderId = null;
   if (!assaultFieldHasGate()) _structuresTabPulse = 120;
+  if (
+    isFirstSagaMap(mapIndex)
+    && nodeIndex === FIRST_SAGA_A3_NODE
+    && _prepFieldMeta.westGateScarred
+    && !_prepFieldMeta.westGateRepaired
+  ) {
+    _prepShell.selectedHotspot = 'wall_scar';
+  }
   _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
 }
 
@@ -4971,6 +5076,26 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
   // Rename intercept — consume all input while renaming a defender
+  if (gamePhase === 'settlementCeremony' && _settlementCeremonyStep === 4) {
+    if (e.key === 'Escape') {
+      _settlementNameDraft = '';
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (validateSettlementName(_settlementNameDraft)) {
+        _settlementCeremonyStep = 5;
+      }
+      return;
+    }
+    if (e.key === 'Backspace') {
+      _settlementNameDraft = _settlementNameDraft.slice(0, -1);
+      return;
+    }
+    if (e.key.length === 1 && _settlementNameDraft.length < 16) {
+      _settlementNameDraft += e.key;
+    }
+    return;
+  }
   if (_renameState) {
     e.preventDefault();
     if (e.key === 'Escape') {
@@ -5341,6 +5466,8 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'attack') {
             _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
             enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
+          } else if (btn.action === 'settlement') {
+            beginSettlementCeremony();
           } else if (btn.action === 'prepareField') {
             enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? null);
           }
@@ -5383,6 +5510,10 @@ canvas.addEventListener('mousedown', e => {
             _returnToNodeMapAfterDebrief = false;
             gameOver = false;
             victory = false;
+            if (_pendingSettlementCeremony && isFirstSagaMap(_campaignMapIndex)) {
+              beginSettlementCeremony();
+              return;
+            }
             if (btn.action === 'nextAssault') {
               enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
             } else if (btn.action === 'warCamp') {
@@ -5400,6 +5531,35 @@ canvas.addEventListener('mousedown', e => {
       } else {
         _betweenFadeIn = _battleResult === 'defeat' ? 0 : 30;
         gamePhase = 'betweenBattles';
+      }
+    }
+    return;
+  }
+
+  if (gamePhase === 'settlementCeremony') {
+    if (e.button === 0) {
+      for (const btn of _settlementCeremonyBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (btn.action === 'pickRecruit') {
+            _settlementRecruitType = btn.recruitType;
+            return;
+          }
+          if (btn.action === 'advance') {
+            if (_settlementCeremonyStep === 3 && !_settlementRecruitType) return;
+            if (_settlementCeremonyStep === 4) {
+              if (!validateSettlementName(_settlementNameDraft)) return;
+              _settlementCeremonyStep = 5;
+              return;
+            }
+            if (_settlementCeremonyStep >= SETTLEMENT_STAGE_COUNT - 1) {
+              completeSettlementCeremony();
+              return;
+            }
+            _settlementCeremonyStep++;
+          }
+          return;
+        }
       }
     }
     return;
@@ -5707,7 +5867,10 @@ canvas.addEventListener('mousedown', e => {
             _campaignState.defenders = _roster.toJSON();
             try { persistCampaign(); } catch {}
           } else if (btn.action === 'recruit') {
-            if (goldReserve >= _effectiveRecruitCost && _recruitType) {
+            const _rg = canRecruitInCampaignWarCamp();
+            if (!_rg.ok) {
+              _uiToast = { text: _rg.reason, timer: 140, color: UI_COLORS.gold };
+            } else if (goldReserve >= _effectiveRecruitCost && _recruitType) {
               const id   = _generateId();
               const name = getDefenderName(_recruitType);
               const def  = new Defender({ defenderId: id, name, type: _recruitType });
@@ -13868,11 +14031,24 @@ function drawBetweenBattles() {
   const recY = _wcCursor;
 
   if (_warCampTab === 'recruit') {
+    const _recruitGate = canRecruitInCampaignWarCamp();
+    if (!_recruitGate.ok) {
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(160,130,90,0.72)';
+      ctx.textAlign = 'center';
+      ctx.fillText(_recruitGate.reason, rix + riW / 2, recY + 36);
+      ctx.font = '7px monospace';
+      ctx.fillStyle = 'rgba(120,100,70,0.5)';
+      ctx.fillText('Complete the Settlement Oath on the command map.', rix + riW / 2, recY + 52);
+      ctx.textAlign = 'left';
+    } else {
     // ── RECRUIT (full panel) ───────────────────────────────────────────────────
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
     ctx.fillText(`◆ ${goldReserve}g reserve · ${_effectiveRecruitCost}g each`, rix, recY + 10);
 
-    const allTypes = [
+    const allTypes = (isCampaignWarCamp() && isFirstSagaMap(_campaignMapIndex))
+      ? [{ type: 'valkyrie', short: 'Val' }, { type: 'military', short: 'Arc' }]
+      : [
       { type: 'berserk', short: 'Ber' }, { type: 'valkyrie', short: 'Val' },
       { type: 'military', short: 'Arc' }, { type: 'catapult', short: 'Cat' },
       { type: 'blondie', short: 'Blo' }, { type: 'piltorn', short: 'War' },
@@ -13925,6 +14101,8 @@ function drawBetweenBattles() {
     }
     ctx.textAlign = 'left';
     if (canAfford) _betweenBtns.push({ x: rix, y: rBtnY, w: riW, h: rBtnH, action: 'recruit' });
+
+    } // recruit unlocked
 
   } else if (_warCampTab === 'fortress') {
     // ── FORTRESS NODES (meta buildings — no field layout) ─────────────────────
@@ -14281,13 +14459,23 @@ function drawCampaignSelect() {
     const col = idx % cols, row = Math.floor(idx / cols);
     const cx = startX + col * (cardW + gap);
     const cy = startY + row * (cardH + gap);
-    const unlocked = i < progress.mapsUnlocked;
+    const unlocked = i < progress.mapsUnlocked && !isFirstSagaSliceLockedRegion(i);
     const cleared  = progress.clearedMaps.includes(i);
     const meta     = getCampaignMapMeta(i);
+    const sliceLocked = isFirstSagaSliceLockedRegion(i);
 
     drawFantasyPanel(cx, cy, cardW, cardH,
       unlocked ? 'rgba(22,14,6,0.96)' : 'rgba(10,8,6,0.92)',
       unlocked ? 0.75 : 0.35, 8);
+
+    if (sliceLocked) {
+      ctx.font = '7px monospace';
+      ctx.fillStyle = '#504030';
+      ctx.textAlign = 'center';
+      ctx.fillText('SAGA II+', cx + cardW / 2, cy + cardH / 2 + 4);
+      ctx.textAlign = 'left';
+      continue;
+    }
 
     if (i === _nextUnlockIdx) {
       const pulse = 0.5 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -14456,7 +14644,16 @@ function drawNodeMap() {
   }
 
   const mapName = meta?.name ?? 'REGION';
-  if (_commandMapView === 'front' && _selectedFrontId) {
+  if (isFirstSagaMap(_campaignMapIndex)) {
+    drawFirstSagaCommandMap(ctx, {
+      mapX, mapY, mapW, mapH,
+      progress,
+      mapIndex: _campaignMapIndex,
+      run,
+      btnsOut: _nodeMapBtns,
+      settlementDone: isFirstSagaSettlementComplete(_campaignState),
+    });
+  } else if (_commandMapView === 'front' && _selectedFrontId) {
     _drawFrontAssaultPanel(progress, layout, run, mapX, mapY, mapW, mapH, _selectedFrontId);
   } else {
     _drawCommandMapOverview(progress, run, mapX, mapY, mapW, mapH, portalCount, layout, mapName);
@@ -14469,12 +14666,14 @@ function drawNodeMap() {
   _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 22, action: 'back' });
 
   const skX = W - 224;
-  drawFantasyPanel(skX, backY, 100, 22, 'rgba(30,22,8,0.72)', 0.55, 6);
-  ctx.fillStyle = '#a08050';
-  ctx.fillText('SKIRMISH', skX + 50, backY + 14);
-  _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
+  if (!isFirstSagaMap(_campaignMapIndex)) {
+    drawFantasyPanel(skX, backY, 100, 22, 'rgba(30,22,8,0.72)', 0.55, 6);
+    ctx.fillStyle = '#a08050';
+    ctx.fillText('SKIRMISH', skX + 50, backY + 14);
+    _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
+  }
 
-  const campX = W - 114;
+  const campX = isFirstSagaMap(_campaignMapIndex) ? W - 114 : W - 114;
   drawFantasyPanel(campX, backY, 100, 22, 'rgba(20,30,14,0.72)', 0.55, 6);
   ctx.fillStyle = '#90c070';
   ctx.fillText('WAR CAMP', campX + 50, backY + 14);
@@ -14979,6 +15178,21 @@ function draw() {
     drawRegionClearFanfare();
     drawFrames();
     drawCampaignMetaBar();
+    ctx.restore();
+    return;
+  }
+
+  if (gamePhase === 'settlementCeremony') {
+    _settlementCeremonyBtns = [];
+    drawSettlementCeremony(ctx, BASE_W, BASE_H, {
+      step: _settlementCeremonyStep,
+      recruitType: _settlementRecruitType,
+      nameDraft: _settlementNameDraft,
+      btnsOut: _settlementCeremonyBtns,
+      settlementComplete: isFirstSagaSettlementComplete(_campaignState),
+    });
+    drawFrames();
+    drawCampaignMetaBar({ line1: 'SETTLEMENT OATH', line2: 'Saga I finale', color: UI_COLORS.gold });
     ctx.restore();
     return;
   }

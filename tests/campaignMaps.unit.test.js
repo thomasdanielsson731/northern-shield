@@ -37,8 +37,9 @@ describe('campaignMaps', () => {
     expect(getMapDisplayName(10)).toBe('MIDGARD 2');
   });
 
-  it('node counts stay within 10–30', () => {
-    for (let i = 0; i < CAMPAIGN_MAP_COUNT; i++) {
+  it('node counts stay within 10–30 (map 0 is First Saga exception)', () => {
+    expect(getNodeCountForMap(0)).toBe(5);
+    for (let i = 1; i < CAMPAIGN_MAP_COUNT; i++) {
       const n = getNodeCountForMap(i);
       expect(n).toBeGreaterThanOrEqual(10);
       expect(n).toBeLessThanOrEqual(30);
@@ -78,8 +79,10 @@ describe('campaignMaps', () => {
     expect(getMarchSuppliesGold(10, 200)).toBeGreaterThan(20);
   });
 
-  it('each node has 2–3 waves; last node ends with boss', () => {
-    for (let m = 0; m < 5; m++) {
+  it('each node has 2–3 waves; last node ends with boss (map 0 uses saga script)', () => {
+    expect(getWaveCountForNode(0, 0)).toBe(1);
+    expect(buildNodeWavePlan(0, 4).waves.at(-1)?.isBoss).toBe(true);
+    for (let m = 1; m < 5; m++) {
       const nodeCount = getNodeCountForMap(m);
       for (let n = 0; n < nodeCount; n++) {
         const w = getWaveCountForNode(m, n);
@@ -93,11 +96,11 @@ describe('campaignMaps', () => {
     }
   });
 
-  it('unlocks assaults per front (first on each front open)', () => {
+  it('unlocks assaults linearly on saga map 0 west front', () => {
     const p = createEmptyCampaignProgress();
     const layout = getFrontLayout(0);
     expect(isAssaultUnlocked(p, 0, 0)).toBe(true);
-    expect(isAssaultUnlocked(p, 0, 1)).toBe(true);
+    expect(isAssaultUnlocked(p, 0, 1)).toBe(false);
     const westSecond = layout.fronts.west.assaults[1];
     if (westSecond) {
       expect(isAssaultUnlocked(p, 0, westSecond.nodeIndex)).toBe(false);

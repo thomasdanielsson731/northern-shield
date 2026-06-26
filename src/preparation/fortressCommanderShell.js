@@ -20,10 +20,14 @@ export const PREP_HOTSPOTS = {
   TREASURY: 'treasury',
 };
 
+import {
+  FIRST_SAGA_A2_NODE,
+  FIRST_SAGA_A3_NODE,
+} from '../campaign/firstSaga.js';
+
 export const GATE_REPAIR_WOOD_COST = 10;
 export const A2_DEBRIEF_WOOD_BUNDLE = 15;
-export const FIRST_SAGA_A2_NODE = 2;
-export const FIRST_SAGA_A3_NODE = 3;
+export { FIRST_SAGA_A2_NODE, FIRST_SAGA_A3_NODE };
 export const CAMERA_DURATION_MS = 400;
 export const HORN_ANIM_MS = 500;
 

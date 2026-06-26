@@ -9,6 +9,7 @@ import {
   getWaveCountForNode,
   getMapRun,
 } from './campaignMaps.js';
+import { isFirstSagaMap, getFirstSagaFrontLayout } from './firstSaga.js';
 
 export const FRONT_IDS = ['west', 'north', 'east', 'south'];
 
@@ -58,6 +59,14 @@ export function getAssaultTierLabel(assaultIndex, isBoss) {
  * Other nodes round-robin across all four fronts (boss node excluded from round-robin).
  */
 export function getFrontLayout(mapIndex) {
+  if (isFirstSagaMap(mapIndex)) {
+    const key = 'first-saga-0';
+    if (_layoutCache.has(key)) return _layoutCache.get(key);
+    const layout = getFirstSagaFrontLayout();
+    _layoutCache.set(key, layout);
+    return layout;
+  }
+
   const key = String(mapIndex);
   if (_layoutCache.has(key)) return _layoutCache.get(key);
 
