@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:saga": "vitest run tests/firstSaga.playtest.harness.test.js"
   },
   "devDependencies": {
     "vitest": "^2.1.8"

@@ -79,7 +79,7 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 - Region 2+ locked on campaign select (Saga II+)
 - Wood repair enforced before A3 horn; wall_scar auto-focus on A3 prep
 - Recruit tab locked until ceremony; Valkyrie/Military only in slice
-- **232** unit tests passing
+- **232** unit tests passing (+ First Saga logic harness: `npm run test:saga`)
 
 ## Current implementation focus
 
@@ -241,7 +241,7 @@ Validate The First Saga with a fresh save and convene Vertical Slice review boar
 - [x] Sprint 4 committed (inner `5b17238`)
 - [x] Sprint 5 balance + prep schematic (`9839ee7`)
 - [x] Sprint 5 balance pass 2 + damage feedback (pending commit)
-- [x] `npx vitest run` green (232+)
+- [x] `npm test` green (235+ incl. saga harness)
 - [x] Vertical Slice board Session 19 — 🟡 RC approved
 - [x] Session 20 — balance/readability follow-up
 - [ ] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
@@ -260,9 +260,9 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 ## Next Recommended Work
 
-1. **Manual fresh-save playtest** — log results to `agents/boards/sessions/`
-2. **Vertical Slice board** — convene after playtest
-3. **Promote structure PNGs** (#33) — polish, not blocking RC
+1. **Human playtest** — canvas/feel items in [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md) (`manual` rows in harness)
+2. Tag `v0.3.0-saga-rc` after human PASS
+3. Polish backlog: structure PNGs (#33)
 
 ---
 
@@ -273,8 +273,8 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **232** / 232 | 2026-06-22 |
-| Test files | 28 | 2026-06-22 |
+| Tests passing | **235** / 235 | 2026-06-22 |
+| Test files | 29 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
 | Inner repo commits ahead of `origin/main` | 12 | 2026-06-22 |
@@ -298,7 +298,7 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 - **CUT in slice:** runes, stars, siege, 4 fronts, skirmish onboarding, food, Region 2+.
 - **Screen laws:** one question per screen; no grid in War Camp; no shop in battle; no recruit in prep.
 - **Key files:** `game.js` (phases), `fortressCommanderShell.js`, `debriefReport.js`, `postTitles.js`.
-- **Tests:** run from `tower-defense/` → `npx vitest run` (232 passing).
+- **Tests:** `npm test` from `tower-defense/` (235 incl. `tests/firstSaga.playtest.harness.test.js`). Campaign edits: `npm run test:saga` first.
 - **Commits:** Phase 5–6 may be uncommitted — check `git status` before assuming shipped.
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.

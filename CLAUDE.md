@@ -17,14 +17,15 @@ All commands run from the **repository root** (`tower-defense/` — where `packa
 ```
 cd tower-defense
 npx vite              # start dev server
-npx vitest run        # run all tests once
-npx vitest            # run tests in watch mode
-npx vitest run tests/tower.unit.test.js   # run a single test file
+npm test              # full suite (includes First Saga logic harness)
+npm run test:saga     # saga checklist gate only
+npx vitest            # watch mode
+npx vitest run tests/tower.unit.test.js   # single file
 ```
 
 There is no build step for development — Vite serves ES modules directly. The `dist/` folder holds a previously built output.
 
-CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test` on every push/PR.
+CI (`.github/workflows/ci.yml`) runs `npm run lint --if-present` then `npm test` on every push/PR. `npm test` includes the **First Saga logic harness** (`tests/firstSaga.playtest.harness.test.js`). Agents: see outer repo `agents/hooks/first-saga-logic-gate.md`.
 
 ## Architecture
 
@@ -71,6 +72,8 @@ src/
     events.js          — EVENT_DEFS (8 Named Campaign Events); getAvailableEvent(cs) → one random eligible event or null
     campaignMaps.js    — 100 campaign maps, assault/wave generation, portal tiers, boss tiers, buildNodeWavePlan()
     campaignFronts.js  — four-front command map, assault codenames, per-front unlock, getNextAvailableAssault()
+    firstSaga.js       — First Saga linear A0–A4 + settlement; spawn tables, wave bands, balance helpers
+    sagaPlaytestHarness.js — automated Sprint 5 checklist (`npm run test:saga`); maps to agents/first-saga-playtest-runner.md
     campaignRun.js     — field persistence (10 heroes + 10 structures), assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
     campaignDeploy.js  — isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults(); prep-only placement rules
     onboarding.js      — ONBOARDING steps enum, getOnboardingHint(), advanceOnboarding(), resolveOnboardingHint()
