@@ -45,6 +45,82 @@ export function getFirstSagaBossConfig() {
   return { name: 'ASH-WARDEN', hp: 900, reward: 120 };
 }
 
+/** Design enemy aliases — raiders/wolves use existing types with tuned HP. */
+const SAGA_RAIDER = 'draugr';
+const SAGA_WOLF   = 'warg';
+
+function sagaPack(type, count, hpScale = 1) {
+  return Array.from({ length: count }, () => ({ type, hpScale }));
+}
+
+/**
+ * Explicit spawn compositions per assault (design/the_first_saga.md §6).
+ * Entries are `{ type, hpScale }` objects; boss waves include `__nodeBoss`.
+ */
+export function buildFirstSagaSpawnQueue(nodeIndex, waveSpec) {
+  const w = waveSpec?.waveInNode ?? 1;
+  if (nodeIndex === 0 && w === 1) {
+    return sagaPack(SAGA_RAIDER, 6, 0.42);
+  }
+  if (nodeIndex === 1) {
+    if (w === 1) return sagaPack(SAGA_WOLF, 6, 0.78);
+    if (w === 2) return [...sagaPack(SAGA_WOLF, 4, 0.82), ...sagaPack(SAGA_RAIDER, 2, 0.62)];
+  }
+  if (nodeIndex === 2) {
+    if (w === 1) return sagaPack(SAGA_RAIDER, 6, 0.86);
+    if (w === 2) return sagaPack(SAGA_RAIDER, 6, 0.94);
+  }
+  if (nodeIndex === 3) {
+    if (w === 1) return sagaPack(SAGA_RAIDER, 7, 0.88);
+    if (w === 2) return sagaPack(SAGA_RAIDER, 7, 0.96);
+  }
+  if (nodeIndex === 4) {
+    if (w === 1) return sagaPack(SAGA_RAIDER, 6, 0.88);
+    if (w === 2) return [...sagaPack(SAGA_RAIDER, 4, 1.0), ...sagaPack(SAGA_WOLF, 2, 0.92)];
+    if (w === 3 && waveSpec?.isBoss) {
+      return [
+        ...sagaPack(SAGA_WOLF, 2, 0.90),
+        ...sagaPack(SAGA_RAIDER, 2, 0.90),
+        { __nodeBoss: true, mapIndex: FIRST_SAGA_MAP_INDEX },
+      ];
+    }
+  }
+  return null;
+}
+
+/** Global wave bands for saga assaults — avoids generic campaign difficulty curve. */
+export function getFirstSagaWaveBands(nodeIndex, waveInNode = 1) {
+  const base = [
+    { hp: 0.70, speed: 0.86 },
+    { hp: 0.78, speed: 0.90 },
+    { hp: 0.86, speed: 0.94 },
+    { hp: 0.92, speed: 0.96 },
+    { hp: 1.00, speed: 1.00 },
+  ][nodeIndex] ?? { hp: 1, speed: 1 };
+  const waveBump = (waveInNode - 1) * 0.03;
+  return {
+    hp:    Math.round((base.hp + waveBump) * 100) / 100,
+    speed: Math.round((base.speed + waveBump * 0.5) * 100) / 100,
+  };
+}
+
+/** Slower spawns on early assaults so a lone hero can barely keep up. */
+export function getFirstSagaSpawnGap(nodeIndex) {
+  if (nodeIndex === 0) return 24;
+  if (nodeIndex === 1) return 18;
+  if (nodeIndex === 2) return 16;
+  return 14;
+}
+
+/** Tighter rampart pool early — victory still needs ≥1 life. */
+export function getFirstSagaStartingLives(nodeIndex) {
+  if (nodeIndex === 0) return 5;
+  if (nodeIndex === 1) return 6;
+  if (nodeIndex === 2) return 6;
+  if (nodeIndex === 3) return 7;
+  return 8;
+}
+
 export function buildFirstSagaWavePlan(nodeIndex) {
   const assault = getFirstSagaAssault(nodeIndex);
   if (!assault) return null;

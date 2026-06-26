@@ -67,9 +67,27 @@ describe('campaignMaps', () => {
     expect(equiv).toBeLessThanOrEqual(12);
   });
 
-  it('tutorial spawn queue is small', () => {
+  it('first saga A0 uses six low-HP raiders per design', () => {
     const plan = buildNodeWavePlan(0, 0);
-    const q = buildCampaignNodeSpawnQueue(plan.waves[0], 0);
+    const q = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 0);
+    expect(q).toHaveLength(6);
+    expect(q.every(e => e.type === 'draugr' && e.hpScale < 0.5)).toBe(true);
+  });
+
+  it('first saga A1 matches wolf smoke composition', () => {
+    const plan = buildNodeWavePlan(0, 1);
+    const w1 = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 1);
+    const w2 = buildCampaignNodeSpawnQueue(plan.waves[1], 0, 1);
+    expect(w1).toHaveLength(6);
+    expect(w1.every(e => e.type === 'warg')).toBe(true);
+    expect(w2).toHaveLength(6);
+    expect(w2.filter(e => e.type === 'warg')).toHaveLength(4);
+    expect(w2.filter(e => e.type === 'draugr')).toHaveLength(2);
+  });
+
+  it('tutorial spawn queue is small (non-saga maps)', () => {
+    const plan = buildNodeWavePlan(1, 0);
+    const q = buildCampaignNodeSpawnQueue(plan.waves[0], 1, 0);
     expect(q.length).toBeLessThanOrEqual(8);
     expect(q.every(t => typeof t === 'string')).toBe(true);
   });

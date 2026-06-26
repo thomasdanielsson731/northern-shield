@@ -3,7 +3,15 @@
  * Nodes have 2–3 waves; the final node ends with a boss wave.
  */
 
-import { isFirstSagaMap, buildFirstSagaWavePlan, getFirstSagaAssault, getFirstSagaBossConfig, FIRST_SAGA_ASSAULT_COUNT } from './firstSaga.js';
+import {
+  isFirstSagaMap,
+  buildFirstSagaWavePlan,
+  buildFirstSagaSpawnQueue,
+  getFirstSagaAssault,
+  getFirstSagaBossConfig,
+  isFirstSagaAssaultNode,
+  FIRST_SAGA_ASSAULT_COUNT,
+} from './firstSaga.js';
 
 export const CAMPAIGN_MAP_COUNT = 100;
 export const MIN_NODES_PER_MAP  = 10;
@@ -192,7 +200,12 @@ const TUTORIAL_WAVE_MIX = [
  * Spawn queue for one campaign node wave.
  * Boss waves on the last node end with a node boss marker.
  */
-export function buildCampaignNodeSpawnQueue(waveSpec, mapIndex) {
+export function buildCampaignNodeSpawnQueue(waveSpec, mapIndex, nodeIndex = null) {
+  if (isFirstSagaMap(mapIndex) && nodeIndex != null && isFirstSagaAssaultNode(nodeIndex)) {
+    const sagaQueue = buildFirstSagaSpawnQueue(nodeIndex, waveSpec);
+    if (sagaQueue) return sagaQueue;
+  }
+
   if (waveSpec.tutorial && !waveSpec.isBoss) {
     return TUTORIAL_WAVE_MIX.slice(0, 6 + waveSpec.waveInNode);
   }

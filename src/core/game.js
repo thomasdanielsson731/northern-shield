@@ -141,7 +141,6 @@ import {
   mergePrepFieldMeta,
   applyFirstSagaAssaultRewards,
   syncPrepMetaForAssault,
-  FIRST_SAGA_A3_NODE,
   updatePrepCamera,
   drawFortressSchematic,
   drawCommanderContextPanel,
@@ -158,6 +157,10 @@ import {
   isFirstSagaSliceLockedRegion,
   isFirstSagaSettlementComplete,
   ensureFirstSagaState,
+  isFirstSagaAssaultNode,
+  getFirstSagaWaveBands,
+  getFirstSagaSpawnGap,
+  getFirstSagaStartingLives,
 } from '../campaign/firstSaga.js';
 import {
   shouldOfferSettlementCeremony,
@@ -2068,7 +2071,13 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   }
 
   const preset = getCampaignBattlePreset(mapIndex);
+  if (isFirstSagaMap(mapIndex) && isFirstSagaAssaultNode(nodeIndex)) {
+    STARTING_LIVES = getFirstSagaStartingLives(nodeIndex);
+  } else {
+    STARTING_LIVES = 8;
+  }
   initBattle(preset);
+  lives = STARTING_LIVES;
   let field = fieldOverride ?? getMapRun(_campaignState.campaignProgress, mapIndex).fieldState;
   if (!skipFieldPrep && !fieldOverride) {
     field = prepareFieldForNewAssault(field);
@@ -2369,6 +2378,7 @@ function getCommanderPlayfield() {
 function getPrepShellPanelCtx() {
   const assault = _pendingAssaultNode != null
     ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  const nodesCleared = _campaignState?.campaignProgress?.mapRuns?.[_campaignMapIndex]?.nodesCleared ?? [];
   return {
     pendingAssaultNode: _pendingAssaultNode,
     postAssignments: _postAssignments,
@@ -2378,6 +2388,7 @@ function getPrepShellPanelCtx() {
     roster: _roster,
     goldReserve,
     nodeCasualties: _nodeCasualties,
+    treasuryUnlocked: battlesCompleted > 0 || nodesCleared.includes(0),
   };
 }
 
@@ -3264,6 +3275,12 @@ function startNextWave() {
   const _bands   = getWaveBands(_equivWave);
   waveHpScale    = _bands.hp;
   waveSpeedScale = _bands.speed;
+  if (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && isFirstSagaAssaultNode(_campaignNodeIndex)) {
+    const waveSpec = _nodeWavePlan?.waves?.[_nodeWaveIndex];
+    const sagaBands = getFirstSagaWaveBands(_campaignNodeIndex, waveSpec?.waveInNode ?? 1);
+    waveHpScale    = sagaBands.hp;
+    waveSpeedScale = sagaBands.speed;
+  }
   waveRangeMult  = 1;
   currentWaveEvent = _campaignNodeMode ? null : (WAVE_EVENTS[waveNumber] ?? null);
   if (endlessMode && waveNumber > 101) {
@@ -3321,7 +3338,7 @@ function startNextWave() {
   }
 
   spawnQueue  = _campaignNodeMode && _nodeWavePlan
-    ? buildCampaignNodeSpawnQueue(_nodeWavePlan.waves[_nodeWaveIndex], _campaignMapIndex)
+    ? buildCampaignNodeSpawnQueue(_nodeWavePlan.waves[_nodeWaveIndex], _campaignMapIndex, _campaignNodeIndex)
     : buildWave(waveNumber);
   if (!_campaignNodeMode && currentWaveEvent?.bonus) {
     const bonusType = ENEMY_TYPES[currentWaveEvent.bonus.type.toUpperCase()] ?? currentWaveEvent.bonus.type;
@@ -3454,7 +3471,9 @@ function updateWave() {
   if (spawnQueue.length > 0) {
     waveActiveFrames++;
     spawnTimer++;
-    const baseSpawnGap  = waveNumber <= 10 ? 16 : SPAWN_FRAMES;
+    const baseSpawnGap  = (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && isFirstSagaAssaultNode(_campaignNodeIndex))
+      ? getFirstSagaSpawnGap(_campaignNodeIndex)
+      : (waveNumber <= 10 ? 16 : SPAWN_FRAMES);
     const spawnInterval = waveActiveFrames > 5400 * gameSpeed ? Math.ceil(baseSpawnGap * 0.5) : baseSpawnGap;
     if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
@@ -3466,6 +3485,9 @@ function updateWave() {
       } else if (next && next.__herald) {
         const e = spawnEnemy(next.type, waveHpScale);
         if (e) e.isHerald = true;
+      } else if (next && typeof next === 'object' && next.type) {
+        const scale = (next.hpScale ?? 1) * waveHpScale;
+        spawnEnemy(next.type, scale);
       } else {
         spawnEnemy(next, waveHpScale);
       }

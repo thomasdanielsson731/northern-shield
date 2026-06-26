@@ -3,12 +3,16 @@ import {
   isFirstSagaMap,
   getFirstSagaAssault,
   buildFirstSagaWavePlan,
+  buildFirstSagaSpawnQueue,
+  getFirstSagaWaveBands,
+  getFirstSagaStartingLives,
   getFirstSagaFrontLayout,
   FIRST_SAGA_A4_NODE,
   isFirstSagaSettlementReady,
   isFirstSagaRecruitUnlocked,
   ensureFirstSagaState,
 } from '../src/campaign/firstSaga.js';
+import { buildCampaignNodeSpawnQueue } from '../src/campaign/campaignMaps.js';
 import {
   shouldOfferSettlementCeremony,
   applySettlementComplete,
@@ -76,5 +80,24 @@ describe('firstSaga', () => {
   it('has six settlement stages', () => {
     expect(SETTLEMENT_STAGE_COUNT).toBe(6);
     expect(getFirstSagaAssault(0)?.codename).toBe('First Night');
+  });
+
+  it('balances assault spawns and ramparts for slice curve', () => {
+    const a0 = buildFirstSagaSpawnQueue(0, { waveInNode: 1 });
+    expect(a0).toHaveLength(6);
+    expect(getFirstSagaStartingLives(0)).toBe(5);
+    expect(getFirstSagaWaveBands(0).hp).toBeLessThan(0.75);
+
+    const a2total = buildFirstSagaSpawnQueue(2, { waveInNode: 1 }).length
+      + buildFirstSagaSpawnQueue(2, { waveInNode: 2 }).length;
+    expect(a2total).toBe(12);
+
+    const bossWave = buildFirstSagaSpawnQueue(4, { waveInNode: 3, isBoss: true });
+    expect(bossWave.some(e => e.__nodeBoss)).toBe(true);
+    expect(bossWave.filter(e => e.type).length).toBe(4);
+
+    const plan = buildFirstSagaWavePlan(0);
+    const viaMaps = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 0);
+    expect(viaMaps).toHaveLength(6);
   });
 });
