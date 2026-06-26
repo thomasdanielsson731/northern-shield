@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Sprint 4 — Vertical Slice closure)  
+**Last updated:** 2026-06-22 (Sprint 5 — balance + prep legibility + human RC in progress)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -70,13 +70,16 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 
 ## Recently completed work
 
+- `firstSaga.js` — explicit A0–A4 spawn tables + wave bands (one Berserker barely clears A0)
+- `fortressCommanderShell.js` — labeled prep schematic (gate/tower/longhouse/treasury, threat arrow)
+- `firstSagaUI.js` — Settlement stone-beat white flash
 - `firstSaga.js` — linear A0–A4 west assault chain, boss Ash-Warden
 - `firstSagaUI.js` — west road command map (6 nodes) + ceremony screens
 - `settlementCeremony.js` — Settlement Oath flow, recruit #2 unlock
 - Region 2+ locked on campaign select (Saga II+)
 - Wood repair enforced before A3 horn; wall_scar auto-focus on A3 prep
 - Recruit tab locked until ceremony; Valkyrie/Military only in slice
-- **229** unit tests passing
+- **232** unit tests passing
 
 ## Current implementation focus
 
@@ -236,9 +239,10 @@ Validate The First Saga with a fresh save and convene Vertical Slice review boar
 ## Definition of Done
 
 - [x] Sprint 4 committed (inner `5b17238`)
-- [x] `npx vitest run` green (229+)
+- [x] Sprint 5 balance + prep schematic (`9839ee7`)
+- [x] `npx vitest run` green (232+)
 - [x] Vertical Slice board Session 19 — 🟡 RC approved
-- [ ] Fresh-save manual playtest logged (human)
+- [ ] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
 
 ## Success Criteria
 
@@ -267,11 +271,11 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **229** / 229 | 2026-06-22 |
+| Tests passing | **232** / 232 | 2026-06-22 |
 | Test files | 28 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
-| Inner repo commits ahead of `origin/main` | 10 | 2026-06-22 |
+| Inner repo commits ahead of `origin/main` | 12 | 2026-06-22 |
 | Implemented slice features (checklist) | 22 ✅ · 2 🟡 · 0 ⬜ | 2026-06-22 |
 | Technical debt items tracked | 4 | 2026-06-22 |
 | Active design decisions | 19 | 2026-06-22 |
@@ -285,14 +289,14 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 - **Game:** Northern Shield — Fortress Commander RPG (Vanilla JS + Canvas, Vite, inner repo `tower-defense/`).
 - **Target:** Ship **The First Saga** only — 1 hero → 2, west gate + watch tower, A0–A4 + Settlement ceremony.
-- **Done:** Sprint 4 — linear west road, Settlement Oath, recruit gate, wood repair.
-- **Not done:** Human fresh-save playtest; Vertical Slice board sign-off.
+- **Done:** Sprint 5 — saga balance, prep schematic labels, settlement stone flash.
+- **Not done:** Human fresh-save playtest sign-off; tag `v0.3.0-saga-rc`.
 - **Phase flow:** War Camp (`betweenBattles`) → Prep (`fortressPrep`) → Combat (`playing`) → Debrief → routes back.
 - **Posts:** `defensivePosts.js` — player assigns heroes to posts; `buildTowerPlacements` feeds combat grid silently.
 - **CUT in slice:** runes, stars, siege, 4 fronts, skirmish onboarding, food, Region 2+.
 - **Screen laws:** one question per screen; no grid in War Camp; no shop in battle; no recruit in prep.
 - **Key files:** `game.js` (phases), `fortressCommanderShell.js`, `debriefReport.js`, `postTitles.js`.
-- **Tests:** run from `tower-defense/` → `npx vitest run` (229 passing).
+- **Tests:** run from `tower-defense/` → `npx vitest run` (232 passing).
 - **Commits:** Phase 5–6 may be uncommitted — check `git status` before assuming shipped.
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.

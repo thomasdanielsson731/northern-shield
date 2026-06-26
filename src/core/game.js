@@ -712,6 +712,7 @@ let _returnToNodeMapAfterDebrief = false;
 let _pendingSettlementCeremony = false;
 let _settlementCeremonyStep = 0;
 let _settlementCeremonyBtns = [];
+let _settlementStoneFlash = 0;
 let _settlementRecruitType = null;
 let _settlementNameDraft = '';
 const CAMPAIGN_MAPS_PER_PAGE = 10;
@@ -2191,9 +2192,30 @@ function beginSettlementCeremony() {
   _settlementRecruitType = null;
   _settlementNameDraft = '';
   _settlementCeremonyBtns = [];
+  _settlementStoneFlash = 0;
   _pendingSettlementCeremony = false;
   gamePhase = 'settlementCeremony';
   sfxChapterBanner();
+}
+
+function advanceSettlementCeremonyStep() {
+  if (_settlementCeremonyStep === 3 && !_settlementRecruitType) return false;
+  if (_settlementCeremonyStep === 4) {
+    if (!validateSettlementName(_settlementNameDraft)) return false;
+    _settlementCeremonyStep = 5;
+    return true;
+  }
+  if (_settlementCeremonyStep >= SETTLEMENT_STAGE_COUNT - 1) {
+    completeSettlementCeremony();
+    return true;
+  }
+  _settlementCeremonyStep++;
+  if (_settlementCeremonyStep === 1) {
+    _settlementStoneFlash = 520;
+    screenShake = Math.max(screenShake, 8);
+    sfxChapterBanner();
+  }
+  return true;
 }
 
 function completeSettlementCeremony() {
@@ -5568,17 +5590,7 @@ canvas.addEventListener('mousedown', e => {
             return;
           }
           if (btn.action === 'advance') {
-            if (_settlementCeremonyStep === 3 && !_settlementRecruitType) return;
-            if (_settlementCeremonyStep === 4) {
-              if (!validateSettlementName(_settlementNameDraft)) return;
-              _settlementCeremonyStep = 5;
-              return;
-            }
-            if (_settlementCeremonyStep >= SETTLEMENT_STAGE_COUNT - 1) {
-              completeSettlementCeremony();
-              return;
-            }
-            _settlementCeremonyStep++;
+            advanceSettlementCeremonyStep();
           }
           return;
         }
@@ -15212,6 +15224,7 @@ function draw() {
       nameDraft: _settlementNameDraft,
       btnsOut: _settlementCeremonyBtns,
       settlementComplete: isFirstSagaSettlementComplete(_campaignState),
+      stoneFlash: _settlementStoneFlash,
     });
     drawFrames();
     drawCampaignMetaBar({ line1: 'SETTLEMENT OATH', line2: 'Saga I finale', color: UI_COLORS.gold });
@@ -16671,6 +16684,7 @@ function gameLoop() {
   }
   _frameTick++;
   if (_structuresTabPulse > 0) _structuresTabPulse--;
+  if (_settlementStoneFlash > 0) _settlementStoneFlash = Math.max(0, _settlementStoneFlash - 18);
   // 1x=30 ticks/s (alt frames), 2x=60 ticks/s (every frame), 4x=120 ticks/s (2 per frame)
   const _ticks = gameSpeed >= 4 ? 2 : (gameSpeed >= 2 || _frameTick % 2 === 1) ? 1 : 0;
   for (let _i = 0; _i < _ticks; _i++) update();

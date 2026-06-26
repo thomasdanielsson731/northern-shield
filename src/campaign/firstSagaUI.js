@@ -131,6 +131,7 @@ export function drawSettlementCeremony(ctx, W, H, {
   nameDraft,
   btnsOut,
   settlementComplete,
+  stoneFlash = 0,
 }) {
   const fade = 1;
   ctx.save();
@@ -138,6 +139,12 @@ export function drawSettlementCeremony(ctx, W, H, {
   ctx.fillStyle = 'rgba(4,2,8,1)';
   ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 1;
+
+  if (stoneFlash > 0) {
+    const a = stoneFlash / 520;
+    ctx.fillStyle = `rgba(255,248,220,${0.62 * a * a})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   if (step >= SETTLEMENT_STAGE_COUNT) return;
 
@@ -148,8 +155,9 @@ export function drawSettlementCeremony(ctx, W, H, {
   const panY = Math.round((H - panH) / 2) - 10;
 
   if (step === 1) {
-    ctx.fillStyle = `rgba(255,255,255,${0.08 + Math.sin(performance.now() * 0.004) * 0.04})`;
-    ctx.fillRect(0, 0, W, H);
+    const glow = 0.06 + Math.sin(performance.now() * 0.004) * 0.03;
+    ctx.fillStyle = `rgba(200,210,230,${glow})`;
+    ctx.fillRect(panX - 20, panY - 20, panW + 40, panH + 40);
   }
 
   drawPanel(panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
