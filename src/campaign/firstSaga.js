@@ -200,7 +200,11 @@ export function ensureFirstSagaState(campaignState) {
       settlementComplete: false,
       stoneWallPlaced: false,
       recruit2Named: false,
+      heroNamed: false,
     };
+  }
+  if (campaignState.firstSaga.heroNamed == null) {
+    campaignState.firstSaga.heroNamed = false;
   }
   return campaignState.firstSaga;
 }

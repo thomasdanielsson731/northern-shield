@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Sprint 5 — balance pass 2 + combat damage feedback)  
+**Last updated:** 2026-06-22 (Post-A0 naming ceremony)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -14,9 +14,9 @@
 | **Project** | Northern Shield |
 | **Genre** | Fortress Commander RPG |
 | **Current Target** | The First Saga (vertical slice) |
-| **Current Version** | `0.3.0-dev` |
-| **Current Phase** | Production (Vertical Slice RC candidate) |
-| **Current Sprint** | Sprint 4 — Vertical Slice Closure ✅ |
+| **Current Version** | `0.3.0-saga-rc` |
+| **Current Phase** | Production (Vertical Slice RC) |
+| **Current Sprint** | Sprint 6 — Polish (naming ceremony) |
 
 **Design authority:** [north_star.md](north_star.md) · [the_first_saga.md](the_first_saga.md) · [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md)
 
@@ -70,6 +70,7 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 
 ## Recently completed work
 
+- Post-A0 **hero naming ceremony** (`heroNamingCeremony` phase) — skald modal after A0 debrief
 - A1 balance pass 2 — between-wave 40% heal, lighter wave 2, slower wolf spawns
 - Assault melee damage floaters (`-dmg`, `-GATE`) + gate/hero hit flash
 - Campaign multi-wave banner (`ASSAULT · WAVE 2/3`)
@@ -83,9 +84,7 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 
 ## Current implementation focus
 
-1. Manual fresh-save playtest A0 → Settlement → recruit #2
-2. Vertical Slice board (11 reviewers)
-3. Commit Sprint 4 (inner + outer)
+1. Polish backlog: structure PNGs (#33)
 
 ---
 
@@ -244,7 +243,8 @@ Validate The First Saga with a fresh save and convene Vertical Slice review boar
 - [x] `npm test` green (235+ incl. saga harness)
 - [x] Vertical Slice board Session 19 — 🟡 RC approved
 - [x] Session 20 — balance/readability follow-up
-- [ ] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
+- [x] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
+- [x] Post-A0 naming ceremony (`heroNamingCeremony.js`)
 
 ## Success Criteria
 
@@ -260,9 +260,7 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 ## Next Recommended Work
 
-1. **Human playtest** — canvas/feel items in [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md) (`manual` rows in harness)
-2. Tag `v0.3.0-saga-rc` after human PASS
-3. Polish backlog: structure PNGs (#33)
+1. Polish backlog: structure PNGs (#33)
 
 ---
 
@@ -273,8 +271,8 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **235** / 235 | 2026-06-22 |
-| Test files | 29 | 2026-06-22 |
+| Tests passing | **239** / 239 | 2026-06-22 |
+| Test files | 30 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
 | Inner repo commits ahead of `origin/main` | 12 | 2026-06-22 |
@@ -291,8 +289,8 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 - **Game:** Northern Shield — Fortress Commander RPG (Vanilla JS + Canvas, Vite, inner repo `tower-defense/`).
 - **Target:** Ship **The First Saga** only — 1 hero → 2, west gate + watch tower, A0–A4 + Settlement ceremony.
-- **Done:** Sprint 5 — saga balance, prep schematic labels, settlement stone flash.
-- **Not done:** Human fresh-save playtest sign-off; tag `v0.3.0-saga-rc`.
+- **Done:** `v0.3.0-saga-rc` tagged — First Saga playable A0→Settlement.
+- **Not done:** Structure PNG sprites (#33).
 - **Phase flow:** War Camp (`betweenBattles`) → Prep (`fortressPrep`) → Combat (`playing`) → Debrief → routes back.
 - **Posts:** `defensivePosts.js` — player assigns heroes to posts; `buildTowerPlacements` feeds combat grid silently.
 - **CUT in slice:** runes, stars, siege, 4 fronts, skirmish onboarding, food, Region 2+.

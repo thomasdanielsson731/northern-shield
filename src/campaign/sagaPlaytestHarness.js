@@ -38,6 +38,13 @@ import {
   validateSettlementName,
   SETTLEMENT_STAGE_COUNT,
 } from './settlementCeremony.js';
+import {
+  shouldOfferHeroNaming,
+  applyHeroNaming,
+  validateHeroName,
+} from './heroNamingCeremony.js';
+import { Defender } from '../roster/defender.js';
+import { Roster } from '../roster/roster.js';
 
 const BERSERK = TOWER_DEFS[TOWER_TYPES.BERSERK];
 
@@ -148,6 +155,14 @@ export function runFirstSagaPlaytestHarness() {
     }
   }
   checks.push(check('spawn.a0.raiders', 'A0', 'Six low-HP raiders', (buildFirstSagaSpawnQueue(0, { waveInNode: 1 }) ?? []).length === 6));
+  const rosterUnnamed = new Roster();
+  rosterUnnamed.defenders.push(new Defender({ defenderId: 'h1', name: '', type: 'berserk' }));
+  const campAfterA0 = { campaignProgress: createEmptyCampaignProgress(), chronicle: {}, firstSaga: {} };
+  campAfterA0.campaignProgress.mapRuns[0] = { nodesCleared: [0], fieldState: null };
+  checks.push(check('naming.offer-a0', 'A0', 'Hero naming offered after A0', shouldOfferHeroNaming(campAfterA0, rosterUnnamed, 0)));
+  checks.push(check('naming.validate', 'A0', 'Hero name min 2 chars', validateHeroName('Ulfr') && !validateHeroName('a')));
+  applyHeroNaming(campAfterA0, rosterUnnamed, 'h1', 'Gunnar');
+  checks.push(check('naming.apply', 'A0', 'Hero naming sets heroNamed', campAfterA0.firstSaga.heroNamed === true));
   checks.push(check('spawn.a1.w2-size', 'A1', 'Wave 2 has five enemies (3+2)', (buildFirstSagaSpawnQueue(1, { waveInNode: 2 }) ?? []).length === 5));
 
   // --- Prep / horn ---
@@ -192,7 +207,7 @@ export function runFirstSagaPlaytestHarness() {
   checks.push(check('finale.name-validate', 'Finale', 'Settlement name min 2 chars', validateSettlementName('ab') && !validateSettlementName('a')));
 
   // --- Session phases ---
-  for (const phase of ['fortressPrep', 'settlementCeremony', 'debrief', 'nodeMap', 'betweenBattles']) {
+  for (const phase of ['fortressPrep', 'settlementCeremony', 'heroNamingCeremony', 'debrief', 'nodeMap', 'betweenBattles']) {
     checks.push(check(`session.phase.${phase}`, 'Post-slice', `Session accepts phase ${phase}`, validateSessionState({ version: 1, gamePhase: phase }) != null));
   }
 
@@ -216,7 +231,7 @@ export function runFirstSagaPlaytestHarness() {
   checks.push(manual('ui.wave-banner', 'A1', 'WOLF SMOKE · WAVE 2/2 banner', 'Canvas combat'));
   checks.push(manual('ui.heal-floater', 'A1', 'Green +HP between waves', 'Canvas combat'));
   checks.push(manual('ui.debrief-prose', 'A0', 'Debrief prose and routing', 'Canvas debrief'));
-  checks.push(manual('ui.rename', 'A0', 'Name hero in War Camp', 'Canvas betweenBattles'));
+  checks.push(manual('ui.naming-ceremony', 'A0', 'Post-A0 naming ceremony modal', 'Canvas heroNamingCeremony'));
   checks.push(manual('ui.stone-flash', 'Finale', 'First Stone white flash', 'Canvas ceremony'));
   checks.push(manual('feel.balance', 'All', 'Assaults feel fair (human)', 'Play feel cannot be unit-tested'));
 

@@ -1,6 +1,6 @@
 const VALID_PHASES = new Set([
   'campaignSelect', 'nodeMap', 'betweenBattles', 'debrief', 'playing', 'mapSelect',
-  'fortressPrep', 'settlementCeremony',
+  'fortressPrep', 'settlementCeremony', 'heroNamingCeremony',
 ]);
 
 /** Sanitize persisted navigation / resume state for a save slot. */
@@ -25,6 +25,17 @@ export function validateSessionState(raw) {
       step: Math.max(0, Math.min(5, clampInt(sc.step, 0, 5))),
       recruitType: typeof sc.recruitType === 'string' ? sc.recruitType : null,
       nameDraft: typeof sc.nameDraft === 'string' ? sc.nameDraft.slice(0, 16) : '',
+    };
+  }
+
+  if (raw.heroNamingCeremony && typeof raw.heroNamingCeremony === 'object') {
+    const hn = raw.heroNamingCeremony;
+    s.heroNamingCeremony = {
+      nameDraft: typeof hn.nameDraft === 'string' ? hn.nameDraft.slice(0, 16) : '',
+      defenderId: typeof hn.defenderId === 'string' ? hn.defenderId : null,
+      pending: hn.pending && typeof hn.pending === 'object'
+        ? { action: String(hn.pending.action ?? 'warCamp'), nodeIndex: hn.pending.nodeIndex != null ? clampInt(hn.pending.nodeIndex, 0, 29) : undefined }
+        : { action: 'warCamp' },
     };
   }
 

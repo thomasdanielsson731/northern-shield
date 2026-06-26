@@ -241,4 +241,73 @@ export function drawSettlementCeremony(ctx, W, H, {
   ctx.restore();
 }
 
+/** Post-A0 naming ceremony — skald + name input. Mutates btnsOut. */
+export function drawHeroNamingCeremony(ctx, W, H, {
+  nameDraft,
+  heroType = 'berserk',
+  btnsOut,
+  nameValid,
+}) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,2,8,0.96)';
+  ctx.fillRect(0, 0, W, H);
+
+  const panW = 420;
+  const panH = 240;
+  const panX = Math.round((W - panW) / 2);
+  const panY = Math.round((H - panH) / 2) - 8;
+  const hx = panX + panW / 2;
+
+  const glow = 0.05 + Math.sin(performance.now() * 0.003) * 0.025;
+  ctx.fillStyle = `rgba(220,180,80,${glow})`;
+  ctx.fillRect(panX - 16, panY - 16, panW + 32, panH + 32);
+
+  drawPanel(panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
+
+  let hy = panY + 26;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = 'rgba(160,130,80,0.55)';
+  ctx.fillText('NAMING · SKALD', hx, hy);
+  hy += 18;
+
+  ctx.font = 'bold 13px monospace';
+  ctx.fillStyle = '#e8c860';
+  ctx.fillText(heroType.toUpperCase(), hx, hy);
+  hy += 20;
+
+  ctx.font = '8px monospace';
+  ctx.fillStyle = 'rgba(200,175,130,0.82)';
+  ctx.fillText('He held the west gate alone. The fire still burns.', hx, hy);
+  hy += 16;
+  ctx.fillStyle = 'rgba(210,190,150,0.88)';
+  ctx.fillText('The wall will remember this name.', hx, hy);
+  hy += 22;
+
+  ctx.font = 'bold 12px monospace';
+  ctx.fillStyle = '#e8d8b0';
+  const cursor = Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '';
+  ctx.fillText(`${nameDraft}${cursor}`, hx, hy);
+  hy += 20;
+
+  ctx.font = '7px monospace';
+  ctx.fillStyle = nameValid ? 'rgba(140,200,120,0.55)' : 'rgba(140,120,80,0.45)';
+  ctx.fillText(nameValid ? 'Enter or click to swear' : 'At least 2 characters', hx, hy);
+
+  const btnW = 168;
+  const btnH = 30;
+  const btnX = hx - btnW / 2;
+  const btnY = panY + panH - 46;
+  drawPanel(btnX, btnY, btnW, btnH, nameValid ? 'rgba(20,30,14,0.97)' : 'rgba(16,12,8,0.9)', 0.75, 6);
+  ctx.font = 'bold 9px monospace';
+  ctx.fillStyle = nameValid ? '#90c070' : 'rgba(120,100,70,0.45)';
+  ctx.fillText('Swear the name', hx, btnY + 19);
+  if (nameValid) {
+    btnsOut.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'confirm' });
+  }
+
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 export { SETTLEMENT_STAGE_COUNT };

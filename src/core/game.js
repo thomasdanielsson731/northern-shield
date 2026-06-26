@@ -170,8 +170,15 @@ import {
   validateSettlementName,
 } from '../campaign/settlementCeremony.js';
 import {
+  shouldOfferHeroNaming,
+  applyHeroNaming,
+  validateHeroName,
+  getUnnamedSagaHero,
+} from '../campaign/heroNamingCeremony.js';
+import {
   drawFirstSagaCommandMap,
   drawSettlementCeremony,
+  drawHeroNamingCeremony,
   SETTLEMENT_STAGE_COUNT,
 } from '../campaign/firstSagaUI.js';
 
@@ -717,6 +724,11 @@ let _settlementCeremonyBtns = [];
 let _settlementStoneFlash = 0;
 let _settlementRecruitType = null;
 let _settlementNameDraft = '';
+let _heroNamingDraft = '';
+let _heroNamingDefenderId = null;
+let _heroNamingBtns = [];
+/** @type {{ action: string, nodeIndex?: number } | null} */
+let _heroNamingPending = null;
 const CAMPAIGN_MAPS_PER_PAGE = 10;
 let selectedMapIdx   = 0;
 let mapSelectBtns    = [];       // hit areas for map cards
@@ -1636,6 +1648,12 @@ function serializeGameSession() {
       recruitType: _settlementRecruitType,
       nameDraft: _settlementNameDraft,
     };
+  } else if (gamePhase === 'heroNamingCeremony') {
+    session.heroNamingCeremony = {
+      nameDraft: _heroNamingDraft,
+      defenderId: _heroNamingDefenderId,
+      pending: _heroNamingPending,
+    };
   } else if (gamePhase === 'playing' && _campaignNodeMode) {
     session.combat = {
       mapIndex: _campaignMapIndex,
@@ -1737,6 +1755,15 @@ function restoreGameSession(session) {
       _settlementRecruitType = session.settlementCeremony?.recruitType ?? null;
       _settlementNameDraft = session.settlementCeremony?.nameDraft ?? '';
       gamePhase = 'settlementCeremony';
+      gameOver = false;
+      victory = false;
+      break;
+    case 'heroNamingCeremony':
+      _heroNamingDraft = session.heroNamingCeremony?.nameDraft ?? '';
+      _heroNamingDefenderId = session.heroNamingCeremony?.defenderId ?? null;
+      _heroNamingPending = session.heroNamingCeremony?.pending ?? { action: 'warCamp' };
+      _heroNamingBtns = [];
+      gamePhase = 'heroNamingCeremony';
       gameOver = false;
       victory = false;
       break;
@@ -2264,6 +2291,66 @@ function beginSettlementCeremony() {
   sfxChapterBanner();
 }
 
+function beginHeroNamingCeremony(pendingBtn) {
+  const unnamed = getUnnamedSagaHero(_roster);
+  if (!unnamed) return false;
+  _heroNamingDefenderId = unnamed.defenderId;
+  _heroNamingDraft = '';
+  _heroNamingBtns = [];
+  _heroNamingPending = pendingBtn
+    ? { action: pendingBtn.action, nodeIndex: pendingBtn.nodeIndex }
+    : { action: 'warCamp' };
+  gamePhase = 'heroNamingCeremony';
+  sfxChapterBanner();
+  return true;
+}
+
+function routeAfterHeroNaming() {
+  const pending = _heroNamingPending ?? { action: 'warCamp' };
+  _heroNamingPending = null;
+  _heroNamingDefenderId = null;
+  _heroNamingDraft = '';
+  _returnToNodeMapAfterDebrief = false;
+  gameOver = false;
+  victory = false;
+  if (pending.action === 'nextAssault' && pending.nodeIndex != null) {
+    enterFieldPrep(_campaignMapIndex, pending.nodeIndex);
+  } else if (pending.action === 'retryAssault') {
+    enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+  } else if (pending.action === 'commandMap') {
+    _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
+    _selectedFrontId = _lastClearedFrontId;
+    gamePhase = 'nodeMap';
+  } else {
+    enterCampaignWarCamp();
+  }
+}
+
+function completeHeroNamingCeremony() {
+  if (!applyHeroNaming(_campaignState, _roster, _heroNamingDefenderId, _heroNamingDraft)) return false;
+  try { persistCampaign(); } catch {}
+  routeAfterHeroNaming();
+  return true;
+}
+
+function routeAfterCampaignDebrief(btn) {
+  if (shouldOfferHeroNaming(_campaignState, _roster, _campaignMapIndex)) {
+    beginHeroNamingCeremony(btn);
+    return;
+  }
+  if (btn.action === 'nextAssault') {
+    enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
+  } else if (btn.action === 'warCamp') {
+    enterCampaignWarCamp();
+  } else if (btn.action === 'retryAssault') {
+    enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+  } else if (btn.action === 'commandMap') {
+    _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
+    _selectedFrontId = _lastClearedFrontId;
+    gamePhase = 'nodeMap';
+  }
+}
+
 function advanceSettlementCeremonyStep() {
   if (_settlementCeremonyStep === 3 && !_settlementRecruitType) return false;
   if (_settlementCeremonyStep === 4) {
@@ -2387,6 +2474,11 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
     if (!d.fortressRole) d.fortressRole = getDefaultFortressRole(d.type);
   }
   _roster.releaseAll();
+
+  if (isFirstSagaMap(mapIndex) && shouldOfferHeroNaming(_campaignState, _roster, mapIndex)) {
+    beginHeroNamingCeremony({ action: 'nextAssault', nodeIndex: nodeIndex ?? _pendingAssaultNode });
+    return;
+  }
 
   const preset = getCampaignBattlePreset(mapIndex);
   initBattle(preset);
@@ -5213,6 +5305,24 @@ function repairWall(col, row) {
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
+  if (gamePhase === 'heroNamingCeremony') {
+    if (e.key === 'Escape') {
+      _heroNamingDraft = '';
+      return;
+    }
+    if (e.key === 'Enter') {
+      completeHeroNamingCeremony();
+      return;
+    }
+    if (e.key === 'Backspace') {
+      _heroNamingDraft = _heroNamingDraft.slice(0, -1);
+      return;
+    }
+    if (e.key.length === 1 && _heroNamingDraft.length < 16) {
+      _heroNamingDraft += e.key;
+    }
+    return;
+  }
   // Rename intercept — consume all input while renaming a defender
   if (gamePhase === 'settlementCeremony' && _settlementCeremonyStep === 4) {
     if (e.key === 'Escape') {
@@ -5242,9 +5352,8 @@ window.addEventListener('keydown', e => {
     }
     if (e.key === 'Enter') {
       const def = _roster?.find(_renameState.defenderId);
-      if (def && _renameState.draft.trim().length > 0) {
-        def.name = _renameState.draft.trim().slice(0, 16);
-        _campaignState.defenders = _roster.toJSON();
+      if (def && validateHeroName(_renameState.draft)) {
+        applyHeroNaming(_campaignState, _roster, def.defenderId, _renameState.draft);
         try { persistCampaign(); } catch {}
         sfxRename();
       }
@@ -5652,17 +5761,7 @@ canvas.addEventListener('mousedown', e => {
               beginSettlementCeremony();
               return;
             }
-            if (btn.action === 'nextAssault') {
-              enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
-            } else if (btn.action === 'warCamp') {
-              enterCampaignWarCamp();
-            } else if (btn.action === 'retryAssault') {
-              enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
-            } else if (btn.action === 'commandMap') {
-              _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
-              _selectedFrontId = _lastClearedFrontId;
-              gamePhase = 'nodeMap';
-            }
+            routeAfterCampaignDebrief(btn);
             return;
           }
         }
@@ -5685,6 +5784,21 @@ canvas.addEventListener('mousedown', e => {
           }
           if (btn.action === 'advance') {
             advanceSettlementCeremonyStep();
+          }
+          return;
+        }
+      }
+    }
+    return;
+  }
+
+  if (gamePhase === 'heroNamingCeremony') {
+    if (e.button === 0) {
+      for (const btn of _heroNamingBtns) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+            mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+          if (btn.action === 'confirm') {
+            completeHeroNamingCeremony();
           }
           return;
         }
@@ -13945,16 +14059,17 @@ function drawBetweenBattles() {
     ctx.textAlign = 'left';
     _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
 
-    // ✏ rename button (to the left of BIO) — named starters or promoted defenders
+    // ✏ rename — always for unnamed; edit for named / promoted
     const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
-    if (hasName || def.careerLevel >= 1) {
-      ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
-      ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
+    if (!hasName || hasName || def.careerLevel >= 1) {
+      const rnLabel = !hasName ? '✎' : '✏';
+      ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : (!hasName ? 'rgba(60,45,8,0.85)' : 'rgba(40,35,15,0.6)');
+      ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : (!hasName ? 'rgba(255,200,60,0.55)' : 'rgba(120,100,40,0.3)');
       ctx.lineWidth   = 0.8;
       ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
       ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
       ctx.textAlign = 'center';
-      ctx.fillText('✏', rnX + rnW / 2, rnY + 9);
+      ctx.fillText(rnLabel, rnX + rnW / 2, rnY + 9);
       ctx.textAlign = 'left';
       _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
     }
@@ -15325,6 +15440,21 @@ function draw() {
     });
     drawFrames();
     drawCampaignMetaBar({ line1: 'SETTLEMENT OATH', line2: 'Saga I finale', color: UI_COLORS.gold });
+    ctx.restore();
+    return;
+  }
+
+  if (gamePhase === 'heroNamingCeremony') {
+    _heroNamingBtns = [];
+    const namingDef = _roster?.find(_heroNamingDefenderId) ?? getUnnamedSagaHero(_roster);
+    drawHeroNamingCeremony(ctx, BASE_W, BASE_H, {
+      nameDraft: _heroNamingDraft,
+      heroType: namingDef?.type ?? 'berserk',
+      btnsOut: _heroNamingBtns,
+      nameValid: validateHeroName(_heroNamingDraft),
+    });
+    drawFrames();
+    drawCampaignMetaBar({ line1: 'NAMING', line2: 'The wall remembers', color: UI_COLORS.gold });
     ctx.restore();
     return;
   }
