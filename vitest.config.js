@@ -18,6 +18,9 @@ export default defineConfig({
         'src/ui/structurePortrait.js',
         'src/ui/assaultPanels.js',
         'src/ui/uiTheme.js',
+        'src/ui/betweenBattlesJuice.js',
+        'src/ui/debriefJuice.js',
+        'src/preparation/**/*.js',
       ],
       exclude: [
         'src/campaign/sagaPlaytestHarness.js',
