@@ -11,6 +11,7 @@ import {
   isMapComplete,
   createEmptyCampaignProgress,
 } from './campaignMaps.js';
+import { inferPostAssignmentsFromTowers } from '../fortress/defensivePosts.js';
 
 const HERO_TYPES = new Set([
   'berserk', 'valkyrie', 'military', 'hydda', 'blondie', 'isjatten',
@@ -38,8 +39,8 @@ export function canPlaceStructure(towers) {
 }
 
 /** Serialize live combat field for persistence between nodes. */
-export function serializeFieldState(towers, wallData, gold) {
-  return {
+export function serializeFieldState(towers, wallData, gold, postAssignments = null) {
+  const state = {
     gold: Math.floor(gold),
     towers: towers.map(t => ({
       type:       t.type,
@@ -55,6 +56,20 @@ export function serializeFieldState(towers, wallData, gold) {
       Object.entries(wallData).filter(([, w]) => !w.temporary)
     ),
   };
+  if (postAssignments && Object.keys(postAssignments).length > 0) {
+    state.postAssignments = { ...postAssignments };
+  }
+  return state;
+}
+
+/** Ensure fieldState has postAssignments (migrate from tower positions). */
+export function ensurePostAssignments(fieldState, goal, ringR = 5) {
+  if (!fieldState) return {};
+  if (fieldState.postAssignments && Object.keys(fieldState.postAssignments).length > 0) {
+    return fieldState.postAssignments;
+  }
+  if (!fieldState.towers?.length) return {};
+  return inferPostAssignmentsFromTowers(fieldState, goal, ringR);
 }
 
 /** Re-add fallen heroes from assault start so they respawn on the next assault. */
