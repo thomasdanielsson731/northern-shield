@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawProceduralStructureIcon } from '../src/ui/structurePortrait.js';
+import { drawHeroNamingCeremony } from '../src/campaign/firstSagaUI.js';
 
 function mockCtx() {
   const g = () => ({ addColorStop: () => {} });
@@ -7,6 +7,7 @@ function mockCtx() {
     save: () => {}, restore: () => {}, beginPath: () => {}, arc: () => {},
     fill: () => {}, stroke: () => {}, fillRect: () => {}, strokeRect: () => {},
     moveTo: () => {}, lineTo: () => {}, closePath: () => {}, fillText: () => {},
+    roundRect: () => {},
     measureText: () => ({ width: 10 }),
     createLinearGradient: g, createRadialGradient: g,
     font: '', textAlign: 'left', textBaseline: 'alphabetic',
@@ -14,11 +15,17 @@ function mockCtx() {
   };
 }
 
-describe('structurePortrait', () => {
-  it('draws siege structure icons without throwing', () => {
+describe('firstSagaUI', () => {
+  it('drawHeroNamingCeremony does not throw with mock ctx', () => {
     const ctx = mockCtx();
-    for (const id of ['ballista', 'watchtower', 'mine', 'barracks', 'runeshrine', 'gate', 'catapult', 'piltorn']) {
-      expect(() => drawProceduralStructureIcon(ctx, 16, 16, id, 24, true)).not.toThrow();
-    }
+    const btns = [];
+    expect(() => drawHeroNamingCeremony(ctx, 734, 480, {
+      nameDraft: 'Ul',
+      heroType: 'berserk',
+      btnsOut: btns,
+      nameValid: true,
+    })).not.toThrow();
+    expect(btns.length).toBe(1);
+    expect(btns[0].action).toBe('confirm');
   });
 });

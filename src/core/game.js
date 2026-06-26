@@ -2249,6 +2249,12 @@ function finishCampaignNodeVictory() {
 }
 
 function enterCampaignWarCamp() {
+  if (!_roster && _campaignState) loadRosterFromCampaignState();
+  const mapIdx = _campaignMapIndex ?? 0;
+  if (shouldOfferHeroNaming(_campaignState, _roster, mapIdx)) {
+    beginHeroNamingCeremony({ action: 'warCamp' });
+    return;
+  }
   _campaignRegionActive = true;
   _returnToNodeMapAfterDebrief = false;
   gameOver = false;

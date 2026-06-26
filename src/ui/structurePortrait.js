@@ -68,18 +68,29 @@ export function drawProceduralStructureIcon(ctx, cx, cy, itemId, size, affordabl
     ctx.fillText('ᛟ', cx, cy + 1);
     ctx.textBaseline = 'alphabetic';
   } else if (itemId === 'gate') {
-    ctx.fillStyle = '#6a5030';
-    ctx.fillRect(cx - s * 0.55, cy - s * 0.45, s * 1.1, s * 0.9);
+    ctx.fillStyle = '#5a4028';
+    ctx.fillRect(cx - s * 0.6, cy - s * 0.5, s * 1.2, s * 0.95);
     ctx.strokeStyle = UI_COLORS.gold;
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(cx - s * 0.55, cy - s * 0.45, s * 1.1, s * 0.9);
-    ctx.fillStyle = 'rgba(232,215,181,0.35)';
-    ctx.fillRect(cx - s * 0.12, cy - s * 0.05, s * 0.24, s * 0.35);
-    ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(cx - s * 0.6, cy - s * 0.5, s * 1.2, s * 0.95);
+    ctx.fillStyle = 'rgba(20,12,6,0.55)';
+    ctx.fillRect(cx - s * 0.14, cy - s * 0.08, s * 0.28, s * 0.38);
+    ctx.fillStyle = 'rgba(232,215,181,0.25)';
+    ctx.fillRect(cx - s * 0.5, cy - s * 0.38, s * 0.18, s * 0.22);
+    ctx.fillRect(cx + s * 0.32, cy - s * 0.38, s * 0.18, s * 0.22);
+    const badgeR = s * 0.28;
+    ctx.fillStyle = 'rgba(180,40,30,0.92)';
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.62, badgeR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffd080';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = `bold ${Math.floor(size * 0.24)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = UI_COLORS.gold;
-    ctx.fillText('P', cx, cy - s * 0.55);
+    ctx.fillStyle = '#fff8e8';
+    ctx.fillText('P', cx, cy - s * 0.62);
     ctx.textBaseline = 'alphabetic';
   } else if (itemId === 'catapult') {
     ctx.fillStyle = '#4a3828';

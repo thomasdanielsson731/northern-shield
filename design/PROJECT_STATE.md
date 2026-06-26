@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Post-A0 naming ceremony)  
+**Last updated:** 2026-06-22 (RC hotfix — naming ceremony draw + War Camp gate)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -271,8 +271,8 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **239** / 239 | 2026-06-22 |
-| Test files | 30 | 2026-06-22 |
+| Tests passing | **240** / 240 | 2026-06-22 |
+| Test files | 31 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
 | Inner repo commits ahead of `origin/main` | 12 | 2026-06-22 |

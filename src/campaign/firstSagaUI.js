@@ -160,7 +160,7 @@ export function drawSettlementCeremony(ctx, W, H, {
     ctx.fillRect(panX - 20, panY - 20, panW + 40, panH + 40);
   }
 
-  drawPanel(panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
+  drawPanel(ctx, panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
   const hx = panX + panW / 2;
   let hy = panY + 28;
 
@@ -197,7 +197,7 @@ export function drawSettlementCeremony(ctx, W, H, {
     const by = hy + 8;
     for (const type of types) {
       const sel = recruitType === type;
-      drawPanel(bx, by, chipW, chipH, sel ? 'rgba(28,40,16,0.97)' : 'rgba(12,8,4,0.95)', 0.75, 6);
+      drawPanel(ctx, bx, by, chipW, chipH, sel ? 'rgba(28,40,16,0.97)' : 'rgba(12,8,4,0.95)', 0.75, 6);
       ctx.font = 'bold 9px monospace';
       ctx.fillStyle = sel ? '#a8e070' : '#c0a060';
       ctx.fillText(type.toUpperCase(), bx + chipW / 2, by + 22);
@@ -224,7 +224,7 @@ export function drawSettlementCeremony(ctx, W, H, {
     const btnH = 30;
     const btnX = hx - btnW / 2;
     const btnY = panY + panH - 48;
-    drawPanel(btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.8, 6);
+    drawPanel(ctx, btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.8, 6);
     ctx.font = 'bold 9px monospace';
     ctx.fillStyle = '#90c070';
     ctx.fillText(stage.cta, hx, btnY + 19);
@@ -262,7 +262,7 @@ export function drawHeroNamingCeremony(ctx, W, H, {
   ctx.fillStyle = `rgba(220,180,80,${glow})`;
   ctx.fillRect(panX - 16, panY - 16, panW + 32, panH + 32);
 
-  drawPanel(panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
+  drawPanel(ctx, panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
 
   let hy = panY + 26;
   ctx.textAlign = 'center';
@@ -298,7 +298,7 @@ export function drawHeroNamingCeremony(ctx, W, H, {
   const btnH = 30;
   const btnX = hx - btnW / 2;
   const btnY = panY + panH - 46;
-  drawPanel(btnX, btnY, btnW, btnH, nameValid ? 'rgba(20,30,14,0.97)' : 'rgba(16,12,8,0.9)', 0.75, 6);
+  drawPanel(ctx, btnX, btnY, btnW, btnH, nameValid ? 'rgba(20,30,14,0.97)' : 'rgba(16,12,8,0.9)', 0.75, 6);
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = nameValid ? '#90c070' : 'rgba(120,100,70,0.45)';
   ctx.fillText('Swear the name', hx, btnY + 19);
