@@ -1,17 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { drawCampaignWarCampBriefing, isSimplifiedWarCamp } from '../src/ui/warCampPanel.js';
-
-function mockCtx() {
-  return {
-    save: () => {}, restore: () => {}, beginPath: () => {}, arc: () => {},
-    fill: () => {}, stroke: () => {}, fillRect: () => {}, strokeRect: () => {},
-    moveTo: () => {}, lineTo: () => {}, closePath: () => {}, fillText: () => {},
-    roundRect: () => {},
-    measureText: (t) => ({ width: (t ?? '').length * 5 }),
-    font: '', textAlign: 'left', textBaseline: 'alphabetic',
-    fillStyle: '', strokeStyle: '', lineWidth: 1, shadowBlur: 0,
-  };
-}
+import { mockCtx } from './canvasMock.js';
 
 describe('warCampPanel', () => {
   it('simplifies UI on First Saga map 0', () => {
@@ -39,5 +28,34 @@ describe('warCampPanel', () => {
     }, btns)).not.toThrow();
     expect(btns.some(b => b.action === 'nextAssault')).toBe(true);
     expect(btns.some(b => b.action === 'commandMap')).toBe(true);
+  });
+
+  it('drawCampaignWarCampBriefing shows retry assault action', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    drawCampaignWarCampBriefing(ctx, { x: 20, y: 40, w: 280, h: 400 }, {
+      defenderNames: ['A', 'B', 'C', 'D'],
+      defenderCount: 5,
+      nextAssault: {
+        codename: 'Ash Gate', tierLabel: 'A0', frontLabel: 'West',
+        waveCount: 1, nodeIndex: 0, isRetry: true,
+      },
+      goldReserve: 12,
+      chronicleProse: 'A long chronicle line that should wrap across multiple rows when rendered.',
+      statusLines: [{ text: 'Scar on west gate', color: '#A93226' }],
+    }, btns);
+    expect(btns.some(b => b.action === 'retryAssault')).toBe(true);
+  });
+
+  it('handles secured region without next assault', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    expect(() => drawCampaignWarCampBriefing(ctx, { x: 0, y: 0, w: 300, h: 400 }, {
+      defenderNames: [],
+      defenderCount: 0,
+      nextAssault: null,
+      goldReserve: 0,
+      statusLines: [],
+    }, btns)).not.toThrow();
   });
 });

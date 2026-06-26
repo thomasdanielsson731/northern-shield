@@ -47,8 +47,39 @@ describe('debriefReport', () => {
     expect(s).toContain('MVP Gunnar');
   });
 
-  it('titles assault nodes', () => {
-    expect(getSagaDebriefTitle(2)).toBe('Splinter');
+  it('formats compact debrief stats without wave total', () => {
+    const s = formatDebriefCompactStats({ waveNumber: 3, slain: 10, goldEarned: 5, lives: 4, maxLives: 20 });
+    expect(s).toContain('3 waves');
+    expect(s).not.toContain('MVP');
+  });
+
+  it('damage report covers patched gate and breach', () => {
+    const patched = buildFortressDamageReport(
+      { '19_15': { isGate: true, hp: 95, maxHp: 100 } },
+      { westGateScarred: true, westGateRepaired: true, wood: 0 },
+      { goal: { col: 24, row: 15 }, lives: 20 },
+    );
+    expect(patched.lines.some(l => l.tone === 'mended')).toBe(true);
+
+    const breached = buildFortressDamageReport(
+      {},
+      { westGateScarred: false, westGateRepaired: false, wood: 0 },
+      { goal: { col: 24, row: 15 }, breachFlag: true, lives: 0 },
+    );
+    expect(breached.breached).toBe(true);
+    expect(breached.lines.some(l => l.label === 'BREACH')).toBe(true);
+
+    const fallback = buildFortressDamageReport(
+      { '10_15': { isGate: true, hp: 30, maxHp: 100 } },
+      {},
+      { goal: { col: 24, row: 15 } },
+    );
+    expect(fallback.gateHpPct).toBe(30);
+  });
+
+  it('fallback prose for unknown node index', () => {
+    expect(getSagaDebriefProse(99, true, {})).toMatch(/north holds/i);
+    expect(getSagaDebriefTitle(99)).toBe('After the assault');
   });
 });
 

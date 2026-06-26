@@ -115,7 +115,8 @@ export function countDeployedRoleBonus(towers, roster, roleId) {
   let n = 0;
   for (const t of towers ?? []) {
     if (!isHeroTowerType(t.type)) continue;
-    const def = roster?.find?.(t.defenderId) ?? roster?.defenders?.find(d => d.defenderId === t.defenderId);
+    const def = roster?.find?.(d => d.defenderId === t.defenderId)
+      ?? roster?.defenders?.find(d => d.defenderId === t.defenderId);
     if (def?.fortressRole === roleId) n++;
   }
   return n;

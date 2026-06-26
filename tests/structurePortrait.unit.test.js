@@ -17,7 +17,7 @@ function mockCtx() {
 describe('structurePortrait', () => {
   it('draws siege structure icons without throwing', () => {
     const ctx = mockCtx();
-    for (const id of ['ballista', 'watchtower', 'mine', 'barracks', 'runeshrine', 'gate', 'catapult', 'piltorn']) {
+    for (const id of ['ballista', 'watchtower', 'mine', 'barracks', 'runeshrine', 'gate', 'catapult', 'piltorn', 'drakship', 'unknown']) {
       expect(() => drawProceduralStructureIcon(ctx, 16, 16, id, 24, true)).not.toThrow();
     }
   });

@@ -1,6 +1,7 @@
 node_modules
 dist
 .DS_Store
+coverage
 
 # Accidental nested full-repo clone — game root is THIS directory, not tower-defense/ again
 tower-defense/

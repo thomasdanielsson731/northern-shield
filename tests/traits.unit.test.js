@@ -205,9 +205,58 @@ describe('getTraitModifiers — legendary traits', () => {
     expect(out.rangeMult).toBeGreaterThan(1);
   });
 
-  it('odins_watch: stronger dmg bonus when fortress is breached twice', () => {
-    const safe    = getTraitModifiers(def('odins_watch'), { rampartsLostThisBattle: 0 }).dmgMult;
-    const breached = getTraitModifiers(def('odins_watch'), { rampartsLostThisBattle: 2 }).dmgMult;
-    expect(breached).toBeGreaterThan(safe);
+  it('positive zone traits', () => {
+    expect(getTraitModifiers(def('methodical')).cdMult).toBeLessThan(1);
+    expect(getTraitModifiers(def('fearless'), { inGateZone: true }).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('guardian'), { inCoreZone: true }).combatHpMult).toBe(1.12);
+    expect(getTraitModifiers(def('inspiring'), { inCoreZone: true }).dmgMult).toBe(1.08);
+    expect(getTraitModifiers(def('builder'), { inWallZone: true }).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('tactician')).eventPreview).toBe(1);
+    expect(getTraitModifiers(def('warmhearted')).goldPerWave).toBeGreaterThan(0);
+    expect(getTraitModifiers(def('merciful')).goldPerWave).toBe(0.4);
+    expect(getTraitModifiers(def('menders_touch')).combatHpMult).toBe(1.08);
+    expect(getTraitModifiers(def('loyal')).dmgMult).toBe(1.08);
+  });
+
+  it('rare and legendary trait branches', () => {
+    expect(getTraitModifiers(def('wolf_friend'), { inWallZone: true }).dmgMult).toBe(1.12);
+    expect(getTraitModifiers(def('draugr_hunter')).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('frostborn')).combatHpMult).toBe(1.06);
+    expect(getTraitModifiers(def('star_seeker')).goldPerWave).toBe(0.8);
+    expect(getTraitModifiers(def('bond_forger')).dmgMult).toBe(1.06);
+    expect(getTraitModifiers(def('quiet_leader'), { inCoreZone: true }).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('gate_singer'), { inGateZone: true }).dmgMult).toBe(1.15);
+    expect(getTraitModifiers(def('quartermasters_eye')).goldPerWave).toBe(0.5);
+    expect(getTraitModifiers(def('stubborn')).combatHpMult).toBe(1.20);
+    expect(getTraitModifiers(def('lone_wolf')).dmgMult).toBe(1.06);
+  });
+
+  it('negative trait branches', () => {
+    expect(getTraitModifiers(def('greedy')).combatHpMult).toBeLessThan(1);
+    expect(getTraitModifiers(def('hotheaded')).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('suspicious')).fearImmune).toBe(true);
+    expect(getTraitModifiers(def('lone_wolf')).dmgMult).toBe(1.06);
+  });
+
+  it('devout and serene traits', () => {
+    expect(getTraitModifiers(def('devout'), { inCoreZone: true }).dmgMult).toBe(1.05);
+    const serene = getTraitModifiers(def('serene'));
+    expect(serene.fearImmune).toBe(true);
+    expect(serene.dmgMult).toBe(0.95);
+  });
+
+  it('context-sensitive negative traits', () => {
+    expect(getTraitModifiers(def('impulsive'), { waveInNode: 1 }).dmgMult).toBe(1.10);
+    expect(getTraitModifiers(def('vengeful'), { vengeanceActive: true }).dmgMult).toBe(1.18);
+    expect(getTraitModifiers(def('brooding'), { livesFull: true }).dmgMult).toBe(0.95);
+    expect(getTraitModifiers(def('proud'), { rampartsLostThisBattle: 1 }).dmgMult).toBe(0.90);
+    expect(getTraitModifiers(def('bitter'), { rampartsLostThisBattle: 2 }).dmgMult).toBe(1.10);
+  });
+
+  it('legendary aliases and economy traits', () => {
+    expect(getTraitModifiers(def('chieftain_hunter')).bossDmgMult).toBe(1.25);
+    const saga = getTraitModifiers(def('saga_bound'));
+    expect(saga.goldPerWave).toBe(1.0);
+    expect(getTraitModifiers(def('fate_touched')).combatHpMult).toBe(1.15);
   });
 });

@@ -35,6 +35,30 @@ describe('sessionSave', () => {
     expect(simpleSessionChecksum(s)).toBe(simpleSessionChecksum(s));
   });
 
+  it('sanitizes settlement and hero naming ceremony state', () => {
+    const s = validateSessionState({
+      version: 1,
+      gamePhase: 'heroNamingCeremony',
+      settlementCeremony: { step: 99, recruitType: 'valkyrie', nameDraft: 'x'.repeat(30) },
+      heroNamingCeremony: {
+        nameDraft: 'Sverker',
+        defenderId: 'd1',
+        pending: { action: 'prep', nodeIndex: 2 },
+      },
+    });
+    expect(s.gamePhase).toBe('heroNamingCeremony');
+    expect(s.settlementCeremony.step).toBe(5);
+    expect(s.settlementCeremony.nameDraft).toHaveLength(16);
+    expect(s.heroNamingCeremony.pending.action).toBe('prep');
+    expect(s.heroNamingCeremony.pending.nodeIndex).toBe(2);
+  });
+
+  it('accepts session without checksum', () => {
+    const { ok, state } = verifySessionChecksum({ version: 1, gamePhase: 'nodeMap', campaignMapIndex: 0 });
+    expect(ok).toBe(true);
+    expect(state.gamePhase).toBe('nodeMap');
+  });
+
   it('verifySessionChecksum clamps tampered combat gold', () => {
     const s = {
       version: 1,
