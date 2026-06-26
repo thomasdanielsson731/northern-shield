@@ -10,6 +10,8 @@ import {
   buildSlotMeta,
   LEGACY_CAMPAIGN_KEY,
   slotCampaignKey,
+  describeSessionLocation,
+  touchSlotMeta,
 } from '../src/campaign/saveSlots.js';
 import { createNewCampaign, saveCampaign, CAMPAIGN_KEY } from '../src/campaign/save.js';
 import { validateSessionState } from '../src/campaign/sessionSave.js';
@@ -69,6 +71,24 @@ describe('saveSlots', () => {
     expect(meta.label).toBe('Iron Wolves');
     expect(meta.summary.battles).toBe(4);
     expect(meta.summary.location).toBe('War Camp');
+  });
+
+  it('describeSessionLocation covers all phases', () => {
+    expect(describeSessionLocation({ gamePhase: 'fortressPrep' })).toBe('Campaign');
+    expect(describeSessionLocation({ gamePhase: 'nodeMap', campaignMapIndex: 0 })).toBeTruthy();
+    expect(describeSessionLocation({ gamePhase: 'playing', combat: { waveNumber: 2 } })).toMatch(/wave 2/);
+    expect(describeSessionLocation({ gamePhase: 'mapSelect' })).toBe('Skirmish select');
+  });
+
+  it('touchSlotMeta updates last played', () => {
+    const { campaign } = createCampaignInSlot(2, storage);
+    touchSlotMeta(2, campaign, { version: 1, gamePhase: 'debrief' }, storage);
+    expect(loadSlotsMeta(storage).slots[2]?.summary.location).toBe('Debrief');
+  });
+
+  it('returns empty meta on corrupt storage', () => {
+    storage.setItem('ns-slots-meta-v1', '{bad');
+    expect(loadSlotsMeta(storage).slots).toHaveLength(SLOT_COUNT);
   });
 });
 
