@@ -585,6 +585,14 @@ function panelActions(hotspot, ctx) {
   return actions.slice(0, 2);
 }
 
+export function getPrepAdvisorContent(hotspot, ctx) {
+  return advisorLines(hotspot, ctx);
+}
+
+export function getPrepPanelActions(hotspot, ctx) {
+  return panelActions(hotspot, ctx);
+}
+
 export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const {
     prepMeta, postAssignments, roster, treasuryUnlocked = true, assault,

@@ -8,6 +8,8 @@ import {
   syncPrepMetaForAssault,
   getPrepAutoHotspot,
   getPrepRepairTeachHint,
+  getPrepAdvisorContent,
+  getPrepPanelActions,
   A2_DEBRIEF_WOOD_BUNDLE,
   FIRST_SAGA_A2_NODE,
   FIRST_SAGA_A3_NODE,
@@ -97,5 +99,20 @@ describe('fortressCommanderShell', () => {
     expect(getPrepRepairTeachHint(meta)).toMatch(/Repair/i);
     expect(getPrepRepairTeachHint({ westGateScarred: true, westGateRepaired: false, wood: 2 }))
       .toMatch(/timber/i);
+  });
+
+  it('advisor content and panel actions for wall scar', () => {
+    const ctx = {
+      prepMeta: { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      postAssignments: { west_gate: { defenderId: 'd1' } },
+      roster: { defenders: [{ defenderId: 'd1', name: 'Erik', type: 'berserk' }] },
+      goldReserve: 0,
+      nodeCasualties: new Set(),
+    };
+    const content = getPrepAdvisorContent(PREP_HOTSPOTS.WALL_SCAR, ctx);
+    expect(content.title).toBe('West Wall');
+    expect(content.lines[0]).toMatch(/splintered/i);
+    const actions = getPrepPanelActions(PREP_HOTSPOTS.WALL_SCAR, ctx);
+    expect(actions.some(a => a.id === 'repair_gate')).toBe(true);
   });
 });
