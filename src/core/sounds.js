@@ -394,6 +394,13 @@ export function sfxChapterBanner() {
   tone(550, 0.16, 0.07, 'sine', 0.42);
 }
 
+/** Fortress Commander — assault horn (prep → battle). */
+export function sfxAssaultHorn() {
+  tone(110, 0.35, 0.14, 'sawtooth');
+  tone(165, 0.28, 0.10, 'sine', 0.08);
+  tone(220, 0.22, 0.08, 'sine', 0.18);
+}
+
 export function sfxKillMilestone() {
   // Brief triumphant sting — a defender reaches a career kill milestone
   tone(660, 0.10, 0.10, 'sine');

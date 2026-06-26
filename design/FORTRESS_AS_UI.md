@@ -1,756 +1,432 @@
 # Fortress as the User Interface
 
-*Northern Shield · Places, People, Ceremonies — not menus*
+*Production spec · First Saga (Level 1) · Executive-approved scope*
 
-**Status:** Creative direction proposal · supersedes panel-first Fortress Prep  
-**Authority:** [north_star.md](north_star.md) · [FORTRESS_COMMANDER.md](FORTRESS_COMMANDER.md) · [the_first_saga.md](the_first_saga.md) · [moments_to_protect.md](moments_to_protect.md)  
-**Replaces:** Menu/panel navigation in [FORTRESS_PREP_REDESIGN.md](FORTRESS_PREP_REDESIGN.md) (schematic + ceremony beats may carry forward)
+**Status:** Implementation target for `fortressPrep` until Saga I ships  
+**Authority:** [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md) · [the_first_saga.md](the_first_saga.md) · [north_star.md](north_star.md)  
+**Philosophy:** APPROVED — places, people, ceremonies (not spreadsheet menus)  
+**Scope:** Level 1 only — see [Future Evolution](#future-evolution)
 
----
-
-## Executive thesis
-
-> **The fortress is not a screen you open. It is how you play.**
-
-Northern Shield stops asking players to operate **abstract UI** (tabs, lists, context panels, chips). Players **inhabit** a Viking stronghold: they walk to the gate, speak with the captain, hear the quartermaster at the treasury chest, mend the wall with builders, and blow the war horn from the battlement.
-
-**North star §1:** The fortress is the main character — it must also be the **primary interface**.  
-**North star §9** evolves: not "one screen, one question" but **one place, one purpose**.
+> **Executive rule:** Increase immersion by reducing abstraction.  
+> **Do NOT** increase immersion by increasing friction.  
+> The player should feel they *visited the Barracks* — not that they *walked to the Barracks*.
 
 ---
 
-# 1. Fortress Navigation Philosophy
+## Executive verdict
 
-## 1.1 Core rule
-
-**Navigate by moving through space, not by opening menus.**
-
-| Old grammar | New grammar |
-|-------------|-------------|
-| Open War Camp tab | Walk to **Longhouse** |
-| Open Fortress Prep | Walk the **walls** and **gates** |
-| Click Assign in panel | Speak with **Captain** at the gate |
-| Open Treasury UI | Visit **Quartermaster** at the chest |
-| Press Begin Assault | **Blow the war horn** on the wall |
-| Confirm dialog | **Ceremony** at the fire / hall |
-
-## 1.2 The fortress as map
-
-One persistent **Fortress Homestead** view — a compound the camera travels across. No left rail. No right context panel. No category accordion.
-
-```
-PLAYER POSITION = CAMERA FOCUS = CURRENT "PLACE"
-```
-
-**Places** are click targets or walk-to hotspots on the homestead:
-- **Destinations** (buildings with interiors: Longhouse, Treasury yard, future Barracks)
-- **Defensive sites** (West Gate, Watch Tower, wall segments)
-- **Thresholds** (horn platform, courtyard, command pole for assault intel)
-
-## 1.3 Interaction verbs (physical)
-
-| Verb | Meaning |
-|------|---------|
-| **Walk** | Camera pans/zooms to a place (0.4–0.8s) |
-| **Enter** | Cross building threshold → interior scene |
-| **Inspect** | Close-up on damage, hero at post, resource pile |
-| **Speak** | Advisor dialogue at that place |
-| **Act** | In-world action (hammer repair, assign defender, slot rune) |
-| **Return** | Camera pulls back to homestead overview |
-| **Sound the horn** | Ceremony at gate — commits assault |
-
-## 1.4 What navigation is NOT
-
-- Scrolling lists of posts
-- Tabs (Warband | Structures | Fortress)
-- Modal forms with OK/Cancel
-- HUD-heavy management screens
-- Grid placement as primary verb
-
-## 1.5 Phase model (revised screen laws)
-
-Phases remain spiritually identical to [FORTRESS_COMMANDER.md](FORTRESS_COMMANDER.md); **presentation** unifies under one fortress:
-
-| Phase | Place law | Never |
-|-------|-----------|-------|
-| **Homestead (between fights)** | People places — Longhouse, Treasury | Battlefield visible |
-| **Wall walk (prep)** | Defensive places — gates, towers, scars | Recruit ceremony (until unlocked) |
-| **Battle** | Through the gate — combat field | Build, shop, recruit |
-| **Aftermath** | Courtyard gathering → Skald at fire | Layout editor |
-
-War Camp and Fortress Prep **merge visually** into one homestead; **place law** replaces screen law.
+| | Decision |
+|---|----------|
+| **Fantasy** | Keep 100% — fortress is the interface, advisors speak, horn commits the plan |
+| **Implementation** | Cut ~70% — click + zoom + panel, not hub sim |
+| **Target** | [the_first_saga.md](the_first_saga.md) only — not Version 1.0 |
+| **Ship bar** | Player says: *"I feel like I'm preparing my own fortress"* in ≤3 clicks and ≤5 seconds per prep action |
 
 ---
 
-# 2. Living Fortress Concept
+## Smallest implementation that still works
 
-## 2.1 Design goal
+**The First Saga target — build only this:**
 
-The stronghold must feel **inhabited**, not like a static level select backdrop.
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ASSAULT: Splinter Raid · WEST · 2 waves          ◆28  ▣15     │  ← thin meta strip only
+├───────────────────────────────────────┬────────────────────────┤
+│                                       │  ADVISOR PANEL         │
+│     LARGE FORTRESS SCHEMATIC          │  [portrait]            │
+│     (70% width · all interaction)     │  Captain:              │
+│                                       │  "The west road stirs."│
+│   [Tower]──[Wall/Gate scar]──[Horn]   │                        │
+│        [Longhouse]  [Treasury]        │  [ Assign Gunnar ]     │
+│                                       │  [ Repair — 10 wood ]  │
+│   hover glow · click zoom ≤0.4s       │                        │
+│   hero medallion on gate when set     │  ─────────────────     │
+│                                       │  [ ▶ SOUND HORN ]      │
+└───────────────────────────────────────┴────────────────────────┘
+```
 
-## 2.2 Living elements (by tier)
+**Five clickable hotspots (slice):** West Gate · Watch Tower · West Wall/Gate scar · Longhouse · Treasury chest  
 
-| Element | Village (slice) | Settlement+ | Fortress+ | Citadel+ |
-|---------|-----------------|-------------|-----------|----------|
-| **Villagers** | 3–5 silhouettes | 12+ | crowds | districts |
-| **Builders** | — | 2 with tools | repair crews | mason guild |
-| **Blacksmith** | — | smoke only | visible forge | enchant sparks |
-| **Training** | — | 1–2 sparring | barracks yard | elite guard |
-| **Smoke** | Longhouse chimney | +granary | +forge | ritual pyres |
-| **Animals** | goat, raven | dogs, horses | war hounds | dragon perch |
-| **Children** | — | 1–2 (hope) | refugees | market play |
-| **Campfires** | central fire | multiple | braziers on walls | signal fires |
-| **Flags/banners** | tattered cloth | named clan | facing colors | rune standards |
-| **Bell tower** | — | warning bell | assault bell | citadel chimes |
-| **Weather** | overcast wind | rain on scars | snow siege | aurora (magic) |
-| **Season** | late autumn | winter prep | spring rebuild | saga years |
+**One interaction loop:** Click place → camera nudges to it → advisor panel updates → act → done. **No return journey. No interior. No walking.**
 
-## 2.3 Reactive life (system-driven)
+**Why this is enough:** The fortress dominates the screen; the advisor names the place; scars and medallions are on the geometry; the horn is ceremonial. Player never sees a post chip list or WARBAND tab in prep.
 
-Life reacts to **game state**, not random decoration:
-
-| State | Fortress reacts |
-|-------|-----------------|
-| Gate scarred | Builders point at west gate; villagers glance west |
-| Assault queued | Scouts on tower; captain at gate; horn ready |
-| Low gold | Quartermaster arms crossed at empty chest |
-| Post-assault win | Courtyard relief — people return to chores |
-| Boss imminent | Bell toll; children indoors; fire dimmed |
-| Settlement | New faces arrive; stone dust; hope motif |
-
-## 2.4 Bible alignment
-
-- **§1** — Home feels alive; attachment to *place*
-- **§6** — Tier growth adds life density, not just bigger walls
-- **Moment #6** — War Camp as people: Longhouse interior *is* the hearth fantasy
-- **Moment #9** — Settlement: refugees visible before recruit UI
+**War Camp stays a separate phase** per [the_first_saga.md](the_first_saga.md) (talents A3, chronicle scroll, fortress building cards). Prep **references** Longhouse/Treasury visually; deep people management remains War Camp until Saga II unification.
 
 ---
 
-# 3. Building Interaction Design
+## Design levels (every feature)
 
-Every building answers **"What happens here?"** and owns **one primary fantasy**.
+Use this table when scoping any fortress UX work:
 
-## 3.1 Building destination table (full game)
+| Level | When | Rule |
+|-------|------|------|
+| **Level 1 — Build Now** | First Saga | Click, zoom ≤0.5s, advisor portrait + panel, overlays, horn |
+| **Level 2 — After Saga I** | Saga II+ | Ambient life, idle advisors, bells, flags, seasonal art |
+| **Level 3 — Version 1.0** | Ages III–VI | Interiors, walkable hubs, crowds, fly-throughs, festivals |
 
-| Building | Physical home | Primary systems | Advisor host | Slice |
-|----------|---------------|-----------------|--------------|-------|
-| **Longhouse** | Fire pit interior | Story, naming, chronicle, recruit ceremonies | **Skald** | ✅ Tier I |
-| **Tiny Treasury** | Buried chest + post | Gold reserve, battle budget | **Quartermaster** | ✅ |
-| **West Gate** | Gate threshold | Hero assignment, brace, horn | **Captain** | ✅ |
-| **Watch Tower** | Tower stairs | Intel, scout assign | **Scout** | ✅ |
-| **Wall segment** | Walkable parapet | Repair, reinforce, tier | **Master Builder** | ✅ (west) |
-| **Barracks** | Bunk + yard | Roster view, training, promotions | **Captain** | Finale tease |
-| **Workshop** | Forge yard | Siege mount, engineering | **Master Builder** | 🔒 Age III |
-| **Temple** | Shrine interior | Healing, blessings | **High Priest** | 🔒 Age II+ |
-| **Rune Hall** | Rune shrine | Spells, rune prep | **Seer** | 🔒 CUT slice |
-| **Smithy** | Anvil | Weapons, armor | **Armorer** | 🔒 |
-| **Great Hall** | Hall interior | Oaths, kingdom events, major promotions | **Jarl's voice** | 🔒 Age III |
-
-## 3.2 Interaction pattern (every building)
-
-```
-1. CLICK building on homestead (or walk hotspot)
-2. CAMERA travels → threshold pause
-3. ENTER (optional interior) or INSPECT (outdoor site)
-4. ADVISOR greets in-character at this place
-5. PLAYER acts with in-world props (not form fields)
-6. RETURN to homestead overview
-```
-
-### Example — West Gate (slice)
-
-```
-[Click West Gate]
-  Camera: pan to gate, slight low angle
-  Captain steps into frame: "The west road is restless."
-  Visual: gate HP as physical damage (splinters, not a bar)
-  Actions: [Place Gunnar on the wall] [Call builders — repair]
-  Horn rack visible when ready
-```
-
-### Example — Longhouse (slice)
-
-```
-[Click Longhouse]
-  Camera: enter smoke-warm interior
-  Skald by fire: "Sit. The saga is not finished."
-  Actions: read chronicle scroll · name hero (post-A0) · (recruit locked)
-  No battlefield through door — only night sky
-```
-
-### Example — Treasury (slice)
-
-```
-[Click chest near Longhouse]
-  Quartermaster: "Battle gold spends fast. The chest keeps the rest."
-  Visual: coins in chest, split piles (battle ◆ vs reserve)
-  Actions: drag coins to pouches (physical metaphor) — no number dialog
-```
-
-## 3.3 Defensive sites vs meta buildings
-
-| Type | Navigation | Interior? |
-|------|------------|-----------|
-| **Defensive site** | Wall walk camera track | No — always outdoor |
-| **Meta building** | Enter threshold | Yes — intimate scene |
-| **District** (Citadel+) | Pan to cluster | Optional overview only |
+**If a feature is not Level 1, do not implement it during the frozen bible.**
 
 ---
 
-# 4. Advisor System
+# Level 1 — Build Now (First Saga)
 
-## 4.1 Philosophy
+## Allowed
 
-**Replace generic UI notifications with familiar characters at places.**
+| Capability | Spec |
+|------------|------|
+| **Clickable fortress** | 5 hotspots on one schematic (see below) |
+| **Camera** | Zoom/pan to selected structure, **≤0.5s**, ease-out |
+| **Advisor** | Static **portrait** + **1–2 lines** in right panel |
+| **Right panel** | Context-sensitive: actions + advisor (not a static menu) |
+| **Highlight** | Hover glow + selection ring on structure |
+| **Damage** | Gate scar **overlay** on art (persists A2+) |
+| **Repair** | Button in panel → **0.6s patch animation** on gate art |
+| **Assignment** | Hero **medallion** on gate; assign via panel button |
+| **Horn** | **Major ceremony** (≤1.5s) → battle; skippable after A0 |
+| **Idle animation** | Smoke from Longhouse chimney (loop); optional flag flutter |
+| **Intel** | Scout line in panel when Tower selected; assault strip top |
 
-Advisors are not a chat log in the corner. They **appear** where they belong:
+## Not allowed (Level 1)
 
-| Advisor | Home | Voice |
-|---------|------|-------|
-| **Scout** | Watch Tower | Terse, directional |
-| **Quartermaster** | Treasury | Practical, worried about stores |
-| **Master Builder** | Wall / Workshop | Proud, hands dirty |
-| **Captain** | Gate / Barracks | Duty, names soldiers |
-| **High Priest** | Temple | Solemn, conditional |
-| **Skald** | Longhouse fire | Saga, memory, prose |
-| **Seer** | Rune Hall | Cryptic, costly |
-
-## 4.2 Delivery rules
-
-- **One advisor at a time** per place (no council dump)
-- **Max 2 lines** per interruption (slice rule carries)
-- **No** red exclamation quest markers — instead character walks to player
-- Urgent intel: Scout **descends tower** and calls from courtyard
-- Critical block (unrepaired gate): Builder **at the scar**, not modal
-
-## 4.3 Familiarity arc
-
-| Campaign age | Advisor relationship |
-|--------------|---------------------|
-| Village | Skald + Captain only |
-| Settlement | + Quartermaster, Scout |
-| Fortress | + Master Builder, High Priest |
-| Citadel | Full cast; callbacks to earlier lines |
-
-## 4.4 Slice cast (Saga I)
-
-| Advisor | Appears when |
-|---------|--------------|
-| **Skald** | Naming, debrief echoes, chronicle |
-| **Captain** | Gate assignment, horn readiness |
-| **Scout** | A1+ tower, intel lines |
-| **Quartermaster** | A1 treasury teach |
-| **Master Builder** | A3 repair at scar |
+| Cut | Reason |
+|-----|--------|
+| Walking / travel between places | Friction without fantasy gain |
+| Building **interiors** | Separate scenes = scope explosion |
+| NPC pathfinding | No captain walks to player |
+| Dynamic villager schedules | Level 2 |
+| Wall-walk camera **track** | Level 2 — click wall segment instead |
+| Courtyard aftermath scene in prep | Debrief handles prose (existing phase) |
+| Resource drag-and-drop | Panel buttons + numbers OK in slice |
+| Merge War Camp into homestead | Slice keeps `betweenBattles` phase |
+| Multiple camera hops per action | One zoom per click |
+| "Return to overview" button required | Click empty schematic or second click deselects |
 
 ---
 
-# 5. Ceremony System
+## Performance budget (non-negotiable)
 
-## 5.1 Philosophy
+| Metric | Limit |
+|--------|-------|
+| **Clicks** to complete any prep task | **≤3** |
+| **Camera movement** | **≤0.5s** |
+| **Wait before interaction** after click | **≤1s** (advisor text can typewrite fast) |
+| **Horn ceremony** (first view) | **≤1.5s** |
+| **Repeat prep** (A1+) | Advisor short line or silent; horn skip offered |
 
-**Replace confirmation dialogs with memorable transitions.**
-
-Every high-stakes decision gets a **short scene** (3–15 seconds). Low-stakes actions stay in-world (hammer on wall).
-
-## 5.2 Ceremony catalog
-
-| Event | Place | Beats | Slice |
-|-------|-------|-------|-------|
-| **New recruit** | Longhouse fire | Stranger steps from dark; naming; clan welcomes | Finale |
-| **Hero promotion** | Great Hall | Torchlight; title spoken; crowd | 🔒 |
-| **Naming** | Longhouse fire | Player speaks name; Skald repeats | ✅ A0 |
-| **Settlement upgrade** | West wall | Builders raise stone; crowd watches | ✅ Finale |
-| **Fortress tier** | Homestead pan | Time-lapse silhouette morph | Post-slice |
-| **Battle start** | West Gate horn | Captain steps aside; horn; cut to field | ✅ All |
-| **Battle end** | Courtyard | Survivors limp in; Skald begins prose | ✅ Debrief lead-in |
-| **Chronicle write** | Longhouse | Skald inks scroll; entry appears | ✅ |
-| **Repair complete** | Gate scar | Builders step down; patch visible | ✅ A3 |
-| **Talent choose** | Longhouse | Veteran teaches at fire (one pick) | ✅ A3 |
-| **Boss warning** | Tower + bell | Bell + Scout line | ✅ A4 |
-
-## 5.3 Ceremony vs friction
-
-| Use ceremony | Skip ceremony |
-|--------------|---------------|
-| First time per chapter | Repeat repair on same gate |
-| Recruit, promote, tier | Optional tower assign |
-| Horn assault start | — always |
-| Settlement, stone wall | — always |
-
-**Skippable after first view** (hold Esc / click "Let them continue") — except horn and finale.
+**Prep gets faster with mastery:** repeat assignments skip advisor intro; repair skip animation after first A3.
 
 ---
 
-# 6. Building-as-UI Architecture
-
-## 6.1 Technical concept (design-level)
+## Screen layout (Level 1)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                 FORTRESS HOMESTEAD SCENE                 │
-│  (single canvas / scene graph — persistent between acts) │
-├─────────────────────────────────────────────────────────┤
-│  Layers:                                                 │
-│   L0 Terrain + sky + weather                             │
-│   L1 Structures (clickable destinations)               │
-│   L2 Living actors (villagers, advisors, animals)        │
-│   L3 Damage overlays (scars, smoke intensity)            │
-│   L4 Interaction highlights (hover glow, path hints)     │
-│   L5 Ceremony overlay (fullscreen vignette when needed)  │
-│   L6 Minimal chrome (assault name, resources as props)   │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ META: assault name · front · waves · gold ◆ · wood ▣ (A3+)      │  32px strip
+├────────────────────────────────────────────┬────────────────────┤
+│                                            │ RIGHT PANEL  280px │
+│  FORTRESS SCHEMATIC  (flex, min 65%)       │                    │
+│                                            │ Place title        │
+│  Isometric/top-down village ring            │ Advisor portrait   │
+│  Clickable:                                 │ 1–2 line dialogue  │
+│    · Watch Tower (northwest)                │                    │
+│    · West Gate + wall scar                  │ Primary actions    │
+│    · Horn peg (part of gate anchor)         │ (max 2 visible)    │
+│    · Longhouse (south)                      │                    │
+│    · Treasury chest (beside longhouse)      │ ─────────────      │
+│                                            │ HORN (gated)       │
+│  States on art:                             │                    │
+│    scar / patch / hero medallion / pulse    │                    │
+└────────────────────────────────────────────┴────────────────────┘
 ```
 
-## 6.2 Place state machine
+**Remove from prototype:** left post chip list · structure dock · flat Begin Assault without horn beat · category accordion from [FORTRESS_PREP_REDESIGN.md](FORTRESS_PREP_REDESIGN.md).
 
-```
-HOMESTEAD_OVERVIEW
-  ├─→ PLACE_GATE ──→ ASSIGN_CEREMONY ──→ HOMESTEAD
-  ├─→ PLACE_TOWER ──→ SCOUT_DIALOGUE ──→ HOMESTEAD
-  ├─→ PLACE_WALL ──→ REPAIR_ACTION ──→ HOMESTEAD
-  ├─→ INTERIOR_LONGHOUSE ──→ NAMING / CHRONICLE ──→ HOMESTEAD
-  ├─→ INTERIOR_TREASURY ──→ QUARTERMASTER ──→ HOMESTEAD
-  ├─→ WALL_WALK_TRACK ──→ (sequential inspect) ──→ HOMESTEAD
-  └─→ HORN_CEREMONY ──→ BATTLE_TRANSITION ──→ COMBAT_FIELD
-```
-
-## 6.3 Resource display (no top-bar spreadsheet)
-
-Resources appear as **world props**:
-
-| Resource | Physical representation |
-|----------|-------------------------|
-| Gold (battle) | Coin pouch on captain's belt / prep table |
-| Gold (reserve) | Chest pile (Treasury place) |
-| Wood | Timber stack by gate (A3+) |
-| Stone | Mason pallets (post-A4) |
-
-Hover pouch → Quartermaster line, not tooltip grid.
-
-## 6.4 Assault intel
-
-**Command pole** or **scout map** at tower — unrolled scroll showing west arrow, wave count, enemy flavor. Not a header string.
+**Keep from redesign:** west-front focus · 2 posts only · scar persistence · horn locks plan.
 
 ---
 
-# 7. Transition Storyboards
+## Hotspots (slice — exhaustive)
 
-## 7.1 Command Map → Homestead (prep)
+| Hotspot | Click zoom | Advisor | Panel actions | Assault |
+|---------|------------|---------|---------------|---------|
+| **West Gate** | Gate fills ~40% of schematic | Captain | Assign hero · Repair (A3, if scarred) | All |
+| **Watch Tower** | Tower prominent | Scout | Assign hero (optional A1+) · View intel | A1+ |
+| **West Wall** | Same as gate (shared scar hitbox) | Builder (A3) | Repair only when scarred | A2+ |
+| **Longhouse** | Building front | Skald | View chronicle (read) · 🔒 recruit until finale | A0+ naming* |
+| **Treasury** | Chest | Quartermaster | View reserve split (read A1 teach) | A1+ |
 
-```
-Frame 1: Map node "Splinter Raid" selected
-Frame 2: Map zooms toward west node
-Frame 3: Crossfade — map becomes fortress aerial
-Frame 4: Camera descends into homestead; wind audio rises
-Frame 5: Scout on tower turns; Captain walks to gate
-Frame 6: Player control — click to explore
-```
+\* **Naming (major ceremony)** triggers after A0 debrief, not during prep — see Ceremonies. Longhouse in prep is chronicle read only until finale.
 
-## 7.2 Homestead → Battle (horn)
+**Locked silhouettes (no click):** N/E/S gate stubs gray — "Saga II" tooltip on hover only.
 
-```
-Frame 1: Player at horn post; Captain nods
-Frame 2: Horn lift animation (0.5s)
-Frame 3: Horn blast — audio peak; UI chrome fades
-Frame 4: Gate doors open outward; camera pushes through
-Frame 5: Hard cut to combat deployment (assignments visible on field)
-Frame 6: Wave 1 spawns — plan locked
-```
+---
 
-## 7.3 Battle → Aftermath (courtyard)
+## Interaction flow (4–5 seconds per visit)
 
 ```
-Frame 1: Last enemy falls; desaturate
-Frame 2: Fade from field back through gate (reverse horn path)
-Frame 3: Courtyard — survivors, damaged gate visible behind
-Frame 4: Skald steps from Longhouse doorway
-Frame 5: Prose overlay (not stats grid) — who held, what broke
-Frame 6: Choices as places: [Longhouse fire] [West Gate again]
+Click Barracks equivalent (Gate)
+  → 0.4s zoom
+  → Captain portrait already visible in panel
+  → "Gunnar stands ready."
+  → [Assign] or state shown
+  → click schematic background OR another hotspot
+  → 0.4s zoom out
+Total: 4–5s
 ```
 
-## 7.4 Naming ceremony (A0)
+**No** explicit "Back" required. **No** intermediate screens.
+
+### A0 tutorial (≤3 clicks to horn)
+
+1. Prep opens — gate **pulses**, Captain line pre-loaded  
+2. Click gate (optional if pre-selected) → **[ Assign ]**  
+3. **[ Sound Horn ]** enables → click → ceremony → battle  
+
+---
+
+## Advisor system (Level 1)
+
+| Advisor | Portrait | When |
+|---------|----------|------|
+| **Captain** | Gate/default | Gate, horn readiness |
+| **Scout** | Tower | Tower selected, A1+ |
+| **Quartermaster** | Treasury | Treasury selected, A1+ |
+| **Builder** | Scar repair | Gate scar + A3 |
+| **Skald** | Longhouse | Chronicle; finale recruit lead-in |
+
+**Rules:**
+- Portrait + text in **panel only** — not a character sprite on schematic (Level 2)
+- Max **2 lines**; repeat visits use **1 line** or icon-only panel
+- No toast notifications — advisor line replaces them
+
+---
+
+## Ceremony system (Level 1)
+
+### Major — never skip
+
+| Ceremony | Trigger | Duration | Implementation |
+|----------|---------|----------|----------------|
+| **Naming** | Post-A0 debrief → War Camp or modal | ≤3s | Skald + name input — existing flow OK |
+| **Horn / battle start** | Horn button | ≤1.5s | Horn art + sting + cut to battle |
+| **Settlement stone** | Post-A4 | ≤2s | Full-screen illustration (existing spec) |
+| **Recruit #2** | Finale | ≤4s | Choice + naming at fire — fullscreen modal |
+
+### Minor — auto-skip after first view
+
+| Ceremony | First view | Repeat |
+|----------|------------|--------|
+| Assign hero | Captain: "He holds the gate." | Instant medallion |
+| Repair complete | Builder: "Mended." + patch anim | Patch only, 0.3s |
+| Treasury teach | QM explains reserve | Panel numbers only |
+| Tower intel | Scout reads scroll | Icon + wave count |
+
+**Skip:** click anywhere or auto-advance at 0.8s for minor only.
+
+---
+
+## Per-assault prep (slice pacing)
+
+One new verb per assault — unchanged from bible.
+
+| Assault | Hotspots active | New verb | Clicks to horn (target) |
+|---------|-----------------|----------|-------------------------|
+| **A0** | Gate only | Assign | 2–3 |
+| **A1** | + Tower, Treasury | Reserve read | 3 |
+| **A2** | Scar visible | Intel read | 3 |
+| **A3** | Repair enabled | Repair wood | 3 |
+| **A4** | All | Boss intel | 3 |
+| **Finale** | Ceremony on map | — | — |
+
+---
+
+## Visual & audio (Level 1 minimum)
+
+| Element | Level 1 |
+|---------|---------|
+| Longhouse smoke | 1 looping sprite |
+| Gate scar | Static crack overlay |
+| Gate patch | Cross-fade overlay after repair |
+| Hero medallion | 32px portrait badge on gate |
+| Horn | 1 frame lift + sound sting |
+| Ambient | Wind loop in prep only |
+| Music | None in prep (moment #1) |
+
+---
+
+## Technical notes (for Engineering)
+
+- **Phase:** `gamePhase === 'fortressPrep'` — unchanged  
+- **State:** extend `defensivePosts.js` + hotspot `selectedPlaceId` in prep module  
+- **Camera:** offset/scaling on existing schematic draw — no scene graph required  
+- **Panel:** HTML overlay or canvas right column — either OK  
+- **Do not** merge `betweenBattles` into prep for slice  
+- **Tests:** hotspot selection, assign round-trip, horn gated until `validateAssignments` passes  
+
+---
+
+## Wireframes (Level 1)
+
+### Overview — nothing selected
 
 ```
-Frame 1: Longhouse interior; fire crackle
-Frame 2: Hero silhouette warming hands
-Frame 3: Skald: "The wall will remember a name."
-Frame 4: Name input as carved rune on beam (not form dialog)
-Frame 5: Carving glow; name spoken aloud
-Frame 6: Return to homestead — name banner on gate post
+╔══════════════════════════════════════════════════════════════════╗
+║ Splinter Raid · WEST · 2 waves                        ◆28  ▣15   ║
+╠══════════════════════════════════════════════╦═══════════════════╣
+║                                              ║ WEST FRONT        ║
+║           ┌────────────┐                     ║                   ║
+║           │WATCH TOWER │                     ║ Select a part of  ║
+║           └─────┬──────┘                     ║ your fortress.    ║
+║    ═════════════╪═════════════                ║                   ║
+║         ┌───────▼────────┐                   ║ Scout (distant):  ║
+║         │╔════════════╗│  ← pulse if needed  ║ "Axes. West gate."║
+║         │║ WEST GATE  ║│                   ║                   ║
+║         │╚════════════╝│  🎺               ║                   ║
+║         └──────────────┘                   ║                   ║
+║      [LONGHOUSE ~]    [💰]                   ║                   ║
+║                                              ║ [ ▶ HORN ] dim    ║
+╚══════════════════════════════════════════════╩═══════════════════╝
 ```
 
-## 7.5 Settlement stone ceremony (finale)
+### West Gate selected
 
 ```
-Frame 1: Courtyard crowd; refugees visible
-Frame 2: Master Builder gestures at west palisade
-Frame 3: Timelapse — stone rises (1.2s)
-Frame 4: Skald chapter title: Saga I — The Settlement
-Frame 5: Stranger at fire — recruit choice (Valkyrie / Military)
-Frame 6: Second naming mini-ceremony
+╠══════════════════════════════════════════════╦═══════════════════╣
+║         ┌───────▼────────┐                   ║ WEST GATE         ║
+║         │╔════════════╗│ ◉ SELECTED          ║ [Captain portrait]║
+║         │║ WEST GATE  ║│  🛡 Gunnar          ║                   ║
+║         │╚════════════╝│  crack art         ║ "He meets them    ║
+║         └──────────────┘                   ║  at the threshold."║
+║                                              ║                   ║
+║                                              ║ [ Change hero ]   ║
+║                                              ║ [ Repair 10▣] A3  ║
+║                                              ║ ─────────────────  ║
+║                                              ║ [ ▶ SOUND HORN ]  ║
+╚══════════════════════════════════════════════╩═══════════════════╝
+```
+
+### Watch Tower selected (A1)
+
+```
+╠══════════════════════════════════════════════╦═══════════════════╣
+║           ┌────────────┐ ◉                   ║ WATCH TOWER       ║
+║           │WATCH TOWER │                     ║ [Scout portrait]  ║
+║           └────────────┘                     ║ "Wolves. Fast.    ║
+║                                              ║  Two waves."      ║
+║                                              ║ [ Assign scout ]  ║
+║                                              ║ (optional)        ║
+╚══════════════════════════════════════════════╩═══════════════════╝
+```
+
+### Horn ceremony (major — in-place, no new screen)
+
+```
+║  Schematic dims 20%                           ║
+║  Horn icon enlarges center-gate               ║  "The plan is set."
+║  0.8s sting ────────────────────────────────► BATTLE
 ```
 
 ---
 
-# 8. Camera Movement Concepts
+## What we removed (executive cut list)
 
-## 8.1 Camera grammar
+From [FORTRESS_AS_UI.md v1](.) creative draft and prototype:
 
-| Move | Duration | Use |
-|------|----------|-----|
-| **Pan** | 0.5–0.8s | Homestead → building |
-| **Dolly in** | 0.4s | Enter interior |
-| **Orbit slow** | 1.2s | Tier upgrade ceremony |
-| **Track** | 1.0s | Wall walk prep sequence |
-| **Push through** | 0.3s | Gate → battle |
-| **Crane up** | 0.8s | Pull back to overview |
-
-Easing: ease-in-out; never snappy mobile UI snap.
-
-## 8.2 Default anchors
-
-```
-ANCHOR_OVERVIEW     — 3/4 view of full compound
-ANCHOR_WEST_WALL    — parapet track, west facing
-ANCHOR_GATE         — hero eye level at threshold
-ANCHOR_TOWER_BASE   — lookup at scout
-ANCHOR_LONGHOUSE_IN — fire-side medium shot
-ANCHOR_COURTYARD    — aftermath gathering
-ANCHOR_HORN         — close on horn + hands
-```
-
-## 8.3 Wall walk (prep flow camera)
-
-Suggested automated **optional** guided path for first-time players:
-
-```
-Overview → West wall damage → Gate → Tower → Treasury → Gate horn
-```
-
-Player can break track anytime by clicking another place. Track completes → Captain offers horn.
-
-## 8.4 Slice constraint
-
-One **outdoor camera rig** + one **Longhouse interior** + **Treasury nook** — no full interior for every building until Settlement tier.
-
----
-
-# 9. Audio Concepts
-
-## 9.1 Place-based soundscapes
-
-| Place | Bed | Interaction |
-|-------|-----|-------------|
-| Homestead overview | Wind, distant hammer, raven | Footsteps on dirt |
-| Longhouse | Fire crackle, murmur | Skald voice dry |
-| Treasury | Coin clink, chest creak | Quartermaster gravel voice |
-| West Gate | Wood stress, rope creak | Armor shuffle on assign |
-| Watch Tower | High wind, flag snap | Scout whistle |
-| Wall walk | Foot on timber | Hammer on repair |
-| Horn ceremony | Silence → blast | Reverb across valley |
-| Courtyard aftermath | Crowd relief, wounded | Skald begins low |
-
-## 9.2 Advisor audio
-
-- Distinct voice filter per advisor (not one narrator)
-- Lines triggered by **proximity** to place, not popup
-- Urgent lines **pan** from direction (west threat from left)
-
-## 9.3 Music
-
-- **No** looped epic during prep — sparse drone
-- Horn moment: single brass sting (battle entry)
-- Ceremony: swell only on Settlement / promotion
-- Slice: ≤3 musical motifs total
-
-## 9.4 Bible
-
-- **Moment #1** First Night: sparse — wind, not orchestra
-- **BRAGI** review: every critical cue has visual twin (INGIRD)
-
----
-
-# 10. Progressive UI Evolution (Village → Last Bastion)
-
-Fortress tier and **interface maturity** are the same curve ([fortress_progression.md](fortress_progression.md)).
-
-| Tier | Fortress look | Navigation | Advisors | Ceremonies |
-|------|---------------|------------|----------|------------|
-| **Village** | Palisade, one fire, chest | 4 places + wall walk | 3 voices | Naming, horn, debrief |
-| **Settlement** | Stone footings, barracks smoke | +Barracks, granary | +QM, Builder | Recruit fire, repair |
-| **Fortress** | Stone curtain, four gates | District pan; Great Hall | Full cast | Hall promotion, multi-post |
-| **Stronghold** | Crenellations, siege yard | Workshop interior | Specialist | Siege mount ritual |
-| **Citadel** | Magic district glow | Rune Hall, Temple | Seer, Priest | Spell prep, blessings |
-| **Last Bastion** | Legendary skyline | City-scale pan; memorial ave | Echoes of all | Saga chapters, legacy |
-
-### UI chrome by tier
-
-| Tier | Chrome level |
-|------|--------------|
-| Village | **Zero** persistent HUD — props only |
-| Settlement | Small coin pouch icon (optional) |
-| Fortress | Facing indicators on command pole |
-| Citadel | Rune cooldown orbs on shrine (diegetic) |
-| Last Bastion | Chronicle stone in courtyard (always visible) |
-
-**Rule:** Higher tier = **more places**, not **more menus**.
-
----
-
-# 11. Wireframes (places, not panels)
-
-## 11.1 Homestead overview (Village / slice)
-
-```
-                    ~~ wind / grey sky ~~
-                           🦅
-              ┌─────────────────────────┐
-              │      WATCH TOWER        │  ← click → climb, Scout
-              │         🧭              │
-              └───────────┬─────────────┘
-    timber ═══════════════╪═══════════════  west wall walk →
-              ┌───────────▼───────────┐
-              │    ╔═════════════╗    │  ← click → Captain, assign
-              │    ║  WEST GATE  ║    │     horn here when ready
-              │    ╚═════════════╝    │
-              └───────────┬───────────┘
-         ┌────────────────┼────────────────┐
-         │   LONGHOUSE    │    💰 chest    │
-         │   ~ smoke ~    │  Quartermaster │
-         │  click → fire  │  click → coins │
-         └────────────────┴────────────────┘
-              villagers · goat · banners
-
-        [ No left panel ]    [ No right panel ]
-        Scout line from tower: "West road, movement."
-```
-
-## 11.2 West Gate place (assignment — not a roster panel)
-
-```
-        ═══════════════════════════════════════
-        ║  WEST GATE — splintered planks      ║
-        ═══════════════════════════════════════
-                    🛡️ Gunnar (on wall)
-
-        CAPTAIN (in scene):
-        "He stands where they'll come first."
-
-        [ Tap Gunnar ] → swap / confirm
-        [ Call for timber ] → Builder arrives (A3)
-
-        🦌 Horn on post (glows when assignment valid)
-
-        ← walk back to courtyard
-```
-
-## 11.3 Longhouse interior (people — not War Camp tabs)
-
-```
-        ╔═══════════════════════════════════════╗
-        ║  LONGHOUSE — firelight                ║
-        ║                                       ║
-        ║      🔥   SKALD: "Sit with us."       ║
-        ║                                       ║
-        ║   [ scroll: chronicle ]               ║
-        ║   [ name carved on beam ]  (A0+)     ║
-        ║   [ empty stool — "Saga II" ] 🔒      ║
-        ║                                       ║
-        ║   door shows night — NO battlefield   ║
-        ╚═══════════════════════════════════════╝
-
-        exit → homestead overview
-```
-
-## 11.4 Wall walk — inspect damage (A2 scar teach)
-
-```
-    camera TRACK along parapet ──────────────►
-
-    ║▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓║
-    ║▓▓▓ CRACK — splinter ║▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓║
-    ║▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓║
-
-    BUILDER at scar: "Timber will hold — for now."
-
-    [ Hammer repair ]  (wood stack nearby)
-
-    no HP bar — damage is ART
-```
-
-## 11.5 Horn ceremony (battle start)
-
-```
-    ┌─────────────────────────────────────────┐
-    │                                         │
-    │     CAPTAIN steps aside                   │
-    │                                         │
-    │          🎺 ← player hand                 │
-    │                                         │
-    │     "When you blow — the plan is set."   │
-    │                                         │
-    │         [ SOUND THE HORN ]               │
-    │                                         │
-    └─────────────────────────────────────────┘
-    gate behind begins to open ──► BATTLE
-```
-
-## 11.6 Courtyard aftermath (debrief entry — not stats screen)
-
-```
-    gate (damaged) visible in background
-
-    survivors lean on walls
-    SKALD approaches from Longhouse
-
-    "The west gate held. Gunnar lives.
-     The wolves tasted iron."
-
-    [ Go to the fire ]  [ Walk the wall again ]
-
-    (stats in scroll on fire if player wants — not default)
-```
-
----
-
-# 12. Risks
-
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| **Scope explosion** (interiors, actors, camera) | High | Slice: 1 interior + outdoor places only; phase interiors by tier |
-| **Slower prep loop** (travel time) | Medium | Camera moves <0.8s; guided track optional; skip on repeat |
-| **Discoverability** (where to click?) | Medium | First assault: Captain walks to player; subtle glow on gate |
-| **Conflicts with screen laws** | Medium | Place laws document; recruit only at Longhouse fire |
-| **Engine cost** (canvas scene graph) | Medium | Start 2.5D layered art; not full 3D |
-| **Accessibility** (camera motion) | Medium | `prefers-reduced-motion`: cuts not pans; text log of advisor lines |
-| **Repeat player fatigue** | Low | Ceremony skip; advisors shorten lines on repeat |
-| **Multi-front complexity** | Low (post-slice) | Command pole rotates to active front; sealed gates visible but inactive |
-
----
-
-# 13. Opportunities
-
-| Opportunity | Why it matters |
-|-------------|----------------|
-| **Unified homestead** | War Camp + Prep become one emotional space |
-| **Streamer-readable** | Viewers see *a place*, not opaque UI |
-| **Attachment multiplier** | Naming at fire > naming in modal |
-| **Premium positioning** | Supergiant/Hades hub quality in strategy genre |
-| **Tier marketing** | Screenshots sell progression without UI |
-| **Chronicle integration** | Skald place is natural story hub |
-| **DLC/expansion** | New buildings = new destinations, not new menus |
-| **Slice still shippable** | 4 places + horn + fire = Saga I complete |
-
----
-
-# 14. Fortress Preparation — place-based flow
-
-## Full game walk
-
-```
-Walk the walls        → inspect scars
-Repair at damage      → Builder + timber
-Visit Longhouse       → hear saga, check people
-Visit Barracks        → Captain, roster
-Visit Workshop        → siege mounts
-Visit Temple          → blessings (if unlocked)
-Visit Rune Hall       → prep magic (if unlocked)
-Return to Gate        → review assignments on wall
-Sound the horn        → battle
-```
-
-## Saga I flow (slice)
-
-```
-A0: Gate only → assign → horn
-A1: + Tower (Scout) · + Treasury (QM teach)
-A2: Wall scar teach · intel scroll at tower
-A3: Builder repair at gate · talent at fire
-A4: Bell + boss intel · horn
-Finale: Stone ceremony at wall · recruit at fire
-```
-
-**One new place or verb per assault** — tutorial pacing preserved.
-
----
-
-# 15. What to REMOVE (menu thinking)
-
-## From current prototype — remove entirely
-
-| Element | Why it feels like a menu |
-|---------|--------------------------|
-| **Left post chip list** | Abstract list, not a place |
-| **WARBAND \| STRUCTURES tabs** | Spreadsheet navigation |
-| **Right context panel with action buttons** | CRM UI, not a stronghold |
-| **Category accordion rail** (prior redesign) | Still a menu attached to fortress |
-| **Begin Assault flat button** | Confirm dialog grammar |
-| **Readiness summary modal** | Spreadsheet checklist — replace with Captain walk + horn |
-| **Deploy bar / structure dock** | TD UI; violates commander fantasy |
-| **Grid as player-facing prep** | Tile editor, not gate command |
-| **Gold numbers in top bar** | Replace with pouch + chest |
-| **Tooltip stat grids** | Numbers at places only when inspecting |
-| **War Camp as separate abstract screen** | Merge into homestead places |
-| **Fortress tab building cards** | Card grid = menu; visit building instead |
-| **Recruit as shop panel** | Ceremony at fire only |
-| **Generic toast notifications** | Advisor at place |
-| **OK/Cancel dialogs** | Ceremonies or in-world actions |
-
-## From [FORTRESS_PREP_REDESIGN.md](FORTRESS_PREP_REDESIGN.md) — supersede
-
-| Element | Replace with |
-|---------|--------------|
-| Left category rail | Click destinations on homestead |
-| Right dynamic context panel | Advisor + in-scene props |
-| Preparation stepper UI | Optional wall-walk camera track |
-| Review Readiness button | Captain invitation to horn |
-| Max 3 primary actions panel | Physical affordances in scene |
-
-## What to KEEP (compatible)
-
-| Element | As place-based version |
+| Removed | Replacement (Level 1) |
 |---------|------------------------|
-| West Gate + Watch Tower posts | Gate and Tower **places** |
-| Regional west front focus | West wall camera track |
-| Scar / repair persistence | Art on wall walk |
-| Horn locks plan | Horn ceremony |
-| No battle-phase shop | Unchanged |
-| Intel before assault | Scout scroll at tower |
+| Walk / travel verbs | Click + zoom |
+| Longhouse **interior** | Exterior zoom + Skald panel |
+| Treasury interior / coin drag | Panel + QM line |
+| Wall-walk camera track | Click gate/wall hitbox |
+| Captain walks to player | Portrait in panel |
+| Courtyard debrief in prep | Keep `debrief` phase |
+| Unified homestead (War Camp merge) | Defer Saga II |
+| Villagers, goat, raven actors | Smoke only |
+| Command pole scroll prop | Intel in Scout panel |
+| Multiple camera anchors | 5 zoom targets total |
+| Zero HUD | Thin meta strip allowed |
+| "No right panel" | **Context panel required** |
+| Readiness summary modal | Horn gated by `validateAssignments` + dim/enable |
+| Left category rail | Hotspots on art |
 
 ---
 
-# 16. Board review checklist
+## Bible compliance checklist
 
-| Reviewer | Question |
-|----------|----------|
-| **SKJOLD** | Do place laws preserve prep-vs-battle separation? |
-| **HEIDR** | Does every building answer "what happens here?" |
-| **GRID** | Can players find gate assignment without a list? |
-| **HAMARR** | Do tier ceremonies match fortress growth? |
-| **SKALD** | Is fire the chronicle home? |
-| **WITNESS** | A0 path ≤3 clicks to horn? |
-| **BJORN** | Slice = 4 places + 1 interior — shippable? |
-| **GARDR** | Assignment at gate, not roster panel? |
-
----
-
-# 17. Implementation phasing (design only)
-
-| Phase | Deliverable |
-|-------|-------------|
-| **P0 Slice** | Homestead overview + Gate + Longhouse interior + Horn ceremony |
-| **P1** | Tower + Treasury places + wall walk + repair animation |
-| **P2** | Courtyard aftermath + advisor actors |
-| **P3** | Barracks yard + Settlement ceremonies |
-| **P4** | Workshop, Temple, multi-front command pole |
-| **P5** | Rune Hall, Great Hall, district pan |
+| Requirement | Level 1 how |
+|-------------|-------------|
+| Moment #1 One hero one gate | A0 gate-only pulse |
+| Moment #3 No battle shop | Horn locks plan |
+| Moment #4 Fortress wounded | Scar overlay + repair |
+| Moment #6 War Camp no battlefield | Separate phase |
+| §1 Fortress as character | Schematic dominates |
+| §2 Preparation wins | All verbs in prep |
+| §9 One question | Panel = selected place only |
+| Slice §16 UI limits | 5 hotspots, 2 actions, 1 horn |
+| Screen law §3 Prep no recruit | Recruit finale modal only |
 
 ---
 
-## Final sentence
+## Future Evolution
 
-The player should never think *"I opened another menu."*  
-They should think *"I walked to the west gate, spoke with the Captain, mended the wall with the builders, sat by the fire while the Skald remembered our names, and blew the horn when the fortress was ready."*
+*Do not implement until Design Bible unfreezes. Preserved vision from creative direction.*
 
-That is Northern Shield.
+### Level 2 — After First Saga (Saga II)
+
+| Feature | Notes |
+|---------|-------|
+| Ambient villagers | Static sprites, not pathing |
+| Builders at scar | Cosmetic at gate during repair |
+| Animals, flags, bell | Art pass |
+| Seasonal weather overlay | Palette swap |
+| Advisor idle bob on portrait | CSS/canvas wiggle |
+| Barracks hotspot | Recruit moves from modal to zoom+panel |
+| Second front unlock | Rotate schematic emphasis |
+| Minor ceremony polish | Repair hammer SFX |
+
+### Level 3 — Version 1.0
+
+| Feature | Notes |
+|---------|-------|
+| Walkable interiors | Longhouse, Temple, Rune Hall, Workshop |
+| Camera fly-through | Command map → homestead cinematic |
+| Dynamic advisors on schematic | Captain at gate sprite |
+| Living settlement crowds | Settlement+ tier |
+| Festival / promotion scenes | Great Hall |
+| Wall-walk guided track | Optional tutorial |
+| Resource props (coin drag) | Diegetic economy |
+| War Camp + Prep unified homestead | Single phase exploration |
+| District pan (Citadel) | Multi-cluster camera |
+| Full advisor cast + voice filters | BRAGI pass |
+
+### Creative north star (unchanged)
+
+> The fortress is the interface. Places not menus. People not panels. Ceremonies not confirm dialogs.
+
+Level 1 delivers this **feel** with **click-zoom-panel-horn** — not the full hub sim.
+
+---
+
+## Board sign-off
+
+| Reviewer | Level 1 verdict |
+|----------|-----------------|
+| **BJORN** | ✅ Scope bounded — ship target defined |
+| **SKJOLD** | ✅ Screen laws preserved |
+| **GRID** | ✅ ≤3 clicks, panel not spreadsheet |
+| **GARDR** | ✅ Gate assignment primary |
+| **WITNESS** | ✅ A0 path 2–3 clicks |
+| **VAULT** | ✅ No new scene engine required |
+
+---
+
+## Implementation target (single sentence)
+
+**Build one fortress schematic with five clickable hotspots, a ≤0.5s zoom, an advisor portrait panel, scar/repair overlays, hero medallions, and a horn ceremony — nothing else for Saga I prep.**
+
+That is the smallest implementation that still makes players say: *"I feel like I'm preparing my own fortress."*
+
+---
+
+*Executive review: philosophy approved · scope reduced · First Saga only · 2026-06-22*

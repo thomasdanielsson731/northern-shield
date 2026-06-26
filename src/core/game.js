@@ -124,7 +124,21 @@ import {
   sfxBossPhase25, sfxBossPhase50,
   sfxRetireCeremony, sfxEnemyIntro, sfxPortalOpens, sfxEventResolve, sfxBondGrief,
   sfxChapterBanner, sfxKillMilestone, sfxEquipItem, sfxSynergy, sfxBossEntry,
+  sfxAssaultHorn,
 } from './sounds.js';
+import {
+  createPrepShellState,
+  loadPrepFieldMeta,
+  mergePrepFieldMeta,
+  syncPrepMetaForAssault,
+  updatePrepCamera,
+  drawFortressSchematic,
+  drawCommanderContextPanel,
+  handlePrepShellPointer,
+  applyPanelAction,
+  startHornAnimation,
+  getHornBlockReason,
+} from '../preparation/fortressCommanderShell.js';
 
 const COLS = 48;
 const ROWS = 30;
@@ -620,6 +634,10 @@ let _fieldPrepBtns         = [];     // hit areas on fortress-prep right panel
 let _postAssignments       = {};     // defensive post → defender / structure
 let _postPickerPostId      = null;   // post awaiting roster pick
 let _postPrepBtns          = [];     // hit areas on post list (left panel)
+let _prepShell             = null;   // Fortress Commander prep UI
+let _prepFieldMeta         = null;   // wood, gate scar (First Saga)
+let _lastPrepFrameTime     = 0;
+let _hornLaunchPending     = false;
 let _equipSparkles         = [];     // { x, y, vx, vy, life, color }
 let _autoMoveHintFrames  = 0;
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
@@ -1426,7 +1444,12 @@ function isCampaignCombat() {
 
 /** Pathless assault — hide cell grid lines during active waves; show during deploy prep. */
 function hideAssaultBattleGrid() {
+  if (isFortressPrepPhase()) return true;
   return isPathlessMode() && gamePhase === 'playing' && waveState === 'active';
+}
+
+function commanderPrepLayout() {
+  return isFortressPrepPhase();
 }
 
 /** Assault/skirmish active wave — full-width playfield, glass side panels. */
@@ -1445,7 +1468,8 @@ function combatRightPanelX() {
 }
 
 function playfieldLeft() {
-  return assaultPlayfieldWide() ? FRAME_THICK : GRID_LEFT;
+  if (assaultPlayfieldWide() || commanderPrepLayout()) return FRAME_THICK;
+  return GRID_LEFT;
 }
 
 function combatPanelFullH() {
@@ -1455,6 +1479,9 @@ function combatPanelFullH() {
 function playfieldWidth() {
   if (assaultPlayfieldWide()) {
     return BASE_W - FRAME_THICK - FRAME_PAD;
+  }
+  if (commanderPrepLayout()) {
+    return BASE_W - FRAME_THICK - FRAME_PAD - combatRightPanelW();
   }
   return COLS * CELL_SIZE;
 }
@@ -2076,7 +2103,10 @@ function persistCampaignFieldLayout() {
     const towersPlain = buildTowerPlacements(_postAssignments, _roster, GOAL, {
       frontId: assault?.frontId ?? 'west',
     });
-    run.fieldState = serializeFieldState(towersPlain, wallData, gold, _postAssignments);
+    run.fieldState = mergePrepFieldMeta(
+      serializeFieldState(towersPlain, wallData, gold, _postAssignments),
+      _prepFieldMeta ?? loadPrepFieldMeta(null),
+    );
   } else {
     run.fieldState = serializeFieldState(towers, wallData, gold, _postAssignments);
   }
@@ -2123,6 +2153,11 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   const field = run?.fieldState ?? { gold: 0, towers: [], walls: {} };
   restoreCampaignField(field, { skipTowers: true });
   _postAssignments = { ...ensurePostAssignments(field, GOAL, FORTRESS_RING_R) };
+  _prepShell = createPrepShellState();
+  _prepFieldMeta = loadPrepFieldMeta(field);
+  _prepFieldMeta = syncPrepMetaForAssault(_prepFieldMeta, nodeIndex, battlesCompleted);
+  _lastPrepFrameTime = performance.now();
+  _hornLaunchPending = false;
   gamePhase = 'fortressPrep';
 
   waveNumber = 0;
@@ -2139,6 +2174,7 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
 }
 
 function launchFieldPrepAssault() {
+  if (_hornLaunchPending) return;
   if (_pendingAssaultNode == null) {
     _uiToast = { text: 'Pick an assault on the command map first', timer: 120, color: UI_COLORS.gold };
     return;
@@ -2158,9 +2194,110 @@ function launchFieldPrepAssault() {
   _onboardingStep = advanceOnboarding(_onboardingStep, 'placedHero');
   startCampaignNodeBattle(mapIndex, nodeIndex, {
     skipFieldPrep: true,
-    fieldOverride: serializeFieldState(placementTowers, wallData, gold, _postAssignments),
+    fieldOverride: mergePrepFieldMeta(
+      serializeFieldState(placementTowers, wallData, gold, _postAssignments),
+      _prepFieldMeta ?? loadPrepFieldMeta(null),
+    ),
     autoStartCombat: true,
   });
+}
+
+function getCommanderPlayfield() {
+  return {
+    x: playfieldLeft(),
+    y: GRID_TOP,
+    w: playfieldWidth(),
+    h: playfieldHeight(),
+  };
+}
+
+function getPrepShellPanelCtx() {
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  return {
+    pendingAssaultNode: _pendingAssaultNode,
+    postAssignments: _postAssignments,
+    prepMeta: _prepFieldMeta ?? loadPrepFieldMeta(null),
+    assaultNodeIndex: _pendingAssaultNode,
+    assault,
+    roster: _roster,
+    goldReserve,
+    nodeCasualties: _nodeCasualties,
+  };
+}
+
+function requestHornLaunch() {
+  if (!_prepShell || _prepShell.hornAnim > 0 || _hornLaunchPending) return;
+  const block = getHornBlockReason(getPrepShellPanelCtx());
+  if (block) {
+    _uiToast = { text: block, timer: 120, color: UI_COLORS.gold };
+    return;
+  }
+  startHornAnimation(_prepShell);
+  _hornLaunchPending = true;
+  sfxAssaultHorn();
+  try { persistCampaignFieldLayout(); } catch {}
+}
+
+function processPrepShellClick(action) {
+  if (!action) return;
+  if (action.type === 'horn') {
+    requestHornLaunch();
+    return;
+  }
+  if (action.action === 'warCamp') {
+    persistCampaignFieldLayout();
+    enterCampaignWarCamp();
+    return;
+  }
+  if (action.action === 'commandMap') {
+    persistCampaignFieldLayout();
+    _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
+    _selectedFrontId = _lastClearedFrontId;
+    gamePhase = 'nodeMap';
+    return;
+  }
+  if (action.id === 'assign_gate' || action.id === 'assign_tower') {
+    _postAssignments = assignDefender(_postAssignments, action.postId, action.defenderId);
+    persistCampaignFieldLayout();
+    return;
+  }
+  if (action.id === 'clear_gate' || action.id === 'clear_tower') {
+    _postAssignments = clearPost(_postAssignments, action.postId);
+    persistCampaignFieldLayout();
+    return;
+  }
+  if (action.id === 'repair_gate') {
+    const result = applyPanelAction(action, _prepFieldMeta);
+    _prepFieldMeta = result.meta;
+    if (result.repairAnim && _prepShell) _prepShell.repairAnim = result.repairAnim;
+    sfxPlace('wall');
+    persistCampaignFieldLayout();
+  }
+}
+
+function tickFortressCommanderPrep() {
+  if (!isFortressPrepPhase() || !_prepShell) return;
+  const now = performance.now();
+  const dt = Math.min(50, now - (_lastPrepFrameTime || now));
+  _lastPrepFrameTime = now;
+  const prevHorn = _prepShell.hornAnim;
+  updatePrepCamera(_prepShell, dt);
+  if (_hornLaunchPending && prevHorn > 0 && _prepShell.hornAnim <= 0) {
+    _hornLaunchPending = false;
+    launchFieldPrepAssault();
+  }
+}
+
+function drawFortressCommanderPrepScreen() {
+  if (!_prepShell) _prepShell = createPrepShellState();
+  tickFortressCommanderPrep();
+  const pf = getCommanderPlayfield();
+  const panelCtx = getPrepShellPanelCtx();
+  if (!_prepShell.selectedHotspot && _pendingAssaultNode != null) {
+    _prepShell.selectedHotspot = 'west_gate';
+  }
+  drawFortressSchematic(ctx, pf, _prepShell, panelCtx);
 }
 
 function canUpgradeHeroNow() {
@@ -4889,7 +5026,7 @@ window.addEventListener('keydown', e => {
 
   if (isFortressPrepPhase() && (e.key === ' ' || e.key === 'Enter')) {
     e.preventDefault();
-    launchFieldPrepAssault();
+    requestHornLaunch();
     return;
   }
 
@@ -5629,43 +5766,18 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  // Warband roster panel — deploy / select field defenders
-  if (e.button === 0 && isFortressPrepPhase()) {
-    for (const btn of _fieldPrepBtns) {
-      if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
-          mouseY >= btn.y && mouseY <= btn.y + btn.h) {
-        if (btn.action === 'launchAssault') launchFieldPrepAssault();
-        else if (btn.action === 'warCamp') {
-          persistCampaignFieldLayout();
-          enterCampaignWarCamp();
-        } else if (btn.action === 'commandMap') {
-          persistCampaignFieldLayout();
-          _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
-          _selectedFrontId = _lastClearedFrontId;
-          gamePhase = 'nodeMap';
-        }
-        return;
+  // Fortress Commander prep — schematic hotspots + context panel
+  if (e.button === 0 && isFortressPrepPhase() && _prepShell) {
+    const pf = getCommanderPlayfield();
+    let action = handlePrepShellPointer(_prepShell, mouseX, mouseY, pf, null, 'click');
+    if (!action && _prepShell.hornHoverZone) {
+      const hz = _prepShell.hornHoverZone;
+      if (mouseX >= hz.x && mouseX <= hz.x + hz.w && mouseY >= hz.y && mouseY <= hz.y + hz.h) {
+        action = { type: 'horn' };
       }
     }
-    for (const btn of _postPrepBtns) {
-      if (mouseX < btn.x || mouseX > btn.x + btn.w || mouseY < btn.y || mouseY > btn.y + btn.h) continue;
-      if (btn.action === 'pickPost') {
-        _postPickerPostId = btn.postId;
-        return;
-      }
-      if (btn.action === 'assignDefender' && btn.defenderId && _postPickerPostId) {
-        _postAssignments = assignDefender(_postAssignments, _postPickerPostId, btn.defenderId);
-        _postPickerPostId = null;
-        persistCampaignFieldLayout();
-        return;
-      }
-      if (btn.action === 'clearPost' && btn.postId) {
-        _postAssignments = clearPost(_postAssignments, btn.postId);
-        _postPickerPostId = null;
-        persistCampaignFieldLayout();
-        return;
-      }
-    }
+    processPrepShellClick(action);
+    return;
   }
 
   // Warband roster panel — deploy / select field defenders
@@ -5938,6 +6050,16 @@ canvas.addEventListener('mousemove', e => {
     }
   }
   if (!_navFound) _navHover = -1;
+
+  if (isFortressPrepPhase() && _prepShell) {
+    const pf = getCommanderPlayfield();
+    handlePrepShellPointer(_prepShell, dragX, dragY, pf, null, 'move');
+    const hz = _prepShell.hornHoverZone;
+    if (hz) {
+      _prepShell.hornHover = dragX >= hz.x && dragX <= hz.x + hz.w
+        && dragY >= hz.y && dragY <= hz.y + hz.h;
+    }
+  }
 });
 
 canvas.addEventListener('mouseup', e => {
@@ -8146,7 +8268,8 @@ function drawRightPanel() {
 
   const fullH    = combatPanelFullH();
   if (isFortressPrepPhase()) {
-    drawFieldPrepPanel(px, pw, fullH);
+    if (!_prepShell) _prepShell = createPrepShellState();
+    drawCommanderContextPanel(ctx, px, GRID_TOP, pw, fullH, _prepShell, getPrepShellPanelCtx());
     return;
   }
 
@@ -8967,7 +9090,11 @@ function drawCampaignMetaBar(center) {
   if (gamePhase === 'nodeMap') {
     subtitle = getCampaignMapMeta(_campaignMapIndex)?.name ?? 'COMMAND MAP';
   } else if (gamePhase === 'fortressPrep') {
-    subtitle = 'Fortress Prep — assign heroes to defensive posts';
+    const assault = _pendingAssaultNode != null
+      ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+    subtitle = assault
+      ? `${assault.codename} · WEST · prepare the fortress`
+      : 'Fortress Prep — click the stronghold';
   } else if (gamePhase === 'betweenBattles') {
     subtitle = isCampaignWarCamp()
       ? (_warCampTabPulse === 'recruit'
@@ -9806,6 +9933,7 @@ function drawAssaultDeployOverlay() {
 
 // ── Left dock — skirmish warband/structures; field prep uses opaque bench dock ───
 function drawLeftDock() {
+  if (isFortressPrepPhase()) return;
   if (gamePhase !== 'playing' && gamePhase !== 'fortressPrep') return;
 
   _rosterPanelBtns = [];
@@ -14606,6 +14734,21 @@ function draw() {
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
     if (_retirementCeremony) drawRetirementCeremony(_retirementCeremony);
     if (_pendingCampaignEvent && _betweenFadeIn <= 0) drawCampaignEventCard();
+    ctx.restore();
+    return;
+  }
+
+  if (gamePhase === 'fortressPrep') {
+    drawFortressCommanderPrepScreen();
+    drawUiToast();
+    drawLeftDock();
+    drawRightPanel();
+    drawFrames();
+    const assault = _pendingAssaultNode != null
+      ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+    drawCampaignMetaBar(assault
+      ? { line1: assault.codename.toUpperCase(), line2: 'FORTRESS PREP', color: UI_COLORS.fortress }
+      : null);
     ctx.restore();
     return;
   }

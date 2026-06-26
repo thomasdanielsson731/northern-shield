@@ -61,7 +61,7 @@ Written for code delivery; must align with foundation docs above.
 
 | Document | Status |
 |----------|--------|
-| **[FORTRESS_AS_UI.md](FORTRESS_AS_UI.md)** | **Creative direction — fortress IS the interface** (places, not menus) |
+| **[FORTRESS_AS_UI.md](FORTRESS_AS_UI.md)** | **Production spec — Level 1 click-zoom-panel (First Saga)** |
 | [FORTRESS_PREP_REDESIGN.md](FORTRESS_PREP_REDESIGN.md) | Superseded for navigation; schematic/ceremony beats may carry forward |
 | [FORTRESS_COMMANDER.md](FORTRESS_COMMANDER.md) | Screen laws, phase separation |
 | [DEFENSIVE_POSTS.md](DEFENSIVE_POSTS.md) | Post assignment spec |
