@@ -17,7 +17,13 @@ import {
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
 import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp } from '../ui/warCampPanel.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines } from '../ui/warCampPanel.js';
+import {
+  computeBetweenBattlesFadeAlpha,
+  tickBtParticle,
+  createBtParticlePool,
+  getVictoryHeaderStyle,
+} from '../ui/betweenBattlesJuice.js';
 import { ONBOARDING, advanceOnboarding, resolveOnboardingHint } from '../campaign/onboarding.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { saveCampaign, loadCampaign, createNewCampaign } from '../campaign/save.js';
@@ -149,6 +155,7 @@ import {
   applyPanelAction,
   startHornAnimation,
   getHornBlockReason,
+  getPrepAutoHotspot,
 } from '../preparation/fortressCommanderShell.js';
 import {
   isFirstSagaMap,
@@ -2520,7 +2527,9 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
     && _prepFieldMeta.westGateScarred
     && !_prepFieldMeta.westGateRepaired
   ) {
-    _prepShell.selectedHotspot = 'wall_scar';
+    _prepShell.selectedHotspot = getPrepAutoHotspot(_prepFieldMeta, {
+      mapIndex, nodeIndex, isFirstSaga: true,
+    }) ?? 'wall_scar';
   }
   _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
 }
@@ -8430,24 +8439,14 @@ const _COMBAT_NAV = [
 function drawCommandNav() {}
 
 function drawBtAmbientParticles() {
+  const bounds = { w: BASE_W, h: BASE_H };
   if (!_btParticles) {
-    _btParticles = Array.from({ length: 30 }, () => ({
-      x: Math.random() * BASE_W,
-      y: Math.random() * BASE_H * 0.6,
-      dx: (Math.random() - 0.5) * 0.35,
-      dy: 0.28 + Math.random() * 0.28,
-      ember: Math.random() < 0.18,
-      a: 0.28 + Math.random() * 0.25,
-    }));
+    _btParticles = createBtParticlePool(30, bounds);
   }
   ctx.save();
   ctx.globalAlpha = 0.85;
   for (const p of _btParticles) {
-    p.x += p.dx;
-    p.y += p.dy;
-    if (p.y > BASE_H + 4) { p.y = -2; p.x = Math.random() * BASE_W; }
-    if (p.x < 0) p.x = BASE_W;
-    if (p.x > BASE_W) p.x = 0;
+    tickBtParticle(p, bounds);
     ctx.fillStyle = p.ember ? `rgba(240,128,64,${p.a})` : `rgba(200,224,248,${p.a})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.ember ? 1.6 : 1.1, 0, Math.PI * 2);
@@ -13391,9 +13390,7 @@ function drawBetweenBattles() {
   }
 
   // Fade-in on screen entry
-  const fadeAlpha = _betweenFadeIn > 0
-    ? Math.min(1, (30 - _betweenFadeIn) / 20)
-    : 1;
+  const fadeAlpha = computeBetweenBattlesFadeAlpha(_betweenFadeIn);
   if (_betweenFadeIn > 0) _betweenFadeIn--;
   ctx.save();
   ctx.globalAlpha = fadeAlpha;
@@ -13449,24 +13446,10 @@ function drawBetweenBattles() {
     const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
     const _nai = _prepNode != null ? getAssaultInfo(_campaignMapIndex, _prepNode) : null;
     const _wcMeta = loadPrepFieldMeta(getMapRun(_wcProgress, _campaignMapIndex).fieldState);
-    const _statusLines = [];
-    if (_wcMeta.westGateScarred && !_wcMeta.westGateRepaired) {
-      _statusLines.push({ text: '⚠ West gate scarred — mend in fortress prep', color: 'rgba(220,140,60,0.88)' });
-    } else if (_wcMeta.westGateRepaired) {
-      _statusLines.push({ text: '✓ West gate bears a patch', color: 'rgba(140,180,120,0.72)' });
-    }
-    if (_wcMeta.wood > 0) {
-      _statusLines.push({ text: `▣ ${ _wcMeta.wood } salvage wood ready`, color: 'rgba(160,130,90,0.78)' });
-    }
     const _fu = goldReserve > 0
       ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
       : null;
-    if (_fu) {
-      _statusLines.push({
-        text: `Fortress: ${_fu.label} → L${_fu.nextLevel} (${_fu.cost}g)`,
-        color: 'rgba(140,200,140,0.75)',
-      });
-    }
+    const _statusLines = buildWarCampStatusLines(_wcMeta, { fortressUpgrade: _fu });
 
     drawCampaignWarCampBriefing(ctx, { x: lpX, y: lpY, w: lpW, h: lpH }, {
       defenderNames: _roster.defenders.map(d => (d.name?.trim() ? d.name : '— unnamed —')),
@@ -13508,12 +13491,11 @@ function drawBetweenBattles() {
   ctx.save();
   ctx.textAlign = 'center';
 
-  const hdrColor  = isVictory ? '#40e880' : '#e84040';
-  const hdrShadow = isVictory ? 'rgba(50,220,100,0.7)' : 'rgba(220,50,50,0.7)';
+  const hdr = getVictoryHeaderStyle(isVictory, performance.now());
   ctx.font        = 'bold 28px monospace';
-  ctx.fillStyle   = hdrColor;
-  ctx.shadowColor = hdrShadow;
-  ctx.shadowBlur  = 18;
+  ctx.fillStyle   = hdr.color;
+  ctx.shadowColor = hdr.shadow;
+  ctx.shadowBlur  = hdr.blur;
   ctx.fillText(isVictory ? 'VICTORY!' : 'DEFEATED', lcx, lpY + 42);
   ctx.shadowBlur = 0;
 

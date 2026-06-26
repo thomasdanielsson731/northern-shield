@@ -6,8 +6,11 @@ import {
   applyFirstSagaAssaultRewards,
   defaultPrepFieldMeta,
   syncPrepMetaForAssault,
+  getPrepAutoHotspot,
+  getPrepRepairTeachHint,
   A2_DEBRIEF_WOOD_BUNDLE,
   FIRST_SAGA_A2_NODE,
+  FIRST_SAGA_A3_NODE,
   GATE_REPAIR_WOOD_COST,
   PREP_HOTSPOTS,
   hotspotRect,
@@ -85,5 +88,14 @@ describe('fortressCommanderShell', () => {
     const s = createPrepShellState();
     expect(s.cameraScale).toBe(1);
     expect(s.selectedHotspot).toBeNull();
+  });
+
+  it('auto-focuses wall scar on A3 teach', () => {
+    const meta = { wood: 15, westGateScarred: true, westGateRepaired: false };
+    expect(getPrepAutoHotspot(meta, { mapIndex: 0, nodeIndex: FIRST_SAGA_A3_NODE, isFirstSaga: true }))
+      .toBe(PREP_HOTSPOTS.WALL_SCAR);
+    expect(getPrepRepairTeachHint(meta)).toMatch(/Repair/i);
+    expect(getPrepRepairTeachHint({ westGateScarred: true, westGateRepaired: false, wood: 2 }))
+      .toMatch(/timber/i);
   });
 });

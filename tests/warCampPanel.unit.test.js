@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp } from '../src/ui/warCampPanel.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines } from '../src/ui/warCampPanel.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('warCampPanel', () => {
@@ -57,5 +57,16 @@ describe('warCampPanel', () => {
       goldReserve: 0,
       statusLines: [],
     }, btns)).not.toThrow();
+  });
+
+  it('buildWarCampStatusLines covers scar, wood, and upgrade', () => {
+    const lines = buildWarCampStatusLines(
+      { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      { fortressUpgrade: { label: 'Barracks', nextLevel: 2, cost: 40 } },
+    );
+    expect(lines.some(l => l.text.includes('scarred'))).toBe(true);
+    expect(lines.some(l => l.text.includes('Repair'))).toBe(true);
+    expect(lines.some(l => l.text.includes('Barracks'))).toBe(true);
+    expect(buildWarCampStatusLines({ westGateRepaired: true })[0].text).toMatch(/patch/);
   });
 });

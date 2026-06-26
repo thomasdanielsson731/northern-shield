@@ -190,3 +190,30 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
 export function isSimplifiedWarCamp(mapIndex) {
   return mapIndex === 0;
 }
+
+/** War Camp status lines from prep meta + optional fortress upgrade hint. */
+export function buildWarCampStatusLines(prepMeta, { fortressUpgrade = null } = {}) {
+  const lines = [];
+  if (prepMeta?.westGateScarred && !prepMeta?.westGateRepaired) {
+    const woodHint = (prepMeta.wood ?? 0) >= 10 ? ' — tap Repair in prep' : '';
+    lines.push({
+      text: `⚠ West gate scarred — mend in fortress prep${woodHint}`,
+      color: 'rgba(220,140,60,0.88)',
+    });
+  } else if (prepMeta?.westGateRepaired) {
+    lines.push({ text: '✓ West gate bears a patch', color: 'rgba(140,180,120,0.72)' });
+  }
+  if ((prepMeta?.wood ?? 0) > 0) {
+    lines.push({
+      text: `▣ ${prepMeta.wood} salvage wood ready`,
+      color: 'rgba(160,130,90,0.78)',
+    });
+  }
+  if (fortressUpgrade) {
+    lines.push({
+      text: `Fortress: ${fortressUpgrade.label} → L${fortressUpgrade.nextLevel} (${fortressUpgrade.cost}g)`,
+      color: 'rgba(140,200,140,0.75)',
+    });
+  }
+  return lines;
+}

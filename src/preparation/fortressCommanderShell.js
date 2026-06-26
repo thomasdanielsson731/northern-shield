@@ -118,6 +118,26 @@ export function syncPrepMetaForAssault(meta, assaultNodeIndex, battlesCompleted 
   return next;
 }
 
+export function getPrepAutoHotspot(prepMeta, { mapIndex, nodeIndex, isFirstSaga } = {}) {
+  if (
+    isFirstSaga
+    && nodeIndex === FIRST_SAGA_A3_NODE
+    && prepMeta?.westGateScarred
+    && !prepMeta?.westGateRepaired
+  ) {
+    return PREP_HOTSPOTS.WALL_SCAR;
+  }
+  return null;
+}
+
+export function getPrepRepairTeachHint(prepMeta) {
+  if (!prepMeta?.westGateScarred || prepMeta.westGateRepaired) return null;
+  if ((prepMeta.wood ?? 0) >= GATE_REPAIR_WOOD_COST) {
+    return `Click WEST WALL — Repair (${GATE_REPAIR_WOOD_COST} wood) before the horn`;
+  }
+  return 'Splintered palisade — gather timber from assault rewards';
+}
+
 export function hotspotRect(playfield, hotspotId) {
   const L = HOTSPOT_LAYOUT[hotspotId];
   if (!L) return null;
@@ -695,8 +715,13 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
 
   if (gateNeedsHero && state.selectedHotspot !== PREP_HOTSPOTS.WEST_GATE) {
     drawSchematicHint(ctx, pf, 'Click WEST GATE — assign your fighter before the horn');
-  } else if (!state.selectedHotspot && assault) {
-    drawSchematicHint(ctx, pf, `${assault.codename} — click a building, then sound the horn`);
+  } else {
+    const repairHint = getPrepRepairTeachHint(prepMeta);
+    if (repairHint) {
+      drawSchematicHint(ctx, pf, repairHint);
+    } else if (!state.selectedHotspot && assault) {
+      drawSchematicHint(ctx, pf, `${assault.codename} — click a building, then sound the horn`);
+    }
   }
 
   drawSchematicLegend(ctx, pf);
