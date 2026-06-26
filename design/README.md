@@ -1,10 +1,20 @@
 # Northern Shield — Design Foundation
 
-*Permanent reference · Foundation Phase · 2026-06-25*
+*Design Bible **frozen** · see [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md)*
 
 > Build and command a living Viking fortress that evolves from a tiny wooden village into the last magical citadel protecting the North.
 
-**Before implementing any feature**, read [north_star.md](north_star.md) and run the feature gate.
+**Before implementing any feature**, read [north_star.md](north_star.md) and [the_first_saga.md](the_first_saga.md) (active vertical slice).
+
+---
+
+## Active implementation target
+
+| Document | Purpose |
+|----------|---------|
+| **[the_first_saga.md](the_first_saga.md)** | **Vertical slice — The First Saga** (canonical until shipped) |
+| [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md) | Freeze notice + rules |
+| [moments_to_protect.md](moments_to_protect.md) | Sacred beats — do not sacrifice |
 
 ---
 
