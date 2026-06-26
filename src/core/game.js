@@ -17,6 +17,7 @@ import {
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
 import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp } from '../ui/warCampPanel.js';
 import { ONBOARDING, advanceOnboarding, resolveOnboardingHint } from '../campaign/onboarding.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { saveCampaign, loadCampaign, createNewCampaign } from '../campaign/save.js';
@@ -2248,13 +2249,14 @@ function finishCampaignNodeVictory() {
   gamePhase = 'debrief';
 }
 
-function enterCampaignWarCamp() {
+function enterCampaignWarCamp(opts = {}) {
   if (!_roster && _campaignState) loadRosterFromCampaignState();
   const mapIdx = _campaignMapIndex ?? 0;
   if (shouldOfferHeroNaming(_campaignState, _roster, mapIdx)) {
     beginHeroNamingCeremony({ action: 'warCamp' });
     return;
   }
+  if (opts.freshVisit) _battleResult = null;
   _campaignRegionActive = true;
   _returnToNodeMapAfterDebrief = false;
   gameOver = false;
@@ -2599,7 +2601,7 @@ function processPrepShellClick(action) {
   }
   if (action.action === 'warCamp') {
     persistCampaignFieldLayout();
-    enterCampaignWarCamp();
+    enterCampaignWarCamp({ freshVisit: true });
     return;
   }
   if (action.action === 'commandMap') {
@@ -5698,7 +5700,7 @@ canvas.addEventListener('mousedown', e => {
           else if (btn.action === 'warCamp') {
             const _wcProgress = ensureCampaignProgress();
             _pendingNextAssaultNode = getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex ?? null;
-            enterCampaignWarCamp();
+            enterCampaignWarCamp({ freshVisit: true });
           } else if (btn.action === 'skirmish') {
             _hintSeen.skirmishDiscovery = true;
             _skirmishDiscoveryTimer = 0;
@@ -13441,6 +13443,68 @@ function drawBetweenBattles() {
     ctx.stroke();
   };
 
+  if (isCampaignWarCamp()) {
+    const _wcProgress = ensureCampaignProgress();
+    const _nextNode = _pendingNextAssaultNode ?? getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex;
+    const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
+    const _nai = _prepNode != null ? getAssaultInfo(_campaignMapIndex, _prepNode) : null;
+    const _wcMeta = loadPrepFieldMeta(getMapRun(_wcProgress, _campaignMapIndex).fieldState);
+    const _statusLines = [];
+    if (_wcMeta.westGateScarred && !_wcMeta.westGateRepaired) {
+      _statusLines.push({ text: '⚠ West gate scarred — mend in fortress prep', color: 'rgba(220,140,60,0.88)' });
+    } else if (_wcMeta.westGateRepaired) {
+      _statusLines.push({ text: '✓ West gate bears a patch', color: 'rgba(140,180,120,0.72)' });
+    }
+    if (_wcMeta.wood > 0) {
+      _statusLines.push({ text: `▣ ${ _wcMeta.wood } salvage wood ready`, color: 'rgba(160,130,90,0.78)' });
+    }
+    const _fu = goldReserve > 0
+      ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
+      : null;
+    if (_fu) {
+      _statusLines.push({
+        text: `Fortress: ${_fu.label} → L${_fu.nextLevel} (${_fu.cost}g)`,
+        color: 'rgba(140,200,140,0.75)',
+      });
+    }
+
+    drawCampaignWarCampBriefing(ctx, { x: lpX, y: lpY, w: lpW, h: lpH }, {
+      defenderNames: _roster.defenders.map(d => (d.name?.trim() ? d.name : '— unnamed —')),
+      defenderCount: _roster.defenders.length,
+      nextAssault: _nai ? {
+        codename: _nai.codename,
+        tierLabel: _nai.tierLabel,
+        frontLabel: FRONT_LABELS[_nai.frontId] ?? 'West',
+        waveCount: _nai.waveCount,
+        nodeIndex: _prepNode,
+        isRetry: _battleResult === 'defeat' && _nextNode == null,
+      } : null,
+      goldReserve,
+      chronicleProse: _campaignState?.chronicle?.battles?.at(-1)?.prose ?? null,
+      statusLines: _statusLines,
+    }, _betweenBtns);
+
+    const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
+    if (_hasChronicle) {
+      const chronicleBtnH = 24;
+      const chronicleBtnW = lpW - 28;
+      const cbX = lpX + 14;
+      const cbY = lpY + lpH - chronicleBtnH - 8;
+      drawFantasyPanel(cbX, cbY, chronicleBtnW, chronicleBtnH, 'rgba(20,8,36,0.97)', 0.6, 4);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(180,140,220,0.85)';
+      ctx.fillText(
+        `📜 OPEN CHRONICLE (${_campaignState.chronicle.battles.length})`,
+        cbX + chronicleBtnW / 2,
+        cbY + 15,
+      );
+      ctx.restore();
+      _betweenBtns.push({ x: cbX, y: cbY, w: chronicleBtnW, h: chronicleBtnH, action: 'openChronicle' });
+    }
+  } else {
+
   ctx.save();
   ctx.textAlign = 'center';
 
@@ -13704,57 +13768,12 @@ function drawBetweenBattles() {
     }
   }
 
-  // Buttons at bottom of left panel
+  // Buttons at bottom of left panel (skirmish only)
   const btnW = 130, btnH = 34, btnGap = 10;
   const btnsY = lpY + lpH - 50;
   const b1x = lcx - btnW - btnGap / 2;
   const b2x = lcx + btnGap / 2;
 
-  if (isCampaignWarCamp()) {
-    const _nextNode = _pendingNextAssaultNode;
-    const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
-    const _assaultInfo = getAssaultInfo(_campaignMapIndex, _campaignNodeIndex);
-    let _btnSlot = 0;
-
-    if (_prepNode != null) {
-      const _prepDefeat = _battleResult === 'defeat' && _nextNode == null;
-      drawFantasyPanel(b1x, btnsY, btnW, btnH,
-        _prepDefeat ? 'rgba(40,16,16,0.97)' : 'rgba(8,26,8,0.97)', 0.75, 6);
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 12px monospace';
-      ctx.fillStyle = _prepDefeat ? '#e08060' : '#88ee66';
-      ctx.shadowColor = _prepDefeat ? 'rgba(220,100,60,0.5)' : 'rgba(100,220,80,0.5)';
-      ctx.shadowBlur = 8;
-      ctx.fillText('PREPARE FORTRESS →', b1x + btnW / 2, btnsY + 22);
-      ctx.restore();
-      _betweenBtns.push({
-        x: b1x, y: btnsY, w: btnW, h: btnH,
-        action: _prepDefeat ? 'retryAssault' : 'nextAssault',
-        nodeIndex: _prepNode,
-      });
-      _btnSlot++;
-    }
-
-    const _mapX = _btnSlot > 0 ? b2x : lcx - btnW / 2;
-    drawFantasyPanel(_mapX, btnsY, btnW, btnH, 'rgba(12,8,4,0.97)', 0.7, 6);
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#c0a060';
-    ctx.shadowColor = 'rgba(180,140,60,0.45)'; ctx.shadowBlur = 6;
-    ctx.fillText('COMMAND MAP', _mapX + btnW / 2, btnsY + 22);
-    ctx.restore();
-    _betweenBtns.push({ x: _mapX, y: btnsY, w: btnW, h: btnH, action: 'commandMap' });
-
-    if (_assaultInfo) {
-      ctx.font = '7px monospace'; ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(140,120,80,0.55)';
-      const _hint = _prepNode != null
-        ? 'Roster in tabs above · then prepare the fortress & sound the horn.'
-        : 'Region secured — return to the command map.';
-      ctx.fillText(_hint, lcx, btnsY - 6);
-    }
-  } else {
   drawFantasyPanel(b1x, btnsY, btnW, btnH, 'rgba(8,26,8,0.97)', 0.75, 6);
   ctx.save();
   ctx.textAlign = 'center';
@@ -13768,13 +13787,11 @@ function drawBetweenBattles() {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#a0b8e0';
-  ctx.shadowColor = 'rgba(120,150,220,0.5)'; ctx.shadowBlur = 8;
+  ctx.shadowColor = 'rgba(120,150,220,0.5)'; ctx.shadowBlur = 6;
   ctx.fillText('MAP SELECT', b2x + btnW / 2, btnsY + 22);
   ctx.restore();
   _betweenBtns.push({ x: b2x, y: btnsY, w: btnW, h: btnH, action: 'mapSelect' });
-  }
 
-  // Chronicle button — small, below the two main buttons
   const chronicleBtnH = 24, chronicleBtnW = btnW * 2 + btnGap;
   const cbX = b1x, cbY = btnsY + btnH + 6;
   const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
@@ -13795,13 +13812,12 @@ function drawBetweenBattles() {
       ctx.fillText('↑  NEW ENTRY IN CHRONICLE', cbX + chronicleBtnW / 2, cbY - 4);
       ctx.textAlign = 'left';
     }
-    // Notification dot — new battle added this betweenBattles
-    {
-      const _dotPulse = 0.75 + 0.25 * Math.sin(performance.now() / 300);
-      ctx.fillStyle = `rgba(200,120,255,${_dotPulse.toFixed(2)})`;
-      ctx.beginPath(); ctx.arc(cbX + chronicleBtnW - 7, cbY + 5, 3, 0, Math.PI * 2); ctx.fill();
-    }
+    const _dotPulse = 0.75 + 0.25 * Math.sin(performance.now() / 300);
+    ctx.fillStyle = `rgba(200,120,255,${_dotPulse.toFixed(2)})`;
+    ctx.beginPath(); ctx.arc(cbX + chronicleBtnW - 7, cbY + 5, 3, 0, Math.PI * 2); ctx.fill();
   }
+
+  } // end skirmish left panel (non-campaign War Camp)
 
   // ── RIGHT PANEL: War Camp tabs (one view at a time) ─────────
   const rpX = lpX + lpW + 8, rpY = META_SCREEN_TOP, rpW = W - (lpX + lpW + 8) - 12, rpH = _contentBot - META_SCREEN_TOP;
@@ -13819,26 +13835,35 @@ function drawBetweenBattles() {
   ctx.textAlign = 'left';
 
   let _wcCursor = rpY0 + 10;
+  const _wcSimple = isCampaignWarCamp() && isSimplifiedWarCamp(_campaignMapIndex);
   const _wcTabHint = {
-    warband:  'Manage roster · equip · talents',
+    warband:  _wcSimple ? 'Tap a hero to equip · talents · bio' : 'Manage roster · equip · talents',
     recruit:  `Hire defenders · ${_effectiveRecruitCost}g each`,
     fortress: 'Meta buildings · reserve gold · fortress status',
   };
-  ctx.font = 'bold 11px monospace';
+  ctx.font = 'bold 12px monospace';
   ctx.fillStyle = '#e8c040';
-  ctx.fillText(_warCampTab === 'warband' ? 'WARBAND' : _warCampTab === 'recruit' ? 'RECRUIT' : 'FORTRESS', rix, _wcCursor + 10);
-  ctx.font = '7px monospace';
-  ctx.fillStyle = 'rgba(140,120,90,0.55)';
-  ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 22);
-  _wcCursor += 30;
+  const _tabTitle = _warCampTab === 'warband'
+    ? (_wcSimple ? 'YOUR WARBAND' : 'WARBAND')
+    : _warCampTab === 'recruit' ? 'RECRUIT' : 'FORTRESS';
+  ctx.fillText(_tabTitle, rix, _wcCursor + 10);
+  ctx.font = '8px monospace';
+  ctx.fillStyle = 'rgba(160,140,100,0.62)';
+  ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 24);
+  _wcCursor += 32;
 
   if (_warCampTab === 'warband') {
     const rCount = _roster.defenders.length;
     const _wb = analyzeWarband(_roster.defenders);
+    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(180,160,120,0.65)';
+    ctx.fillText(
+      `${rCount} hero${rCount !== 1 ? 'es' : ''}  ·  Tank ${_wb.counts.tank}  Support ${_wb.counts.support}  DPS ${_wb.counts.st_dps + _wb.counts.aoe_dps}`,
+      rix,
+      _wcCursor + 8,
+    );
+    _wcCursor += 16;
+    if (!_wcSimple) {
     const _presetId = _campaignState?.squadPreset ?? 'balanced';
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.55)';
-    ctx.fillText(`${rCount} heroes · Tank ${_wb.counts.tank} Sup ${_wb.counts.support} DPS ${_wb.counts.st_dps + _wb.counts.aoe_dps}`, rix, _wcCursor + 8);
-    _wcCursor += 14;
     const _pChipW = Math.floor((riW - 8) / SQUAD_PRESETS.length);
     for (let pi = 0; pi < SQUAD_PRESETS.length; pi++) {
       const pr = SQUAD_PRESETS[pi];
@@ -13856,14 +13881,15 @@ function drawBetweenBattles() {
       _betweenBtns.push({ x: px, y: _wcCursor, w: _pChipW, h: 14, action: 'applyPreset', presetId: pr.id });
     }
     _wcCursor += 20;
+    }
   }
 
   ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
   ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
   _wcCursor += 8;
 
-  // Rune Carver — warband tab, War Camp only; shows when player has stars to spend
-  if (_warCampTab === 'warband' && stars > 0) {
+  // Rune Carver — hidden in First Saga slice
+  if (_warCampTab === 'warband' && stars > 0 && !_wcSimple) {
     ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#c8a8ff';
     ctx.fillText('✦ RUNE CARVER', rix, _wcCursor + 9);
     ctx.textAlign = 'right'; ctx.font = '8px monospace'; ctx.fillStyle = '#f0d040';
@@ -13965,7 +13991,7 @@ function drawBetweenBattles() {
   const listTop  = _wcCursor;
   const listBot  = rpY0 + rpH0 - 6;
   const listH    = Math.max(40, listBot - listTop);
-  const rowH     = 72;
+  const rowH     = _wcSimple ? 84 : 72;
   const maxRows  = Math.max(1, Math.floor(listH / rowH));
 
   // Clamp scroll offset
