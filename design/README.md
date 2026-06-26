@@ -61,6 +61,8 @@ Written for code delivery; must align with foundation docs above.
 
 | Document | Status |
 |----------|--------|
+| **[FORTRESS_AS_UI.md](FORTRESS_AS_UI.md)** | **Creative direction — fortress IS the interface** (places, not menus) |
+| [FORTRESS_PREP_REDESIGN.md](FORTRESS_PREP_REDESIGN.md) | Superseded for navigation; schematic/ceremony beats may carry forward |
 | [FORTRESS_COMMANDER.md](FORTRESS_COMMANDER.md) | Screen laws, phase separation |
 | [DEFENSIVE_POSTS.md](DEFENSIVE_POSTS.md) | Post assignment spec |
 | [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) | Code phase tracker |
@@ -81,8 +83,16 @@ Written for code delivery; must align with foundation docs above.
 
 ---
 
-## Agent boards
+## Agent review organization
+
+Five studio boards protect this bible. Start at [agents/ORGANIZATION.md](../agents/ORGANIZATION.md).
+
+| Board | Protects |
+|-------|----------|
+| Executive | Vision, scope, milestones |
+| Gameplay | Loop, economy, heroes, combat |
+| Fortress | Buildings, posts, settlement |
+| Player Experience | UX, art, narrative, feel |
+| Engineering | Architecture, tests, saves |
 
 Review sessions: [agents/boards/sessions/](../agents/boards/sessions/)
-
-Fortress Commander pivot: [2026-06-25-fortress-commander-pivot.md](../agents/boards/sessions/2026-06-25-fortress-commander-pivot.md)
