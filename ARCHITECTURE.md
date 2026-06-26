@@ -8,7 +8,7 @@
 
 Northern Shield is a **Fortress Commander RPG** (evolved from Fortress Defense RPG) with two combat modes:
 
-1. **Campaign (primary):** 100 procedural maps, **assault** chains on a four-front command map, pathless combat, persistent field state between assaults. **UX pivot:** grid deploy → **defensive posts** in `fortressPrep` phase (see `../../design/DEFENSIVE_POSTS.md`).
+1. **Campaign (primary):** 100 procedural maps, **assault** chains on a four-front command map, pathless combat, persistent field state between assaults. **UX pivot:** grid deploy → **defensive posts** in `fortressPrep` phase (see [design/DEFENSIVE_POSTS.md](design/DEFENSIVE_POSTS.md)).
 2. **Skirmish (secondary):** 3 preset maps, 100-wave maze TD, BFS pathfinding, endless mode — unchanged TD loop.
 
 All four domain layers (Combat / Roster / Fortress / Meta Progression) are implemented. **Phase separation** (War Camp / Fortress Prep / Battle / After Action) is the active architecture migration.
@@ -190,7 +190,7 @@ Covers towers, enemies, bullets, pathing, campaign save, **save slots**, campaig
 
 ## 8. Planned domain extensions (design specs)
 
-*Tactical Squad Management — specs in outer workspace `design/` (also summarized here).*
+*Tactical Squad Management — full specs in [design/README.md](design/README.md).*
 
 | System | Status | Key file (when built) |
 |--------|--------|------------------------|

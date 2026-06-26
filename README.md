@@ -73,4 +73,4 @@ npx vitest run    # tests
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Domain model, campaign, planned systems |
 | [ART_DIRECTION.md](ART_DIRECTION.md) | Sprite rules |
 
-Design specs (Hero domain, fortress roles, traits, balance): outer workspace `design/` — see monorepo `tower-defence/design/README.md`.
+Design foundation and progression specs: [design/README.md](design/README.md) — start with [design/north_star.md](design/north_star.md).

@@ -1,6 +1,6 @@
 /**
  * Defensive posts — Fortress Preparation assignments map to grid cells for combat.
- * See design/DEFENSIVE_POSTS.md in outer repo.
+ * See design/DEFENSIVE_POSTS.md
  */
 
 import { isHeroTowerType } from '../campaign/campaignRun.js';
