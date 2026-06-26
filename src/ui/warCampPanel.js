@@ -180,7 +180,7 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
 
   ctx.font = '7px monospace';
   ctx.fillStyle = 'rgba(140,120,80,0.45)';
-  ctx.fillText('Manage roster in tabs →', cx, btnsY - 8);
+  ctx.fillText(getWarCampTabHint(state.tabPulseTarget), cx, btnsY - 8);
 
   ctx.restore();
   return { btnsY };
@@ -189,6 +189,17 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
 /** First Saga slice — hide skirmish-era clutter (presets, rune shop). */
 export function isSimplifiedWarCamp(mapIndex) {
   return mapIndex === 0;
+}
+
+/** Tab pulse when simplified War Camp needs roster/fortress discovery. */
+export function shouldPulseWarCampTab(tabId, pulseTarget) {
+  return !!pulseTarget && tabId === pulseTarget;
+}
+
+export function getWarCampTabHint(pulseTarget) {
+  if (pulseTarget === 'recruit') return 'Hire defenders in RECRUIT tab →';
+  if (pulseTarget === 'fortress') return 'Upgrade buildings in FORTRESS tab →';
+  return 'Manage roster in tabs →';
 }
 
 /** War Camp status lines from prep meta + optional fortress upgrade hint. */

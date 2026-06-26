@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines } from '../src/ui/warCampPanel.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, shouldPulseWarCampTab, getWarCampTabHint } from '../src/ui/warCampPanel.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('warCampPanel', () => {
@@ -68,5 +68,11 @@ describe('warCampPanel', () => {
     expect(lines.some(l => l.text.includes('Repair'))).toBe(true);
     expect(lines.some(l => l.text.includes('Barracks'))).toBe(true);
     expect(buildWarCampStatusLines({ westGateRepaired: true })[0].text).toMatch(/patch/);
+  });
+
+  it('tab pulse helpers for simplified War Camp', () => {
+    expect(shouldPulseWarCampTab('recruit', 'recruit')).toBe(true);
+    expect(shouldPulseWarCampTab('fortress', 'recruit')).toBe(false);
+    expect(getWarCampTabHint('recruit')).toMatch(/RECRUIT/);
   });
 });
