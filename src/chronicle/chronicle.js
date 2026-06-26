@@ -7,50 +7,161 @@ const ORDINALS = ['first','second','third','fourth','fifth','sixth','seventh',
 export function ordinal(n) { return ORDINALS[n - 1] ?? `${n}th`; }
 
 // ── Trait definitions ─────────────────────────────────────────────────────────
+// rarity: 'positive' | 'negative' | 'rare' | 'legendary'
 export const TRAIT_DEFS = {
-  reckless:   { id: 'reckless',   label: 'Reckless',   desc: 'Fights without restraint' },
-  steadfast:  { id: 'steadfast',  label: 'Steadfast',  desc: 'Holds ground without yielding' },
-  brooding:   { id: 'brooding',   label: 'Brooding',   desc: 'Darkens after defeat, sharpens after' },
-  serene:     { id: 'serene',     label: 'Serene',     desc: 'Unshaken by chaos' },
-  methodical: { id: 'methodical', label: 'Methodical', desc: 'Measured and precise' },
-  impulsive:  { id: 'impulsive',  label: 'Impulsive',  desc: 'Strikes before planning' },
-  vengeful:   { id: 'vengeful',   label: 'Vengeful',   desc: 'Remembers every loss' },
-  devout:     { id: 'devout',     label: 'Devout',     desc: 'Draws strength from faith' },
-  fearless:   { id: 'fearless',   label: 'Fearless',   desc: 'Holds the gate without flinching' },
-  builder:    { id: 'builder',    label: 'Builder',    desc: 'Thinks in stone and timber' },
-  guardian:   { id: 'guardian',   label: 'Guardian',   desc: 'The hoard is their oath' },
-  lucky:      { id: 'lucky',      label: 'Lucky',      desc: 'Fortune favors them' },
-  tactician:  { id: 'tactician',  label: 'Tactician',  desc: 'Reads the battle early' },
+  // Positive (18)
+  steadfast:           { id: 'steadfast',           label: 'Steadfast',           desc: 'Holds ground without yielding',              rarity: 'positive' },
+  devout:              { id: 'devout',              label: 'Devout',              desc: 'Draws strength from faith',                   rarity: 'positive' },
+  serene:              { id: 'serene',              label: 'Serene',              desc: 'Unshaken by chaos',                           rarity: 'positive' },
+  methodical:          { id: 'methodical',          label: 'Methodical',          desc: 'Measured and precise',                        rarity: 'positive' },
+  fearless:            { id: 'fearless',            label: 'Fearless',            desc: 'Holds the gate without flinching',            rarity: 'positive' },
+  builder:             { id: 'builder',             label: 'Builder',             desc: 'Thinks in stone and timber',                  rarity: 'positive' },
+  guardian:            { id: 'guardian',            label: 'Guardian',            desc: 'The hoard is their oath',                     rarity: 'positive' },
+  lucky:               { id: 'lucky',               label: 'Lucky',               desc: 'Fortune favors them',                         rarity: 'positive' },
+  tactician:           { id: 'tactician',           label: 'Tactician',           desc: 'Reads the battle early',                      rarity: 'positive' },
+  warmhearted:         { id: 'warmhearted',         label: 'Warm-Hearted',        desc: "Cares for the warband's wellbeing",           rarity: 'positive' },
+  inspiring:           { id: 'inspiring',           label: 'Inspiring',           desc: 'Lifts the warband by example',                rarity: 'positive' },
+  patient:             { id: 'patient',             label: 'Patient',             desc: 'Finds the moment, then acts decisively',      rarity: 'positive' },
+  hardy:               { id: 'hardy',               label: 'Hardy',               desc: 'Shrugs off wounds that would fell others',    rarity: 'positive' },
+  loyal:               { id: 'loyal',               label: 'Loyal',               desc: 'Fights hardest for those they stand beside',  rarity: 'positive' },
+  swift:               { id: 'swift',               label: 'Swift',               desc: 'Strikes faster than the eye follows',         rarity: 'positive' },
+  merciful:            { id: 'merciful',            label: 'Merciful',            desc: 'Inclined toward mercy, even in battle',       rarity: 'positive' },
+  eagle_eyed:          { id: 'eagle_eyed',          label: 'Eagle-Eyed',          desc: 'Sees further than most',                      rarity: 'positive' },
+  menders_touch:       { id: 'menders_touch',       label: "Mender's Touch",      desc: 'Wounds heal faster in their presence',        rarity: 'positive' },
+  // Negative (12)
+  reckless:            { id: 'reckless',            label: 'Reckless',            desc: 'Fights without restraint',                    rarity: 'negative' },
+  impulsive:           { id: 'impulsive',           label: 'Impulsive',           desc: 'Strikes before planning',                     rarity: 'negative' },
+  brooding:            { id: 'brooding',            label: 'Brooding',            desc: 'Darkens after defeat, sharpens after',        rarity: 'negative' },
+  vengeful:            { id: 'vengeful',            label: 'Vengeful',            desc: 'Remembers every loss',                        rarity: 'negative' },
+  greedy:              { id: 'greedy',              label: 'Greedy',              desc: 'Fights harder for personal gain',             rarity: 'negative' },
+  cowardly:            { id: 'cowardly',            label: 'Cowardly',            desc: 'Loses heart when the fortress weakens',       rarity: 'negative' },
+  proud:               { id: 'proud',               label: 'Proud',               desc: 'Pride comes before the fall',                 rarity: 'negative' },
+  hotheaded:           { id: 'hotheaded',           label: 'Hotheaded',           desc: 'Volatile and hard to steady',                 rarity: 'negative' },
+  suspicious:          { id: 'suspicious',          label: 'Suspicious',          desc: 'Trusts no one, fights with caution',          rarity: 'negative' },
+  wasteful:            { id: 'wasteful',            label: 'Wasteful',            desc: 'Spends more effort than the task requires',   rarity: 'negative' },
+  bitter:              { id: 'bitter',              label: 'Bitter',              desc: 'Old wounds, old anger',                       rarity: 'negative' },
+  lone_wolf:           { id: 'lone_wolf',           label: 'Lone Wolf',           desc: 'Better alone than in a pack',                 rarity: 'negative' },
+  // Rare (14)
+  rune_touched:        { id: 'rune_touched',        label: 'Rune-Touched',        desc: 'Marked by elder runes, inside and out',       rarity: 'rare' },
+  veteran_trait:       { id: 'veteran_trait',       label: 'Veteran',             desc: 'Forged by a hundred battles',                 rarity: 'rare' },
+  stubborn:            { id: 'stubborn',            label: 'Stubborn',            desc: 'Will not yield while breath remains',         rarity: 'rare' },
+  iron_willed:         { id: 'iron_willed',         label: 'Iron-Willed',         desc: 'Cannot be broken in spirit',                  rarity: 'rare' },
+  wolf_friend:         { id: 'wolf_friend',         label: 'Wolf-Friend',         desc: 'Has the trust of wild things',                rarity: 'rare' },
+  giant_bane:          { id: 'giant_bane',          label: 'Giant-Bane',          desc: 'Knows how to bring down the very large',      rarity: 'rare' },
+  draugr_hunter:       { id: 'draugr_hunter',       label: 'Draugr-Hunter',       desc: 'Knows the walking dead by name',              rarity: 'rare' },
+  frostborn:           { id: 'frostborn',           label: 'Frostborn',           desc: 'At home in the bitter cold',                  rarity: 'rare' },
+  star_seeker:         { id: 'star_seeker',         label: 'Star-Seeker',         desc: 'Chases glory and fortune in equal measure',   rarity: 'rare' },
+  bond_forger:         { id: 'bond_forger',         label: 'Bond-Forger',         desc: 'Builds trust faster than others',             rarity: 'rare' },
+  scar_bearer:         { id: 'scar_bearer',         label: 'Scar-Bearer',         desc: 'Each wound made them stronger',               rarity: 'rare' },
+  quiet_leader:        { id: 'quiet_leader',        label: 'Quiet Leader',        desc: 'Leads without words, by example',             rarity: 'rare' },
+  gate_singer:         { id: 'gate_singer',         label: 'Gate-Singer',         desc: 'The old songs bind the stones',               rarity: 'rare' },
+  quartermasters_eye:  { id: 'quartermasters_eye',  label: "Quartermaster's Eye", desc: 'Wastes nothing, misses nothing',              rarity: 'rare' },
+  // Legendary (6) — not in recruit pool; acquired via events or feats
+  jarlslayer:          { id: 'jarlslayer',          label: 'Jarlslayer',          desc: 'Has slain a Jarl in single combat',           rarity: 'legendary' },
+  einherjar:           { id: 'einherjar',           label: 'Einherjar',           desc: 'Chosen for Valhalla but returned',            rarity: 'legendary' },
+  saga_bound:          { id: 'saga_bound',          label: 'Saga-Bound',          desc: 'Their deeds will outlast them',               rarity: 'legendary' },
+  fate_touched:        { id: 'fate_touched',        label: 'Fate-Touched',        desc: 'Fate intercedes on their behalf',             rarity: 'legendary' },
+  world_tree_marked:   { id: 'world_tree_marked',   label: 'World-Tree Marked',   desc: 'Blessed by Yggdrasil itself',                 rarity: 'legendary' },
+  odins_watch:         { id: 'odins_watch',         label: "Odin's Watch",        desc: 'The Allfather sees through their eyes',       rarity: 'legendary' },
 };
 
-// Weighted trait pools per class — more common traits listed multiple times
+// Convenience sets (used by getRandomTrait, getLegendaryTrait, and tests)
+export const RARE_TRAITS = [
+  'rune_touched','veteran_trait','stubborn','iron_willed','wolf_friend','giant_bane',
+  'draugr_hunter','frostborn','star_seeker','bond_forger','scar_bearer','quiet_leader',
+  'gate_singer','quartermasters_eye',
+];
+export const LEGENDARY_TRAITS = [
+  'jarlslayer','einherjar','saga_bound','fate_touched','world_tree_marked','odins_watch',
+];
+
+// Weighted class pools — positive/negative mix weighted by archetype; rare traits appear occasionally
 const TRAIT_BY_CLASS = {
-  berserk:  ['reckless','reckless','impulsive','vengeful','brooding'],
-  valkyrie: ['steadfast','devout','serene','methodical','steadfast'],
-  military: ['methodical','impulsive','reckless','steadfast','methodical'],
-  catapult: ['methodical','brooding','serene','steadfast','methodical'],
-  drakship: ['reckless','impulsive','vengeful','brooding','reckless'],
-  piltorn:  ['methodical','serene','steadfast','devout','methodical'],
-  blondie:  ['serene','devout','methodical','serene','serene'],
-  hydda:    ['devout','serene','devout','methodical','devout'],
-  isjatten: ['serene','methodical','brooding','devout','serene'],
+  berserk:  ['reckless','reckless','impulsive','vengeful','brooding','hardy','fearless','hotheaded','lone_wolf'],
+  valkyrie: ['steadfast','steadfast','devout','serene','methodical','loyal','inspiring','patient','devout'],
+  military: ['methodical','methodical','impulsive','reckless','steadfast','eagle_eyed','tactician','swift','proud'],
+  catapult: ['methodical','methodical','brooding','serene','steadfast','patient','guardian','suspicious','scar_bearer'],
+  drakship: ['reckless','reckless','impulsive','vengeful','brooding','hotheaded','lone_wolf','swift','greedy'],
+  piltorn:  ['methodical','methodical','serene','steadfast','devout','eagle_eyed','patient','rune_touched','stubborn'],
+  blondie:  ['serene','serene','devout','methodical','serene','frostborn','menders_touch','inspiring','warmhearted'],
+  hydda:    ['devout','devout','serene','devout','methodical','warmhearted','menders_touch','merciful','loyal'],
+  isjatten: ['serene','serene','methodical','brooding','devout','iron_willed','giant_bane','frostborn','stubborn'],
 };
 
+// 10% chance of a rare trait on recruit; legendary never from standard recruit
 export function getRandomTrait(type) {
-  const pool = TRAIT_BY_CLASS[type] ?? Object.keys(TRAIT_DEFS);
+  if (Math.random() < 0.10) {
+    return RARE_TRAITS[Math.floor(Math.random() * RARE_TRAITS.length)];
+  }
+  const pool = TRAIT_BY_CLASS[type] ?? Object.keys(TRAIT_DEFS).filter(k => {
+    const r = TRAIT_DEFS[k].rarity;
+    return r === 'positive' || r === 'negative';
+  });
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Acquire a legendary trait via event or feat (pass specific ID or get random)
+export function getLegendaryTrait(specificId = null) {
+  if (specificId && LEGENDARY_TRAITS.includes(specificId)) return specificId;
+  return LEGENDARY_TRAITS[Math.floor(Math.random() * LEGENDARY_TRAITS.length)];
 }
 
 // Closing bio sentence per trait (uses {name} placeholder)
 const TRAIT_BIO_CLOSE = {
-  reckless:   '{name} is Reckless by nature, and the warband has learned not to place them where retreat is the plan.',
-  steadfast:  '{name} is Steadfast. The warband places them where the line cannot break.',
-  brooding:   '{name} is Brooding. After defeat, something in them sharpens.',
-  serene:     '{name} is Serene, untroubled by the chaos around them.',
-  methodical: '{name} is Methodical. They do not rush. The enemy learns this too late.',
-  impulsive:  '{name} is Impulsive, and the warband relies on this.',
-  vengeful:   '{name} is Vengeful. They do not forget.',
-  devout:     '{name} is Devout, and draws strength from a source the warband cannot name.',
+  // positive
+  reckless:           '{name} is Reckless by nature, and the warband has learned not to place them where retreat is the plan.',
+  steadfast:          '{name} is Steadfast. The warband places them where the line cannot break.',
+  brooding:           '{name} is Brooding. After defeat, something in them sharpens.',
+  serene:             '{name} is Serene, untroubled by the chaos around them.',
+  methodical:         '{name} is Methodical. They do not rush. The enemy learns this too late.',
+  impulsive:          '{name} is Impulsive, and the warband relies on this.',
+  vengeful:           '{name} is Vengeful. They do not forget.',
+  devout:             '{name} is Devout, and draws strength from a source the warband cannot name.',
+  fearless:           '{name} is Fearless. The gate does not need to be safe. It needs to hold.',
+  builder:            '{name} is a Builder. The walls stand because they thought of them first.',
+  guardian:           '{name} is a Guardian. The hoard is their oath. The warband trusts this.',
+  lucky:              '{name} is Lucky. The warband has stopped questioning it.',
+  tactician:          '{name} is a Tactician. They read the battle before it begins.',
+  warmhearted:        '{name} is Warm-Hearted. The warband does not always say so. But they notice.',
+  inspiring:          '{name} is Inspiring. They do not try to be. The warband fights harder regardless.',
+  patient:            '{name} is Patient. Late in the battle, this tells.',
+  hardy:              '{name} is Hardy. What would kill others only slows them.',
+  loyal:              '{name} is Loyal. Leave them behind and they notice.',
+  swift:              '{name} is Swift. The enemy does not realize they have been hit.',
+  merciful:           '{name} is Merciful. They fight when they must, and no more.',
+  eagle_eyed:         '{name} is Eagle-Eyed. They see what others miss.',
+  menders_touch:      "{name} has the Mender's Touch. Small hurts close quickly around them.",
+  // negative
+  greedy:             '{name} is Greedy. The warband accepts this. So far, the gold comes back.',
+  cowardly:           '{name} is Cowardly. The warband does not speak of it. They still stand.',
+  proud:              '{name} is Proud. The warband has learned not to remind them of their failures.',
+  hotheaded:          '{name} is Hotheaded. The warband has learned to stay out of the way.',
+  suspicious:         '{name} is Suspicious. They trust the warband — on good days.',
+  wasteful:           '{name} is Wasteful. The warband has learned to resupply them early.',
+  bitter:             '{name} is Bitter. The warband does not ask about it.',
+  lone_wolf:          '{name} is a Lone Wolf. The warband respects the distance.',
+  // rare
+  rune_touched:       '{name} is Rune-Touched. The marks came with them. No one asks from where.',
+  veteran_trait:      '{name} is a Veteran. The warband recognizes this without being told.',
+  stubborn:           '{name} is Stubborn. The warband has watched them refuse to fall.',
+  iron_willed:        '{name} is Iron-Willed. The warband has seen what cannot break them.',
+  wolf_friend:        '{name} has the trust of wild things. The warband does not question it.',
+  giant_bane:         '{name} is a Giant-Bane. They have done this before. The warband stays back.',
+  draugr_hunter:      '{name} is a Draugr-Hunter. They know the dead. The warband is grateful.',
+  frostborn:          '{name} is Frostborn. Cold is an old companion. The warband wears more layers.',
+  star_seeker:        '{name} is a Star-Seeker. They fight for what comes after.',
+  bond_forger:        '{name} is a Bond-Forger. The warband trusts quickly around them.',
+  scar_bearer:        '{name} is a Scar-Bearer. The warband counts the marks and does not ask.',
+  quiet_leader:       '{name} is a Quiet Leader. No speeches. The warband follows anyway.',
+  gate_singer:        '{name} is a Gate-Singer. They hum before battle. The stones seem to listen.',
+  quartermasters_eye: "{name} has the Quartermaster's Eye. Nothing is wasted. The warband eats well.",
+  // legendary
+  jarlslayer:         '{name} has killed a Jarl. The warband does not need to ask how.',
+  einherjar:          '{name} is Einherjar. The warband has seen them fall and stand again.',
+  saga_bound:         '{name} is Saga-Bound. The skald follows them. The warband understands why.',
+  fate_touched:       '{name} is Fate-Touched. What should have killed them, did not.',
+  world_tree_marked:  '{name} is World-Tree Marked. The warband has learned not to stand too close during storms.',
+  odins_watch:        "{name} is under Odin's Watch. The warband is not sure how they feel about this.",
 };
 
 // Combat style sentence per class (uses {name} placeholder)
@@ -68,14 +179,60 @@ const CLASS_BIO_STYLE = {
 
 // Short trait clause for battle reports (appended to MVP/last-stand sentences)
 const TRAIT_REPORT_CLAUSE = {
-  reckless:   ' They did not hold back.',
-  steadfast:  ' They did not yield.',
-  brooding:   ' Something in them had sharpened.',
-  serene:     ' They were untroubled.',
-  methodical: ' Every kill was deliberate.',
-  impulsive:  ' They struck before the order came.',
-  vengeful:   ' They had not forgotten.',
-  devout:     ' Their faith held with them.',
+  // positive
+  steadfast:          ' They did not yield.',
+  devout:             ' Their faith held with them.',
+  serene:             ' They were untroubled.',
+  methodical:         ' Every kill was deliberate.',
+  fearless:           ' They did not step back from the gate.',
+  builder:            ' They had planned for this.',
+  guardian:           ' The hoard held. So did they.',
+  lucky:              ' Fortune had not abandoned them.',
+  tactician:          ' They had seen this coming.',
+  warmhearted:        ' Their warmth steadied those around them.',
+  inspiring:          ' Others fought harder watching them.',
+  patient:            ' They had waited for this.',
+  hardy:              ' They endured more than should be possible.',
+  loyal:              ' They fought for those beside them.',
+  swift:              ' They were too fast to stop.',
+  merciful:           ' They did not pursue the broken.',
+  eagle_eyed:         ' Nothing moved beyond their sight.',
+  menders_touch:      ' They were already mending between volleys.',
+  // negative
+  reckless:           ' They did not hold back.',
+  impulsive:          ' They struck before the order came.',
+  brooding:           ' Something in them had sharpened.',
+  vengeful:           ' They had not forgotten.',
+  greedy:             ' They took what they were owed.',
+  cowardly:           ' They held their ground — barely.',
+  proud:              ' Their pride would not let them fall.',
+  hotheaded:          ' They struck before thinking. It worked.',
+  suspicious:         ' They trusted the outcome to no one.',
+  wasteful:           ' They spent every edge they had.',
+  bitter:             ' Old anger is still anger.',
+  lone_wolf:          ' They needed no one. No one helped.',
+  // rare
+  rune_touched:       ' The runes in their skin answered.',
+  veteran_trait:      ' They had been here before.',
+  stubborn:           ' The warband thought them finished. They rose again.',
+  iron_willed:        ' Their spirit did not bend.',
+  wolf_friend:        ' Something in the dark answered their call.',
+  giant_bane:         ' They knew where to strike.',
+  draugr_hunter:      ' They knew this enemy.',
+  frostborn:          ' Cold was their oldest companion.',
+  star_seeker:        ' They were looking for this moment.',
+  bond_forger:        ' Beside their shield-kin, they found another gear.',
+  scar_bearer:        ' Each old wound had earned this.',
+  quiet_leader:       ' No words. The warband understood.',
+  gate_singer:        ' The gate held. They knew it would.',
+  quartermasters_eye: ' Not a stroke wasted.',
+  // legendary
+  jarlslayer:         ' A Jarl-killer does not fall easily.',
+  einherjar:          ' Odin sent them back for this.',
+  saga_bound:         ' The skald will remember this.',
+  fate_touched:       ' Something watched over them.',
+  world_tree_marked:  ' Yggdrasil shelters its own.',
+  odins_watch:        ' The Allfather did not look away.',
 };
 
 // ── Scar definitions ──────────────────────────────────────────────────────────

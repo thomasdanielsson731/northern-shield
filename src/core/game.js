@@ -3180,6 +3180,18 @@ function updateWave() {
         t.goldGenerated = (t.goldGenerated ?? 0) + _gpw;
         dmgFloaters.push({ x: t.x, y: t.y - 10, val: `+${_gpw}`, life: 80, maxLife: 80, color: '#d0a020', large: false, suffix: 'g' });
       }
+      // Trait goldPerWave bonus (lucky, merciful, warmhearted, star_seeker, saga_bound, quartermasters_eye)
+      if (isHeroTowerType(t.type) && t.defenderId && _roster) {
+        const _def = _roster.find(t.defenderId);
+        if (_def) {
+          const _tgpw = getTraitModifiers(_def, buildHeroModifierCtx(t)).goldPerWave;
+          if (_tgpw > 0) {
+            gold += _tgpw;
+            goldEarned += _tgpw;
+            t.goldGenerated = (t.goldGenerated ?? 0) + _tgpw;
+          }
+        }
+      }
     }
     // Quartermaster fortress role — +3g per deployed QM per wave
     {
@@ -5884,8 +5896,9 @@ function update() {
   // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
     // Apply synergy stat boosts temporarily around update()
-    const _origRange  = tower.range;
-    const _origSplash = tower.splashDamage;
+    const _origRange    = tower.range;
+    const _origSplash   = tower.splashDamage;
+    const _origFireRate = tower.fireRate;
     if (waveRangeMult !== 1) tower.range = Math.round(tower.range * waveRangeMult);
     if (tower._synergy === 'eagleEye')  tower.range = Math.round(tower.range * 1.15);
     if (tower._synergy === 'siegeFury' && tower.splashDamage)
@@ -5905,6 +5918,8 @@ function update() {
         const roleMult = getFortressRoleDamageMult(def, tower.col, tower.row, ctx);
         const bossMult = tower._currentTarget?.isBoss ? trait.bossDmgMult : 1;
         tower._synergyDmgBoost *= trait.dmgMult * roleMult * bossMult;
+        if (trait.rangeMult !== 1) tower.range    = Math.round(tower.range    * trait.rangeMult);
+        if (trait.cdMult    !== 1) tower.fireRate = Math.max(4, Math.round(tower.fireRate * trait.cdMult));
       }
     }
 
@@ -5919,6 +5934,7 @@ function update() {
     // Restore temporarily modified stats
     tower.range        = _origRange;
     tower.splashDamage = _origSplash;
+    tower.fireRate     = _origFireRate;
 
     if (!tr) continue;
     if (tr.type === 'heal') {

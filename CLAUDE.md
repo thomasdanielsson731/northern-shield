@@ -115,7 +115,7 @@ tests/
   gameImports.smoke.test.js
 ```
 
-**162 tests** — run `npx vitest run` from repo root.
+**194 tests** — run `npx vitest run` from repo root.
 
 ### Key facts about game.js
 
@@ -458,18 +458,16 @@ _campaignState = {
 
 10 systems that turn defenders from stats into characters. All implemented as of 2026-06-22.
 
-**Traits** — 8 personalities assigned at recruit/link, class-weighted. Affect Chronicle prose via `TRAIT_REPORT_CLAUSE`. Immutable after assignment.
+**Traits** — 50 traits across 4 rarity tiers, assigned at recruit/link. Affect Chronicle prose (`TRAIT_REPORT_CLAUSE`, `TRAIT_BIO_CLOSE`) and combat (`getTraitModifiers`). Immutable after assignment.
 
-| Trait | Description |
-|---|---|
-| reckless | Fires into clusters, first to engage |
-| steadfast | Holds position, never yields |
-| brooding | Dark presence, minimal words |
-| serene | Unshakeable calm under pressure |
-| methodical | Precise, systematic, no wasted effort |
-| impulsive | Acts before the order is given |
-| vengeful | Remembers every scar |
-| devout | Fights for something beyond the battle |
+| Rarity | Count | Acquisition | Combat cap |
+|--------|-------|-------------|------------|
+| positive | 18 | ~55% recruit (class-weighted pool) | ±5–12% |
+| negative | 12 | ~30% recruit (class-weighted pool) | ±5–15% |
+| rare | 14 | ~10% recruit; events | ±8–20% |
+| legendary | 6 | events / boss feats only — not in recruit pool | up to +25% narrow |
+
+`getRandomTrait(type)` — 10% rare roll, else class pool (never legendary). `getLegendaryTrait(id?)` — legendary acquisition via events. `RARE_TRAITS` and `LEGENDARY_TRAITS` exported arrays. New `traitGameplay.js` output fields: `rangeMult` (applied per-tick like synergy range), `cdMult` (temporarily scales `tower.fireRate`), `goldPerWave` (wired into wave-end gold loop).
 
 **Veteran Ranks** — 6 tiers computed from `level + battles + kills + titles`. Display in rank color on roster cards and in Chronicle prose.
 
