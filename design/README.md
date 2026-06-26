@@ -35,6 +35,14 @@
 | [unlock_philosophy.md](unlock_philosophy.md) | Fortress-evolved unlocks only |
 | [system_dependency_map.md](system_dependency_map.md) | Future systems reinforcement map |
 
+### Milestone 4 — Player experience
+
+| Document | Purpose |
+|----------|---------|
+| [player_journey.md](player_journey.md) | Emotional chapters + 35 WOW moments |
+| [player_motivation.md](player_motivation.md) | Retention — first hour to 100 hours |
+| [moments_to_protect.md](moments_to_protect.md) | Sacred beats; identity over convenience |
+
 ---
 
 ## Implementation specs (engineering)
