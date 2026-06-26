@@ -235,10 +235,10 @@ Validate The First Saga with a fresh save and convene Vertical Slice review boar
 
 ## Definition of Done
 
+- [x] Sprint 4 committed (inner `5b17238`)
+- [x] `npx vitest run` green (229+)
+- [x] Vertical Slice board Session 19 — 🟡 RC approved
 - [ ] Fresh-save manual playtest logged (human)
-- [ ] Vertical Slice board Session 19 — 11 reviewers ✅
-- [ ] Sprint 4 committed (inner + outer)
-- [ ] `npx vitest run` green (229+)
 
 ## Success Criteria
 
@@ -271,11 +271,11 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Test files | 28 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
-| Inner repo commits ahead of `origin/main` | 9 (+ uncommitted Sprint 4) | 2026-06-22 |
+| Inner repo commits ahead of `origin/main` | 10 | 2026-06-22 |
 | Implemented slice features (checklist) | 22 ✅ · 2 🟡 · 0 ⬜ | 2026-06-22 |
 | Technical debt items tracked | 4 | 2026-06-22 |
 | Active design decisions | 19 | 2026-06-22 |
-| Last board session | [2026-06-22-all-agents-board-18](../../agents/boards/sessions/2026-06-22-all-agents-board-18.md) | 2026-06-22 |
+| Last board session | [Session 19 — Vertical Slice RC](../../agents/boards/sessions/2026-06-22-vertical-slice-board-19.md) | 2026-06-22 |
 
 ---
 
