@@ -4,6 +4,7 @@ import {
   advanceOnboarding,
   getOnboardingHint,
   resolveOnboardingHint,
+  getRepairOnboardingHint,
 } from '../src/campaign/onboarding.js';
 
 describe('onboarding', () => {
@@ -27,5 +28,18 @@ describe('onboarding', () => {
   it('stays on deploy after gate placed until hero placed', () => {
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedGate')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedHero')).toBe(ONBOARDING.DONE);
+  });
+
+  it('advances after gate repair during deploy teach', () => {
+    expect(advanceOnboarding(ONBOARDING.DEPLOY, 'repairedGate')).toBe(ONBOARDING.DONE);
+  });
+
+  it('shows repair hint on A3 when gate scarred', () => {
+    const hint = getRepairOnboardingHint({ westGateScarred: true, westGateRepaired: false, wood: 15 }, 3);
+    expect(hint?.title).toBe('MEND THE GATE');
+    expect(hint?.line).toMatch(/10 wood/);
+    expect(getRepairOnboardingHint({ westGateScarred: true, westGateRepaired: false, wood: 2 }, 3)?.line)
+      .toMatch(/timber/i);
+    expect(getRepairOnboardingHint({ westGateScarred: false, wood: 15 }, 3)).toBeNull();
   });
 });

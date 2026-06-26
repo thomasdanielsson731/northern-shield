@@ -24,7 +24,7 @@ import {
   createBtParticlePool,
   getVictoryHeaderStyle,
 } from '../ui/betweenBattlesJuice.js';
-import { ONBOARDING, advanceOnboarding, resolveOnboardingHint } from '../campaign/onboarding.js';
+import { ONBOARDING, advanceOnboarding, resolveOnboardingHint, getRepairOnboardingHint } from '../campaign/onboarding.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { saveCampaign, loadCampaign, createNewCampaign } from '../campaign/save.js';
 import {
@@ -2634,6 +2634,7 @@ function processPrepShellClick(action) {
     const result = applyPanelAction(action, _prepFieldMeta);
     _prepFieldMeta = result.meta;
     if (result.repairAnim && _prepShell) _prepShell.repairAnim = result.repairAnim;
+    _onboardingStep = advanceOnboarding(_onboardingStep, 'repairedGate');
     sfxPlace('wall');
     persistCampaignFieldLayout();
   }
@@ -9715,6 +9716,26 @@ function drawCommandMapHint() {
 }
 
 function drawOnboardingBanner() {
+  if (isFortressPrepPhase()) {
+    const repairHint = getRepairOnboardingHint(_prepFieldMeta, _pendingAssaultNode);
+    if (repairHint) {
+      const y = META_SCREEN_TOP + 2;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(8,6,14,0.90)';
+      ctx.beginPath(); ctx.roundRect(48, y - 10, BASE_W - 96, 28, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(220,140,60,0.55)'; ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.font = 'bold 7px monospace';
+      ctx.fillStyle = '#f0a050';
+      ctx.fillText(repairHint.title, BASE_W / 2, y + 2);
+      ctx.font = '6.5px monospace';
+      ctx.fillStyle = UI_COLORS.parchment;
+      ctx.fillText(repairHint.line, BASE_W / 2, y + 12);
+      ctx.restore();
+      return;
+    }
+  }
   if (_onboardingStep <= ONBOARDING.NONE || _onboardingStep >= ONBOARDING.DONE) return;
   if (gamePhase !== 'nodeMap' && gamePhase !== 'playing') return;
   if (gamePhase === 'playing' && !isFortressPrepPhase() && canModifyWarbandDeployment()) return;

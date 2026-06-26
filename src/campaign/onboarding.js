@@ -30,7 +30,20 @@ export function advanceOnboarding(step, action) {
   if (step === ONBOARDING.LAUNCH && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.DEPLOY && action === 'placedHero') return ONBOARDING.DONE;
   if (step === ONBOARDING.DEPLOY && action === 'placedGate') return step;
+  if (step === ONBOARDING.DEPLOY && action === 'repairedGate') return ONBOARDING.DONE;
   return step;
+}
+
+/** A3 teach — mend scarred west gate before horn. */
+export function getRepairOnboardingHint(prepMeta, assaultNodeIndex, woodCost = 10) {
+  if (assaultNodeIndex == null || assaultNodeIndex < 3) return null;
+  if (!prepMeta?.westGateScarred || prepMeta.westGateRepaired) return null;
+  return {
+    title: 'MEND THE GATE',
+    line: (prepMeta.wood ?? 0) >= woodCost
+      ? `Spend ${woodCost} wood on the west wall, then sound the horn`
+      : 'Splintered palisade — gather timber from assault rewards first',
+  };
 }
 
 /** Context-aware hint — front panel shows LAUNCH step after a front is picked. */
