@@ -2,14 +2,14 @@
 
 ## Genre
 
-**Fortress Defense RPG** — a Norse dark-fantasy strategy game focused on:
+**Fortress Commander RPG** — a Norse dark-fantasy strategy game focused on:
 
 - Persistent defender roster management
-- Fortress construction and expansion
+- **Fortress preparation** — assign veterans to gates, walls, and siege posts
 - Long-term character progression across battles
-- Tactical wave defense as the proving ground for your defenders
+- Tactical wave defense as the proving ground for your plan
 
-Draws from the strategic depth of classic maze TD games, the character attachment of RPGs, and the dark-fantasy aesthetic of Clash of Clans — all filtered through a Norse mythology lens.
+Draws from character attachment of RPGs, strategic preparation of squad tactics games, and Norse dark-fantasy tone — evolved from classic maze TD roots (skirmish mode retains TD).
 
 ---
 
@@ -32,22 +32,23 @@ The player commands a living warband. Defenders earn names, experience, and scar
 
 ## Core Gameplay Loop
 
-### Campaign (primary)
+### Campaign (primary — Fortress Commander)
 
 ```
-Select region (1–100 maps)
+Command map — pick assault (intel only)
 ↓
-Command map — four fronts (W/N/E/S), pick assault
+War Camp (optional) — roster, recruit, equip, meta fortress
 ↓
-Assault (2–3 waves; waves 2+ auto-advance)
+Fortress Preparation — assign heroes to defensive posts, repairs, siege
 ↓
-Debrief → War Camp (recruit, upgrade, equip, XP)
+Battle — execution only (no build docks in campaign)
 ↓
-Next assault or return to command map
+After Action — prose-first consequences
 ↓
-Field persists (max 10 heroes + 10 structures; fallen heroes respawn next assault)
-↓
-Clear map → unlock next region
+War Camp or next assault
+```
+
+Field persists between assaults on a region. **Preparation** (who holds which gate) is the primary skill expression; grid coordinates are simulation detail.
 ```
 
 **Combat:** Pathless — warband places anywhere and **moves** (melee advance, ranged positioning); structures/walls only near fortress.
@@ -84,34 +85,55 @@ Players develop a roster that carries forward:
 
 ## Defender Classes
 
-| Class | Role | Strength | Style |
-|---|---|---|---|
-| Berserker | Melee burst | Clustered enemies, kill-zones | High-risk frontline brawler |
-| Valkyrie | Long-range sniper | High-HP single targets, bosses | Precision from safety |
-| Archer | Fast-fire attrition | Swarms, fast enemies | Reliable sustained DPS |
-| Catapult | Siege AoE | Clustered groups | Area denial, high setup cost |
-| Blondie | Crowd control | Fast, priority targets | Enables other defenders |
-| Warden | Balanced ranged | Mixed threats | Adaptable generalist |
-| Healer | Support | Sustain in long engagements | Keeps defenders alive |
-| Ice Giant | Nova AoE | Mass slow, zone control | Wave-shaping specialist |
-| Dragonship | Heavy siege | Large splash, long range | High-cost elite damage |
+| Class | Code ID | Role | Strength | Style |
+|---|---|---|---|---|
+| Berserker | `berserk` | Melee burst | Clustered enemies, kill-zones | High-risk frontline brawler |
+| Valkyrie | `valkyrie` | Long-range sniper | High-HP single targets, bosses | Precision from safety |
+| Archer | `military` | Fast-fire attrition | Swarms, fast enemies | Reliable sustained DPS |
+| Blondie | `blondie` | Crowd control | Fast, priority targets | Enables other defenders |
+| Healer | `hydda` | Support | Sustain in long engagements | Keeps defenders alive |
+| Ice Giant | `isjatten` | Nova AoE | Mass slow, zone control | Wave-shaping specialist |
 
 No defender should be replaceable by another. Each has a role in the roster that cannot be fully covered by alternatives.
+
+> **Catapult, Ballista, Dragonship, and Piltorn are siege structures** — they are built in the fortress zone but are not warband members and do not earn XP or equipment.
 
 ---
 
 ## Fortress and Walls
 
-Walls and structures are **strategic assets**, not simple obstacles:
+Walls and structures are **strategic assets**, not simple obstacles. The fortress should feel like a home that grows — not a generic build grid.
 
-- **Shield Walls** — Block and redirect enemy paths; create kill-zones
-- **Great Hall** — Fortress center; determines roster capacity
-- **Barracks** — Unlocks new defender classes and recruitment
-- **Watch Towers** — Passive vision and range bonuses for nearby defenders
-- **Treasury** — Stores resources; higher tiers unlock equipment and talents
-- **Rune Forge** — Crafts and upgrades equipment; applies runes to defenders
+### Implemented structures (fortress zone, placeable on field)
 
-The fortress should feel like a home that grows — not a generic build grid.
+| Structure | Purpose |
+|---|---|
+| **Fortress Gate** | Reinforced gate in the fortress ring wall — top enemy priority until breached |
+| **Watch Tower** | Passive range/vision bonuses for nearby defenders |
+| **Ballista** | Long-range siege bolt, single target |
+| **Catapult** | AoE splash, anti-cluster |
+| **Mine** | Area-denial trap |
+| **Barracks** | Passive combat bonus for warband in range |
+| **Rune Shrine** | Earns stars per wave — fuels the rune system |
+| **Piltorn** | Fast-fire arrow tower |
+| **Dragonship** | Heavy splash, long range, high cost |
+
+### Planned fortress expansions
+
+| Structure | Purpose |
+|---|---|
+| **Great Hall** *(planned)* | The mead hall at the fortress heart — determines warband capacity and unlock gates for advanced roles |
+| **Treasury** *(planned)* | Visible gold vault on the field — raises the gold reserve cap; higher tiers generate passive income from plundered gold |
+| **Rune Forge** *(planned)* | Upgrades the Rune Shrine's output — unlocks more powerful rune types and reduces their star cost |
+
+### Fortress upgrade nodes (War Camp, purchased with gold reserve)
+
+| Node | Max Bonus |
+|---|---|
+| **Barracks** | Recruit cost −15g / +60g starting gold |
+| **Armory** | Equipment damage ×1.20 |
+| **Watch Tower** | Wave event preview +3 waves ahead |
+| **Wallworks** | Wall cost −3g, adjacent slow +10% |
 
 ---
 
@@ -153,17 +175,6 @@ Boss encounters are **events** that test the entire warband. Each boss:
 - **Not tower-placement-centric** — Where you place a wall matters. Which defender stands there matters more.
 
 ---
-
-## Identified Pre-Transition Inconsistencies (to resolve in implementation)
-
-The following assumptions from the original Tower Defense design no longer apply:
-
-1. **"Maze-building is the primary mechanic"** — maze building is a supporting mechanic; roster management is primary.
-2. **"No single tower clears waves solo"** — becomes "no single defender class covers all threats"; the constraint is the same but the framing is about roles, not tower types.
-3. **"Stars reset each run"** — stars should persist or convert to a cross-battle currency that funds defender progression.
-4. **"Sell tower for 50%"** — defenders should not be "sold"; they retire, are injured, or are lost. The sell mechanic applies only to buildings and equipment.
-5. **"100 waves, then endless"** — the battle structure needs to define what a "battle" is versus a "campaign", and how the roster carries between them.
-6. **Tower upgrade per level 1-10** — tower upgrades are replaced by defender leveling with talent trees. The upgrade system needs a full redesign pass.
 
 ---
 

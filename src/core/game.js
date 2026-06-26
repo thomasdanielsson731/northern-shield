@@ -67,6 +67,7 @@ import {
   isHeroTowerType,
   MAX_FIELD_HEROES,
   MAX_FIELD_STRUCTURES,
+  ensurePostAssignments,
 } from '../campaign/campaignRun.js';
 import {
   isAssaultDeployPhase,
@@ -84,6 +85,10 @@ import { getDefenderName } from '../roster/names.js';
 import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
 import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
 import { FORTRESS_DEFS, getFortressBonuses, getNextFortressUpgradeOffer } from '../fortress/fortress.js';
+import {
+  HERO_POST_IDS, POST_DEFS, resolvePostCell, getPrimaryGateForFront,
+  assignDefender, clearPost, validateAssignments, buildTowerPlacements, countAssignedHeroes,
+} from '../fortress/defensivePosts.js';
 import {
   createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText,
   getRandomTrait, TRAIT_DEFS, SCAR_DEFS, checkScars, getRank, VETERAN_RANKS,
@@ -415,6 +420,8 @@ let dragItem    = null;  // { id, label, color, cost, mode } while dragging from
 let pendingSell = null;  // { col, row, timer } — tower awaiting sell confirmation
 let dragX     = 0;
 let dragY     = 0;
+let dragStartX = 0;
+let dragStartY = 0;
 let hoverCol  = -1;
 let hoverRow  = -1;
 
@@ -552,6 +559,7 @@ let _pendingEventBtns     = [];          // [{x,y,w,h,choice,canAfford}] hit are
 let _eventCardAnim        = 0;           // frames since card opened (slide-in)
 let _campaignVictoryScreen = false;     // true after W100 victory, until dismissed
 let _battleXpData       = [];           // [{name, xpGained, oldLevel, newLevel}] per defender
+let _battleFieldStats   = [];           // persisted tower stats (survives field wipe removal)
 let _reserveContrib     = 0;            // gold added to reserve this battle (25% of goldEarned)
 let _bossLootBanner     = null;         // { itemId, timer } for loot callout display
 let _lastBossLootItemId = null;         // item dropped from last boss kill (shown in debrief)
@@ -606,6 +614,12 @@ let _warCampWelcomeTimer = 0;
 let _skirmishDiscoveryTimer = 0;
 let _warCampTabPulse       = null;   // 'recruit' | 'fortress' — pulse tab on first visits
 let _structuresTabPulse    = 0;      // frames — pulse STRUCTURES tab during deploy onboarding
+let _pendingAssaultNode    = null;   // assault node queued from command map / war camp
+let _placingDefenderId     = null;   // roster bench hero being dragged to field (legacy skirmish)
+let _fieldPrepBtns         = [];     // hit areas on fortress-prep right panel
+let _postAssignments       = {};     // defensive post → defender / structure
+let _postPickerPostId      = null;   // post awaiting roster pick
+let _postPrepBtns          = [];     // hit areas on post list (left panel)
 let _equipSparkles         = [];     // { x, y, vx, vy, life, color }
 let _autoMoveHintFrames  = 0;
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
@@ -1020,6 +1034,7 @@ function restartCombatState() {
   _starsEarnedThisBattle = 0;
   _defKillMilestones = new Set();
   _battleXpData      = [];
+  _battleFieldStats  = [];
   _reserveContrib    = 0;
   _bossLootBanner    = null;
   _lastBossLootItemId = null;
@@ -1153,19 +1168,15 @@ function initCampaign(preset) {
 function recordBattleResult(result, { skipDebrief = false } = {}) {
   _battleResult = result;
   if (!_campaignState) return;
+  for (const t of towers) captureBattleFieldStat(t);
+  const _xpTowerPool = towers.length > 0 ? towers : getBattleHeroStats();
   battlesCompleted++;
   _campaignState.battlesCompleted = battlesCompleted;
   _campaignState.stars            = stars;
   _campaignState.runeInventory    = { ...runeInventory };
   _campaignState.achievements     = [..._earnedAch];
 
-  const mvpTower = towers.length
-    ? towers.reduce((best, t) => {
-        const sc = (t.damageDealt || 0) + (t.killCount || 0) * 32;
-        const bs = best ? ((best.damageDealt || 0) + (best.killCount || 0) * 32) : -1;
-        return sc > bs ? t : best;
-      }, null)
-    : null;
+  const mvpTower = pickBattleMvp();
 
   _campaignState.battleHistory.push({
     battleNumber:  battlesCompleted,
@@ -1184,9 +1195,9 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
 
   // Build trait map for trait-aware prose
   const _defTraitMap = {};
-  for (const t of towers) {
-    const def = _roster.find(t.defenderId);
-    if (def?.trait && t.defenderId) _defTraitMap[t.defenderId] = def.trait;
+  for (const s of getBattleHeroStats()) {
+    const def = _roster.find(s.defenderId);
+    if (def?.trait && s.defenderId) _defTraitMap[s.defenderId] = def.trait;
   }
 
   const _chronicleBattleData = {
@@ -1204,10 +1215,10 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
     bossKills:       _chronBossKills.slice(),
     lastStand:       _chronLastStand,
     defenderTraits:  _defTraitMap,
-    defenders:       towers.map(t => ({
-      defenderId: t.defenderId ?? null,
-      name:       t.name ?? TOWER_DEFS[t.type]?.label ?? t.type,
-      kills:      t.killCount ?? 0,
+    defenders:       getBattleHeroStats().map(s => ({
+      defenderId: s.defenderId ?? null,
+      name:       s.name,
+      kills:      s.killCount ?? 0,
     })),
     prose: '',
   };
@@ -1237,20 +1248,20 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   _campaignState.equipmentInventory = _equipmentInventory.slice();
 
   // Capture pre-XP state including rank (for detecting rank promotions after XP)
-  const _preXpState = towers.map(t => {
+  const _preXpState = _xpTowerPool.map(t => {
     const d = _roster.find(t.defenderId);
     return d ? { id: d.defenderId, name: d.name, xp: d.xp, level: d.careerLevel, rankId: getRank(d).id, defType: d.type } : null;
   }).filter(Boolean);
 
   // Update breach counter for every deployed defender before XP
   if (_chronBreached) {
-    for (const t of towers) {
+    for (const t of _xpTowerPool) {
       const def = _roster.find(t.defenderId);
       if (def) def.breachesDeployed = (def.breachesDeployed ?? 0) + 1;
     }
   }
 
-  _newBattleTalentUnlocks = _roster.grantBattleXP(towers, waveNumber);
+  _newBattleTalentUnlocks = _roster.grantBattleXP(_xpTowerPool, waveNumber);
 
   _battleXpData = _preXpState.map(prev => {
     const d = _roster.find(prev.id);
@@ -1258,7 +1269,7 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   }).filter(Boolean);
 
   // Check scars for all deployed defenders
-  for (const t of towers) {
+  for (const t of _xpTowerPool) {
     const def = _roster.find(t.defenderId);
     if (!def) continue;
     if (!def.scars) def.scars = [];
@@ -1855,10 +1866,16 @@ function resetAssaultFieldVitality(towerList, walls) {
   }
 }
 
-function restoreCampaignField(state) {
+function isFortressPrepPhase() {
+  return gamePhase === 'fortressPrep';
+}
+
+function restoreCampaignField(state, options = {}) {
+  const { skipTowers = false } = options;
   if (!state) return;
   gold = state.gold ?? gold;
   _displayGold = gold;
+  if (!skipTowers) {
   for (const wt of state.towers ?? []) {
     if (isNodeCasualty(_nodeCasualties, wt.defenderId)) continue;
     const fp = TOWER_DEFS[wt.type]?.footprint ?? { w: 1, h: 1 };
@@ -1898,6 +1915,7 @@ function restoreCampaignField(state) {
     if (isHeroTowerType(t.type)) initHeroCombatHp(t);
     towers.push(t);
   }
+  }
   for (const [key, w] of Object.entries(state.walls ?? {})) {
     const [c, r] = key.split('_').map(Number);
     if (grid.getCell(c, r) !== CELL.EMPTY) continue;
@@ -1909,7 +1927,7 @@ function restoreCampaignField(state) {
 }
 
 function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
-  const { skipFieldPrep = false, fieldOverride = null, initialCasualties = null } = options;
+  const { skipFieldPrep = false, fieldOverride = null, initialCasualties = null, autoStartCombat = false } = options;
   ensureCampaignProgress();
   _campaignRegionActive = true;
   _campaignMapIndex  = mapIndex;
@@ -1967,6 +1985,9 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   }
   waveNumber = 0;
   endlessMode = false;
+  if (autoStartCombat && towers.some(t => isHeroTowerType(t.type))) {
+    startNextWave();
+  }
 }
 
 function finishCampaignNodeVictory() {
@@ -2036,7 +2057,110 @@ function isCampaignWarCamp() {
 }
 
 function canModifyWarbandDeployment() {
-  return isAssaultDeployPhase(_campaignNodeMode, waveNumber, waveState);
+  return !isFortressPrepPhase() && isAssaultDeployPhase(_campaignNodeMode, waveNumber, waveState);
+}
+
+function canLayoutCampaignField() {
+  return isFortressPrepPhase() || canModifyWarbandDeployment();
+}
+
+function persistCampaignFieldLayout() {
+  if (_campaignMapIndex == null || !_campaignState) return;
+  const progress = ensureCampaignProgress();
+  const run = getMapRun(progress, _campaignMapIndex);
+  if (!run) return;
+  if (!run.fieldState) run.fieldState = { gold: 0, towers: [], walls: {} };
+  if (isFortressPrepPhase()) {
+    const assault = _pendingAssaultNode != null
+      ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+    const towersPlain = buildTowerPlacements(_postAssignments, _roster, GOAL, {
+      frontId: assault?.frontId ?? 'west',
+    });
+    run.fieldState = serializeFieldState(towersPlain, wallData, gold, _postAssignments);
+  } else {
+    run.fieldState = serializeFieldState(towers, wallData, gold, _postAssignments);
+  }
+  _campaignState.campaignProgress = progress;
+  try { persistCampaign(); } catch {}
+}
+
+function enterFieldPrep(mapIndex, nodeIndex = null) {
+  _pendingAssaultNode = nodeIndex;
+  _campaignRegionActive = true;
+  _campaignMapIndex = mapIndex;
+  if (nodeIndex != null) _campaignNodeIndex = nodeIndex;
+  _returnToNodeMapAfterDebrief = false;
+  gameOver = false;
+  victory = false;
+  _postPickerPostId = null;
+
+  if (!_campaignState) {
+    _campaignState = _activeSlotIndex != null
+      ? (loadCampaign(localStorage, _activeSlotIndex) ?? createNewCampaign())
+      : createNewCampaign();
+  }
+  battlesCompleted = _campaignState.battlesCompleted ?? 0;
+  stars            = _campaignState.stars ?? 0;
+  goldReserve      = _campaignState.goldReserve ?? 0;
+  _equipmentInventory = (_campaignState.equipmentInventory ?? []).slice();
+  runeInventory    = Object.assign(
+    { ironEdge: 0, swiftStrike: 0, frostRune: 0, battleHymn: 0, valhalla: 0 },
+    _campaignState.runeInventory ?? {}
+  );
+  if (!_roster) _roster = new Roster();
+  _roster.load(_campaignState.defenders ?? []);
+  for (const d of _roster.defenders) {
+    if (!d.fortressRole) d.fortressRole = getDefaultFortressRole(d.type);
+  }
+  _roster.releaseAll();
+
+  const preset = getCampaignBattlePreset(mapIndex);
+  initBattle(preset);
+  _campaignNodeMode = true;
+
+  const progress = ensureCampaignProgress();
+  const run = getMapRun(progress, mapIndex);
+  const field = run?.fieldState ?? { gold: 0, towers: [], walls: {} };
+  restoreCampaignField(field, { skipTowers: true });
+  _postAssignments = { ...ensurePostAssignments(field, GOAL, FORTRESS_RING_R) };
+  gamePhase = 'fortressPrep';
+
+  waveNumber = 0;
+  waveState  = 'countdown';
+  _leftDockTab = 'warband';
+  _buildBtnsCache = null;
+  _structureScrollY = 0;
+  selectedTower = null;
+  buildMode = null;
+  dragItem = null;
+  _placingDefenderId = null;
+  if (!assaultFieldHasGate()) _structuresTabPulse = 120;
+  _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
+}
+
+function launchFieldPrepAssault() {
+  if (_pendingAssaultNode == null) {
+    _uiToast = { text: 'Pick an assault on the command map first', timer: 120, color: UI_COLORS.gold };
+    return;
+  }
+  const assault = getAssaultInfo(_campaignMapIndex, _pendingAssaultNode);
+  const validation = validateAssignments(_postAssignments, { minHeroes: 1 });
+  if (!validation.ok) {
+    _uiToast = { text: validation.errors[0] ?? 'Assign heroes to posts', timer: 120, color: UI_COLORS.warband };
+    return;
+  }
+  const placementTowers = buildTowerPlacements(_postAssignments, _roster, GOAL, {
+    frontId: assault?.frontId ?? 'west',
+  });
+  persistCampaignFieldLayout();
+  const mapIndex = _campaignMapIndex;
+  const nodeIndex = _pendingAssaultNode;
+  _onboardingStep = advanceOnboarding(_onboardingStep, 'placedHero');
+  startCampaignNodeBattle(mapIndex, nodeIndex, {
+    skipFieldPrep: true,
+    fieldOverride: serializeFieldState(placementTowers, wallData, gold, _postAssignments),
+    autoStartCombat: true,
+  });
 }
 
 function canUpgradeHeroNow() {
@@ -2083,7 +2207,55 @@ function upgradeFieldHeroAtWarCamp(defenderId) {
   upgradeFieldTowerAtWarCamp({ defenderId });
 }
 
+function captureBattleFieldStat(tower) {
+  if (!tower) return;
+  const entry = {
+    defenderId:   tower.defenderId ?? null,
+    type:         tower.type,
+    name:         tower.name ?? TOWER_DEFS[tower.type]?.label ?? tower.type,
+    killCount:    tower.killCount ?? 0,
+    damageDealt:  tower.damageDealt ?? 0,
+    _careerLevel: tower._careerLevel ?? 0,
+    _rankIndex:   tower._rankIndex ?? null,
+    col:          tower.col,
+    row:          tower.row,
+  };
+  const idx = entry.defenderId
+    ? _battleFieldStats.findIndex(s => s.defenderId === entry.defenderId)
+    : _battleFieldStats.findIndex(s => s.type === entry.type && s.col === entry.col && s.row === entry.row);
+  if (idx >= 0) _battleFieldStats[idx] = entry;
+  else _battleFieldStats.push(entry);
+}
+
+function battleMvpScore(entry) {
+  return (entry.damageDealt || 0) + (entry.killCount || 0) * 32;
+}
+
+function getBattleFieldStatsPool() {
+  if (_battleFieldStats.length > 0) return _battleFieldStats;
+  return towers.map(t => ({
+    defenderId:   t.defenderId ?? null,
+    type:         t.type,
+    name:         t.name ?? TOWER_DEFS[t.type]?.label ?? t.type,
+    killCount:    t.killCount ?? 0,
+    damageDealt:  t.damageDealt ?? 0,
+    _careerLevel: t._careerLevel ?? 0,
+    _rankIndex:   t._rankIndex ?? null,
+  }));
+}
+
+function getBattleHeroStats() {
+  return getBattleFieldStatsPool().filter(s => isHeroTowerType(s.type));
+}
+
+function pickBattleMvp() {
+  const pool = getBattleFieldStatsPool();
+  if (!pool.length) return null;
+  return pool.reduce((best, e) => battleMvpScore(e) > battleMvpScore(best) ? e : best, pool[0]);
+}
+
 function killHeroInCombat(tower) {
+  captureBattleFieldStat(tower);
   markNodeCasualty(_nodeCasualties, tower.defenderId);
   dmgFloaters.push({
     x: tower.x, y: tower.y - 14,
@@ -2337,6 +2509,7 @@ function processEnemyMeleeAttacks() {
       t.combatHp -= dmg;
       enemy.meleeTimer = 28;
       enemy.hitFlash = 6;
+      enemy.hitFlashMax = 6;
       if (t.combatHp <= 0) killHeroInCombat(t);
       continue;
     }
@@ -2430,6 +2603,7 @@ function removeTower(tower) {
   rerouteActiveEnemies();
   wallFrostDirty = true;
   if (!isHeroTowerType(tower.type)) checkAssaultEndConditions();
+  if (isFortressPrepPhase()) persistCampaignFieldLayout();
 }
 
 // ── wave system ───────────────────────────────────────────────────────────────
@@ -4308,7 +4482,7 @@ function tryPlaceAt(col, row, mode, towerType) {
 
   if (mode === CELL.WALL) return false;
 
-  if (_campaignNodeMode && !canModifyWarbandDeployment()) return false;
+  if (_campaignNodeMode && !canLayoutCampaignField()) return false;
 
   const _isHeroType = HERO_BUILD_ITEMS.some(h => h.id === towerType);
   const _isStructure = mode === CELL.TOWER && !_isHeroType;
@@ -4358,7 +4532,7 @@ function tryPlaceAt(col, row, mode, towerType) {
     ? GATE_COST
     : Math.max(5, TOWER_DEFS[towerType].cost - _barracksDiscount);
   // Deploying a roster hero during campaign assault prep is free — they are your warband, not new hires
-  const _isBenchDeploy = _campaignNodeMode && _isHeroType && canModifyWarbandDeployment();
+  const _isBenchDeploy = !isFortressPrepPhase() && (_campaignNodeMode && canModifyWarbandDeployment()) && _isHeroType;
   const _effectiveCost = _isBenchDeploy ? 0 : cost;
   if (gold < _effectiveCost) return false;
 
@@ -4419,8 +4593,23 @@ function tryPlaceAt(col, row, mode, towerType) {
     const cx = (col + fp.w / 2) * CELL_SIZE;
     const cy = (row + fp.h / 2) * CELL_SIZE;
     const t = new Tower(cx, cy, col, row, towerType);
-    // Link to roster: reuse an existing veteran if available, otherwise register the new recruit.
-    const def = _roster.link(towerType, t.defenderId, t.name);
+    let def;
+    if (_isBenchDeploy && _placingDefenderId) {
+      def = _roster.find(_placingDefenderId);
+      if (!def || def.deployed || def.type !== towerType) {
+        for (let dc = 0; dc < fp.w; dc++) {
+          for (let dr = 0; dr < fp.h; dr++) grid.setCell(col + dc, row + dr, CELL.EMPTY);
+        }
+        return false;
+      }
+      def.deployed = true;
+      t.defenderId = def.defenderId;
+      t.name = def.name;
+    } else {
+      def = _roster.link(towerType, t.defenderId, t.name);
+      t.defenderId = def.defenderId;
+      t.name = def.name;
+    }
     const rawEq         = getItemBonuses(def.equipment);
     const hasEquip      = def.equipment.some(Boolean);
     const armoryMult    = _fortressBonuses.equipDmMult ?? 1;
@@ -4464,6 +4653,8 @@ function tryPlaceAt(col, row, mode, towerType) {
       _onboardingStep = advanceOnboarding(_onboardingStep, 'placedGate');
     }
   }
+  if (isFortressPrepPhase()) persistCampaignFieldLayout();
+  _placingDefenderId = null;
   return true;
 }
 
@@ -4694,6 +4885,12 @@ window.addEventListener('keydown', e => {
       }
       return;
     }
+  }
+
+  if (isFortressPrepPhase() && (e.key === ' ' || e.key === 'Enter')) {
+    e.preventDefault();
+    launchFieldPrepAssault();
+    return;
   }
 
   if ((e.key === ' ' || e.key === 'Enter') && (waveState === 'countdown' || waveState === 'break')) {
@@ -4956,7 +5153,9 @@ canvas.addEventListener('mousedown', e => {
             _selectedFrontId = null;
           } else if (btn.action === 'attack') {
             _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
-            startCampaignNodeBattle(_campaignMapIndex, btn.nodeIndex);
+            enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
+          } else if (btn.action === 'prepareField') {
+            enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? null);
           }
           return;
         }
@@ -4998,11 +5197,11 @@ canvas.addEventListener('mousedown', e => {
             gameOver = false;
             victory = false;
             if (btn.action === 'nextAssault') {
-              startCampaignNodeBattle(_campaignMapIndex, btn.nodeIndex);
+              enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
             } else if (btn.action === 'warCamp') {
               enterCampaignWarCamp();
             } else if (btn.action === 'retryAssault') {
-              startCampaignNodeBattle(_campaignMapIndex, _campaignNodeIndex);
+              enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
             } else if (btn.action === 'commandMap') {
               _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
               _selectedFrontId = _lastClearedFrontId;
@@ -5092,9 +5291,11 @@ canvas.addEventListener('mousedown', e => {
             _selectedFrontId = _lastClearedFrontId;
             gamePhase = 'nodeMap';
           } else if (btn.action === 'nextAssault') {
-            startCampaignNodeBattle(_campaignMapIndex, btn.nodeIndex);
+            enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
           } else if (btn.action === 'retryAssault') {
-            startCampaignNodeBattle(_campaignMapIndex, _campaignNodeIndex);
+            enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+          } else if (btn.action === 'prepareField') {
+            enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? _pendingNextAssaultNode ?? null);
           } else if (btn.action === 'mapSelect') {
             gamePhase = 'campaignSelect';
             _betweenSubtab = 'recruit';
@@ -5429,6 +5630,45 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // Warband roster panel — deploy / select field defenders
+  if (e.button === 0 && isFortressPrepPhase()) {
+    for (const btn of _fieldPrepBtns) {
+      if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
+          mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+        if (btn.action === 'launchAssault') launchFieldPrepAssault();
+        else if (btn.action === 'warCamp') {
+          persistCampaignFieldLayout();
+          enterCampaignWarCamp();
+        } else if (btn.action === 'commandMap') {
+          persistCampaignFieldLayout();
+          _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
+          _selectedFrontId = _lastClearedFrontId;
+          gamePhase = 'nodeMap';
+        }
+        return;
+      }
+    }
+    for (const btn of _postPrepBtns) {
+      if (mouseX < btn.x || mouseX > btn.x + btn.w || mouseY < btn.y || mouseY > btn.y + btn.h) continue;
+      if (btn.action === 'pickPost') {
+        _postPickerPostId = btn.postId;
+        return;
+      }
+      if (btn.action === 'assignDefender' && btn.defenderId && _postPickerPostId) {
+        _postAssignments = assignDefender(_postAssignments, _postPickerPostId, btn.defenderId);
+        _postPickerPostId = null;
+        persistCampaignFieldLayout();
+        return;
+      }
+      if (btn.action === 'clearPost' && btn.postId) {
+        _postAssignments = clearPost(_postAssignments, btn.postId);
+        _postPickerPostId = null;
+        persistCampaignFieldLayout();
+        return;
+      }
+    }
+  }
+
+  // Warband roster panel — deploy / select field defenders
   if (e.button === 0 && gamePhase === 'playing') {
     for (const rb of _rosterPanelBtns) {
       if (mouseX >= rb.x && mouseX <= rb.x + rb.w &&
@@ -5437,7 +5677,7 @@ canvas.addEventListener('mousedown', e => {
         if (fieldRef) {
           if (fieldRef !== selectedTower) _heroMoveMode = null;
           selectedTower = fieldRef;
-        } else if (!canModifyWarbandDeployment()) {
+        } else if (!canLayoutCampaignField()) {
           return;
         } else {
           buildMode         = CELL.TOWER;
@@ -5446,6 +5686,9 @@ canvas.addEventListener('mousedown', e => {
           dragItem          = rb;
           dragX             = mouseX;
           dragY             = mouseY;
+          dragStartX        = mouseX;
+          dragStartY        = mouseY;
+          _placingDefenderId = rb.defenderId ?? null;
         }
         return;
       }
@@ -5456,7 +5699,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 0) {
     const btn = getBuildButtonAt(mouseX, mouseY);
     if (btn) {
-      if (_campaignNodeMode && !canModifyWarbandDeployment()) return;
+      if (_campaignNodeMode && !canLayoutCampaignField()) return;
       _leftDockTab = 'structures';
       _buildBtnsCache = null;
       _structureScrollY = 0;
@@ -5468,6 +5711,9 @@ canvas.addEventListener('mousedown', e => {
       dragItem = btn;
       dragX    = mouseX;
       dragY    = mouseY;
+      dragStartX = mouseX;
+      dragStartY = mouseY;
+      _placingDefenderId = null;
       return;
     }
   }
@@ -5705,14 +5951,23 @@ canvas.addEventListener('mouseup', e => {
     if (!dragged && saved && !gameOver) handleRightClickAt(saved.mouseX, saved.mouseY);
     return;
   }
-  if (!dragItem || gameOver) { dragItem = null; return; }
+  if (!dragItem || gameOver) { dragItem = null; _placingDefenderId = null; return; }
   const rect   = canvas.getBoundingClientRect();
   const mouseX = (e.clientX - rect.left - panX) / gameScale;
   const mouseY = (e.clientY - rect.top  - panY) / gameScale;
+  const overUi = (mouseX < FRAME_THICK + LEFT_DOCK_W && mouseY >= GRID_TOP && mouseY < GRID_BOTTOM)
+    || (mouseX >= combatRightPanelX() && mouseY >= GRID_TOP);
+  const dragDist = Math.hypot(mouseX - dragStartX, mouseY - dragStartY);
+  if (overUi || dragDist < 10) {
+    dragItem = null;
+    _placingDefenderId = null;
+    return;
+  }
   const { x: gridX, y: gridY } = outerToGridLocal(mouseX, mouseY);
   const { col, row } = grid.pixelToCell(gridX, gridY);
   tryPlaceAt(col, row, dragItem.mode, dragItem.id);
   dragItem = null;
+  _placingDefenderId = null;
 });
 
 canvas.addEventListener('mouseleave', () => {
@@ -5780,6 +6035,7 @@ function clampRightPanelScale() {
 
 function update() {
   if (gameOver || gamePhase !== 'playing' || isPaused) return;
+  if (isFortressPrepPhase()) return;
 
   // Treasury stage advancement pulse
   {
@@ -7889,6 +8145,11 @@ function drawRightPanel() {
   if (pw < 60) return;
 
   const fullH    = combatPanelFullH();
+  if (isFortressPrepPhase()) {
+    drawFieldPrepPanel(px, pw, fullH);
+    return;
+  }
+
   const panelBot = GRID_TOP + fullH;
   const _glass   = assaultUiGlass();
   const _assaultTransparent = assaultPlayfieldWide();
@@ -8422,6 +8683,155 @@ function drawRightPanel() {
   ctx.restore();
 }
 
+function drawPostPrepPanel(px, py, pw, ph) {
+  _postPrepBtns = [];
+  const pad = 8;
+  const contentTop = py + DOCK_TAB_H + 12;
+  const rowH = 22;
+  let ly = contentTop;
+
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText(_postPickerPostId ? 'PICK DEFENDER' : 'DEFENSIVE POSTS', px + pad, ly);
+  ly += 14;
+
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  const primaryGate = getPrimaryGateForFront(assault?.frontId ?? 'west');
+
+  if (_postPickerPostId) {
+    const available = (_roster?.defenders ?? []).filter(d => !isNodeCasualty(_nodeCasualties, d.defenderId));
+    for (const def of available) {
+      if (ly + rowH > py + ph - 8) break;
+      const cardX = px + pad;
+      const cardW = pw - pad * 2;
+      const assignedElsewhere = HERO_POST_IDS.some(
+        pid => pid !== _postPickerPostId && _postAssignments[pid]?.defenderId === def.defenderId,
+      );
+      drawFantasyPanel(cardX, ly, cardW, rowH - 2,
+        assignedElsewhere ? 'rgba(28,16,16,0.85)' : 'rgba(14,20,36,0.92)', 0.55, 4);
+      ctx.font = '7.5px monospace';
+      ctx.fillStyle = assignedElsewhere ? 'rgba(160,120,100,0.55)' : '#e8d7b5';
+      const label = def.name || getDefenderName(def.type);
+      ctx.fillText(label, cardX + 6, ly + 14);
+      if (!assignedElsewhere) {
+        _postPrepBtns.push({ x: cardX, y: ly, w: cardW, h: rowH - 2, action: 'assignDefender', defenderId: def.defenderId });
+      }
+      ly += rowH;
+    }
+    return;
+  }
+
+  for (const postId of HERO_POST_IDS) {
+    if (ly + rowH > py + ph - 8) break;
+    const defn = POST_DEFS[postId];
+    const cell = resolvePostCell(postId, GOAL, FORTRESS_RING_R);
+    const assignedId = _postAssignments[postId]?.defenderId;
+    const def = assignedId ? _roster?.find(assignedId) : null;
+    const isPrimary = postId === primaryGate;
+    const cardX = px + pad;
+    const cardW = pw - pad * 2;
+    drawFantasyPanel(cardX, ly, cardW, rowH - 2,
+      isPrimary ? 'rgba(20,28,12,0.95)' : 'rgba(12,10,24,0.90)', isPrimary ? 0.7 : 0.5, 4);
+    ctx.font = 'bold 7px monospace';
+    ctx.fillStyle = isPrimary ? '#a8e060' : 'rgba(180,160,120,0.75)';
+    ctx.fillText(defn?.label ?? postId, cardX + 6, ly + 10);
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = def ? '#e8d7b5' : 'rgba(140,120,90,0.50)';
+    ctx.fillText(def ? (def.name || getDefenderName(def.type)) : '— assign —', cardX + cardW - 6, ly + 14);
+    ctx.textAlign = 'left';
+    _postPrepBtns.push({ x: cardX, y: ly, w: cardW, h: rowH - 2, action: 'pickPost', postId });
+    if (assignedId) {
+      _postPrepBtns.push({ x: cardX + cardW - 18, y: ly + 2, w: 14, h: rowH - 6, action: 'clearPost', postId });
+    }
+    ly += rowH;
+  }
+}
+
+function drawPostMarkers() {
+  if (!isFortressPrepPhase()) return;
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  const primaryGate = getPrimaryGateForFront(assault?.frontId ?? 'west');
+  ctx.save();
+  for (const postId of HERO_POST_IDS) {
+    const cell = resolvePostCell(postId, GOAL, FORTRESS_RING_R);
+    const pos = grid.cellCenter(cell.col, cell.row);
+    const sx = gridScreenX(pos.x);
+    const sy = gridScreenY(pos.y);
+    const assignedId = _postAssignments[postId]?.defenderId;
+    const isPrimary = postId === primaryGate;
+    const r = CELL_SIZE * 0.42;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = assignedId
+      ? (isPrimary ? 'rgba(120,200,80,0.55)' : 'rgba(80,140,220,0.45)')
+      : (isPrimary ? 'rgba(200,160,40,0.35)' : 'rgba(100,90,140,0.25)');
+    ctx.fill();
+    ctx.strokeStyle = isPrimary ? '#c0e060' : 'rgba(180,160,220,0.55)';
+    ctx.lineWidth = isPrimary ? 2 : 1;
+    ctx.stroke();
+    if (assignedId) {
+      const def = _roster?.find(assignedId);
+      ctx.font = 'bold 6px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f0e8d0';
+      const initials = (def?.name ?? '?').slice(0, 2).toUpperCase();
+      ctx.fillText(initials, sx, sy + 2);
+    }
+  }
+  ctx.restore();
+}
+
+function drawFieldPrepPanel(px, pw, fullH) {
+  _fieldPrepBtns = [];
+  drawFantasyPanel(px, GRID_TOP, pw, fullH, 'rgba(10,6,20,0.92)', 0.72, 6);
+  const cx = px + pw / 2;
+  let ly = GRID_TOP + 16;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 10px monospace'; ctx.fillStyle = UI_COLORS.gold;
+  ctx.fillText('FORTRESS PREP', cx, ly);
+  ly += 16;
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(232,215,181,0.60)';
+  const heroes = countAssignedHeroes(_postAssignments);
+  ctx.fillText(`${heroes} heroes assigned to posts`, cx, ly);
+  ly += 14;
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  if (assault) {
+    ctx.fillStyle = 'rgba(180,150,90,0.65)';
+    ctx.fillText(`${assault.codename} · ${assault.tierLabel}`, cx, ly);
+  } else {
+    ctx.fillStyle = 'rgba(200,140,100,0.55)';
+    ctx.fillText('Pick assault on command map', cx, ly);
+  }
+  ly += 20;
+  const btnW = pw - 16, btnH = 36;
+  const btnX = px + 8;
+  const canLaunch = _pendingAssaultNode != null && heroes > 0;
+  drawFantasyPanel(btnX, ly, btnW, btnH,
+    canLaunch ? 'rgba(8,28,8,0.95)' : 'rgba(28,16,16,0.85)', 0.7, 6);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = canLaunch ? '#88ee66' : 'rgba(200,120,100,0.55)';
+  ctx.fillText('BEGIN ASSAULT', cx, ly + 22);
+  if (canLaunch) _fieldPrepBtns.push({ x: btnX, y: ly, w: btnW, h: btnH, action: 'launchAssault' });
+  ly += btnH + 10;
+  const secH = 26;
+  drawFantasyPanel(btnX, ly, btnW, secH, 'rgba(12,8,4,0.85)', 0.6, 4);
+  ctx.font = '8px monospace'; ctx.fillStyle = '#c0a060';
+  ctx.fillText('◀ WAR CAMP', cx, ly + 17);
+  _fieldPrepBtns.push({ x: btnX, y: ly, w: btnW, h: secH, action: 'warCamp' });
+  ly += secH + 6;
+  drawFantasyPanel(btnX, ly, btnW, secH, 'rgba(12,8,4,0.85)', 0.6, 4);
+  ctx.fillText('COMMAND MAP', cx, ly + 17);
+  _fieldPrepBtns.push({ x: btnX, y: ly, w: btnW, h: secH, action: 'commandMap' });
+  ly += secH + 10;
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.50)';
+  ctx.fillText('Assign posts on the left · recruit in War Camp', cx, ly);
+}
+
 function drawSpeedTriangles(cx, cy, n, color, size = 5) {
   const gap = 3.5, total = n * size + (n - 1) * gap;
   let tx = cx - total / 2;
@@ -8556,6 +8966,8 @@ function drawCampaignMetaBar(center) {
   let subtitle = 'CAMPAIGN';
   if (gamePhase === 'nodeMap') {
     subtitle = getCampaignMapMeta(_campaignMapIndex)?.name ?? 'COMMAND MAP';
+  } else if (gamePhase === 'fortressPrep') {
+    subtitle = 'Fortress Prep — assign heroes to defensive posts';
   } else if (gamePhase === 'betweenBattles') {
     subtitle = isCampaignWarCamp()
       ? (_warCampTabPulse === 'recruit'
@@ -8656,6 +9068,8 @@ function drawRegionClearFanfare() {
 function drawCommandMapHint() {
   if (_commandMapHintTimer <= 0 || gamePhase !== 'nodeMap') return;
   if (_onboardingStep === ONBOARDING.COMMAND_MAP) return;
+  if (_onboardingStep >= ONBOARDING.PICK_FRONT && _onboardingStep <= ONBOARDING.LAUNCH) return;
+  if (_commandMapView === 'front') return;
   _commandMapHintTimer--;
   const alpha = Math.min(1, _commandMapHintTimer / 60);
   const W = BASE_W;
@@ -8675,7 +9089,8 @@ function drawCommandMapHint() {
 function drawOnboardingBanner() {
   if (_onboardingStep <= ONBOARDING.NONE || _onboardingStep >= ONBOARDING.DONE) return;
   if (gamePhase !== 'nodeMap' && gamePhase !== 'playing') return;
-  if (gamePhase === 'playing' && canModifyWarbandDeployment()) return;
+  if (gamePhase === 'playing' && !isFortressPrepPhase() && canModifyWarbandDeployment()) return;
+  if (isFortressPrepPhase() && _onboardingStep !== ONBOARDING.DEPLOY) return;
   const hint = resolveOnboardingHint(_onboardingStep, {
     frontView: gamePhase === 'nodeMap' && _commandMapView === 'front',
   });
@@ -9130,7 +9545,75 @@ function drawTopBar() {
 
 /** True when left dock shows deployed field overview (not recruitment list). */
 function useAssaultFieldDock() {
-  return isCampaignCombat() || waveState === 'active';
+  return !isFortressPrepPhase() && gamePhase === 'playing' && (isCampaignCombat() || waveState === 'active') && !canModifyWarbandDeployment();
+}
+
+function useFieldLayoutDock() {
+  return isFortressPrepPhase() || (gamePhase === 'playing' && canLayoutCampaignField());
+}
+
+/** Roster bench in left dock — drag heroes to the field (field prep / layout). */
+function drawFieldLayoutBench(px, py, pw, ph) {
+  if (!_roster) return;
+  const contentTop = py + DOCK_TAB_H + 10;
+  const padX = 5;
+  const cardW = pw - 2 * padX;
+  const gap = 4;
+  const cardH = 34;
+  let ly = contentTop;
+
+  const heroes = towers.filter(t => isHeroTowerType(t.type)).length;
+  ctx.font = 'bold 8px monospace'; ctx.fillStyle = UI_COLORS.warband; ctx.textAlign = 'left';
+  ctx.fillText('⚔ WARBAND', px + padX, ly);
+  ctx.font = '6px monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(232,215,181,0.55)';
+  ctx.fillText(`${heroes}/${MAX_FIELD_HEROES}`, px + pw - padX, ly);
+  ctx.textAlign = 'left';
+  ly += 10;
+  ctx.font = '6.5px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.50)';
+  ctx.fillText('Drag to field · STRUCTURES tab for gates', px + padX, ly + 6);
+  ly += 14;
+
+  const benchDefs = _roster.defenders.filter(d =>
+    !isNodeCasualty(_nodeCasualties, d.defenderId)
+    && !towers.some(t => t.defenderId === d.defenderId)
+  );
+
+  if (benchDefs.length === 0) {
+    ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(232,215,181,0.42)';
+    ctx.fillText('All heroes deployed', px + padX, ly + 10);
+    return;
+  }
+
+  for (const item of benchDefs) {
+    if (ly + cardH > py + ph - 6) break;
+    const heroItem = HERO_BUILD_ITEMS.find(h => h.id === item.type);
+    if (!heroItem) continue;
+    const cardX = px + padX;
+    const cardY = ly;
+    const rgb = TOWER_DEFS[item.type]?.glowRgb ?? '74,111,165';
+    const sel = !selectedTower && selectedTowerType === item.type && buildMode === CELL.TOWER
+      && _placingDefenderId === item.defenderId;
+    drawFantasyPanel(cardX, cardY, cardW, cardH,
+      sel ? `rgba(${rgb},0.28)` : 'rgba(16,8,30,0.94)', sel ? 0.75 : 0.35, 4);
+    drawMiniDefenderPortrait(cardX + 16, cardY + cardH / 2, item.type, 10);
+    ctx.font = 'bold 7.5px monospace'; ctx.fillStyle = '#d8c8a8';
+    ctx.fillText((item.name ?? heroItem.label).slice(0, 14), cardX + 30, cardY + cardH / 2 + 3);
+    ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(100,200,130,0.75)';
+    ctx.textAlign = 'right';
+    ctx.fillText('FREE', cardX + cardW - 5, cardY + cardH / 2 + 3);
+    ctx.textAlign = 'left';
+    _rosterPanelBtns.push({
+      ...heroItem,
+      cost: 0,
+      mode: CELL.TOWER,
+      x: cardX, y: cardY, w: cardW, h: cardH,
+      width: cardW, height: cardH,
+      deployed: false,
+      defenderId: item.defenderId,
+    });
+    ly += cardH + gap;
+  }
 }
 
 /** Deploy bench overlay — prep phase only, top strip so bottom playfield stays clear. */
@@ -9175,7 +9658,7 @@ function drawAssaultWarbandOverlay(topInset = 0) {
       ctx.font = 'bold 9px monospace'; ctx.fillStyle = `rgba(212,175,55,${pulse})`;
       ctx.fillText('⬆ DRAG HERO', sX + 2, ly + 10);
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,180,140,0.55)';
-      ctx.fillText('from bar above', sX + 2, ly + 21);
+      ctx.fillText('from left panel', sX + 2, ly + 21);
       ctx.fillText('to the field', sX + 2, ly + 31);
       ly += 36;
     } else {
@@ -9321,32 +9804,38 @@ function drawAssaultDeployOverlay() {
   ctx.restore();
 }
 
-// ── Left dock — skirmish warband/structures; assault uses glass left overlay ───
+// ── Left dock — skirmish warband/structures; field prep uses opaque bench dock ───
 function drawLeftDock() {
-  if (gamePhase !== 'playing') return;
+  if (gamePhase !== 'playing' && gamePhase !== 'fortressPrep') return;
 
   _rosterPanelBtns = [];
+
+  if (useFieldLayoutDock()) {
+    const px = FRAME_THICK;
+    const py = GRID_TOP;
+    const pw = LEFT_DOCK_W;
+    const ph = leftDockPanelHeight();
+
+    drawFantasyPanel(px, py, pw, ph, 'rgba(10,6,22,0.98)');
+    drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns, {
+      pulseId: _structuresTabPulse > 0 && _leftDockTab !== 'structures' ? 'structures' : null,
+    });
+    if (_leftDockTab === 'structures') {
+      drawStructuresDockContent(px, py, pw, ph);
+    } else if (isFortressPrepPhase()) {
+      drawPostPrepPanel(px, py, pw, ph);
+    } else {
+      drawFieldLayoutBench(px, py, pw, ph);
+    }
+    return;
+  }
 
   if (useAssaultFieldDock()) {
     const px = FRAME_THICK;
     const py = GRID_TOP;
     const pw = LEFT_DOCK_W;
     const ph = leftDockPanelHeight();
-
-    if (canModifyWarbandDeployment()) {
-      drawHorizTabs(px + 4, py + 4, pw - 8, _LEFT_DOCK_TABS, _leftDockTab, _leftDockTabBtns, {
-        transparent: true,
-        pulseId: _structuresTabPulse > 0 && _leftDockTab !== 'structures' ? 'structures' : null,
-      });
-      if (_leftDockTab === 'structures') {
-        drawStructuresDockContent(px, py, pw, ph);
-      } else {
-        drawAssaultWarbandOverlay(DOCK_TAB_H + 8);
-      }
-      if (_roster) drawAssaultDeployOverlay();
-    } else {
-      drawAssaultWarbandOverlay();
-    }
+    drawAssaultWarbandOverlay();
     return;
   }
 
@@ -10766,6 +11255,7 @@ function drawPauseOverlay() {
   const _phaseLbl = {
     playing: isPathlessMode() ? 'Assault' : 'Skirmish',
     betweenBattles: 'War Camp',
+    fortressPrep: 'Fortress Prep',
     debrief: 'Debrief',
     nodeMap: 'Command Map',
     campaignSelect: 'Region Select',
@@ -11517,20 +12007,24 @@ function drawDebrief() {
       ctx.fillStyle = 'rgba(200,140,100,0.70)';
       ctx.fillText(`${_lastAssaultCasualtyCount} fallen — rally at next assault`, hx, hy);
     }
-    if (_lastAssaultCasualtyCount > 0 && !isVictory) {
-      hy += 11;
-      ctx.fillStyle = 'rgba(200,140,100,0.65)';
-      ctx.fillText(`${_lastAssaultCasualtyCount} fallen — full HP restored on retry`, hx, hy);
-    }
-    if (!isVictory && _lastDefeatReason === 'ramparts') {
-      hy += 11;
-      ctx.fillStyle = 'rgba(255,120,80,0.82)';
-      ctx.fillText('Ramparts breached — treasury exposed', hx, hy);
-    }
     if (!isVictory && _lastDefeatReason === 'field_wiped') {
       hy += 11;
       ctx.fillStyle = 'rgba(255,100,60,0.80)';
-      ctx.fillText('The line broke — warband and structures lost', hx, hy);
+      ctx.fillText('The line broke — all defenders fell', hx, hy);
+      hy += 11;
+      ctx.fillStyle = 'rgba(200,140,100,0.65)';
+      ctx.fillText('Retry restores full HP at deploy slots', hx, hy);
+    } else {
+      if (_lastAssaultCasualtyCount > 0 && !isVictory) {
+        hy += 11;
+        ctx.fillStyle = 'rgba(200,140,100,0.65)';
+        ctx.fillText(`${_lastAssaultCasualtyCount} fallen — full HP restored on retry`, hx, hy);
+      }
+      if (!isVictory && _lastDefeatReason === 'ramparts') {
+        hy += 11;
+        ctx.fillStyle = 'rgba(255,120,80,0.82)';
+        ctx.fillText('Ramparts breached — treasury exposed', hx, hy);
+      }
     }
     if (!isVictory && goldStolen > 0) {
       hy += 11;
@@ -11628,12 +12122,7 @@ function drawDebrief() {
 
   hy += 6;
   // ── MVP ──────────────────────────────────────────────────────────────────────
-  const _mvpT = towers.length > 0
-    ? towers.reduce((best, t) => {
-        const sc = (t.damageDealt ?? 0) + (t.killCount ?? 0) * 32;
-        return sc > ((best.damageDealt ?? 0) + (best.killCount ?? 0) * 32) ? t : best;
-      }, towers[0])
-    : null;
+  const _mvpT = pickBattleMvp();
 
   {
     const sepG = ctx.createLinearGradient(panX + 20, 0, panX + panW - 20, 0);
@@ -11669,8 +12158,8 @@ function drawDebrief() {
   hy += 20;
 
   // ── Per-defender kill breakdown (compact list) ─────────────────────────────
-  const _defKillList = towers
-    .filter(t => (t.killCount ?? 0) > 0)
+  const _defKillList = getBattleHeroStats()
+    .filter(s => (s.killCount ?? 0) > 0)
     .sort((a, b) => (b.killCount ?? 0) - (a.killCount ?? 0))
     .slice(0, 5);
   if (_defKillList.length > 1) {
@@ -12198,7 +12687,7 @@ function drawBetweenBattles() {
   ctx.fillText('TOP HEROES THIS BATTLE', lcx, _ly);
   _ly += 16;
 
-  const top3 = [...towers]
+  const top3 = getBattleHeroStats()
     .sort((a, b) => ((b.killCount || 0) + (b.damageDealt || 0) * 0.02) -
                     ((a.killCount || 0) + (a.damageDealt || 0) * 0.02))
     .slice(0, 3);
@@ -12209,19 +12698,19 @@ function drawBetweenBattles() {
     _ly += 18;
   } else {
     const icons = ['★', '·', '·'];
-    top3.forEach((tower, i) => {
-      const def2   = TOWER_DEFS[tower.type];
-      const lvlTag = tower._careerLevel > 0 ? ` [${ROMAN[tower._careerLevel] ?? ''}]` : '';
+    top3.forEach((stat, i) => {
+      const def2   = TOWER_DEFS[stat.type];
+      const lvlTag = stat._careerLevel > 0 ? ` [${ROMAN[stat._careerLevel] ?? ''}]` : '';
       ctx.font      = i === 0 ? 'bold 11px monospace' : '10px monospace';
-      const topRgb  = defenderGlowRgb(tower);
+      const topRgb  = defenderGlowRgb(stat);
       ctx.fillStyle = `rgba(${topRgb},${i === 0 ? 0.95 : 0.78})`;
       if (i === 0) { ctx.shadowColor = `rgba(${topRgb},0.55)`; ctx.shadowBlur = 4; }
-      ctx.fillText(`${icons[i]} ${tower.name}${lvlTag}  ☠${tower.killCount ?? 0}`, lcx, _ly);
+      ctx.fillText(`${icons[i]} ${stat.name}${lvlTag}  ☠${stat.killCount ?? 0}`, lcx, _ly);
       ctx.shadowBlur = 0;
       _ly += 14;
       if (i === 0) {
         ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)';
-        ctx.fillText(def2?.label ?? tower.type, lcx, _ly);
+        ctx.fillText(def2?.label ?? stat.type, lcx, _ly);
         _ly += 12;
       }
     });
@@ -12355,7 +12844,7 @@ function drawBetweenBattles() {
       ctx.textAlign = 'center';
       ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#88ee66';
       ctx.shadowColor = 'rgba(100,220,80,0.5)'; ctx.shadowBlur = 8;
-      ctx.fillText('NEXT ASSAULT →', b1x + btnW / 2, btnsY + 22);
+      ctx.fillText('PREPARE FIELD →', b1x + btnW / 2, btnsY + 22);
       ctx.restore();
       _betweenBtns.push({ x: b1x, y: btnsY, w: btnW, h: btnH, action: 'nextAssault', nodeIndex: _nextNode });
       _btnSlot++;
@@ -12365,7 +12854,7 @@ function drawBetweenBattles() {
       ctx.textAlign = 'center';
       ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#e08060';
       ctx.shadowColor = 'rgba(220,100,60,0.5)'; ctx.shadowBlur = 8;
-      ctx.fillText('RETRY ASSAULT', b1x + btnW / 2, btnsY + 22);
+      ctx.fillText('RETRY · PREP FIELD', b1x + btnW / 2, btnsY + 22);
       ctx.restore();
       _betweenBtns.push({ x: b1x, y: btnsY, w: btnW, h: btnH, action: 'retryAssault' });
       _btnSlot++;
@@ -12381,13 +12870,24 @@ function drawBetweenBattles() {
     ctx.restore();
     _betweenBtns.push({ x: _mapX, y: btnsY, w: btnW, h: btnH, action: 'commandMap' });
 
+    const prepW = btnW * 2 + btnGap;
+    const prepY = btnsY - btnH - 10;
+    drawFantasyPanel(b1x, prepY, prepW, btnH - 4, 'rgba(16,24,12,0.95)', 0.7, 6);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#a0d890';
+    ctx.fillText('PREPARE FIELD', b1x + prepW / 2, prepY + 20);
+    _betweenBtns.push({
+      x: b1x, y: prepY, w: prepW, h: btnH - 4,
+      action: 'prepareField', nodeIndex: _nextNode ?? _campaignNodeIndex ?? null,
+    });
+
     if (_assaultInfo) {
       ctx.font = '7px monospace'; ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(140,120,80,0.55)';
       const _hint = _nextNode != null
-        ? 'Reorganize your warband, then advance.'
+        ? 'Recruit in tabs above · then prepare field & launch.'
         : _battleResult === 'defeat'
-          ? `Retry: ${_assaultInfo.codename}`
+          ? `Retry: ${_assaultInfo.codename} — prepare field first`
           : 'Region secured — return to the command map.';
       ctx.fillText(_hint, lcx, btnsY - 6);
     }
@@ -12706,11 +13206,11 @@ function drawBetweenBattles() {
     const isChampionPlus = ['champion','ironguard','legend'].includes(defRank.id);
 
     // Name + level
-    const isUnnamed   = def.careerLevel < 1;
+    const hasName     = Boolean(def.name?.trim());
     const displayName = isRenaming
       ? _renameState.draft + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
-      : isUnnamed ? '— unnamed —'
-      : `${def.name}${lvlStr}`;
+      : hasName ? `${def.name}${lvlStr}`
+      : '— unnamed —';
     ctx.font = 'bold 11px monospace';
     if (isRenaming) {
       ctx.fillStyle = 'rgba(255,220,100,0.95)';
@@ -12719,7 +13219,7 @@ function drawBetweenBattles() {
       ctx.shadowBlur = 0;
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.55)';
       ctx.fillText('Enter confirm · Esc cancel', rix, ry + 24);
-    } else if (isUnnamed) {
+    } else if (!hasName) {
       ctx.fillStyle = 'rgba(130,120,100,0.45)';
       ctx.fillText(displayName, rix, ry + 14);
     } else {
@@ -12743,9 +13243,9 @@ function drawBetweenBattles() {
     ctx.textAlign = 'left';
     _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
 
-    // ✏ rename button (to the left of BIO) — only for defenders who've earned a name (careerLevel >= 1)
+    // ✏ rename button (to the left of BIO) — named starters or promoted defenders
     const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
-    if (!isUnnamed) {
+    if (hasName || def.careerLevel >= 1) {
       ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
       ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
       ctx.lineWidth   = 0.8;
@@ -13175,7 +13675,7 @@ function drawGuidedPulse(x, y, w, h, radius = 6) {
 
 function assaultFieldHasGate() {
   return towers.some(t => t.type === 'gate')
-    || (wallData ?? []).some(w => w?.type === 'gate');
+    || Object.values(wallData ?? {}).some(w => w?.isGate);
 }
 
 function spawnEquipSparkles(color) {
@@ -14327,6 +14827,7 @@ function draw() {
 
   for (const t of towers) drawHeroCombatHpBar(t);
   drawFortressGateHpBars();
+  drawPostMarkers();
 
   // Pre-fire targeting line
   if (selectedTower && selectedTower._currentTarget?.alive && waveState === 'active') {
@@ -15381,7 +15882,7 @@ function drawDragGhost() {
       : { w: 1, h: 1 };
 
     // Check all footprint cells
-    let canPlace = gold >= dragItem.cost;
+    let canPlace = (dragItem.cost === 0 && dragItem.defenderId != null) || gold >= dragItem.cost;
     const _isHeroDrag = dragItem.mode === CELL.TOWER && HERO_BUILD_ITEMS.some(h => h.id === dragItem.id);
     const _isGateDrag = dragItem.mode === CELL.GATE;
     if (canPlace && _isGateDrag && !isFortressGateSlot(col, row)) canPlace = false;

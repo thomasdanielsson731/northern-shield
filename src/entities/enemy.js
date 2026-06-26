@@ -411,7 +411,9 @@ export class Enemy {
 
     // Hit flash — white ring + expanding ring when damage lands
     if (this.hitFlash > 0) {
-      const hRatio  = this.hitFlashMax > 0 ? this.hitFlash / this.hitFlashMax : 0;
+      const hRatio  = this.hitFlashMax > 0
+        ? Math.min(1, Math.max(0, this.hitFlash / this.hitFlashMax))
+        : 0;
       const hfAlpha = hRatio * 0.78;
       ctx.strokeStyle = `rgba(${this.hitFlashColor ?? '255,240,200'},${hfAlpha})`;
       ctx.lineWidth   = 2;
@@ -420,7 +422,7 @@ export class Enemy {
       ctx.stroke();
 
       // Expanding ring — decrement happens after both draws use hRatio
-      const expandR = this.radius + (1 - hRatio) * 14;
+      const expandR = Math.max(1, this.radius + (1 - hRatio) * 14);
       ctx.save();
       ctx.strokeStyle = `rgba(${this.hitFlashColor ?? '255,240,200'},${hRatio * 0.6})`;
       ctx.lineWidth   = 2;

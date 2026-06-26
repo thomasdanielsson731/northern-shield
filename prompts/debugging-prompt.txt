@@ -14,14 +14,14 @@ Debug Northern Shield systematically using evidence from the code.
      bullet.update() checks !this.target.alive and sets this.alive = false.
      If enemy.alive is not set to false before bullet processes, it continues.
 
- Wisp not flying straight:
-     ENEMY_DEFS.drone.flying must be true.
+ Myling not flying straight:
+     ENEMY_DEFS.myling.flying must be true.
      spawnEnemy() checks ENEMY_DEFS[type].flying for path type selection.
      rerouteActiveEnemies() must skip enemies where enemy.flying === true.
 
- Banshee EMP not disabling towers:
-     ENEMY_DEFS.banshee.empRadius must be set.
-     game.js update loop must check enemy.type === ENEMY_TYPES.BANSHEE.
+ Mara EMP not disabling towers:
+     ENEMY_DEFS.mara.empRadius must be set.
+     game.js update loop must check enemy.type === ENEMY_TYPES.MARA.
      Tower.empDisabled flag must prevent tower.update() from firing.
 
  Sprite not appearing:
@@ -42,7 +42,7 @@ Debug Northern Shield systematically using evidence from the code.
  HUD layout (for reference):
      Canvas fills window. Grid starts at (GRID_LEFT, GRID_TOP) = (188, 56).
      LEFT_DOCK_W=172 (left), RIGHT_PANEL_W=188 (right), GRID_TOP=56 (War Room top bar).
-     Grid pixel size: 50*14 = 700px wide, 30*14 = 420px tall.
+     Grid pixel size: 48*14 = 672px wide, 30*14 = 420px tall.
 
  DEBUGGING PROCESS:
  1. Identify the symptom precisely

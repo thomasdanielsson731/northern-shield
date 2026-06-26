@@ -18,32 +18,26 @@ Lead a growing band of veteran defenders. They gain experience, level up, and ea
 - Vite dev server
 - No external game engine
 
-## Defenders
+## Defenders (Warband — persistent XP, levels, talents, equipment)
 
-The warband is the player's primary asset. Defenders persist across battles with XP, levels, talents, and equipment.
+| Defender | Code | Role |
+|---|---|---|
+| Berserker | `berserk` | Melee burst, anti-swarm |
+| Valkyrie | `valkyrie` | Long-range sniper, anti-boss |
+| Archer | `military` | Fast-fire attrition, reliable DPS |
+| Blondie | `blondie` | Crowd control, slow field |
+| Healer | `hydda` | Support, warband HP sustain |
+| Ice Giant | `isjatten` | Nova AoE, mass slow |
 
-| Defender | Role |
-|---|---|
-| Berserker | Melee burst, anti-swarm |
-| Valkyrie | Long-range sniper, anti-boss |
-| Archer | Fast-fire attrition, reliable DPS |
-| Catapult | AoE siege, anti-cluster |
-| Blondie | Crowd control, stun on hit |
-| Warden | Balanced ranged, generalist |
-| Healer | Support, sustain |
-| Ice Giant | Nova AoE, mass slow |
-| Dragonship | Heavy siege, long-range splash |
+## Fortress Structures (placeable on field, fortress zone only)
 
-## Fortress Structures
+Siege structures, gates, and outpost buildings. They do not earn XP — that is the warband's domain.
 
-Walls and buildings are strategic assets that grow between battles:
+- **Fortress Gate** — top enemy priority until breached; placed in ring-wall gaps
+- **Watch Tower / Ballista / Catapult / Piltorn / Dragonship** — siege and outpost structures
+- **Barracks / Rune Shrine / Mine** — passive support structures
 
-- **Shield Walls** — redirect enemies, create kill-zones
-- **Great Hall** — fortress center, sets roster capacity
-- **Barracks** — unlocks new defender classes
-- **Watch Towers** — passive range/vision bonuses
-- **Treasury** — resources and equipment storage
-- **Rune Forge** — craft and apply runes to defenders
+**Planned:** Great Hall (roster capacity), Treasury (gold reserve expansion), Rune Forge (rune crafting)
 
 ## Enemies
 
@@ -72,7 +66,6 @@ npx vite          # dev server — http://localhost:5173
 npx vitest run    # tests
 ```
 
-Previously some docs pointed at `tower-defense/tower-defense/` — that was a duplicate clone and has been removed.
 
 | File | Purpose |
 |------|---------|

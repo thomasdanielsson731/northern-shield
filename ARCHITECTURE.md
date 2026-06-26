@@ -1,17 +1,17 @@
 # Northern Shield — Architecture Review
 
-*Last updated: 2026-06-22 (campaign assault UX). Written against the Fortress Defense RPG vision. For day-to-day coding rules see [CLAUDE.md](CLAUDE.md).*
+*Last updated: 2026-06-25 (Fortress Commander pivot). Written against the Fortress Commander RPG vision. For day-to-day coding rules see [CLAUDE.md](CLAUDE.md).*
 
 ---
 
-## 1. Current State (2026-06-24)
+## 1. Current State (2026-06-25)
 
-Northern Shield is a **Fortress Defense RPG** with two combat modes:
+Northern Shield is a **Fortress Commander RPG** (evolved from Fortress Defense RPG) with two combat modes:
 
-1. **Campaign (primary):** 100 procedural maps, **assault** chains on a four-front command map, pathless combat, persistent field state between assaults.
-2. **Skirmish (secondary):** 3 preset maps, 100-wave maze TD, BFS pathfinding, endless mode.
+1. **Campaign (primary):** 100 procedural maps, **assault** chains on a four-front command map, pathless combat, persistent field state between assaults. **UX pivot:** grid deploy → **defensive posts** in `fortressPrep` phase (see `../../design/DEFENSIVE_POSTS.md`).
+2. **Skirmish (secondary):** 3 preset maps, 100-wave maze TD, BFS pathfinding, endless mode — unchanged TD loop.
 
-All four domain layers (Combat / Roster / Fortress / Meta Progression) are implemented.
+All four domain layers (Combat / Roster / Fortress / Meta Progression) are implemented. **Phase separation** (War Camp / Fortress Prep / Battle / After Action) is the active architecture migration.
 
 ### Source map
 
@@ -51,6 +51,8 @@ src/
   chronicle/
     chronicle.js       Battle history prose + hall of honored/fallen
   fortress/
+    defensivePosts.js  post assignments → grid placements (Fortress Prep)
+    fortressUpgrades.js
     fortress.js        Fortress upgrade nodes + bonus aggregation
 ```
 

@@ -1,44 +1,87 @@
 Work only from known code in Northern Shield. Do not invent APIs or assume file contents.
 
- KNOWN FILE STRUCTURE:
-     src/main.js
-     src/core/game.js
-     src/core/renderer.js
-     src/grid/grid.js
-     src/entities/enemy.js
-     src/entities/tower.js
-     src/entities/bullet.js
-     src/assets.js
+KNOWN FILE STRUCTURE (complete as of 2026-06-25):
+  src/
+    main.js              entry point — imports assets.js then game.js
+    assets.js            sprite manifest: SPRITES shared object
+    config.js            sprite scale helpers: getSpriteScale/setSpriteScale
+    core/
+      renderer.js        canvas + ctx (DPR scaling) — exports { canvas, ctx }
+      game.js            game loop, UI, input (~12 600 lines) — NO EXPORTS (side-effect module)
+      sounds.js          Web Audio API procedural SFX
+    entities/
+      tower.js           Tower class, TOWER_DEFS, TOWER_TYPES
+      enemy.js           Enemy class, ENEMY_DEFS, ENEMY_TYPES
+      bullet.js          Bullet class
+    grid/
+      grid.js            Grid class, CELL enum, BFS pathfinding
+    roster/
+      defender.js        Defender class (XP, scars, traits, career)
+      roster.js          Roster class (link, grantBattleXP, releaseAll)
+      names.js           Viking name pools — getDefenderName(type)
+      items.js           ITEM_DEFS, BOSS_DROP_TABLE, getItemBonuses()
+      talents.js         TALENT_DEFS, CLASS_TALENTS, getTalentBonuses()
+      heroLevel.js       MAX_HERO_LEVEL=100, upgrade costs, level table
+      structureLevel.js  MAX_STRUCTURE_LEVEL=30, structure HP scaling
+      heroMovement.js    pathless hero advance / ranged positioning
+      heroRoles.js       fortress role zones, role damage mult
+      warbandComposition.js  squad presets, deploy hints, composition warnings
+      traitGameplay.js   getTraitModifiers()
+      warbandHeal.js     Hydda warband HP heal (pathless)
+    ui/
+      uiTheme.js         UI_COLORS palette, War Room top bar chrome, stat chips
+      assaultPanels.js   deployed field card HP bars, status labels
+      structurePortrait.js   drawProceduralStructureIcon()
+    campaign/
+      save.js            saveCampaign(), loadCampaign(), migrateLegacySaves()
+      saveSlots.js       10 slots, ns-slots-meta-v1, deleteSlot()
+      sessionSave.js     validateSessionState(), per-slot ns-session-v1-slot-N
+      saveValidate.js    validateCampaignState(), verifySaveChecksum(), simpleSaveChecksum()
+      events.js          EVENT_DEFS (8 Named Campaign Events), getAvailableEvent()
+      campaignMaps.js    CAMPAIGN_MAP_COUNT=100, buildNodeWavePlan()
+      campaignFronts.js  four-front command map, assault codenames, getNextAvailableAssault()
+      campaignRun.js     field persistence, assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
+      campaignDeploy.js  isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults()
+      onboarding.js      ONBOARDING steps enum, getOnboardingHint(), advanceOnboarding(), resolveOnboardingHint()
+    fortress/
+      fortress.js        FORTRESS_DEFS (4 upgrade nodes × 3 levels), getFortressBonuses()
+    chronicle/
+      chronicle.js       TRAIT_DEFS, SCAR_DEFS, VETERAN_RANKS, generateBattleReport(), generateBio(), generateEpitaph()
+    combat/
+      assaultTargeting.js  hasLivingFortressGates(), buildAssaultTargetPriority(), isStructureWallTarget(), isGateWallTarget()
 
- NOTE: engine/ contains old dead skeleton files — do not reference them.
+KNOWN HERO TYPES (HERO_BUILD_ITEMS — warband characters with roster identity, XP, levels):
+  berserk, valkyrie, military, hydda, blondie, isjatten
 
- KNOWN EXPORTS:
-     grid.js:         export const CELL, export class Grid
-     enemy.js:       export const ENEMY_TYPES, ENEMY_DEFS, export class Enemy
-     tower.js:       export const TOWER_TYPES, TOWER_DEFS, export class Tower
-     bullet.js:     export class Bullet
-     renderer.js: export { canvas, ctx }
-     assets.js:     export const SPRITES
-     game.js:         no exports (top-level side-effect module)
+KNOWN STRUCTURE TYPES (TOWER_BUILD_ITEMS — static siege/defensive structures, fortress-zone only):
+  gate, watchtower, ballista, catapult, mine, barracks, runeshrine, piltorn, drakship
 
- KNOWN GAME STATE VARIABLES (in game.js module scope):
-     grid, currentPath, enemies[], towers[], bullets[], particles[]
-     gold, lives, slain, goldEarned, leaked
-     buildMode, selectedTowerType, gameOver
-     waveState, waveNumber, waveTimer, spawnQueue[]
-     shakeX, shakeY
+KNOWN CONSTANTS (game.js):
+  COLS=48, ROWS=30, CELL_SIZE=14
+  FRAME_THICK=16, LEFT_DOCK_W=172, RIGHT_PANEL_W=188
+  GRID_LEFT=188  (= FRAME_THICK + LEFT_DOCK_W)
+  GRID_TOP=56    (= FRAME_THICK + 40)
+  SPAWN={col:0, row:15}, GOAL={col:24, row:15}   ← fortress at center
+  STARTING_GOLD=120, STARTING_LIVES=8, WALL_COST=12
+  GATE_COST=28, GATE_HP=120, FORTRESS_RING_R=5
+  MAX_WAVES=100 (skirmish only)
 
- KNOWN CONSTANTS (game.js):
-     COLS=50, ROWS=30, CELL_SIZE=14, WALL_COST=5
-     SIDEBAR_W=52, RIGHT_PANEL_W=188, GRID_LEFT=52, GRID_TOP=56
-     SPAWN={col:0,row:15}, GOAL={col:49,row:15}
-     STARTING_GOLD=85, STARTING_LIVES=20, MAX_LEVEL=10
-     COUNTDOWN_FRAMES=150, BREAK_FRAMES=250
-     BUILD_BTN, BUILD_ITEMS (derives from TOWER_DEFS)
+KNOWN GAME PHASES:
+  slotSelect → campaignSelect → nodeMap → playing → debrief → betweenBattles
+  mapSelect (skirmish entry from campaignSelect)
 
- RULES:
- - If you need to know what's in a file, read it first
- - Do not invent new exported functions that don't exist yet
- - Do not assume a method exists on Grid, Enemy, Tower, or Bullet without checking
- - If information is missing, ask a concise question
- - Do not hallucinate game engine systems (there is no engine — it's vanilla JS)
+KNOWN CAMPAIGN STATE (_campaignState):
+  stars, goldReserve, fortressUpgrades, defenders[], equipmentInventory[],
+  runeInventory, chronicle, hallOfFallen, hallOfHonored, bonds, coDeployments,
+  legacyBonuses, battlesCompleted, seenEventIds, campaignProgress, uiHints
+
+RULES:
+- If you need to know what's in a file, read it first — do not assume
+- game.js has no exports — it is a side-effect module; do not add exports
+- New systems go in new files under src/campaign/, src/roster/, etc.
+  game.js calls into them; it does not absorb them
+- Defender progression state lives on Defender (roster/defender.js)
+  Tower mirrors only: _careerLevel, name, defenderId
+- saveCampaign() must NEVER be called inside requestAnimationFrame or game tick
+- Campaign mode is pathless (no BFS on placement); BFS only on skirmish/non-pathless presets
+- Upgrade heroes only in War Camp (canUpgradeHeroLevelBetweenAssaults), not during assault
