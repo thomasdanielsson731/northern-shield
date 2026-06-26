@@ -6,6 +6,8 @@ import {
   buildFirstSagaSpawnQueue,
   getFirstSagaWaveBands,
   getFirstSagaStartingLives,
+  getFirstSagaWaveBreakFrames,
+  getFirstSagaBetweenWaveHealFraction,
   getFirstSagaFrontLayout,
   FIRST_SAGA_A4_NODE,
   isFirstSagaSettlementReady,
@@ -99,5 +101,12 @@ describe('firstSaga', () => {
     const plan = buildFirstSagaWavePlan(0);
     const viaMaps = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 0);
     expect(viaMaps).toHaveLength(6);
+
+    const a1w1 = buildFirstSagaSpawnQueue(1, { waveInNode: 1 });
+    expect(a1w1[0].speedScale).toBeLessThanOrEqual(0.75);
+    expect(getFirstSagaStartingLives(1)).toBe(7);
+    expect(getFirstSagaWaveBreakFrames(1)).toBeGreaterThan(60);
+    expect(getFirstSagaBetweenWaveHealFraction(1)).toBe(0.40);
+    expect(getFirstSagaWaveBands(1).speed).toBeLessThan(0.8);
   });
 });

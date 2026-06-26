@@ -49,8 +49,8 @@ export function getFirstSagaBossConfig() {
 const SAGA_RAIDER = 'draugr';
 const SAGA_WOLF   = 'warg';
 
-function sagaPack(type, count, hpScale = 1) {
-  return Array.from({ length: count }, () => ({ type, hpScale }));
+function sagaPack(type, count, hpScale = 1, speedScale = 1) {
+  return Array.from({ length: count }, () => ({ type, hpScale, speedScale }));
 }
 
 /**
@@ -63,8 +63,12 @@ export function buildFirstSagaSpawnQueue(nodeIndex, waveSpec) {
     return sagaPack(SAGA_RAIDER, 6, 0.42);
   }
   if (nodeIndex === 1) {
-    if (w === 1) return sagaPack(SAGA_WOLF, 6, 0.78);
-    if (w === 2) return [...sagaPack(SAGA_WOLF, 4, 0.82), ...sagaPack(SAGA_RAIDER, 2, 0.62)];
+    // Wargs are fast — keep ~2-hit HP but slash speed; wave 2 is lighter after wave-1 attrition.
+    if (w === 1) return sagaPack(SAGA_WOLF, 6, 0.80, 0.70);
+    if (w === 2) return [
+      ...sagaPack(SAGA_WOLF, 3, 0.74, 0.66),
+      ...sagaPack(SAGA_RAIDER, 2, 0.58, 1),
+    ];
   }
   if (nodeIndex === 2) {
     if (w === 1) return sagaPack(SAGA_RAIDER, 6, 0.86);
@@ -92,12 +96,12 @@ export function buildFirstSagaSpawnQueue(nodeIndex, waveSpec) {
 export function getFirstSagaWaveBands(nodeIndex, waveInNode = 1) {
   const base = [
     { hp: 0.70, speed: 0.86 },
-    { hp: 0.78, speed: 0.90 },
+    { hp: 0.66, speed: 0.76 },
     { hp: 0.86, speed: 0.94 },
     { hp: 0.92, speed: 0.96 },
     { hp: 1.00, speed: 1.00 },
   ][nodeIndex] ?? { hp: 1, speed: 1 };
-  const waveBump = (waveInNode - 1) * 0.03;
+  const waveBump = nodeIndex <= 1 ? 0 : (waveInNode - 1) * 0.03;
   return {
     hp:    Math.round((base.hp + waveBump) * 100) / 100,
     speed: Math.round((base.speed + waveBump * 0.5) * 100) / 100,
@@ -105,17 +109,32 @@ export function getFirstSagaWaveBands(nodeIndex, waveInNode = 1) {
 }
 
 /** Slower spawns on early assaults so a lone hero can barely keep up. */
-export function getFirstSagaSpawnGap(nodeIndex) {
+export function getFirstSagaSpawnGap(nodeIndex, waveInNode = 1) {
   if (nodeIndex === 0) return 24;
-  if (nodeIndex === 1) return 18;
+  if (nodeIndex === 1) return waveInNode >= 2 ? 28 : 22;
   if (nodeIndex === 2) return 16;
   return 14;
+}
+
+/** Breather between waves inside one assault (game ticks @ 30/s). */
+export function getFirstSagaWaveBreakFrames(nodeIndex) {
+  if (nodeIndex === 1) return 150;
+  if (nodeIndex <= 2) return 90;
+  return 60;
+}
+
+/** Between-wave hero refill on early saga assaults (wave-1 attrition teach). */
+export function getFirstSagaBetweenWaveHealFraction(nodeIndex) {
+  if (nodeIndex === 0) return 0;
+  if (nodeIndex === 1) return 0.40;
+  if (nodeIndex === 2) return 0.25;
+  return 0;
 }
 
 /** Tighter rampart pool early — victory still needs ≥1 life. */
 export function getFirstSagaStartingLives(nodeIndex) {
   if (nodeIndex === 0) return 5;
-  if (nodeIndex === 1) return 6;
+  if (nodeIndex === 1) return 7;
   if (nodeIndex === 2) return 6;
   if (nodeIndex === 3) return 7;
   return 8;

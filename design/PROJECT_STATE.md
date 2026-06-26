@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Sprint 5 — balance + prep legibility + human RC in progress)  
+**Last updated:** 2026-06-22 (Sprint 5 — balance pass 2 + combat damage feedback)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -70,10 +70,10 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 
 ## Recently completed work
 
-- `firstSaga.js` — explicit A0–A4 spawn tables + wave bands (one Berserker barely clears A0)
-- `fortressCommanderShell.js` — labeled prep schematic (gate/tower/longhouse/treasury, threat arrow)
-- `firstSagaUI.js` — Settlement stone-beat white flash
-- `firstSaga.js` — linear A0–A4 west assault chain, boss Ash-Warden
+- A1 balance pass 2 — between-wave 40% heal, lighter wave 2, slower wolf spawns
+- Assault melee damage floaters (`-dmg`, `-GATE`) + gate/hero hit flash
+- Campaign multi-wave banner (`ASSAULT · WAVE 2/3`)
+- `firstSaga.js` — explicit A0–A4 spawn tables + wave bands
 - `firstSagaUI.js` — west road command map (6 nodes) + ceremony screens
 - `settlementCeremony.js` — Settlement Oath flow, recruit #2 unlock
 - Region 2+ locked on campaign select (Saga II+)
@@ -240,8 +240,10 @@ Validate The First Saga with a fresh save and convene Vertical Slice review boar
 
 - [x] Sprint 4 committed (inner `5b17238`)
 - [x] Sprint 5 balance + prep schematic (`9839ee7`)
+- [x] Sprint 5 balance pass 2 + damage feedback (pending commit)
 - [x] `npx vitest run` green (232+)
 - [x] Vertical Slice board Session 19 — 🟡 RC approved
+- [x] Session 20 — balance/readability follow-up
 - [ ] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
 
 ## Success Criteria
@@ -250,7 +252,7 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 ## Blocked By
 
-- Manual playtest not yet run
+- Human playtest incomplete (A0 done? A1 re-test after balance pass 2)
 
 ## Next Review Board
 
@@ -279,7 +281,7 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implemented slice features (checklist) | 22 ✅ · 2 🟡 · 0 ⬜ | 2026-06-22 |
 | Technical debt items tracked | 4 | 2026-06-22 |
 | Active design decisions | 19 | 2026-06-22 |
-| Last board session | [Session 19 — Vertical Slice RC](../../agents/boards/sessions/2026-06-22-vertical-slice-board-19.md) | 2026-06-22 |
+| Last board session | [Session 20 — Balance pass 2](../../agents/boards/sessions/2026-06-22-vertical-slice-board-20.md) | 2026-06-22 |
 
 ---
 

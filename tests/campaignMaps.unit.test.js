@@ -74,14 +74,14 @@ describe('campaignMaps', () => {
     expect(q.every(e => e.type === 'draugr' && e.hpScale < 0.5)).toBe(true);
   });
 
-  it('first saga A1 matches wolf smoke composition', () => {
+  it('first saga A1 matches wolf smoke composition with tuned wolves', () => {
     const plan = buildNodeWavePlan(0, 1);
     const w1 = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 1);
     const w2 = buildCampaignNodeSpawnQueue(plan.waves[1], 0, 1);
     expect(w1).toHaveLength(6);
-    expect(w1.every(e => e.type === 'warg')).toBe(true);
-    expect(w2).toHaveLength(6);
-    expect(w2.filter(e => e.type === 'warg')).toHaveLength(4);
+    expect(w1.every(e => e.type === 'warg' && e.hpScale >= 0.75 && e.speedScale <= 0.75)).toBe(true);
+    expect(w2).toHaveLength(5);
+    expect(w2.filter(e => e.type === 'warg')).toHaveLength(3);
     expect(w2.filter(e => e.type === 'draugr')).toHaveLength(2);
   });
 

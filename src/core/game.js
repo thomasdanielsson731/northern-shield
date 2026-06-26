@@ -161,6 +161,8 @@ import {
   getFirstSagaWaveBands,
   getFirstSagaSpawnGap,
   getFirstSagaStartingLives,
+  getFirstSagaWaveBreakFrames,
+  getFirstSagaBetweenWaveHealFraction,
 } from '../campaign/firstSaga.js';
 import {
   shouldOfferSettlementCeremony,
@@ -1892,8 +1894,64 @@ function drawFortressGateHpBars() {
     const by = pos.y + CELL_SIZE * 0.32;
     const accent = frac > 0.5 ? UI_COLORS.gold : frac > 0.25 ? '#c89040' : UI_COLORS.threat;
     ctx.save();
+    if (w.damageFlash > 0) {
+      const hf = w.damageFlash / 16;
+      ctx.fillStyle = `rgba(255,80,50,${0.18 + hf * 0.35})`;
+      ctx.fillRect(pos.x - CELL_SIZE / 2, pos.y - CELL_SIZE / 2, CELL_SIZE, CELL_SIZE);
+    }
     drawPanelHpBar(ctx, bx, by, barW, barH, frac, accent);
     ctx.restore();
+  }
+}
+
+function showAssaultDamageFloater(x, y, dmg, kind) {
+  const styles = {
+    hero:      { color: '#ff5858', suffix: '' },
+    gate:      { color: '#ff8040', suffix: ' GATE' },
+    wall:      { color: '#d07040', suffix: '' },
+    structure: { color: '#c89850', suffix: '' },
+  };
+  const s = styles[kind] ?? styles.wall;
+  dmgFloaters.push({
+    x, y: y - 10,
+    val: `-${dmg}`,
+    life: 72, maxLife: 72,
+    color: s.color,
+    large: kind === 'hero' || kind === 'gate',
+    suffix: s.suffix,
+    vy: -0.4,
+    raw: true,
+  });
+}
+
+function refreshSagaHeroesBetweenWaves() {
+  if (!_campaignNodeMode || !isFirstSagaMap(_campaignMapIndex)) return;
+  const frac = getFirstSagaBetweenWaveHealFraction(_campaignNodeIndex);
+  if (frac <= 0) return;
+  for (const t of towers) {
+    if (!isHeroTowerType(t.type)) continue;
+    if (t.combatHp == null) initHeroCombatHp(t);
+    const missing = t.combatMaxHp - t.combatHp;
+    if (missing <= 0) continue;
+    const heal = Math.max(1, Math.round(t.combatMaxHp * frac));
+    const applied = Math.min(missing, heal);
+    t.combatHp += applied;
+    dmgFloaters.push({
+      x: t.x, y: t.y - 18,
+      val: `+${applied}`, life: 90, maxLife: 90,
+      color: '#70e8a8', large: false, suffix: ' HP', vy: -0.3, raw: true,
+    });
+  }
+  try { sfxHeal(); } catch {}
+}
+
+function tickAssaultDamageFlashes() {
+  if (gamePhase !== 'playing') return;
+  for (const t of towers) {
+    if ((t.combatHitFlash ?? 0) > 0) t.combatHitFlash--;
+  }
+  for (const w of Object.values(wallData)) {
+    if ((w.damageFlash ?? 0) > 0) w.damageFlash--;
   }
 }
 
@@ -1945,6 +2003,14 @@ function drawHeroCombatHpBar(tower) {
   const by = tower.y + CELL_SIZE * 0.36;
   const accent = frac > 0.5 ? UI_COLORS.fortress : frac > 0.25 ? UI_COLORS.gold : UI_COLORS.threat;
   ctx.save();
+  if ((tower.combatHitFlash ?? 0) > 0) {
+    const hf = tower.combatHitFlash / 12;
+    ctx.strokeStyle = `rgba(255,90,70,${0.35 + hf * 0.55})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(tower.x, tower.y, CELL_SIZE * 0.42, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   drawPanelHpBar(ctx, bx, by, barW, barH, frac, accent);
   if (frac < 0.25 && frac > 0) {
     const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
@@ -2832,9 +2898,12 @@ function processEnemyMeleeAttacks() {
       const t = target.tower;
       if (t.combatHp == null) initHeroCombatHp(t);
       t.combatHp -= dmg;
+      t.combatHitFlash = 12;
       enemy.meleeTimer = 28;
       enemy.hitFlash = 6;
       enemy.hitFlashMax = 6;
+      showAssaultDamageFloater(t.x, t.y, dmg, 'hero');
+      screenShake = Math.max(screenShake, 4);
       if (t.combatHp <= 0) killHeroInCombat(t);
       continue;
     }
@@ -2847,6 +2916,8 @@ function processEnemyMeleeAttacks() {
       }
       t.structureHp -= dmg;
       enemy.meleeTimer = 32;
+      showAssaultDamageFloater(t.x, t.y, dmg, 'structure');
+      screenShake = Math.max(screenShake, 3);
       if (t.structureHp <= 0) removeTower(t);
       continue;
     }
@@ -2855,7 +2926,14 @@ function processEnemyMeleeAttacks() {
       const { c, r, w } = target.wall;
       const wasGate = w.isGate;
       w.hp = Math.max(0, (w.hp ?? WALL_BASE_HP) - dmg);
+      w.damageFlash = 16;
       enemy.meleeTimer = 32;
+      const pos = grid.cellCenter(c, r);
+      showAssaultDamageFloater(pos.x, pos.y, dmg, wasGate ? 'gate' : 'wall');
+      screenShake = Math.max(screenShake, wasGate ? 5 : 3);
+      if (wasGate && w.hp > 0 && w.hp < (w.maxHp ?? GATE_HP) * 0.5) {
+        _gateBreachBannerTimer = Math.max(_gateBreachBannerTimer, 40);
+      }
       if (w.hp <= 0) {
         if (wasGate) {
           _fortressGateBreached = true;
@@ -3303,6 +3381,17 @@ function startNextWave() {
     waveHpScale    = sagaBands.hp;
     waveSpeedScale = sagaBands.speed;
   }
+  if (_campaignNodeMode && _nodeWavePlan && _nodeWavePlan.waves.length > 1) {
+    const waveSpec = _nodeWavePlan.waves[_nodeWaveIndex];
+    const assault = getAssaultInfo(_campaignMapIndex, _campaignNodeIndex);
+    if (waveSpec?.isBoss) {
+      chapterBannerText  = '☠ BOSS WAVE';
+      chapterBannerTimer = 220;
+    } else if (assault) {
+      chapterBannerText  = `${assault.codename.toUpperCase()} · WAVE ${waveSpec.waveInNode}/${_nodeWavePlan.waves.length}`;
+      chapterBannerTimer = waveSpec.waveInNode > 1 ? 200 : 140;
+    }
+  }
   waveRangeMult  = 1;
   currentWaveEvent = _campaignNodeMode ? null : (WAVE_EVENTS[waveNumber] ?? null);
   if (endlessMode && waveNumber > 101) {
@@ -3494,7 +3583,7 @@ function updateWave() {
     waveActiveFrames++;
     spawnTimer++;
     const baseSpawnGap  = (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && isFirstSagaAssaultNode(_campaignNodeIndex))
-      ? getFirstSagaSpawnGap(_campaignNodeIndex)
+      ? getFirstSagaSpawnGap(_campaignNodeIndex, _nodeWavePlan?.waves?.[_nodeWaveIndex]?.waveInNode ?? 1)
       : (waveNumber <= 10 ? 16 : SPAWN_FRAMES);
     const spawnInterval = waveActiveFrames > 5400 * gameSpeed ? Math.ceil(baseSpawnGap * 0.5) : baseSpawnGap;
     if (spawnTimer >= spawnInterval) {
@@ -3509,7 +3598,11 @@ function updateWave() {
         if (e) e.isHerald = true;
       } else if (next && typeof next === 'object' && next.type) {
         const scale = (next.hpScale ?? 1) * waveHpScale;
-        spawnEnemy(next.type, scale);
+        const enemy = spawnEnemy(next.type, scale);
+        if (enemy && next.speedScale != null && next.speedScale !== 1) {
+          enemy.baseSpeed *= next.speedScale;
+          enemy.speed *= next.speedScale;
+        }
       } else {
         spawnEnemy(next, waveHpScale);
       }
@@ -3632,6 +3725,7 @@ function updateWave() {
     if (_campaignNodeMode && _nodeWavePlan) {
       const wavesInNode = _nodeWavePlan.waves.length;
       if (_nodeWaveIndex < wavesInNode - 1) {
+        refreshSagaHeroesBetweenWaves();
         _nodeWaveIndex++;
       } else {
         finishCampaignNodeVictory();
@@ -6418,7 +6512,10 @@ function update() {
   // Campaign node: waves 2+ auto-start after a short breather
   const _campaignAutoNext = isCampaignCombat() && _nodeWavePlan && _nodeWaveIndex > 0
     && (waveState === 'break');
-  if (_campaignAutoNext && waveTimer > 60) {
+  const _sagaWaveBreak = (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && isFirstSagaAssaultNode(_campaignNodeIndex))
+    ? getFirstSagaWaveBreakFrames(_campaignNodeIndex)
+    : 60;
+  if (_campaignAutoNext && waveTimer > _sagaWaveBreak) {
     startNextWave();
   } else if (autoNextWave && waveTimer > 60 && (waveState === 'break' || waveState === 'countdown')) {
     startNextWave();
@@ -16685,6 +16782,7 @@ function gameLoop() {
   _frameTick++;
   if (_structuresTabPulse > 0) _structuresTabPulse--;
   if (_settlementStoneFlash > 0) _settlementStoneFlash = Math.max(0, _settlementStoneFlash - 18);
+  tickAssaultDamageFlashes();
   // 1x=30 ticks/s (alt frames), 2x=60 ticks/s (every frame), 4x=120 ticks/s (2 per frame)
   const _ticks = gameSpeed >= 4 ? 2 : (gameSpeed >= 2 || _frameTick % 2 === 1) ? 1 : 0;
   for (let _i = 0; _i < _ticks; _i++) update();
