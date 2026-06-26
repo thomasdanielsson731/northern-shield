@@ -121,6 +121,7 @@ import {
   applySquadPreset, getCombatRole, COMBAT_ROLES,
 } from '../roster/warbandComposition.js';
 import { getTraitModifiers } from '../roster/traitGameplay.js';
+import { formatLegacyBonusLine } from '../roster/legacyBonus.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -12403,11 +12404,12 @@ function drawDefenderBioOverlay(bioState) {
 
   // Legacy bonus
   if (def.legacyBonus) {
-    const _lb = def.legacyBonus;
-    const _lbStat = _lb.stat === 'dm' ? '+8% DMG' : _lb.stat === 'rm' ? '+8% RNG' : '−7% CD';
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.70)';
-    ctx.fillText(`✦ ${_lb.fromName}'s Legacy: ${_lbStat}`, PAD + 4, bioY);
-    bioY += 13;
+    const legacyLine = formatLegacyBonusLine(def.legacyBonus);
+    if (legacyLine) {
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,200,160,0.70)';
+      ctx.fillText(legacyLine, PAD + 4, bioY);
+      bioY += 13;
+    }
   }
 
   // Titles
@@ -13486,6 +13488,7 @@ function drawBetweenBattles() {
       goldReserve,
       chronicleProse: _campaignState?.chronicle?.battles?.at(-1)?.prose ?? null,
       statusLines: _statusLines,
+      tabPulseTarget: isSimplifiedWarCamp(_campaignMapIndex) ? _warCampTabPulse : null,
     }, _betweenBtns);
 
     const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
