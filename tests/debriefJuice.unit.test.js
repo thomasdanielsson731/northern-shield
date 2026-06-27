@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMvpPulseScale, getDebriefRouteOpacity, getDebriefOutcomeColor } from '../src/ui/debriefJuice.js';
+import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor } from '../src/ui/debriefJuice.js';
 
 describe('debriefJuice', () => {
   it('pulses MVP label', () => {
@@ -11,6 +11,11 @@ describe('debriefJuice', () => {
     expect(getDebriefRouteOpacity(false, 0)).toBe(1);
     expect(getDebriefRouteOpacity(true, 1)).toBe(1);
     expect(getDebriefRouteOpacity(true, 0)).toBeLessThan(1);
+  });
+
+  it('MVP pulse settles after hold frames', () => {
+    expect(getMvpPulseAlpha(100)).toBe(1);
+    expect(getDebriefContinuePulse(0)).toBeCloseTo(0.65, 1);
   });
 
   it('outcome colors', () => {

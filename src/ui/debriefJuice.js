@@ -9,6 +9,15 @@ export function getDebriefRouteOpacity(isDefeat, routeIndex) {
   return routeIndex === 1 ? 1 : 0.82;
 }
 
+export function getMvpPulseAlpha(frame, holdFrames = 90) {
+  if (frame >= holdFrames) return 1;
+  return getMvpPulseScale(frame);
+}
+
+export function getDebriefContinuePulse(nowMs = 0) {
+  return 0.65 + Math.sin(nowMs * 0.004) * 0.35;
+}
+
 export function getDebriefOutcomeColor(isVictory) {
   return isVictory ? '#40e880' : '#e84040';
 }

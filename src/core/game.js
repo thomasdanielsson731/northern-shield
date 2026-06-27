@@ -121,7 +121,12 @@ import {
   applySquadPreset, getCombatRole, COMBAT_ROLES,
 } from '../roster/warbandComposition.js';
 import { getTraitModifiers } from '../roster/traitGameplay.js';
-import { formatLegacyBonusLine } from '../roster/legacyBonus.js';
+import { formatLegacyBonusLine, formatLegacyBadge } from '../roster/legacyBonus.js';
+import {
+  getMvpPulseAlpha,
+  getDebriefRouteOpacity,
+  getDebriefContinuePulse,
+} from '../ui/debriefJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -12716,31 +12721,48 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
   let btnX = hx - totalW / 2;
 
   if (_canContinue) {
-    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.7, 6);
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#90c070';
-    ctx.fillText('WAR CAMP', btnX + btnW / 2, btnY + 18);
-    _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'warCamp' });
+    const drawRoute = (routeIdx, fn) => {
+      ctx.save();
+      ctx.globalAlpha = getDebriefRouteOpacity(!isVictory, routeIdx);
+      fn();
+      ctx.restore();
+    };
+
+    drawRoute(0, () => {
+      drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.7, 6);
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#90c070';
+      ctx.fillText('WAR CAMP', btnX + btnW / 2, btnY + 18);
+      _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'warCamp' });
+    });
     btnX += btnW + gap;
 
     if (showPrep) {
-      drawFantasyPanel(btnX, btnY, btnW, btnH,
-        isVictory ? 'rgba(28,40,16,0.97)' : 'rgba(40,16,16,0.97)', 0.75, 6);
-      ctx.fillStyle = isVictory ? '#a8e070' : '#e08060';
-      ctx.fillText('PREPARE FORTRESS', btnX + btnW / 2, btnY + 18);
-      _debriefBtns.push({
-        x: btnX, y: btnY, w: btnW, h: btnH,
-        action: isVictory ? 'nextAssault' : 'retryAssault',
-        nodeIndex: prepNode,
+      drawRoute(1, () => {
+        drawFantasyPanel(btnX, btnY, btnW, btnH,
+          isVictory ? 'rgba(28,40,16,0.97)' : 'rgba(40,16,16,0.97)', 0.75, 6);
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isVictory ? '#a8e070' : '#e08060';
+        ctx.fillText(isVictory ? 'PREPARE FORTRESS' : 'RETRY ASSAULT', btnX + btnW / 2, btnY + 18);
+        _debriefBtns.push({
+          x: btnX, y: btnY, w: btnW, h: btnH,
+          action: isVictory ? 'nextAssault' : 'retryAssault',
+          nodeIndex: prepNode,
+        });
       });
       btnX += btnW + gap;
     }
 
-    drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(12,8,4,0.97)', 0.7, 6);
-    ctx.fillStyle = '#c0a060';
-    ctx.fillText('COMMAND MAP', btnX + btnW / 2, btnY + 18);
-    _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'commandMap' });
+    drawRoute(showPrep ? 2 : 1, () => {
+      drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(12,8,4,0.97)', 0.7, 6);
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#c0a060';
+      ctx.fillText('COMMAND MAP', btnX + btnW / 2, btnY + 18);
+      _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'commandMap' });
+    });
   } else {
     ctx.font = '8px monospace';
     ctx.fillStyle = 'rgba(140,120,80,0.45)';
@@ -12972,7 +12994,7 @@ function drawDebrief() {
     const mvpRgb = defenderGlowRgb(_mvpT);
     const mvpDmg = Math.round(_mvpT.damageDealt ?? 0);
     const mvpKills = _mvpT.killCount ?? 0;
-    const mvpPulse = _debriefTimer < 90 ? 0.85 + Math.sin(_debriefTimer * 0.14) * 0.15 : 1;
+    const mvpPulse = getMvpPulseAlpha(_debriefTimer);
     ctx.font      = 'bold 11px monospace';
     ctx.fillStyle = `rgba(${mvpRgb},${(0.90 * mvpPulse).toFixed(2)})`;
     ctx.textAlign = 'left';
@@ -13057,7 +13079,7 @@ function drawDebrief() {
     ctx.fillText(campLabel, btnX + btnW / 2, btnY + 18);
     _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'warCamp' });
   } else {
-    const _cPulse = _canContinue ? 0.65 + Math.sin(performance.now() * 0.004) * 0.35 : 0;
+    const _cPulse = _canContinue ? getDebriefContinuePulse(performance.now()) : 0;
     ctx.font      = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = `rgba(200,170,80,${_cPulse})`;
@@ -14281,11 +14303,12 @@ function drawBetweenBattles() {
 
     const _legArr2 = (_campaignState?.legacyBonuses ?? {})[def.type];
     const _legBonus2 = def.legacyBonus ?? (Array.isArray(_legArr2) ? _legArr2[0] : _legArr2);
-    if (_legBonus2) {
-      const _statLabel = _legBonus2.stat === 'dm' ? '+8% DMG' : _legBonus2.stat === 'rm' ? '+8% RNG' : '−7% CD';
-      const _legAlpha  = def.battlesPlayed === 0 ? 0.65 : 0.45;
-      ctx.font = '7px monospace'; ctx.fillStyle = `rgba(160,200,160,${_legAlpha})`;
-      ctx.fillText(`✦ ${_legBonus2.fromName}'s Legacy (${_statLabel})`, rix + 80, ry + 14);
+    const legacyLine = formatLegacyBonusLine(_legBonus2);
+    if (legacyLine) {
+      const _legAlpha = def.battlesPlayed === 0 ? 0.65 : 0.45;
+      ctx.font = '7px monospace';
+      ctx.fillStyle = `rgba(160,200,160,${_legAlpha})`;
+      ctx.fillText(legacyLine.length > 28 ? `${formatLegacyBadge(_legBonus2)} Legacy` : legacyLine, rix + 80, ry + 14);
     }
   });
 
