@@ -228,3 +228,29 @@ export function buildWarCampStatusLines(prepMeta, { fortressUpgrade = null } = {
   }
   return lines;
 }
+
+/** Single bond line for commander briefing. */
+export function formatWarCampBondLine(bond, nameById = {}) {
+  if (!bond?.defenderIds?.length) return null;
+  const names = bond.defenderIds.map((id) => nameById[id] ?? '?');
+  if (names.length < 2) return null;
+  const title = bond.name ? `∞ ${bond.name}` : '∞ Bond';
+  return `${title}: ${names[0]} & ${names[1]}`;
+}
+
+/** Bond status lines for War Camp briefing (max 2 shown). */
+export function buildWarCampBondLines(bonds = [], nameById = {}, maxLines = 2) {
+  const lines = [];
+  for (const bond of bonds.slice(0, maxLines)) {
+    const text = formatWarCampBondLine(bond, nameById);
+    if (text) lines.push({ text, color: 'rgba(200,160,220,0.75)' });
+  }
+  const extra = bonds.length - maxLines;
+  if (extra > 0) {
+    lines.push({
+      text: `+${extra} more bond${extra !== 1 ? 's' : ''}`,
+      color: 'rgba(160,130,180,0.55)',
+    });
+  }
+  return lines;
+}

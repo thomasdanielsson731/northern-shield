@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, shouldPulseWarCampTab, getWarCampTabHint } from '../src/ui/warCampPanel.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines, shouldPulseWarCampTab, getWarCampTabHint, formatWarCampBondLine } from '../src/ui/warCampPanel.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('warCampPanel', () => {
@@ -74,5 +74,17 @@ describe('warCampPanel', () => {
     expect(shouldPulseWarCampTab('recruit', 'recruit')).toBe(true);
     expect(shouldPulseWarCampTab('fortress', 'recruit')).toBe(false);
     expect(getWarCampTabHint('recruit')).toMatch(/RECRUIT/);
+  });
+
+  it('buildWarCampBondLines formats active bonds', () => {
+    const bonds = [
+      { name: 'Shield-Brothers', defenderIds: ['a', 'b'] },
+      { defenderIds: ['c', 'd'] },
+    ];
+    const names = { a: 'Erik', b: 'Saga', c: 'Ulfr', d: 'Gunnar' };
+    const lines = buildWarCampBondLines(bonds, names);
+    expect(lines[0].text).toMatch(/Shield-Brothers/);
+    expect(formatWarCampBondLine(bonds[1], names)).toMatch(/Ulfr & Gunnar/);
+    expect(buildWarCampBondLines([], names)).toEqual([]);
   });
 });

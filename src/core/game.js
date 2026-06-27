@@ -17,7 +17,7 @@ import {
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
 import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines } from '../ui/warCampPanel.js';
+import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines } from '../ui/warCampPanel.js';
 import {
   computeBetweenBattlesFadeAlpha,
   tickBtParticle,
@@ -138,6 +138,11 @@ import {
   getEquipLabelAlpha,
   tickEquipCeremonyTimer,
 } from '../ui/equipJuice.js';
+import {
+  getSkirmishDiscoveryPulseAlpha,
+  tickSkirmishDiscoveryTimer,
+  SKIRMISH_DISCOVERY_FRAMES,
+} from '../ui/skirmishJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -1829,7 +1834,7 @@ function activateSlot(slotIndex) {
     ensureFirstSagaState(_campaignState);
     _campaignState.defenders = _roster.toJSON();
     gamePhase = 'campaignSelect';
-    if (!_hintSeen.skirmishDiscovery) _skirmishDiscoveryTimer = 420;
+    if (!_hintSeen.skirmishDiscovery) _skirmishDiscoveryTimer = SKIRMISH_DISCOVERY_FRAMES;
     persistCampaign();
     return;
   }
@@ -1853,7 +1858,7 @@ function activateSlot(slotIndex) {
   );
   restoreGameSession(loadSession(slotIndex));
   if (!_hintSeen.skirmishDiscovery && battlesCompleted === 0) {
-    _skirmishDiscoveryTimer = 420;
+    _skirmishDiscoveryTimer = SKIRMISH_DISCOVERY_FRAMES;
   }
   persistCampaign();
 }
@@ -13504,7 +13509,13 @@ function drawBetweenBattles() {
     const _fu = goldReserve > 0
       ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
       : null;
-    const _statusLines = buildWarCampStatusLines(_wcMeta, { fortressUpgrade: _fu });
+    const _statusLines = [
+      ...buildWarCampBondLines(
+        _campaignState?.bonds ?? [],
+        Object.fromEntries(_roster.defenders.map((d) => [d.defenderId, d.name?.trim() || '—'])),
+      ),
+      ...buildWarCampStatusLines(_wcMeta, { fortressUpgrade: _fu }),
+    ];
 
     drawCampaignWarCampBriefing(ctx, { x: lpX, y: lpY, w: lpW, h: lpH }, {
       defenderNames: _roster.defenders.map(d => (d.name?.trim() ? d.name : '— unnamed —')),
@@ -14837,11 +14848,10 @@ function drawCampaignSelect() {
   _campaignSelectBtns.push({ x: skX, y: skY, w: 144, h: 26, action: 'skirmish' });
 
   if (_skirmishDiscoveryTimer > 0) {
-    _skirmishDiscoveryTimer--;
-    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
+    _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
     drawGuidedPulse(skX - 2, skY - 2, 148, 30, 6);
     ctx.font = '7px monospace';
-    ctx.fillStyle = `rgba(240,210,120,${0.50 + pulse * 0.40})`;
+    ctx.fillStyle = `rgba(240,210,120,${getSkirmishDiscoveryPulseAlpha(performance.now())})`;
     ctx.fillText('↑ Optional: classic 100-wave maze TD', W / 2, skY - 10);
   }
 
@@ -14990,11 +15000,10 @@ function drawNodeMap() {
   ctx.fillText('SKIRMISH', skX + 50, backY + 14);
   _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
   if (_skirmishDiscoveryTimer > 0 && !_hintSeen.skirmishDiscovery) {
-    _skirmishDiscoveryTimer--;
-    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
+    _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
     drawGuidedPulse(skX - 2, backY - 2, 104, 26, 6);
     ctx.font = '7px monospace';
-    ctx.fillStyle = `rgba(240,210,120,${0.50 + pulse * 0.40})`;
+    ctx.fillStyle = `rgba(240,210,120,${getSkirmishDiscoveryPulseAlpha(performance.now())})`;
     ctx.fillText('Optional: classic 100-wave maze TD', W / 2, backY - 10);
   }
 
