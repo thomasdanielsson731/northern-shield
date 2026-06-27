@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor } from '../src/ui/debriefJuice.js';
+import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors } from '../src/ui/debriefJuice.js';
 
 describe('debriefJuice', () => {
   it('pulses MVP label', () => {
@@ -21,5 +21,13 @@ describe('debriefJuice', () => {
   it('outcome colors', () => {
     expect(getDebriefOutcomeColor(true)).toBe('#40e880');
     expect(getDebriefOutcomeColor(false)).toBe('#e84040');
+  });
+
+  it('header colors for debrief panels', () => {
+    const win = getDebriefHeaderColors(true);
+    const loss = getDebriefHeaderColors(false);
+    expect(win.fill).toBe('#f0c840');
+    expect(loss.fill).toBe('#e04040');
+    expect(win.shadowBlur).toBeGreaterThan(loss.shadowBlur);
   });
 });

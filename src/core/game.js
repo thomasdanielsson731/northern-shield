@@ -121,12 +121,14 @@ import {
   applySquadPreset, getCombatRole, COMBAT_ROLES,
 } from '../roster/warbandComposition.js';
 import { getTraitModifiers } from '../roster/traitGameplay.js';
-import { formatLegacyBonusLine, formatLegacyBadge } from '../roster/legacyBonus.js';
+import { formatLegacyBonusLine, formatLegacyBadge, formatPendingLegacyPreview } from '../roster/legacyBonus.js';
 import {
   getMvpPulseAlpha,
   getDebriefRouteOpacity,
   getDebriefContinuePulse,
+  getDebriefHeaderColors,
 } from '../ui/debriefJuice.js';
+import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -12627,7 +12629,7 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
   });
 
   let hy = slideY + 22;
-  const rColor = isVictory ? '#f0c840' : '#e04040';
+  const rHeader = getDebriefHeaderColors(isVictory);
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(160,130,80,0.55)';
@@ -12635,8 +12637,8 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
   hy += 16;
 
   ctx.font = 'bold 18px monospace';
-  ctx.fillStyle = rColor;
-  ctx.shadowColor = isVictory ? 'rgba(240,180,20,0.5)' : 'rgba(220,40,40,0.5)';
+  ctx.fillStyle = rHeader.fill;
+  ctx.shadowColor = rHeader.glow;
   ctx.shadowBlur = 10;
   ctx.fillText(isVictory ? '— VICTORY —' : '— DEFEATED —', hx, hy);
   ctx.shadowBlur = 0;
@@ -12805,12 +12807,11 @@ function drawDebrief() {
   // ── Result header ────────────────────────────────────────────────────────────
   const hx = panX + panW / 2;
   let hy = slideY + 28;
-  const rColor = isVictory ? '#f0c840' : '#e04040';
-  const rGlow  = isVictory ? 'rgba(240,180,20,0.6)' : 'rgba(220,40,40,0.6)';
+  const rColor = getDebriefHeaderColors(isVictory);
   ctx.font        = 'bold 20px monospace';
-  ctx.fillStyle   = rColor;
-  ctx.shadowColor = rGlow;
-  ctx.shadowBlur  = isVictory ? 14 : 10;
+  ctx.fillStyle   = rColor.fill;
+  ctx.shadowColor = rColor.glow;
+  ctx.shadowBlur  = rColor.shadowBlur;
   ctx.textAlign   = 'center';
   ctx.fillText(isVictory ? '— VICTORY —' : '— DEFEATED —', hx, hy);
   ctx.shadowBlur  = 0;
@@ -14395,16 +14396,18 @@ function drawBetweenBattles() {
       rix + riW / 2, rBtnY + 16);
     ctx.shadowBlur = 0;
     const _legPending = (_campaignState?.legacyBonuses ?? {})[_recruitType];
-    const _legCount = Array.isArray(_legPending) ? _legPending.length : (_legPending ? 1 : 0);
-    if (_recruitType && _legCount > 0) {
+    const _legPreview = formatPendingLegacyPreview(_legPending);
+    let _recruitHintY = rBtnY + rBtnH - 3;
+    if (_recruitType && _legPreview) {
       ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(200,170,100,0.60)';
-      ctx.fillText(`✦ ${_legCount} legacy bonus${_legCount !== 1 ? 'es' : ''} waiting`, rix + riW / 2, rBtnY + rBtnH - 3);
+      ctx.fillText(_legPreview, rix + riW / 2, _recruitHintY);
+      if (_recruitType && _effectiveRecruitCost < RECRUIT_COST) _recruitHintY -= 9;
     }
     // Barracks cost reduction hint
     if (_recruitType && _effectiveRecruitCost < RECRUIT_COST) {
       const _discount = RECRUIT_COST - _effectiveRecruitCost;
       ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(96,180,236,0.65)';
-      ctx.fillText(`Barracks −${_discount}g`, rix + riW / 2, rBtnY + rBtnH - 3);
+      ctx.fillText(`Barracks −${_discount}g`, rix + riW / 2, _recruitHintY);
     }
     ctx.textAlign = 'left';
     if (canAfford) _betweenBtns.push({ x: rix, y: rBtnY, w: riW, h: rBtnH, action: 'recruit' });
@@ -14973,14 +14976,20 @@ function drawNodeMap() {
   _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 22, action: 'back' });
 
   const skX = W - 224;
-  if (!isFirstSagaMap(_campaignMapIndex)) {
-    drawFantasyPanel(skX, backY, 100, 22, 'rgba(30,22,8,0.72)', 0.55, 6);
-    ctx.fillStyle = '#a08050';
-    ctx.fillText('SKIRMISH', skX + 50, backY + 14);
-    _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
+  drawFantasyPanel(skX, backY, 100, 22, 'rgba(30,22,8,0.72)', 0.55, 6);
+  ctx.fillStyle = '#a08050';
+  ctx.fillText('SKIRMISH', skX + 50, backY + 14);
+  _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
+  if (_skirmishDiscoveryTimer > 0 && !_hintSeen.skirmishDiscovery) {
+    _skirmishDiscoveryTimer--;
+    const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
+    drawGuidedPulse(skX - 2, backY - 2, 104, 26, 6);
+    ctx.font = '7px monospace';
+    ctx.fillStyle = `rgba(240,210,120,${0.50 + pulse * 0.40})`;
+    ctx.fillText('Optional: classic 100-wave maze TD', W / 2, backY - 10);
   }
 
-  const campX = isFirstSagaMap(_campaignMapIndex) ? W - 114 : W - 114;
+  const campX = W - 114;
   drawFantasyPanel(campX, backY, 100, 22, 'rgba(20,30,14,0.72)', 0.55, 6);
   ctx.fillStyle = '#90c070';
   ctx.fillText('WAR CAMP', campX + 50, backY + 14);
@@ -16972,7 +16981,7 @@ function gameLoop() {
   }
   _frameTick++;
   if (_structuresTabPulse > 0) _structuresTabPulse--;
-  if (_settlementStoneFlash > 0) _settlementStoneFlash = Math.max(0, _settlementStoneFlash - 18);
+  if (_settlementStoneFlash > 0) _settlementStoneFlash = tickStoneFlash(_settlementStoneFlash);
   tickAssaultDamageFlashes();
   // 1x=30 ticks/s (alt frames), 2x=60 ticks/s (every frame), 4x=120 ticks/s (2 per frame)
   const _ticks = gameSpeed >= 4 ? 2 : (gameSpeed >= 2 || _frameTick % 2 === 1) ? 1 : 0;

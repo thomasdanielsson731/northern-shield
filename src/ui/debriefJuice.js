@@ -21,3 +21,10 @@ export function getDebriefContinuePulse(nowMs = 0) {
 export function getDebriefOutcomeColor(isVictory) {
   return isVictory ? '#40e880' : '#e84040';
 }
+
+/** Header fill + glow used on debrief panels. */
+export function getDebriefHeaderColors(isVictory) {
+  return isVictory
+    ? { fill: '#f0c840', glow: 'rgba(240,180,20,0.6)', shadowBlur: 14 }
+    : { fill: '#e04040', glow: 'rgba(220,40,40,0.6)', shadowBlur: 10 };
+}
