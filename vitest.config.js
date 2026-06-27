@@ -21,6 +21,7 @@ export default defineConfig({
         'src/ui/betweenBattlesJuice.js',
         'src/ui/debriefJuice.js',
         'src/ui/settlementJuice.js',
+        'src/ui/equipJuice.js',
       ],
       exclude: [
         'src/campaign/sagaPlaytestHarness.js',

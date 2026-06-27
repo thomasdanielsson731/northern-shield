@@ -129,6 +129,15 @@ import {
   getDebriefHeaderColors,
 } from '../ui/debriefJuice.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
+import {
+  EQUIP_CEREMONY_FRAMES,
+  getEquipCeremonyProgress,
+  getEquipFlashAlpha,
+  getEquipRingAlpha,
+  getEquipRingRadius,
+  getEquipLabelAlpha,
+  tickEquipCeremonyTimer,
+} from '../ui/equipJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -9774,18 +9783,18 @@ function drawEquipCeremony() {
   tickEquipCeremony();
   if (!_equipFlash || _equipFlash.timer <= 0) return;
   const def = _roster?.defenders?.find(d => d.defenderId === _equipFlash.defenderId);
-  const prog = 1 - _equipFlash.timer / 72;
-  if (_equipFlash.timer > 48) {
-    const alpha = Math.min(0.24, (_equipFlash.timer - 48) / 16 * 0.24);
+  const prog = getEquipCeremonyProgress(_equipFlash.timer, EQUIP_CEREMONY_FRAMES);
+  const flashAlpha = getEquipFlashAlpha(_equipFlash.timer);
+  if (flashAlpha > 0) {
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = flashAlpha;
     ctx.fillStyle = _equipFlash.color;
     ctx.fillRect(GRID_LEFT, 12, BASE_W - GRID_LEFT - 4, BASE_H - 24);
     ctx.restore();
   }
   if (def) {
-    const ringR = 28 + prog * 42;
-    const ringA = Math.max(0, 1 - prog * 1.2) * 0.55;
+    const ringR = getEquipRingRadius(prog);
+    const ringA = getEquipRingAlpha(prog);
     if (ringA > 0.02) {
       ctx.save();
       ctx.globalAlpha = ringA;
@@ -9807,8 +9816,8 @@ function drawEquipCeremony() {
     ctx.fill();
     ctx.restore();
   }
-  if (def && _equipFlash.timer > 24) {
-    const alpha = Math.min(1, (_equipFlash.timer - 24) / 18);
+  if (def && getEquipLabelAlpha(_equipFlash.timer) > 0) {
+    const alpha = getEquipLabelAlpha(_equipFlash.timer);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
@@ -14586,7 +14595,7 @@ function spawnEquipSparkles(color) {
 }
 
 function tickEquipCeremony() {
-  if (_equipFlash?.timer > 0) _equipFlash.timer--;
+  if (_equipFlash?.timer > 0) _equipFlash.timer = tickEquipCeremonyTimer(_equipFlash.timer);
   if (!_equipSparkles.length) return;
   for (const p of _equipSparkles) {
     p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.life--;

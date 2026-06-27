@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawHeroNamingCeremony } from '../src/campaign/firstSagaUI.js';
+import { drawHeroNamingCeremony, drawSettlementCeremony } from '../src/campaign/firstSagaUI.js';
 
 function mockCtx() {
   const g = () => ({ addColorStop: () => {} });
@@ -27,5 +27,19 @@ describe('firstSagaUI', () => {
     })).not.toThrow();
     expect(btns.length).toBe(1);
     expect(btns[0].action).toBe('confirm');
+  });
+
+  it('drawSettlementCeremony does not throw with stone flash', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    expect(() => drawSettlementCeremony(ctx, 734, 480, {
+      step: 1,
+      recruitType: null,
+      nameDraft: '',
+      btnsOut: btns,
+      settlementComplete: false,
+      stoneFlash: 400,
+    })).not.toThrow();
+    expect(btns.some(b => b.action === 'advance')).toBe(true);
   });
 });
