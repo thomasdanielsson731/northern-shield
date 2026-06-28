@@ -17,6 +17,7 @@ import {
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
 import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
+import { drawStructureArtIcon } from '../assets/structureArt.js';
 import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines } from '../ui/warCampPanel.js';
 import {
   drawWarCampAmbientBackdrop,
@@ -38,6 +39,15 @@ import {
   getVictoryHeaderStyle,
 } from '../ui/betweenBattlesJuice.js';
 import { ONBOARDING, advanceOnboarding, resolveOnboardingHint, getRepairOnboardingHint } from '../campaign/onboarding.js';
+import {
+  REINFORCE_COST,
+  REINFORCE_WAVES,
+  canOfferReinforcePurchase,
+  purchaseReinforce,
+  tickReinforceAfterBattle,
+  canPlaceReinforceWall,
+  countReinforceWalls,
+} from '../campaign/reinforceEconomy.js';
 import { getSpriteScale, setSpriteScale, changeSpriteScale, setPlayfieldSpriteCompensation } from '../config.js';
 import { saveCampaign, loadCampaign, createNewCampaign } from '../campaign/save.js';
 import {
@@ -339,7 +349,7 @@ let panStartOffX      = 0, panStartOffY  = 0;
 let rightClickDragged = false;
 let rightClickSaved   = null;
 
-const REINFORCE_WAVES = 3;   // legacy temp-wall decay (no longer built by player)
+const REINFORCE_WAVES_LEGACY = 3;   // per-wall decay ticks (see reinforceEconomy.js)
 
 // TOWER items: static siege/defensive structures
 const TOWER_BUILD_ITEMS = [
@@ -378,15 +388,27 @@ const _LEFT_DOCK_TABS = [
 /** Wave 1 on fortress maps: gates first, then siege unlocks after a gate is placed. */
 function getVisibleStructureItems() {
   const all = TOWER_BUILD_ITEMS;
+  const reinforceActive = !isCampaignCombat()
+    && !isPathlessMode()
+    && (_campaignState?.reinforceBattlesLeft ?? 0) > 0;
+  const reinforceItem = reinforceActive ? [{
+    id: 'reinforce',
+    label: 'Reinforce Wall',
+    key: 'R',
+    color: '#b89018',
+    cost: 0,
+    mode: CELL.WALL,
+    category: 'siege',
+  }] : [];
   if (!hasFortressRing()) {
-    return all.filter(i => i.category !== 'gates');
+    return [...reinforceItem, ...all.filter(i => i.category !== 'gates')];
   }
   const anySiege = towers.length > 0 || Object.values(wallData).some(w => w.isGate);
   if (gamePhase === 'playing' && waveNumber === 1 && !anySiege && !_hintSeen.firstPlacement
       && !(isCampaignCombat() && isTutorialNode(_campaignMapIndex, _campaignNodeIndex))) {
     return all.filter(i => i.category === 'gates');
   }
-  return all;
+  return [...reinforceItem, ...all];
 }
 
 function drawHorizTabs(px, py, pw, tabs, activeId, outBtns, opts = {}) {
@@ -484,7 +506,7 @@ function _drawStructureDockCard(item, cardX, cardY, cardW, cardH, isBuildSel) {
 
   ctx.font = '6px monospace'; ctx.textAlign = 'right';
   ctx.fillStyle = affordable ? '#a08050' : '#e84040';
-  ctx.fillText(`${cost}g`, cardX + cardW - 5, cardY + cardH / 2 - 2);
+  ctx.fillText(item.mode === CELL.WALL ? 'FREE' : `${cost}g`, cardX + cardW - 5, cardY + cardH / 2 - 2);
 
   ctx.fillStyle = `rgba(${glowRgb},${affordable ? 0.45 : 0.15})`;
   ctx.beginPath(); ctx.roundRect(cardX + 4, cardY + cardH - 3, cardW - 8, 2, [0, 0, 2, 2]); ctx.fill();
@@ -518,6 +540,7 @@ const STRUCTURE_SHORT = {
   runeshrine:  'Rune Shrine',
   piltorn:     'Warden',
   drakship:    'Dragonship',
+  reinforce:   'Reinforce',
 };
 
 // Tactical high-ground choke tiles — defenders placed here get +15% range.
@@ -1570,6 +1593,8 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   _lastResolvedEventTitle  = null;
 
   _recruitType = null;
+
+  _campaignState = tickReinforceAfterBattle(_campaignState);
 
   try { persistCampaign(); } catch {}
   if (_newBattleTalentUnlocks.length > 0) sfxTalentUnlock();
@@ -2713,6 +2738,7 @@ function requestHornLaunch() {
   }
   startHornAnimation(_prepShell);
   _hornLaunchPending = true;
+  _onboardingStep = advanceOnboarding(_onboardingStep, 'soundedHorn');
   sfxAssaultHorn();
   try { persistCampaignFieldLayout(); } catch {}
 }
@@ -2737,6 +2763,9 @@ function processPrepShellClick(action) {
   }
   if (action.id === 'assign_gate' || action.id === 'assign_tower') {
     _postAssignments = assignDefender(_postAssignments, action.postId, action.defenderId);
+    if (action.id === 'assign_gate' && action.postId === 'west_gate') {
+      _onboardingStep = advanceOnboarding(_onboardingStep, 'assignedGate');
+    }
     persistCampaignFieldLayout();
     return;
   }
@@ -5158,12 +5187,60 @@ function isFortressGateSlot(col, row) {
   return getFortressGateSlots().some(g => g.col === col && g.row === row);
 }
 
+function tryPlaceReinforceWall(col, row) {
+  if (!canPlaceReinforceWall({
+    reinforceBattlesLeft: _campaignState?.reinforceBattlesLeft,
+    wallData,
+    isSkirmish: !isCampaignCombat() && !isPathlessMode(),
+  })) return false;
+
+  const fc = grid.getCell(col, row);
+  if (fc === null || fc === CELL.SPAWN || fc === CELL.GOAL || fc !== CELL.EMPTY) {
+    pathBlockFlash = { col, row, timer: 70, type: 'occupied' };
+    return false;
+  }
+  if (hasEnemyInCell(col, row)) return false;
+
+  grid.setCell(col, row, CELL.WALL);
+  const newPath = grid.findPath(SPAWN.col, SPAWN.row, GOAL.col, GOAL.row);
+  let _extraPathsOk = true;
+  const _newExtraPaths = [];
+  if (newPath) {
+    for (const _es of _extraSpawns) {
+      const _ep = grid.findPath(_es.col, _es.row, GOAL.col, GOAL.row);
+      if (!_ep) { _extraPathsOk = false; break; }
+      _newExtraPaths.push(_ep);
+    }
+  }
+  if (!newPath || !_extraPathsOk) {
+    grid.setCell(col, row, CELL.EMPTY);
+    pathBlockFlash = { col, row, timer: 70 };
+    return false;
+  }
+  currentPath = newPath;
+  for (let i = 0; i < _extraSpawns.length; i++) {
+    if (_newExtraPaths[i]) _extraSpawns[i].path = _newExtraPaths[i];
+  }
+  pathDirty = true;
+  rerouteActiveEnemies();
+  wallData[`${col}_${row}`] = {
+    level: 0,
+    hp: WALL_BASE_HP,
+    maxHp: WALL_BASE_HP,
+    temporary: true,
+    wavesLeft: REINFORCE_WAVES,
+  };
+  wallFrostDirty = true;
+  sfxPlace('reinforce');
+  return true;
+}
+
 function tryPlaceAt(col, row, mode, towerType) {
   // Check star gate for locked towers
   const gate = TOWER_STAR_GATES[towerType];
   if (mode === CELL.TOWER && gate && stars < gate) return false;
 
-  if (mode === CELL.WALL) return false;
+  if (mode === CELL.WALL) return tryPlaceReinforceWall(col, row);
 
   if (_campaignNodeMode && !canLayoutCampaignField()) return false;
 
@@ -6312,6 +6389,19 @@ canvas.addEventListener('mousedown', e => {
               }
               try { persistCampaign(); } catch {}
             }
+          } else if (btn.action === 'purchaseReinforce') {
+            const result = purchaseReinforce(_campaignState);
+            if (result.ok) {
+              _campaignState = result.state;
+              goldReserve = _campaignState.goldReserve;
+              try { persistCampaign(); } catch {}
+              _eventOutcomeToast = {
+                text: `Reinforce purchased — ${REINFORCE_COST}g · ${result.state.reinforceBattlesLeft} skirmishes`,
+                timer: 140,
+                color: UI_COLORS.fortress,
+              };
+              sfxFortressUpgrade();
+            }
           } else if (btn.action === 'upgradeFortress') {
             const fDef = FORTRESS_DEFS[btn.key];
             const upgrades = _campaignState.fortressUpgrades ?? {};
@@ -6436,7 +6526,6 @@ canvas.addEventListener('mousedown', e => {
       buildMode = btn.mode;
       if (btn.mode === CELL.TOWER) selectedTowerType = btn.id;
       if (btn.mode === CELL.GATE) selectedGateType = btn.id;
-      if (btn.mode === CELL.WALL) return;
       selectedTower = null;
       dragItem = btn;
       dragX    = mouseX;
@@ -7590,6 +7679,7 @@ function drawStructurePortrait(cx, cy, itemId, size, affordable) {
   const sprKey = DEFENDER_SPRITE_KEYS[itemId];
   const sp     = sprKey ? SPRITES[sprKey] : null;
   drawDefenderPortraitGlow(cx, cy, rgb, size * 0.22, affordable ? 1 : 0.38);
+  if (drawStructureArtIcon(ctx, itemId, cx, cy, size, affordable)) return;
   if (sp?.img?.complete && sp.img.naturalWidth > 0) {
     ctx.save();
     if (!affordable) ctx.globalAlpha = 0.45;
@@ -9910,6 +10000,7 @@ function drawOnboardingBanner() {
   const hint = resolveOnboardingHint(_onboardingStep, {
     frontView: gamePhase === 'nodeMap' && _commandMapView === 'front',
     firstSaga: isFirstSagaMap(_campaignMapIndex ?? 0),
+    gateAssigned: Boolean(_postAssignments?.west_gate?.defenderId),
   });
   if (!hint) return;
   const W = BASE_W;
@@ -10883,7 +10974,9 @@ function drawStructuresDockContent(px, py, pw, ph) {
     if (cardY + lm.cardH < lm.contentTop || cardY > lm.contentTop + lm.contentH) continue;
     const isBuildSel = item.mode === CELL.GATE
       ? (buildMode === CELL.GATE && selectedGateType === item.id)
-      : (buildMode === CELL.TOWER && selectedTowerType === item.id);
+      : item.mode === CELL.WALL
+        ? (buildMode === CELL.WALL)
+        : (buildMode === CELL.TOWER && selectedTowerType === item.id);
     _drawStructureDockCard(item, cardX, cardY, lm.cardW, lm.cardH, isBuildSel);
   }
   ctx.restore();
@@ -14924,7 +15017,42 @@ function drawBetweenBattles() {
       drawWarCampFortressRow(ctx, rix, ry2, riW, def, lvl, maxed, cost, goldReserve >= cost, _betweenBtns, key, goldReserve);
     });
 
-    let _fortSummY = _nodeBaseY + nodeKeys.length * (nodeRowH + 4) + 4;
+    const _reinLeft = _campaignState?.reinforceBattlesLeft ?? 0;
+    if (_reinLeft > 0 || canOfferReinforcePurchase(_campaignState)) {
+      const _reinY = _nodeBaseY + nodeKeys.length * (nodeRowH + 4) + 6;
+      const _reinH = 40;
+      const _canBuy = canOfferReinforcePurchase(_campaignState);
+      ctx.fillStyle = _canBuy ? 'rgba(20,16,8,0.92)' : 'rgba(14,12,18,0.85)';
+      ctx.strokeStyle = _canBuy ? 'rgba(200,160,60,0.55)' : 'rgba(70,60,45,0.22)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.roundRect(rix, _reinY, riW, _reinH, 4); ctx.fill(); ctx.stroke();
+      ctx.font = 'bold 9px monospace'; ctx.fillStyle = _canBuy ? '#e8c840' : 'rgba(160,140,100,0.55)';
+      ctx.fillText('⟳ REINFORCE WALLS', rix + 10, _reinY + 14);
+      ctx.font = '6px monospace';
+      ctx.fillStyle = _reinLeft > 0 ? 'rgba(140,210,130,0.75)' : 'rgba(120,110,90,0.55)';
+      ctx.fillText(
+        _reinLeft > 0
+          ? `Active — ${ _reinLeft} skirmish${_reinLeft !== 1 ? 'es' : ''} left · place temp walls in SKIRMISH`
+          : `${REINFORCE_COST}g reserve · 3 skirmishes · up to 3 temp walls`,
+        rix + 10, _reinY + 28,
+      );
+      if (_canBuy) {
+        const btnW = 82, btnH = 28, btnX = rix + riW - btnW - 5, btnY = _reinY + 6;
+        ctx.fillStyle = 'rgba(10,40,10,0.98)';
+        ctx.strokeStyle = 'rgba(60,220,60,0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 5); ctx.fill(); ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(130,240,90,0.95)';
+        ctx.fillText('BUY', btnX + btnW / 2, btnY + 12);
+        ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#f0e060';
+        ctx.fillText(`${REINFORCE_COST}g`, btnX + btnW / 2, btnY + 23);
+        ctx.textAlign = 'left';
+        _betweenBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'purchaseReinforce' });
+      }
+    }
+
+    let _fortSummY = _nodeBaseY + nodeKeys.length * (nodeRowH + 4) + (_reinLeft > 0 || canOfferReinforcePurchase(_campaignState) ? 54 : 4);
     const fb = getFortressBonuses(upgrades);
     const _fbTyped = [];
     if ((fb.startingGoldBonus   ?? 0) > 0) _fbTyped.push({ text: `+${fb.startingGoldBonus}g start`,                   color: '#e8c040' });

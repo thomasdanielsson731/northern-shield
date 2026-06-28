@@ -30,6 +30,8 @@ export function validateCampaignState(state) {
   if (!Array.isArray(s.equipmentInventory)) s.equipmentInventory = [];
   if (!s.uiHints || typeof s.uiHints !== 'object') s.uiHints = {};
 
+  s.reinforceBattlesLeft = Math.max(0, Math.min(3, Math.floor(Number(s.reinforceBattlesLeft) || 0)));
+
   const fu = { ...DEFAULT_FORTRESS_UPGRADES, ...(s.fortressUpgrades ?? {}) };
   for (const key of Object.keys(DEFAULT_FORTRESS_UPGRADES)) {
     const max = FORTRESS_DEFS[key]?.maxLevel ?? 3;
@@ -59,7 +61,7 @@ export function verifySaveChecksum(raw) {
 /** Lightweight client checksum — tamper deterrence only. */
 export function simpleSaveChecksum(state) {
   const p = state?.campaignProgress;
-  const payload = `${state?.goldReserve ?? 0}|${state?.stars ?? 0}|${p?.mapsUnlocked ?? 1}|${(p?.clearedMaps ?? []).length}`;
+  const payload = `${state?.goldReserve ?? 0}|${state?.stars ?? 0}|${state?.battlesCompleted ?? 0}|${(state?.defenders ?? []).length}|${p?.mapsUnlocked ?? 1}|${(p?.clearedMaps ?? []).length}`;
   let h = 0;
   for (let i = 0; i < payload.length; i++) h = ((h << 5) - h + payload.charCodeAt(i)) | 0;
   return (h >>> 0).toString(16);

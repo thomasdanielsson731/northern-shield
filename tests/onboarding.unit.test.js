@@ -11,6 +11,7 @@ describe('onboarding', () => {
   it('advances command map → pick front → deploy', () => {
     expect(advanceOnboarding(ONBOARDING.COMMAND_MAP, 'openFront')).toBe(ONBOARDING.PICK_FRONT);
     expect(advanceOnboarding(ONBOARDING.COMMAND_MAP, 'startAssault')).toBe(ONBOARDING.DEPLOY);
+    expect(advanceOnboarding(ONBOARDING.COMMAND_MAP, 'attack')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.PICK_FRONT, 'startAssault')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.LAUNCH, 'startAssault')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedHero')).toBe(ONBOARDING.DONE);
@@ -19,6 +20,8 @@ describe('onboarding', () => {
   it('returns first saga hints when requested', () => {
     expect(getOnboardingHint(ONBOARDING.COMMAND_MAP, { firstSaga: true })?.title).toBe('WEST ROAD');
     expect(getOnboardingHint(ONBOARDING.DEPLOY, { firstSaga: true })?.line).toMatch(/WEST GATE/i);
+    expect(getOnboardingHint(ONBOARDING.DEPLOY, { firstSaga: true, gateAssigned: true })?.title)
+      .toBe('SOUND HORN');
   });
 
   it('shows launch hint on front panel after pick', () => {
@@ -33,6 +36,7 @@ describe('onboarding', () => {
 
   it('advances after gate repair during deploy teach', () => {
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'repairedGate')).toBe(ONBOARDING.DONE);
+    expect(advanceOnboarding(ONBOARDING.DEPLOY, 'soundedHorn')).toBe(ONBOARDING.DONE);
   });
 
   it('shows repair hint on A3 when gate scarred', () => {

@@ -8,7 +8,7 @@ export const ONBOARDING = {
   DONE:        5,
 };
 
-export function getOnboardingHint(step, { firstSaga = false } = {}) {
+export function getOnboardingHint(step, { firstSaga = false, gateAssigned = false } = {}) {
   if (firstSaga) {
     switch (step) {
       case ONBOARDING.COMMAND_MAP:
@@ -18,6 +18,9 @@ export function getOnboardingHint(step, { firstSaga = false } = {}) {
       case ONBOARDING.LAUNCH:
         return { title: 'LAUNCH', line: 'Press LAUNCH on the highlighted assault row' };
       case ONBOARDING.DEPLOY:
+        if (gateAssigned) {
+          return { title: 'SOUND HORN', line: 'Tap SOUND HORN — launch First Night' };
+        }
         return { title: 'ASSIGN GATE', line: 'Tap WEST GATE · assign your berserker · sound the horn' };
       default:
         return null;
@@ -40,9 +43,13 @@ export function getOnboardingHint(step, { firstSaga = false } = {}) {
 export function advanceOnboarding(step, action) {
   if (step >= ONBOARDING.DONE) return step;
   if (action === 'startAssault' && step <= ONBOARDING.LAUNCH) return ONBOARDING.DEPLOY;
-  if (step === ONBOARDING.COMMAND_MAP && action === 'openFront') return ONBOARDING.PICK_FRONT;
+  if (step === ONBOARDING.COMMAND_MAP && (action === 'openFront' || action === 'attack')) {
+    return action === 'attack' ? ONBOARDING.DEPLOY : ONBOARDING.PICK_FRONT;
+  }
   if (step === ONBOARDING.PICK_FRONT && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.LAUNCH && action === 'startAssault') return ONBOARDING.DEPLOY;
+  if (step === ONBOARDING.DEPLOY && action === 'assignedGate') return ONBOARDING.DEPLOY;
+  if (step === ONBOARDING.DEPLOY && action === 'soundedHorn') return ONBOARDING.DONE;
   if (step === ONBOARDING.DEPLOY && action === 'placedHero') return ONBOARDING.DONE;
   if (step === ONBOARDING.DEPLOY && action === 'placedGate') return step;
   if (step === ONBOARDING.DEPLOY && action === 'repairedGate') return ONBOARDING.DONE;

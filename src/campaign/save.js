@@ -28,6 +28,7 @@ export function createNewCampaign() {
     coDeployments:      {},
     legacyBonuses:      {},
     uiHints:            {},
+    reinforceBattlesLeft: 0,
     campaignProgress:   createEmptyCampaignProgress(),
   };
 }
