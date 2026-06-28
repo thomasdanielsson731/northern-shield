@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getFlawlessNotifAlpha,
   getFlawlessNotifY,
+  getBossHudBottomY,
   tickFlawlessTimer,
   FLAWLESS_TOTAL,
 } from '../src/ui/flawlessJuice.js';
@@ -13,11 +14,14 @@ describe('flawlessJuice', () => {
     expect(getFlawlessNotifAlpha(90)).toBeGreaterThan(0.8);
   });
 
-  it('drifts downward over time', () => {
-    const start = getFlawlessNotifY(FLAWLESS_TOTAL, 40, false);
-    const end = getFlawlessNotifY(1, 40, false);
+  it('drifts downward and clears boss HUD', () => {
+    const gridTop = 40;
+    const start = getFlawlessNotifY(FLAWLESS_TOTAL, gridTop, null);
+    const end = getFlawlessNotifY(1, gridTop, null);
     expect(end).toBeGreaterThan(start);
-    expect(getFlawlessNotifY(90, 40, true)).toBeGreaterThan(getFlawlessNotifY(90, 40, false));
+    const bossBottom = getBossHudBottomY(gridTop, { hasBoss: true });
+    expect(getFlawlessNotifY(90, gridTop, bossBottom)).toBeGreaterThan(getFlawlessNotifY(90, gridTop, null));
+    expect(getBossHudBottomY(gridTop, { hasBoss: false })).toBeNull();
   });
 
   it('ticks timer', () => {

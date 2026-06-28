@@ -6,6 +6,7 @@ import {
   getEquipRingAlpha,
   getEquipRingRadius,
   getEquipLabelAlpha,
+  getEquipCardPopAlpha,
   tickEquipCeremonyTimer,
 } from '../src/ui/equipJuice.js';
 import { getEquipCeremonyLayout } from '../src/ui/warCampJuice.js';
@@ -30,6 +31,8 @@ describe('equipJuice', () => {
     expect(getEquipLabelAlpha(42)).toBeGreaterThan(0);
     expect(getEquipLabelAlpha(20)).toBe(0);
     expect(getEquipCeremonyLayout(50).ringCy).toBeGreaterThan(120);
+    expect(getEquipCardPopAlpha(36)).toBeGreaterThan(0);
+    expect(getEquipCardPopAlpha(0)).toBe(0);
   });
 
   it('ticks ceremony timer', () => {

@@ -160,12 +160,15 @@ import {
   getEquipRingAlpha,
   getEquipRingRadius,
   getEquipLabelAlpha,
+  getEquipCardPopAlpha,
   tickEquipCeremonyTimer,
 } from '../ui/equipJuice.js';
 import {
   getSkirmishDiscoveryPulseAlpha,
   tickSkirmishDiscoveryTimer,
   SKIRMISH_DISCOVERY_FRAMES,
+  getSkirmishCtaRect,
+  getSkirmishLinkRect,
 } from '../ui/skirmishJuice.js';
 import {
   getCelebrationFadeAlpha,
@@ -177,6 +180,7 @@ import {
 import {
   getFlawlessNotifAlpha,
   getFlawlessNotifY,
+  getBossHudBottomY,
   tickFlawlessTimer,
 } from '../ui/flawlessJuice.js';
 import {
@@ -11899,8 +11903,12 @@ function drawEnemyIntroBanner() {
 function drawFlawlessNotif() {
   if (flawlessTimer <= 0) return;
   const alpha = getFlawlessNotifAlpha(flawlessTimer);
-  const hasBossBar = enemies.some(e => e.isBoss && e.alive && !e.reached);
-  const cy = getFlawlessNotifY(flawlessTimer, GRID_TOP, hasBossBar);
+  const bossActive = enemies.some(e => e.isBoss && e.alive && !e.reached);
+  const bossBottom = getBossHudBottomY(GRID_TOP, {
+    hasBoss: bossActive,
+    hasPhaseDesc: (_bossPhaseDesc?.timer ?? 0) > 0,
+  });
+  const cy = getFlawlessNotifY(flawlessTimer, GRID_TOP, bossBottom);
   ctx.save();
   ctx.textAlign   = 'center';
   ctx.font        = 'bold 13px monospace';
@@ -14187,13 +14195,19 @@ function drawBetweenBattles() {
       });
 
       if (_equipFlash?.defenderId === def.defenderId && _equipFlash.timer > 0) {
+        const popA = getEquipCardPopAlpha(_equipFlash.timer);
         ctx.save();
-        ctx.globalAlpha = Math.min(1, _equipFlash.timer / 28) * 0.75;
+        ctx.globalAlpha = Math.min(1, _equipFlash.timer / 28) * 0.75 + popA * 0.25;
         ctx.strokeStyle = _equipFlash.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 + popA * 1.5;
         ctx.shadowColor = _equipFlash.color;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 8 + popA * 10;
         ctx.beginPath(); ctx.roundRect(cx, cy, grid.cardW, grid.cardH, 4); ctx.stroke();
+        if (popA > 0.1) {
+          ctx.globalAlpha = popA * 0.14;
+          ctx.fillStyle = _equipFlash.color;
+          ctx.beginPath(); ctx.roundRect(cx, cy, grid.cardW, grid.cardH, 4); ctx.fill();
+        }
         ctx.shadowBlur = 0;
         ctx.restore();
       }
@@ -14994,24 +15008,31 @@ function drawCampaignSelect() {
   _campaignSelectBtns.push({ x: prevX, y: navY, w: btnW, h: btnH, action: 'prevPage' });
   _campaignSelectBtns.push({ x: nextX, y: navY, w: btnW, h: btnH, action: 'nextPage' });
 
-  const skX = W / 2 - 72, skY = H - 52;
-  drawFantasyPanel(skX - 4, skY - 4, 152, 34, 'rgba(40,28,8,0.35)', 0.4, 8);
-  drawFantasyPanel(skX, skY, 144, 26, 'rgba(18,10,4,0.95)', 0.65, 6);
-  ctx.fillStyle = '#e8c060';
-  ctx.fillText('SKIRMISH MODE', W / 2, skY + 17);
-  _campaignSelectBtns.push({ x: skX, y: skY, w: 144, h: 26, action: 'skirmish' });
+  const sk = getSkirmishCtaRect(W, H);
+  const skDisc = _skirmishDiscoveryTimer > 0;
+  if (skDisc) _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
+  if (skDisc) {
+    const pulse = getSkirmishDiscoveryPulseAlpha(performance.now());
+    drawFantasyPanel(sk.x - 3, sk.y - 3, sk.w + 6, sk.h + 6, `rgba(220,170,40,${pulse * 0.22})`, 0.5, 10);
+    drawGuidedPulse(sk.x - 2, sk.y - 2, sk.w + 4, sk.h + 4, 8);
+  }
+  drawFantasyPanel(sk.x, sk.y, sk.w, sk.h, 'rgba(22,14,6,0.97)', skDisc ? 0.85 : 0.7, 8);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#f0d878';
+  ctx.fillText('⚔  SKIRMISH MODE', W / 2, sk.y + 18);
+  ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(200,175,130,0.78)';
+  ctx.fillText('Classic 100-wave maze TD · no campaign progress', W / 2, sk.y + 32);
+  _campaignSelectBtns.push({ x: sk.x, y: sk.y, w: sk.w, h: sk.h, action: 'skirmish' });
 
-  if (_skirmishDiscoveryTimer > 0) {
-    _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
-    drawGuidedPulse(skX - 2, skY - 2, 148, 30, 6);
+  if (skDisc) {
     ctx.font = '7px monospace';
     ctx.fillStyle = `rgba(240,210,120,${getSkirmishDiscoveryPulseAlpha(performance.now())})`;
-    ctx.fillText('↑ Optional: classic 100-wave maze TD', W / 2, skY - 10);
+    ctx.fillText('↑ Optional side mode — same heroes, different rules', W / 2, sk.y - 10);
   }
 
-  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(180,150,100,0.65)';
-  ctx.fillText('Classic 100-wave maze TD — separate from campaign assaults', W / 2, H - 30);
-  ctx.font = '8px monospace'; ctx.fillStyle = '#504030';
+  ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(120,100,70,0.45)';
   ctx.fillText(`Page ${_campaignMapPage + 1} / ${Math.ceil(CAMPAIGN_MAP_COUNT / CAMPAIGN_MAPS_PER_PAGE)}  ·  ${progress.mapsUnlocked} regions unlocked  ·  ← → pages`, W / 2, H - 18);
 }
 
@@ -15148,17 +15169,22 @@ function drawNodeMap() {
   ctx.fillText('◀ MAPS', backX + 45, backY + 14);
   _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 22, action: 'back' });
 
-  const skX = W - 224;
-  drawFantasyPanel(skX, backY, 100, 22, 'rgba(30,22,8,0.72)', 0.55, 6);
-  ctx.fillStyle = '#a08050';
-  ctx.fillText('SKIRMISH', skX + 50, backY + 14);
-  _nodeMapBtns.push({ x: skX, y: backY, w: 100, h: 22, action: 'skirmish' });
-  if (_skirmishDiscoveryTimer > 0 && !_hintSeen.skirmishDiscovery) {
-    _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
-    drawGuidedPulse(skX - 2, backY - 2, 104, 26, 6);
+  const sk = getSkirmishLinkRect(W, backY - 2);
+  const skDisc = _skirmishDiscoveryTimer > 0 && !_hintSeen.skirmishDiscovery;
+  if (skDisc) _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
+  if (skDisc) drawGuidedPulse(sk.x - 2, sk.y - 2, sk.w + 4, sk.h + 4, 6);
+  drawFantasyPanel(sk.x, sk.y, sk.w, sk.h, skDisc ? 'rgba(36,26,10,0.88)' : 'rgba(30,22,8,0.72)', skDisc ? 0.75 : 0.55, 6);
+  ctx.font = 'bold 8px monospace';
+  ctx.fillStyle = skDisc ? '#f0d878' : '#c0a060';
+  ctx.fillText('⚔ SKIRMISH', sk.x + sk.w / 2, backY + 13);
+  ctx.font = '6px monospace';
+  ctx.fillStyle = 'rgba(160,140,100,0.55)';
+  ctx.fillText('classic TD', sk.x + sk.w / 2, backY + 22);
+  _nodeMapBtns.push({ x: sk.x, y: sk.y, w: sk.w, h: sk.h, action: 'skirmish' });
+  if (skDisc) {
     ctx.font = '7px monospace';
     ctx.fillStyle = `rgba(240,210,120,${getSkirmishDiscoveryPulseAlpha(performance.now())})`;
-    ctx.fillText('Optional: classic 100-wave maze TD', W / 2, backY - 10);
+    ctx.fillText('Optional 100-wave maze mode', W / 2, backY - 12);
   }
 
   const campX = W - 114;

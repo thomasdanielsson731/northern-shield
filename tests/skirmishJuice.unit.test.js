@@ -3,6 +3,8 @@ import {
   getSkirmishDiscoveryPulseAlpha,
   tickSkirmishDiscoveryTimer,
   SKIRMISH_DISCOVERY_FRAMES,
+  getSkirmishCtaRect,
+  SKIRMISH_CTA_W,
 } from '../src/ui/skirmishJuice.js';
 
 describe('skirmishJuice', () => {
@@ -15,5 +17,11 @@ describe('skirmishJuice', () => {
     expect(SKIRMISH_DISCOVERY_FRAMES).toBe(420);
     expect(tickSkirmishDiscoveryTimer(5)).toBe(4);
     expect(tickSkirmishDiscoveryTimer(0)).toBe(0);
+  });
+
+  it('campaign select CTA is centered and wide', () => {
+    const r = getSkirmishCtaRect(800, 600);
+    expect(r.w).toBe(SKIRMISH_CTA_W);
+    expect(r.x + r.w / 2).toBe(400);
   });
 });

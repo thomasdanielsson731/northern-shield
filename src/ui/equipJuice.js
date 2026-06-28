@@ -30,6 +30,13 @@ export function getEquipLabelAlpha(timer) {
   return Math.min(1, (timer - 24) / 18);
 }
 
+/** Brief pop on the equipped card (0–1). */
+export function getEquipCardPopAlpha(timer, total = 72) {
+  if (timer <= 0) return 0;
+  const p = timer / total;
+  return Math.sin(p * Math.PI) * 0.85;
+}
+
 export function tickEquipCeremonyTimer(timer) {
   if (timer <= 0) return 0;
   return timer - 1;
