@@ -3,22 +3,37 @@ import {
   drawWarCampPanel,
   drawWarCampHeader,
   drawWarCampCycle,
-  drawWarCampSectionTitle,
   drawWarCampSectionBanner,
-  drawWarCampDefenderCard,
+  drawWarCampPortraitCard,
+  drawWarCampFortressRow,
+  computeWarCampCardGrid,
+  warCampCardOrigin,
   getCareerXpProgress,
-  WAR_CAMP_SECTIONS,
-  WAR_CAMP_HEADER_H,
+  WAR_CAMP_BANNER_H,
   WAR_CAMP_CYCLE_H,
+  WAR_CAMP_GRID_COLS,
+  WAR_CAMP_CARD_ASPECT,
   isWarCampArtReady,
 } from '../src/ui/warCampVisual.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('warCampVisual', () => {
   it('exports layout constants', () => {
-    expect(WAR_CAMP_HEADER_H).toBeGreaterThan(0);
+    expect(WAR_CAMP_BANNER_H).toBeGreaterThan(0);
     expect(WAR_CAMP_CYCLE_H).toBeGreaterThan(0);
-    expect(WAR_CAMP_SECTIONS.recruit.title).toBe('RECRUIT');
+    expect(WAR_CAMP_GRID_COLS).toBe(5);
+    expect(WAR_CAMP_CARD_ASPECT).toBeGreaterThan(1);
+  });
+
+  it('computeWarCampCardGrid uses portrait cards', () => {
+    const g = computeWarCampCardGrid(520, 320);
+    expect(g.cols).toBeGreaterThanOrEqual(4);
+    expect(g.cardH).toBeGreaterThan(g.cardW);
+    expect(g.rowsVisible).toBeGreaterThanOrEqual(2);
+    expect(g.cardsPerPage).toBe(g.cols * g.rowsVisible);
+    const o = warCampCardOrigin(10, 20, g, 4);
+    expect(o.col).toBe(4 % g.cols);
+    expect(o.row).toBe(Math.floor(4 / g.cols));
   });
 
   it('isWarCampArtReady is false before image loads in node', () => {
@@ -35,13 +50,20 @@ describe('warCampVisual', () => {
     expect(() => drawWarCampPanel(ctx, 0, 0, 100, 80)).not.toThrow();
     expect(() => drawWarCampHeader(ctx, 8, 8, 400)).not.toThrow();
     expect(() => drawWarCampCycle(ctx, 8, 500, 400, 'warband')).not.toThrow();
-    expect(() => drawWarCampSectionTitle(ctx, 10, 10, 'fortress')).not.toThrow();
-    expect(() => drawWarCampSectionBanner(ctx, 10, 40, 280, 56, 'recruit')).not.toThrow();
-    expect(() => drawWarCampDefenderCard(ctx, 10, 100, 260, 72, {
+    expect(() => drawWarCampSectionBanner(ctx, 10, 40, 280, WAR_CAMP_BANNER_H, 'recruit')).not.toThrow();
+    expect(() => drawWarCampPortraitCard(ctx, 10, 100, 72, 112, {
       name: 'Gunnar',
       type: 'valkyrie',
       careerLevel: 2,
       xp: 120,
+      equipment: [null, null],
+      defenderId: 'd1',
+    }, {
+      slotMeta: [{ itemDef: null }, { itemDef: null }],
+      btnsOut: [],
     })).not.toThrow();
+    expect(() => drawWarCampFortressRow(ctx, 10, 200, 280, {
+      icon: '⬡', label: 'Barracks', maxLevel: 3, levelDesc: ['+1 slot'],
+    }, 1, false, 50, true, [], 'barracks')).not.toThrow();
   });
 });

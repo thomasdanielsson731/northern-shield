@@ -20,14 +20,13 @@ import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
 import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines } from '../ui/warCampPanel.js';
 import {
   drawWarCampAmbientBackdrop,
-  drawWarCampHeader,
-  drawWarCampCycle,
   drawWarCampPanel,
   drawWarCampSectionBanner,
-  drawWarCampSectionTitle,
-  drawWarCampFortressMap,
-  drawWarCampDefenderCard,
-  WAR_CAMP_HEADER_H,
+  computeWarCampCardGrid,
+  warCampCardOrigin,
+  drawWarCampPortraitCard,
+  drawWarCampFortressRow,
+  WAR_CAMP_BANNER_H,
   WAR_CAMP_CYCLE_H,
 } from '../ui/warCampVisual.js';
 import {
@@ -9681,12 +9680,10 @@ function drawCampaignMetaBar(center) {
   } else if (gamePhase === 'betweenBattles') {
     subtitle = isCampaignWarCamp()
       ? (_warCampTabPulse === 'recruit'
-        ? 'War Camp — hire defenders in RECRUIT tab'
+        ? 'Hire defenders — RECRUIT tab'
         : _warCampTabPulse === 'fortress'
-          ? 'War Camp — fortress buildings in FORTRESS tab'
-          : (_warCampWelcomeTimer > 0
-            ? 'War Camp — tabs: Warband · Recruit · Fortress'
-            : 'War Camp'))
+          ? 'Upgrade buildings — FORTRESS tab'
+          : 'Where heroes are made and legends are forged.')
       : 'Between battles';
   } else if (gamePhase === 'debrief') {
     subtitle = 'AFTER ACTION';
@@ -13495,14 +13492,8 @@ function drawBetweenBattles() {
 
   // ── LEFT PANEL: Battle summary ──────────────────────────────
   const _wcLayout = isCampaignWarCamp();
-  const _wcHeaderH = _wcLayout ? WAR_CAMP_HEADER_H : 0;
-  const _wcCycleH = _wcLayout ? WAR_CAMP_CYCLE_H + 6 : 0;
-  const _contentTop = META_SCREEN_TOP + _wcHeaderH;
-  const _contentBot = H - FRAME_THICK - 8 - _wcCycleH;
-
-  if (_wcLayout) {
-    drawWarCampHeader(ctx, FRAME_THICK + 8, META_SCREEN_TOP + 6, W - FRAME_THICK * 2 - 16);
-  }
+  const _contentTop = META_SCREEN_TOP;
+  const _contentBot = H - FRAME_THICK - 8;
 
   const lpX = FRAME_THICK + 4, lpY = _contentTop, lpW = 300, lpH = _contentBot - _contentTop;
   if (_wcLayout) {
@@ -13552,6 +13543,7 @@ function drawBetweenBattles() {
       chronicleProse: _campaignState?.chronicle?.battles?.at(-1)?.prose ?? null,
       statusLines: _statusLines,
       tabPulseTarget: isSimplifiedWarCamp(_campaignMapIndex) ? _warCampTabPulse : null,
+      activeTab: _warCampTab,
     }, _betweenBtns);
 
     const _hasChronicle = (_campaignState?.chronicle?.battles?.length ?? 0) > 0;
@@ -13559,8 +13551,8 @@ function drawBetweenBattles() {
       const chronicleBtnH = 24;
       const chronicleBtnW = lpW - 28;
       const cbX = lpX + 14;
-      const cbY = lpY + lpH - chronicleBtnH - 8;
-      drawFantasyPanel(cbX, cbY, chronicleBtnW, chronicleBtnH, 'rgba(20,8,36,0.97)', 0.6, 4);
+      const cbY = lpY + lpH - 30 - WAR_CAMP_CYCLE_H - 12 - chronicleBtnH - 8;
+      drawWarCampPanel(ctx, cbX, cbY, chronicleBtnW, chronicleBtnH, { radius: 4, borderAlpha: 0.6 });
       ctx.save();
       ctx.textAlign = 'center';
       ctx.font = '9px monospace';
@@ -13891,7 +13883,11 @@ function drawBetweenBattles() {
   // ── RIGHT PANEL: War Camp tabs (one view at a time) ─────────
   const rpX = lpX + lpW + 8, rpY = _contentTop, rpW = W - (lpX + lpW + 8) - 12, rpH = _contentBot - _contentTop;
   _navBtns = [];
-  const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns, { pulseId: _warCampTabPulse });
+  const _fortUpgradePulse = _warCampTab === 'warband'
+    ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
+    : null;
+  const _tabPulse = _warCampTabPulse ?? (_fortUpgradePulse ? 'fortress' : null);
+  const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns, { pulseId: _tabPulse });
   const rpContentY = rpY + _bbNavH + 4;
   const rpContentH = rpH - _bbNavH - 4;
   const rpY0 = rpContentY;
@@ -13910,18 +13906,23 @@ function drawBetweenBattles() {
   let _wcCursor = rpY0 + 10;
   const _wcSimple = isCampaignWarCamp() && isSimplifiedWarCamp(_campaignMapIndex);
   const _wcTabHint = {
-    warband:  _wcSimple ? 'Tap a hero to equip · talents · bio' : 'Manage roster · equip · talents',
+    warband:  _equipmentInventory.length > 0
+      ? `Tap gold ⚔ / 🛡 slots on each card to equip (${_equipmentInventory.length} in stash)`
+      : (_wcSimple ? 'Tap ⚔ / 🛡 on a card to manage gear · 📜 for bio' : 'Tap ⚔ / 🛡 slots to cycle equipment · 📜 bio'),
     recruit:  `Hire defenders · ${_effectiveRecruitCost}g each`,
-    fortress: 'Meta buildings · reserve gold · fortress status',
+    fortress: goldReserve > 0
+      ? `◆ ${goldReserve}g — open FORTRESS tab · tap green UPGRADE buttons`
+      : 'Earn gold in battle · then upgrade buildings here',
   };
+  if (_wcLayout && _warCampTab !== 'warband') {
+    drawWarCampSectionBanner(ctx, rix, _wcCursor, riW, WAR_CAMP_BANNER_H, _warCampTab);
+    _wcCursor += WAR_CAMP_BANNER_H + 6;
+  }
   if (_wcLayout) {
-    drawWarCampSectionTitle(ctx, rix, _wcCursor, _warCampTab);
-    _wcCursor += 34;
-    const _bannerH = _warCampTab === 'fortress' ? 0 : 56;
-    if (_bannerH > 0) {
-      drawWarCampSectionBanner(ctx, rix, _wcCursor, riW, _bannerH, _warCampTab);
-      _wcCursor += _bannerH + 8;
-    }
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(160,140,100,0.62)';
+    ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 8);
+    _wcCursor += 14;
   } else {
     ctx.font = 'bold 12px monospace';
     ctx.fillStyle = '#e8c040';
@@ -13934,23 +13935,32 @@ function drawBetweenBattles() {
     ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 24);
     _wcCursor += 32;
   }
-  if (_wcLayout) {
-    ctx.font = '8px monospace';
-    ctx.fillStyle = 'rgba(160,140,100,0.62)';
-    ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 8);
-    _wcCursor += 16;
-  }
 
   if (_warCampTab === 'warband') {
     const rCount = _roster.defenders.length;
     const _wb = analyzeWarband(_roster.defenders);
-    ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(180,160,120,0.65)';
+    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(180,160,120,0.65)';
     ctx.fillText(
-      `${rCount} hero${rCount !== 1 ? 'es' : ''}  ·  Tank ${_wb.counts.tank}  Support ${_wb.counts.support}  DPS ${_wb.counts.st_dps + _wb.counts.aoe_dps}`,
+      `${rCount} hero${rCount !== 1 ? 'es' : ''}  ·  Tank ${_wb.counts.tank}  DPS ${_wb.counts.st_dps + _wb.counts.aoe_dps}`,
       rix,
       _wcCursor + 8,
     );
-    _wcCursor += 16;
+    _wcCursor += 14;
+    if (!_wcSimple && _equipmentInventory.length > 0) {
+      ctx.font = 'bold 7px monospace';
+      ctx.fillStyle = 'rgba(200,170,80,0.75)';
+      ctx.fillText(`◈ ${_equipmentInventory.length} item${_equipmentInventory.length !== 1 ? 's' : ''} in stash — tap ⚔ or 🛡 on a hero card`, rix, _wcCursor + 8);
+      _wcCursor += 12;
+    }
+    if (!_wcSimple && goldReserve > 0) {
+      const _fuHint = getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve);
+      ctx.font = 'bold 7px monospace';
+      ctx.fillStyle = _fuHint ? 'rgba(120,200,120,0.8)' : 'rgba(160,140,100,0.65)';
+      ctx.fillText(_fuHint
+        ? `◆ ${goldReserve}g — FORTRESS tab · upgrade ${_fuHint.label} (${_fuHint.cost}g)`
+        : `◆ ${goldReserve}g in reserve — open FORTRESS tab`, rix, _wcCursor + 8);
+      _wcCursor += 12;
+    }
     if (!_wcSimple) {
     const _presetId = _campaignState?.squadPreset ?? 'balanced';
     const _pChipW = Math.floor((riW - 8) / SQUAD_PRESETS.length);
@@ -14080,14 +14090,114 @@ function drawBetweenBattles() {
   const listTop  = _wcCursor;
   const listBot  = rpY0 + rpH0 - 6;
   const listH    = Math.max(40, listBot - listTop);
-  const rowH     = _wcSimple ? 84 : 72;
-  const maxRows  = Math.max(1, Math.floor(listH / rowH));
-
-  // Clamp scroll offset
   const totalDefs = _roster.defenders.length;
+
+  if (_wcLayout) {
+    const grid = computeWarCampCardGrid(riW, listH);
+    const totalRows = Math.ceil(totalDefs / grid.cols) || 0;
+    const maxGridRow = Math.max(0, totalRows - grid.rowsVisible);
+    _rosterScrollOffset = Math.max(0, Math.min(_rosterScrollOffset, maxGridRow));
+    const startIdx = _rosterScrollOffset * grid.cols;
+
+    if (_rosterScrollOffset > 0) {
+      const arY = listTop - 1;
+      ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,170,80,0.65)';
+      ctx.fillText('▲', rpX + rpW - 16, arY + 10);
+      _betweenBtns.push({ x: rpX + rpW - 26, y: arY, w: 22, h: 14, action: 'scrollRoster', dir: -1 });
+    }
+    if (_rosterScrollOffset < maxGridRow) {
+      const arY = listBot - 13;
+      ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,170,80,0.65)';
+      ctx.fillText('▼', rpX + rpW - 16, arY + 10);
+      _betweenBtns.push({ x: rpX + rpW - 26, y: arY, w: 22, h: 14, action: 'scrollRoster', dir: 1 });
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rpX + 4, listTop, rpW - 8, listH);
+    ctx.clip();
+
+    const _RARITY_BG = { common: 'rgba(168,168,168,0.14)', rare: 'rgba(64,144,255,0.14)', epic: 'rgba(204,68,255,0.14)', legendary: 'rgba(255,144,32,0.14)' };
+
+    for (let vi = 0; vi < grid.cardsPerPage; vi++) {
+      const defIdx = startIdx + vi;
+      if (defIdx >= totalDefs) break;
+      const def = _roster.defenders[defIdx];
+      const { x: cx, y: cy } = warCampCardOrigin(rix, listTop, grid, vi);
+      const isRenaming = _renameState?.defenderId === def.defenderId;
+      const _cardBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
+
+      const slotMeta = [0, 1].map(slotIdx => {
+        const itemId = def.equipment[slotIdx];
+        const itemDef = itemId ? ITEM_DEFS[itemId] : null;
+        return {
+          itemDef,
+          rarCol: itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null,
+          rarityBg: itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : null,
+        };
+      });
+
+      const chrome = drawWarCampPortraitCard(ctx, cx, cy, grid.cardW, grid.cardH, def, {
+        selected: isRenaming,
+        bond: !!_cardBond,
+        isRenaming,
+        renameDraft: _renameState?.draft,
+        drawPortrait: (c, px, py, pr) => drawMiniDefenderPortrait(px, py, def.type, pr),
+        slotMeta,
+        btnsOut: _betweenBtns,
+      });
+
+      if (_equipFlash?.defenderId === def.defenderId && _equipFlash.timer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, _equipFlash.timer / 28) * 0.75;
+        ctx.strokeStyle = _equipFlash.color;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = _equipFlash.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.roundRect(cx, cy, grid.cardW, grid.cardH, 4); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      ctx.fillStyle = 'rgba(30,20,40,0.8)'; ctx.strokeStyle = 'rgba(120,90,180,0.4)'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.roundRect(chrome.bioX, chrome.bioY, chrome.bioW, chrome.bioH, 2); ctx.fill(); ctx.stroke();
+      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.75)'; ctx.textAlign = 'center';
+      ctx.fillText('📜', chrome.bioX + chrome.bioW / 2, chrome.bioY + 9);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: chrome.bioX, y: chrome.bioY, w: chrome.bioW, h: chrome.bioH, action: 'openBio', defenderId: def.defenderId });
+
+      const hasName = Boolean(def.name?.trim());
+      if (!hasName || def.careerLevel >= 1) {
+        ctx.fillStyle = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.7)';
+        ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.35)';
+        ctx.beginPath(); ctx.roundRect(chrome.rnX, chrome.rnY, chrome.bioW, chrome.bioH, 2); ctx.fill(); ctx.stroke();
+        ctx.font = '6px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
+        ctx.textAlign = 'center';
+        ctx.fillText(!hasName ? '✎' : '✏', chrome.rnX + chrome.bioW / 2, chrome.rnY + 9);
+        ctx.textAlign = 'left';
+        _betweenBtns.push({ x: chrome.rnX, y: chrome.rnY, w: chrome.bioW, h: chrome.bioH, action: 'startRename', defenderId: def.defenderId });
+      }
+    }
+
+    if (totalDefs === 0) {
+      ctx.textAlign = 'center';
+      ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(120,100,70,0.45)';
+      ctx.fillText('No defenders in warband yet', rpX + rpW / 2, listTop + 30);
+      ctx.textAlign = 'left';
+    } else if (totalDefs > grid.cardsPerPage) {
+      const endIdx = Math.min(startIdx + grid.cardsPerPage, totalDefs);
+      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,70,0.5)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${startIdx + 1}–${endIdx} of ${totalDefs}`, rpX + rpW / 2, listBot - 4);
+      ctx.textAlign = 'left';
+    }
+
+    ctx.restore();
+  } else {
+  const rowH     = 72;
+  const maxRows  = Math.max(1, Math.floor(listH / rowH));
   _rosterScrollOffset = Math.max(0, Math.min(_rosterScrollOffset, Math.max(0, totalDefs - maxRows)));
 
-  // Scroll arrows (drawn outside clip region)
   if (_rosterScrollOffset > 0) {
     const arY = listTop - 1;
     ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,170,80,0.65)';
@@ -14101,7 +14211,6 @@ function drawBetweenBattles() {
     _betweenBtns.push({ x: rpX + rpW - 26, y: arY, w: 22, h: 14, action: 'scrollRoster', dir: 1 });
   }
 
-  // Roster list (clip to avoid overflow)
   ctx.save();
   ctx.beginPath();
   ctx.rect(rpX + 4, listTop, rpW - 8, listH);
@@ -14114,61 +14223,7 @@ function drawBetweenBattles() {
     const isRenaming  = _renameState?.defenderId === def.defenderId;
     const _cardBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
 
-    if (_wcLayout && _wcSimple) {
-      drawWarCampDefenderCard(ctx, rpX + 6, ry, rpW - 12, rowH - 4, def, {
-        selected: isRenaming,
-        bond: !!_cardBond,
-      });
-      if (isRenaming) {
-        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.55)';
-        ctx.fillText('Enter confirm · Esc cancel', rix + 52, ry + 28);
-      }
-      const bioW = 18, bioH = 12;
-      const bioX = rpX + rpW - 12 - bioW;
-      const bioY2 = ry + 4;
-      ctx.fillStyle = 'rgba(30,20,40,0.7)'; ctx.strokeStyle = 'rgba(120,90,180,0.35)'; ctx.lineWidth = 0.7;
-      ctx.beginPath(); ctx.roundRect(bioX, bioY2, bioW, bioH, 2); ctx.fill(); ctx.stroke();
-      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)'; ctx.textAlign = 'center';
-      ctx.fillText('📜', bioX + bioW / 2, bioY2 + 9);
-      ctx.textAlign = 'left';
-      _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
-      const hasName = Boolean(def.name?.trim());
-      const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
-      if (!hasName || def.careerLevel >= 1) {
-        const rnLabel = !hasName ? '✎' : '✏';
-        ctx.fillStyle = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
-        ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
-        ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
-        ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
-        ctx.textAlign = 'center';
-        ctx.fillText(rnLabel, rnX + rnW / 2, rnY + 9);
-        ctx.textAlign = 'left';
-        _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
-      }
-      const chipSlotW = Math.floor((riW - 6) / 2);
-      [0, 1].forEach(slotIdx => {
-        const itemId  = def.equipment[slotIdx];
-        const itemDef = itemId ? ITEM_DEFS[itemId] : null;
-        const cx2     = rix + slotIdx * (chipSlotW + 3);
-        const cy2     = ry + 56;
-        const cH      = 12;
-        const rarCol  = itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null;
-        const icon    = slotIdx === 0 ? '⚔' : '🛡';
-        ctx.fillStyle   = itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : 'rgba(30,20,10,0.5)';
-        ctx.strokeStyle = rarCol ?? 'rgba(80,60,30,0.3)';
-        ctx.lineWidth   = rarCol ? 0.8 : 0.5;
-        ctx.beginPath(); ctx.roundRect(cx2, cy2, chipSlotW, cH, 2); ctx.fill(); ctx.stroke();
-        ctx.font = '7px monospace';
-        ctx.fillStyle = rarCol ?? 'rgba(100,80,50,0.45)';
-        const label = itemDef ? `${icon} ${itemDef.name.slice(0, 10)}` : `${icon} —`;
-        ctx.fillText(label, cx2 + 3, cy2 + 9);
-        _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
-      });
-      return;
-    }
-
-    // Bonded defender: warm amber tint on card background
+    // Skirmish legacy row layout
     ctx.fillStyle = _cardBond ? 'rgba(200,150,50,0.07)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
     ctx.fillRect(rpX + 4, ry, rpW - 8, rowH - 2);
     if (_cardBond) {
@@ -14442,6 +14497,8 @@ function drawBetweenBattles() {
 
   ctx.restore(); // remove clip
 
+  } // end skirmish list else
+
   // Inventory stash hint
   const freeItemCount = _equipmentInventory.length;
   if (freeItemCount > 0 && listBot + 24 < rpY0 + rpH0) {
@@ -14530,13 +14587,8 @@ function drawBetweenBattles() {
     } // recruit unlocked
 
   } else if (_warCampTab === 'fortress') {
-    // ── FORTRESS NODES (meta buildings — no field layout) ─────────────────────
+    // ── FORTRESS NODES — static art banner + upgrade list ─────
     const upgrades = _campaignState?.fortressUpgrades ?? {};
-    if (_wcLayout) {
-      const mapH = 118;
-      drawWarCampFortressMap(ctx, rix, recY, riW, mapH, upgrades);
-      recY += mapH + 10;
-    }
 
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
     ctx.fillText(`◆ ${goldReserve}g reserve · fortress upgrades`, rix, recY + 10);
@@ -14562,75 +14614,35 @@ function drawBetweenBattles() {
     }
 
     const nodeKeys  = ['barracks', 'armory', 'watchtower', 'wallworks', 'treasury'];
-    ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,90,0.58)';
-    ctx.fillText('FORTRESS NODES', rix, _fortStatusY + 10);
-    const _nodeBaseY = _fortStatusY + 18;
+    const _nextFu = getNextFortressUpgradeOffer(upgrades, goldReserve);
+    ctx.font = 'bold 8px monospace';
+    ctx.fillStyle = _nextFu ? 'rgba(140,200,120,0.85)' : 'rgba(140,120,90,0.58)';
+    ctx.fillText(_nextFu
+      ? `Tap UPGRADE to spend reserve gold · next: ${_nextFu.label} (${_nextFu.cost}g)`
+      : 'FORTRESS BUILDINGS', rix, _fortStatusY + 10);
+    const _nodeBaseY = _fortStatusY + 20;
     {
       const _totalLvls = nodeKeys.reduce((s, k) => s + (upgrades[k] ?? 0), 0);
       const _maxLvls   = nodeKeys.reduce((s, k) => s + (FORTRESS_DEFS[k]?.maxLevel ?? 0), 0);
       if (_maxLvls > 0) {
         ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.40)'; ctx.textAlign = 'right';
-        ctx.fillText(`${_totalLvls} / ${_maxLvls} unlocked`, rix + riW, recY + 10);
+        ctx.fillText(`${_totalLvls} / ${_maxLvls} levels`, rix + riW, _fortStatusY + 10);
         ctx.textAlign = 'left';
       }
     }
-    const nodeRowH  = 22;
+    const nodeRowH = 40;
     nodeKeys.forEach((key, i) => {
-      const def    = FORTRESS_DEFS[key];
-      const lvl    = upgrades[key] ?? 0;
-      const maxed  = lvl >= def.maxLevel;
-      const cost   = maxed ? 0 : def.cost[lvl];
-      const ry2    = _nodeBaseY + i * nodeRowH;
-
-      // Row background
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
-      ctx.fillRect(rix, ry2, riW, nodeRowH - 2);
-
-      // Icon + label + level
-      ctx.font = 'bold 9px monospace';
-      ctx.fillStyle = maxed ? '#f0d040' : '#c8b060';
-      ctx.fillText(`${def.icon} ${def.label}`, rix, ry2 + 14);
-
-      const lvlStr = `Lv ${lvl}/${def.maxLevel}`;
-      ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.6)';
-      ctx.textAlign = 'right';
-      if (!maxed) {
-        const descIdx = lvl;
-        ctx.fillText(`${def.levelDesc[descIdx] ?? ''}`, rix + riW - 52, ry2 + 14);
-      }
-      ctx.textAlign = 'left';
-
-      ctx.font = '8px monospace';
-      ctx.fillStyle = maxed ? 'rgba(240,200,60,0.7)' : 'rgba(160,140,100,0.5)';
-      const lvlBadgeX = rix + riW - 50;
-      ctx.fillText(maxed ? 'MAX' : `→ L${lvl + 1}`, lvlBadgeX, ry2 + 14);
-
-      // UPGRADE button (right side)
-      if (!maxed) {
-        const btnW2 = 38, btnH2 = 14, btnX = rpX + rpW - 12 - btnW2, btnY2 = ry2 + 3;
-        const canBuy = goldReserve >= cost;
-        ctx.fillStyle   = canBuy ? 'rgba(8,22,8,0.9)'  : 'rgba(20,16,10,0.6)';
-        ctx.strokeStyle = canBuy ? 'rgba(80,200,80,0.5)' : 'rgba(80,60,30,0.3)';
-        ctx.lineWidth   = 0.8;
-        ctx.beginPath(); ctx.roundRect(btnX, btnY2, btnW2, btnH2, 3); ctx.fill(); ctx.stroke();
-        ctx.font = '7px monospace';
-        ctx.fillStyle = canBuy ? '#88ee66' : 'rgba(120,110,70,0.4)';
-        ctx.textAlign = 'center';
-        ctx.fillText(`+${cost}g`, btnX + btnW2 / 2, btnY2 + 7);
-        if (goldReserve > 0) {
-          const pct = Math.round((cost / goldReserve) * 100);
-          ctx.font = '6px monospace';
-          ctx.fillStyle = !canBuy ? 'rgba(200,80,60,0.8)' : pct > 60 ? '#e0a040' : 'rgba(120,180,120,0.55)';
-          ctx.fillText(`${pct}%`, btnX + btnW2 / 2, btnY2 + 13);
-        }
-        ctx.textAlign = 'left';
-        if (canBuy) _betweenBtns.push({ x: btnX, y: btnY2, w: btnW2, h: btnH2, action: 'upgradeFortress', key });
-      }
+      const def   = FORTRESS_DEFS[key];
+      const lvl   = upgrades[key] ?? 0;
+      const maxed = lvl >= def.maxLevel;
+      const cost  = maxed ? 0 : def.cost[lvl];
+      const ry2   = _nodeBaseY + i * (nodeRowH + 4);
+      drawWarCampFortressRow(ctx, rix, ry2, riW, def, lvl, maxed, cost, goldReserve >= cost, _betweenBtns, key);
     });
 
-    // Active bonuses summary — color-coded by type
+    let _fortSummY = _nodeBaseY + nodeKeys.length * (nodeRowH + 4) + 4;
     const fb = getFortressBonuses(upgrades);
-    const _fbTyped = [];  // { text, color }
+    const _fbTyped = [];
     if ((fb.startingGoldBonus   ?? 0) > 0) _fbTyped.push({ text: `+${fb.startingGoldBonus}g start`,                   color: '#e8c040' });
     if ((fb.recruitCostReduction ?? 0) > 0) _fbTyped.push({ text: `−${fb.recruitCostReduction}g recruit`,              color: '#60b0e8' });
     if ((fb.wallCostReduction   ?? 0) > 0) _fbTyped.push({ text: `wall −${fb.wallCostReduction}g`,                    color: '#60b0e8' });
@@ -14639,7 +14651,6 @@ function drawBetweenBattles() {
     if ((fb.wallSlowBonus       ?? 0) > 0) _fbTyped.push({ text: `slow +${Math.round(fb.wallSlowBonus * 100)}%`,      color: '#80c0e8' });
     if ((fb.marchSuppliesBonus  ?? 0) > 0) _fbTyped.push({ text: `march +${fb.marchSuppliesBonus}g`,                   color: '#e8c040' });
     if ((fb.warChestDiscount    ?? 0) > 0) _fbTyped.push({ text: `War Chest −${fb.warChestDiscount}g`,                 color: '#c0a060' });
-    let _fortSummY = _nodeBaseY + nodeKeys.length * nodeRowH + 8;
     if (_fbTyped.length > 0) {
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(120,100,60,0.50)';
       ctx.fillText('ACTIVE BONUSES', rix, _fortSummY);
@@ -14675,17 +14686,6 @@ function drawBetweenBattles() {
   }
 
   ctx.restore(); // right panel clip
-
-  if (_wcLayout) {
-    drawWarCampCycle(
-      ctx,
-      FRAME_THICK + 4,
-      H - FRAME_THICK - 8 - WAR_CAMP_CYCLE_H,
-      W - FRAME_THICK * 2 - 8,
-      _warCampTab,
-    );
-  }
-
   ctx.restore(); // fade-in globalAlpha
 }
 

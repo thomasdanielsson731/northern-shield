@@ -6,9 +6,9 @@
 import { UI_COLORS } from './uiTheme.js';
 import {
   drawWarCampPanel,
-  drawWarCampSectionBanner,
-  drawWarCampSectionTitle,
+  drawWarCampCycle,
   WAR_CAMP_THEME,
+  WAR_CAMP_CYCLE_H,
 } from './warCampVisual.js';
 
 function drawPanel(ctx, x, y, w, h, fill, borderA = 0.75, r = 8) {
@@ -38,26 +38,20 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
   const { x, y, w, h } = panel;
   const cx = x + w / 2;
   const pad = 14;
+  const btnH = 30;
 
   ctx.save();
   ctx.textAlign = 'center';
 
-  // Longhouse recruit art strip (mockup left column)
-  const bannerH = 56;
-  drawWarCampSectionBanner(ctx, x + pad, y + 8, w - pad * 2, bannerH, 'recruit');
-  let hy = y + bannerH + 22;
+  let hy = y + 22;
 
   ctx.font = 'bold 10px monospace';
   ctx.fillStyle = 'rgba(160,130,80,0.55)';
   ctx.fillText('COMMANDER BRIEFING', cx, hy);
   hy += 18;
 
-  drawWarCampSectionTitle(ctx, x + pad, hy - 8, 'recruit');
-  hy += 34;
-
   ctx.font = '9px monospace';
   ctx.fillStyle = WAR_CAMP_THEME.subtitle;
-  ctx.textAlign = 'center';
   ctx.fillText('Who holds the line at the next assault?', cx, hy);
   hy += 20;
   ctx.textAlign = 'left';
@@ -142,8 +136,9 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
     hy += 13;
   }
 
-  // ── Chronicle whisper ─────────────────────────────────────
-  if (state.chronicleProse) {
+  // ── Chronicle whisper (skip if footer cycle would overlap) ─
+  const _footerReserve = WAR_CAMP_CYCLE_H + btnH + 36;
+  if (state.chronicleProse && hy + 28 < y + h - _footerReserve) {
     hy += 6;
     ctx.strokeStyle = 'rgba(140,110,60,0.25)';
     ctx.lineWidth = 0.5;
@@ -167,11 +162,15 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
     }
   }
 
-  // ── Secondary CTA ─────────────────────────────────────────
-  const btnsY = y + h - 44;
+  // ── THE CYCLE (mockup left-column footer) + primary CTAs ───
   const btnW = 148;
-  const btnH = 30;
   const mapX = cx - btnW / 2;
+  const btnsY = y + h - btnH - 10;
+  const cycleY = btnsY - WAR_CAMP_CYCLE_H - 12;
+  const cycleW = w - pad * 2;
+
+  drawWarCampCycle(ctx, x + pad, cycleY, cycleW, state.activeTab ?? 'warband');
+
   drawPanel(ctx, mapX, btnsY, btnW, btnH, 'rgba(12,8,4,0.97)', 0.7, 6);
   ctx.textAlign = 'center';
   ctx.font = 'bold 10px monospace';
@@ -179,12 +178,14 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
   ctx.fillText('COMMAND MAP', cx, btnsY + 19);
   btnsOut.push({ x: mapX, y: btnsY, w: btnW, h: btnH, action: 'commandMap' });
 
-  ctx.font = '7px monospace';
-  ctx.fillStyle = 'rgba(140,120,80,0.45)';
-  ctx.fillText(getWarCampTabHint(state.tabPulseTarget), cx, btnsY - 8);
+  if (state.tabPulseTarget) {
+    ctx.font = '7px monospace';
+    ctx.fillStyle = 'rgba(140,120,80,0.45)';
+    ctx.fillText(getWarCampTabHint(state.tabPulseTarget), cx, cycleY - 8);
+  }
 
   ctx.restore();
-  return { btnsY };
+  return { btnsY, cycleY };
 }
 
 /** First Saga slice — hide skirmish-era clutter (presets, rune shop). */

@@ -5,11 +5,14 @@
 
 import { UI_COLORS } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
-import { FORTRESS_DEFS } from '../fortress/fortress.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 
-export const WAR_CAMP_HEADER_H = 40;
+export const WAR_CAMP_HEADER_H = 0;
 export const WAR_CAMP_CYCLE_H = 52;
+export const WAR_CAMP_BANNER_H = 48;
+export const WAR_CAMP_GRID_COLS = 5;
+export const WAR_CAMP_CARD_GAP = 5;
+export const WAR_CAMP_CARD_ASPECT = 1.55; // height ÷ width — portrait trading card
 
 export const WAR_CAMP_THEME = {
   bg: '#0c0c10',
@@ -69,7 +72,7 @@ export function drawWarCampPanel(ctx, x, y, w, h, opts = {}) {
   ctx.stroke();
 }
 
-/** Full-width WARCAMP header + tagline. */
+/** Full-width WARCAMP header + tagline — title lives in meta bar; kept for tests/skirmish reuse. */
 export function drawWarCampHeader(ctx, x, y, w) {
   ctx.save();
   ctx.textAlign = 'left';
@@ -132,7 +135,7 @@ export function drawWarCampCycle(ctx, x, y, w, activeTab = 'warband') {
   ctx.restore();
 }
 
-/** Ambient backdrop — dark base + hearth glow + pine silhouettes. */
+/** Ambient backdrop — dark gradient + subtle hearth glow only (no full mockup bleed). */
 export function drawWarCampAmbientBackdrop(ctx, W, top, H, fortressUpgrades = {}) {
   const tier = Object.values(fortressUpgrades).reduce((s, v) => s + (v ?? 0), 0);
   const h = H - top;
@@ -144,59 +147,20 @@ export function drawWarCampAmbientBackdrop(ctx, W, top, H, fortressUpgrades = {}
   ctx.fillStyle = g;
   ctx.fillRect(0, top, W, h);
 
-  if (isWarCampArtReady()) {
-    drawWarCampArtCrop(ctx, 0, top, W, h, 'full', 0.38);
-  }
-
-  // Pine ridge silhouettes (fortress mockup horizon)
-  ctx.save();
-  ctx.fillStyle = 'rgba(12,18,10,0.55)';
-  for (let i = 0; i < 9; i++) {
-    const bx = W * (0.08 + i * 0.11);
-    const by = top + h * 0.62;
-    ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.lineTo(bx + 18, by - 28 - (i % 3) * 6);
-    ctx.lineTo(bx + 36, by);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-
   const t = performance.now() * 0.001;
-  const hearthX = W * 0.22;
-  const hearthY = top + h * 0.55;
+  const hearthX = W * 0.28;
+  const hearthY = top + h * 0.58;
   const pulse = 0.55 + Math.sin(t * 1.4) * 0.12;
-  const warm = Math.min(1, 0.35 + tier * 0.08);
-  const glow = ctx.createRadialGradient(hearthX, hearthY, 0, hearthX, hearthY, 160 + tier * 10);
-  glow.addColorStop(0, `rgba(220,130,60,${warm * pulse * 0.5})`);
-  glow.addColorStop(0.5, `rgba(100,50,25,${0.04 + tier * 0.015})`);
+  const warm = Math.min(1, 0.28 + tier * 0.06);
+  const glow = ctx.createRadialGradient(hearthX, hearthY, 0, hearthX, hearthY, 140 + tier * 8);
+  glow.addColorStop(0, `rgba(200,115,55,${warm * pulse * 0.35})`);
+  glow.addColorStop(0.55, `rgba(80,40,20,${0.03 + tier * 0.01})`);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, top, W, h);
 }
 
-/** Section labels matching the reference mockup. */
-export const WAR_CAMP_SECTIONS = {
-  recruit:  { num: '1.', title: 'RECRUIT',  subtitle: 'At the Longhouse Fire.' },
-  warband:  { num: '2.', title: 'WARBAND',  subtitle: 'Your heroes. Your story.' },
-  fortress: { num: '3.', title: 'FORTRESS', subtitle: 'Your home. Your legacy.' },
-};
-
-export function drawWarCampSectionTitle(ctx, x, y, tabId) {
-  const sec = WAR_CAMP_SECTIONS[tabId] ?? WAR_CAMP_SECTIONS.warband;
-  ctx.save();
-  ctx.textAlign = 'left';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillStyle = WAR_CAMP_THEME.gold;
-  ctx.fillText(`${sec.num} ${sec.title}`, x, y + 12);
-  ctx.font = '8px monospace';
-  ctx.fillStyle = WAR_CAMP_THEME.subtitle;
-  ctx.fillText(sec.subtitle, x, y + 26);
-  ctx.restore();
-}
-
-/** Section banner using reference art crop. */
+/** Section banner — one art crop per active tab (the only mockup art on screen). */
 export function drawWarCampSectionBanner(ctx, x, y, w, h, tabId) {
   drawWarCampPanel(ctx, x, y, w, h, { fill: 'rgba(8,6,12,0.85)', radius: 6 });
   const crop = tabId === 'recruit' ? 'recruit' : tabId === 'fortress' ? 'fortress' : 'warband';
@@ -212,53 +176,6 @@ export function drawWarCampSectionBanner(ctx, x, y, w, h, tabId) {
   ctx.fillRect(x, y, w, h);
 }
 
-/** Fortress panorama with labeled nodes (mockup bottom-right). */
-export function drawWarCampFortressMap(ctx, x, y, w, h, upgrades = {}, btnsOut = null) {
-  drawWarCampSectionBanner(ctx, x, y, w, h, 'fortress');
-
-  const nodes = [
-    { key: 'watchtower', label: 'Watch Tower', sub: 'Intel & scouts', nx: 0.78, ny: 0.22 },
-    { key: 'barracks', label: 'Barracks', sub: 'Warband training', nx: 0.62, ny: 0.38 },
-    { key: 'treasury', label: 'Treasury', sub: 'Resources', nx: 0.82, ny: 0.52 },
-    { key: 'wallworks', label: 'West Gate', sub: 'Defenders & horn', nx: 0.28, ny: 0.58 },
-    { key: 'armory', label: 'Longhouse', sub: 'Chronicle & gear', nx: 0.48, ny: 0.42 },
-  ];
-
-  ctx.save();
-  ctx.textAlign = 'left';
-  for (const node of nodes) {
-    const def = FORTRESS_DEFS[node.key];
-    if (!def) continue;
-    const lvl = upgrades[node.key] ?? 0;
-    const px = x + w * node.nx;
-    const py = y + h * node.ny;
-    const dotR = 4 + lvl * 0.8;
-
-    ctx.fillStyle = lvl > 0 ? 'rgba(200,170,80,0.95)' : 'rgba(180,160,140,0.65)';
-    ctx.beginPath();
-    ctx.arc(px, py, dotR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,240,200,0.45)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    ctx.font = 'bold 7px monospace';
-    ctx.fillStyle = '#f0e8d8';
-    ctx.fillText(node.label.toUpperCase(), px + 8, py + 3);
-    ctx.font = '6px monospace';
-    ctx.fillStyle = 'rgba(180,165,140,0.65)';
-    ctx.fillText(node.sub, px + 8, py + 12);
-    if (lvl > 0) {
-      ctx.fillStyle = WAR_CAMP_THEME.gold;
-      ctx.fillText(`Lv ${lvl}`, px + 8, py + 21);
-    }
-    if (btnsOut) {
-      btnsOut.push({ x: px - 12, y: py - 12, w: 24, h: 24, action: 'focusFortressNode', key: node.key });
-    }
-  }
-  ctx.restore();
-}
-
 export function getCareerXpProgress(xp, level) {
   const cur = CAREER_XP[level] ?? 0;
   const next = CAREER_XP[Math.min(level + 1, CAREER_XP.length - 1)] ?? cur + 1;
@@ -266,55 +183,233 @@ export function getCareerXpProgress(xp, level) {
   return Math.max(0, Math.min(1, (xp - cur) / (next - cur)));
 }
 
-/** Mockup-style defender card chrome + XP bar. */
-export function drawWarCampDefenderCard(ctx, x, y, w, h, def, { selected = false, bond = false } = {}) {
-  const fill = bond ? 'rgba(32,24,14,0.92)' : 'rgba(18,16,22,0.92)';
+/** Grid layout — portrait cards (taller than wide), 4–6 cols by available width. */
+export function computeWarCampCardGrid(contentW, contentH, preferredCols = WAR_CAMP_GRID_COLS) {
+  const gap = WAR_CAMP_CARD_GAP;
+  let best = null;
+
+  for (let cols = 4; cols <= 6; cols++) {
+    const cardW = Math.floor((contentW - gap * (cols - 1)) / cols);
+    if (cardW < 62) continue;
+    const maxH = Math.floor((contentH - gap) / 2);
+    let cardH = Math.min(Math.floor(cardW * WAR_CAMP_CARD_ASPECT), maxH);
+    if (cardH <= cardW) cardH = Math.floor(cardW * 1.08) + 12;
+    const rowsVisible = Math.max(1, Math.floor((contentH + gap) / (cardH + gap)));
+    const portrait = cardH > cardW;
+    const score = (portrait ? 100 : 0) + rowsVisible * 20 + (cols === preferredCols ? 5 : 0);
+    if (!best || score > best.score) {
+      best = { cols, gap, cardW, cardH, rowsVisible, cardsPerPage: cols * rowsVisible, score };
+    }
+  }
+
+  if (!best) {
+    const cols = 4;
+    const cardW = Math.max(62, Math.floor((contentW - gap * (cols - 1)) / cols));
+    const cardH = Math.floor(cardW * WAR_CAMP_CARD_ASPECT);
+    const rowsVisible = Math.max(1, Math.floor((contentH + gap) / (cardH + gap)));
+    return { cols, gap, cardW, cardH, rowsVisible, cardsPerPage: cols * rowsVisible };
+  }
+
+  const { score: _s, ...grid } = best;
+  return grid;
+}
+
+/** Card index → grid cell origin. */
+export function warCampCardOrigin(listX, listY, grid, indexInView) {
+  const col = indexInView % grid.cols;
+  const row = Math.floor(indexInView / grid.cols);
+  const x = listX + col * (grid.cardW + grid.gap);
+  const y = listY + row * (grid.cardH + grid.gap);
+  return { x, y, col, row };
+}
+
+/**
+ * Vertical portrait card — mockup warband grid cell.
+ * Equip slots are drawn on-card when slotMeta + btnsOut provided.
+ */
+export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
+  const {
+    selected = false,
+    bond = false,
+    isRenaming = false,
+    renameDraft = null,
+    drawPortrait = null,
+    slotMeta = null,
+    btnsOut = null,
+  } = opts;
+
+  const glow = TOWER_DEFS?.[def.type]?.glowRgb ?? '180,150,80';
+  const fill = bond ? 'rgba(32,24,14,0.96)' : 'rgba(12,10,16,0.96)';
   drawWarCampPanel(ctx, x, y, w, h, {
-    fill: selected ? 'rgba(28,32,20,0.95)' : fill,
-    borderAlpha: selected ? 0.9 : 0.55,
+    fill: selected ? 'rgba(28,32,20,0.98)' : fill,
+    borderAlpha: selected ? 0.95 : 0.7,
+    radius: 5,
   });
 
-  const portrait = 36;
-  ctx.fillStyle = 'rgba(8,6,12,0.85)';
-  ctx.strokeStyle = 'rgba(120,100,70,0.45)';
-  ctx.lineWidth = 0.8;
+  // Class tint strip at top (mockup card rim)
+  ctx.fillStyle = `rgba(${glow},0.22)`;
+  ctx.fillRect(x + 1, y + 1, w - 2, 3);
+
+  const pad = 4;
+  const equipH = slotMeta ? 22 : 0;
+  const footerH = 18;
+  const portraitH = h - pad * 2 - equipH - footerH - 28;
+  const px = x + pad;
+  const py = y + pad + 4;
+  const pw = w - pad * 2;
+  const cx = x + w / 2;
+  const cy = py + portraitH / 2;
+  const pr = Math.min(pw, portraitH) * 0.42;
+
+  ctx.fillStyle = 'rgba(4,2,8,0.95)';
+  ctx.strokeStyle = `rgba(${glow},0.35)`;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(x + 6, y + 6, portrait, portrait, 4);
+  ctx.roundRect(px, py, pw, portraitH, 3);
   ctx.fill();
   ctx.stroke();
 
-  const glow = TOWER_DEFS?.[def.type]?.glowRgb ?? '180,150,80';
-  ctx.fillStyle = `rgba(${glow},0.35)`;
-  ctx.beginPath();
-  ctx.arc(x + 6 + portrait / 2, y + 6 + portrait / 2, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  const tx = x + portrait + 14;
-  ctx.textAlign = 'left';
-  ctx.font = 'bold 10px monospace';
-  ctx.fillStyle = UI_COLORS.parchment;
-  ctx.fillText((def.name?.trim() || '— unnamed —').slice(0, 14), tx, y + 18);
-  ctx.font = '7px monospace';
-  ctx.fillStyle = WAR_CAMP_THEME.subtitle;
-  const role = TOWER_DEFS[def.type]?.label ?? def.type;
-  ctx.fillText(`${role}  ·  Lvl ${def.careerLevel ?? 1}`, tx, y + 30);
-
-  const barX = tx;
-  const barY = y + h - 14;
-  const barW = w - portrait - 22;
-  const prog = getCareerXpProgress(def.xp ?? 0, def.careerLevel ?? 1);
-  ctx.fillStyle = WAR_CAMP_THEME.xpTrack;
-  ctx.beginPath();
-  ctx.roundRect(barX, barY, barW, 5, 2);
-  ctx.fill();
-  if (prog > 0) {
-    ctx.fillStyle = WAR_CAMP_THEME.xpBar;
+  if (drawPortrait) {
+    drawPortrait(ctx, cx, cy, pr);
+  } else {
+    ctx.fillStyle = `rgba(${glow},0.45)`;
     ctx.beginPath();
-    ctx.roundRect(barX, barY, Math.max(4, barW * prog), 5, 2);
+    ctx.arc(cx, cy, pr * 0.85, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  if (bond) {
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(220,180,80,0.9)';
+    ctx.fillText('⚭', px + 3, py + 10);
+  }
+
+  const hasName = Boolean(def.name?.trim());
+  const displayName = isRenaming
+    ? (renameDraft ?? '') + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
+    : (hasName ? def.name : '— unnamed —');
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 8px monospace';
+  ctx.fillStyle = isRenaming ? '#ffd878' : (hasName ? UI_COLORS.parchment : 'rgba(130,120,100,0.5)');
+  const nameY = py + portraitH + 12;
+  ctx.fillText(String(displayName).slice(0, 10), cx, nameY);
+
+  const role = TOWER_DEFS[def.type]?.label ?? def.type;
   ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(140,160,180,0.55)';
-  const nextXp = CAREER_XP[Math.min((def.careerLevel ?? 1) + 1, CAREER_XP.length - 1)];
-  ctx.fillText(`${def.xp ?? 0} / ${nextXp} XP`, barX, barY - 3);
+  ctx.fillStyle = WAR_CAMP_THEME.subtitle;
+  ctx.fillText(role.length > 12 ? `${role.slice(0, 11)}…` : role, cx, nameY + 10);
+
+  if (slotMeta && btnsOut) {
+    const slotY = nameY + 16;
+    const slotW = Math.floor((w - pad * 2 - 3) / 2);
+    for (let si = 0; si < 2; si++) {
+      const meta = slotMeta[si];
+      const sx = x + pad + si * (slotW + 3);
+      const icon = si === 0 ? '⚔' : '🛡';
+      const label = meta?.itemDef ? meta.itemDef.name.slice(0, 7) : 'EQUIP';
+      ctx.fillStyle = meta?.itemDef ? (meta.rarityBg ?? 'rgba(40,32,20,0.9)') : 'rgba(24,18,12,0.92)';
+      ctx.strokeStyle = meta?.itemDef ? (meta.rarCol ?? 'rgba(120,100,70,0.5)') : 'rgba(200,170,80,0.55)';
+      ctx.lineWidth = meta?.itemDef ? 0.9 : 1;
+      ctx.beginPath();
+      ctx.roundRect(sx, slotY, slotW, equipH, 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = 'bold 7px monospace';
+      ctx.fillStyle = meta?.itemDef ? (meta.rarCol ?? '#c0a060') : '#c9a227';
+      ctx.textAlign = 'center';
+      ctx.fillText(icon, sx + slotW / 2, slotY + 9);
+      ctx.font = '5px monospace';
+      ctx.fillStyle = meta?.itemDef ? 'rgba(210,195,170,0.85)' : 'rgba(200,170,100,0.65)';
+      ctx.fillText(label, sx + slotW / 2, slotY + 17);
+      btnsOut.push({
+        x: sx, y: slotY, w: slotW, h: equipH,
+        action: 'cycleEquip', defenderId: def.defenderId, slotIdx: si,
+      });
+    }
+    ctx.textAlign = 'left';
+  }
+
+  const lvl = def.careerLevel ?? 1;
+  const prog = getCareerXpProgress(def.xp ?? 0, lvl);
+  const nextXp = CAREER_XP[Math.min(lvl + 1, CAREER_XP.length - 1)];
+  const barX = x + pad;
+  const barW = w - pad * 2;
+  const barY = y + h - pad - 4;
+
+  ctx.textAlign = 'left';
+  ctx.font = '5px monospace';
+  ctx.fillStyle = 'rgba(150,165,185,0.7)';
+  ctx.fillText(`Lv${lvl}`, barX, barY - 5);
+  ctx.textAlign = 'right';
+  ctx.fillText(lvl >= CAREER_XP.length - 1 ? 'MAX' : `${def.xp ?? 0}/${nextXp}`, barX + barW, barY - 5);
+
+  ctx.fillStyle = WAR_CAMP_THEME.xpTrack;
+  ctx.beginPath();
+  ctx.roundRect(barX, barY, barW, 2, 1);
+  ctx.fill();
+  if (prog > 0) {
+    ctx.fillStyle = lvl >= 10 ? '#e8c040' : WAR_CAMP_THEME.xpBar;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, Math.max(2, barW * prog), 2, 1);
+    ctx.fill();
+  }
+  ctx.textAlign = 'left';
+
+  return {
+    bioX: x + w - 16, bioY: y + 3, bioW: 14, bioH: 12,
+    rnX: x + 3, rnY: y + 3,
+  };
+}
+
+/** Fortress upgrade row — clear UPGRADE affordance. */
+export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canBuy, btnsOut, key) {
+  ctx.fillStyle = 'rgba(14,12,18,0.85)';
+  ctx.strokeStyle = maxed ? 'rgba(200,170,80,0.45)' : 'rgba(100,90,70,0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 36, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 9px monospace';
+  ctx.fillStyle = maxed ? '#f0d040' : '#d8c890';
+  ctx.fillText(`${def.icon} ${def.label}`, x + 8, y + 15);
+  ctx.font = '6px monospace';
+  ctx.fillStyle = 'rgba(160,145,120,0.65)';
+  const desc = maxed ? 'Fully upgraded' : (def.levelDesc?.[lvl] ?? '');
+  ctx.fillText(desc.length > 36 ? `${desc.slice(0, 35)}…` : desc, x + 8, y + 27);
+
+  ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(160,140,100,0.55)';
+  ctx.textAlign = 'right';
+  ctx.fillText(`Lv ${lvl}/${def.maxLevel}`, x + w - 8, y + 13);
+
+  if (!maxed) {
+    const btnW = 72, btnH = 22;
+    const btnX = x + w - btnW - 6;
+    const btnY = y + 7;
+    ctx.fillStyle = canBuy ? 'rgba(12,32,12,0.95)' : 'rgba(28,22,14,0.85)';
+    ctx.strokeStyle = canBuy ? 'rgba(100,210,100,0.65)' : 'rgba(80,70,50,0.35)';
+    ctx.lineWidth = canBuy ? 1 : 0.7;
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 7px monospace';
+    ctx.fillStyle = canBuy ? '#88ee66' : 'rgba(120,110,70,0.45)';
+    ctx.fillText(`UPGRADE ${cost}g`, btnX + btnW / 2, btnY + 14);
+    ctx.textAlign = 'left';
+    if (canBuy) {
+      btnsOut.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'upgradeFortress', key });
+    }
+  }
+}
+
+/** @deprecated use drawWarCampPortraitCard */
+export function drawWarCampDefenderCard(ctx, x, y, w, h, def, opts = {}) {
+  drawWarCampPortraitCard(ctx, x, y, w, h, def, opts);
 }
