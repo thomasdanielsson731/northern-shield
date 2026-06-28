@@ -45,9 +45,10 @@ export function getFirstSagaBossConfig() {
   return { name: 'ASH-WARDEN', hp: 900, reward: 120 };
 }
 
-/** Design enemy aliases — raiders/wolves use existing types with tuned HP. */
-const SAGA_RAIDER = 'draugr';
+/** Design enemy aliases — raiders/wolves/draugr use distinct types with tuned HP. */
+const SAGA_RAIDER = 'raider';
 const SAGA_WOLF   = 'warg';
+const SAGA_DRAUGR = 'draugr';
 
 function sagaPack(type, count, hpScale = 1, speedScale = 1) {
   return Array.from({ length: count }, () => ({ type, hpScale, speedScale }));
@@ -71,20 +72,20 @@ export function buildFirstSagaSpawnQueue(nodeIndex, waveSpec) {
     ];
   }
   if (nodeIndex === 2) {
-    if (w === 1) return sagaPack(SAGA_RAIDER, 6, 0.86);
-    if (w === 2) return sagaPack(SAGA_RAIDER, 6, 0.94);
+    if (w === 1) return sagaPack(SAGA_DRAUGR, 6, 0.86);
+    if (w === 2) return sagaPack(SAGA_DRAUGR, 6, 0.94);
   }
   if (nodeIndex === 3) {
-    if (w === 1) return sagaPack(SAGA_RAIDER, 7, 0.88);
-    if (w === 2) return sagaPack(SAGA_RAIDER, 7, 0.96);
+    if (w === 1) return sagaPack(SAGA_DRAUGR, 7, 0.88);
+    if (w === 2) return sagaPack(SAGA_DRAUGR, 7, 0.96);
   }
   if (nodeIndex === 4) {
-    if (w === 1) return sagaPack(SAGA_RAIDER, 6, 0.88);
-    if (w === 2) return [...sagaPack(SAGA_RAIDER, 4, 1.0), ...sagaPack(SAGA_WOLF, 2, 0.92)];
+    if (w === 1) return sagaPack(SAGA_DRAUGR, 6, 0.88);
+    if (w === 2) return [...sagaPack(SAGA_DRAUGR, 4, 1.0), ...sagaPack(SAGA_WOLF, 2, 0.92)];
     if (w === 3 && waveSpec?.isBoss) {
       return [
         ...sagaPack(SAGA_WOLF, 2, 0.90),
-        ...sagaPack(SAGA_RAIDER, 2, 0.90),
+        ...sagaPack(SAGA_DRAUGR, 2, 0.90),
         { __nodeBoss: true, mapIndex: FIRST_SAGA_MAP_INDEX },
       ];
     }

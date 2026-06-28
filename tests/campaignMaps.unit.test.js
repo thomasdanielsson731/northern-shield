@@ -71,7 +71,7 @@ describe('campaignMaps', () => {
     const plan = buildNodeWavePlan(0, 0);
     const q = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 0);
     expect(q).toHaveLength(6);
-    expect(q.every(e => e.type === 'draugr' && e.hpScale < 0.5)).toBe(true);
+    expect(q.every(e => e.type === 'raider' && e.hpScale < 0.5)).toBe(true);
   });
 
   it('first saga A1 matches wolf smoke composition with tuned wolves', () => {
@@ -82,7 +82,7 @@ describe('campaignMaps', () => {
     expect(w1.every(e => e.type === 'warg' && e.hpScale >= 0.75 && e.speedScale <= 0.75)).toBe(true);
     expect(w2).toHaveLength(5);
     expect(w2.filter(e => e.type === 'warg')).toHaveLength(3);
-    expect(w2.filter(e => e.type === 'draugr')).toHaveLength(2);
+    expect(w2.filter(e => e.type === 'raider')).toHaveLength(2);
   });
 
   it('tutorial spawn queue is small (non-saga maps)', () => {

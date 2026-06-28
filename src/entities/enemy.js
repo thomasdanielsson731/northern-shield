@@ -11,6 +11,7 @@ function angleToRow(angle) {
 }
 
 export const ENEMY_TYPES = {
+  RAIDER:    'raider',
   DRAUGR:    'draugr',
   MYLING:    'myling',
   JOTUNN:    'jotunn',
@@ -40,6 +41,17 @@ export const ENEMY_DEFS = {
     reward:         9,
     color:          '#3a6888',   // more saturated blue-slate — undead corpse warrior
     highlightColor: '#90c0de',   // brighter ice-blue highlight
+    flying:         false,
+    targetPriority: ['warband', 'structures', 'goal'],
+  },
+  raider: {
+    label:          'Raider',
+    speed:          1.05,
+    hp:             120,
+    radius:         7,
+    reward:         8,
+    color:          '#5a4838',
+    highlightColor: '#a08060',
     flying:         false,
     targetPriority: ['warband', 'structures', 'goal'],
   },
@@ -528,7 +540,8 @@ export class Enemy {
   }
 
   _drawSprite(ctx) {
-    const sp = SPRITES[this.type];
+    const spriteKey = this.isBoss && this.bossName === 'ASH-WARDEN' ? 'ashWarden' : this.type;
+    const sp = SPRITES[spriteKey];
     if (!sp || !sp.img.complete || sp.img.naturalWidth === 0) return false;
 
     const frame = Math.floor(performance.now() / 180) % 2;  // cycle IDLE/WALK frames only

@@ -11,7 +11,7 @@ import {
   getSkaldPostCounsel,
   getPreferredPostLabel,
 } from '../roster/postTitles.js';
-import { drawFortressPrepSprite } from './fortressPrepArt.js';
+import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey } from './fortressPrepArt.js';
 
 export const PREP_HOTSPOTS = {
   WEST_GATE: 'west_gate',
@@ -349,6 +349,15 @@ function drawWatchTowerGraphic(ctx, box) {
 }
 
 function drawWestGateGraphic(ctx, box, prepMeta, selected) {
+  const gateKey = getWestGateArtKey(prepMeta);
+  if (drawFortressPrepSprite(ctx, gateKey, box)) {
+    if (selected) {
+      ctx.strokeStyle = 'rgba(232,208,96,0.75)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4);
+    }
+    return;
+  }
   const fill = prepMeta.westGateRepaired ? '#4a5038' : '#3a2810';
   const stroke = selected ? '#e8d060' : '#6a5030';
   const postW = box.w * 0.17;
@@ -622,8 +631,13 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const bgGrad = ctx.createLinearGradient(pf.x, pf.y, pf.x, pf.y + pf.h);
   bgGrad.addColorStop(0, '#1a2838');
   bgGrad.addColorStop(1, '#0e1418');
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
+  if (!drawFortressPrepBackground(ctx, pf)) {
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
+  } else {
+    ctx.fillStyle = 'rgba(8,12,18,0.35)';
+    ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
+  }
 
   const cx = pf.x + pf.w * 0.5;
   const cy = pf.y + pf.h * 0.48;
@@ -646,11 +660,13 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
 
   const wallR = hotspotRect(pf, PREP_HOTSPOTS.WALL_SCAR);
   const wallBox = boxFromRect(wallR, pf, cam);
-  ctx.fillStyle = '#3a2818';
-  ctx.fillRect(wallBox.x, wallBox.y, wallBox.w, wallBox.h);
-  ctx.strokeStyle = '#5a4030';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(wallBox.x + 0.5, wallBox.y + 0.5, wallBox.w - 1, wallBox.h - 1);
+  if (!drawFortressPrepSprite(ctx, 'wallScar', wallBox)) {
+    ctx.fillStyle = '#3a2818';
+    ctx.fillRect(wallBox.x, wallBox.y, wallBox.w, wallBox.h);
+    ctx.strokeStyle = '#5a4030';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(wallBox.x + 0.5, wallBox.y + 0.5, wallBox.w - 1, wallBox.h - 1);
+  }
 
   const lhBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.LONGHOUSE), pf, cam);
   drawLonghouseGraphic(ctx, lhBox);
