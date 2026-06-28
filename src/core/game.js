@@ -19,6 +19,18 @@ import {
 import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
 import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines } from '../ui/warCampPanel.js';
 import {
+  drawWarCampAmbientBackdrop,
+  drawWarCampHeader,
+  drawWarCampCycle,
+  drawWarCampPanel,
+  drawWarCampSectionBanner,
+  drawWarCampSectionTitle,
+  drawWarCampFortressMap,
+  drawWarCampDefenderCard,
+  WAR_CAMP_HEADER_H,
+  WAR_CAMP_CYCLE_H,
+} from '../ui/warCampVisual.js';
+import {
   computeBetweenBattlesFadeAlpha,
   tickBtParticle,
   createBtParticlePool,
@@ -13428,63 +13440,9 @@ function applyCampaignEventChoice(eventId, choice) {
   sfxEventResolve();
 }
 
-/** Campaign War Camp backdrop — hearth warmth; evolves with fortress upgrades. */
+/** Campaign War Camp backdrop — mockup-inspired ambient scene + reference art. */
 function drawWarCampBackdrop(fortressUpgrades = {}) {
-  const W = BASE_W, H = BASE_H;
-  const top = META_SCREEN_TOP;
-  const tier = Object.values(fortressUpgrades).reduce((s, v) => s + (v ?? 0), 0);
-  const warm = Math.min(1, 0.35 + tier * 0.08);
-  const g = ctx.createLinearGradient(0, top, 0, H);
-  g.addColorStop(0, '#0c0818');
-  g.addColorStop(0.45, `rgb(${12 + tier}, ${8 + tier}, ${14 + tier * 2})`);
-  g.addColorStop(1, '#080610');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, top, W, H - top);
-
-  const t = performance.now() * 0.001;
-  const hearthX = W * 0.58;
-  const hearthY = top + (H - top) * 0.52;
-  const pulse = 0.55 + Math.sin(t * 1.4) * 0.12;
-  const glow = ctx.createRadialGradient(hearthX, hearthY, 0, hearthX, hearthY, 180 + tier * 12);
-  glow.addColorStop(0, `rgba(200,120,50,${warm * pulse})`);
-  glow.addColorStop(0.45, `rgba(120,60,30,${0.06 + tier * 0.02})`);
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, top, W, H - top);
-
-  ctx.fillStyle = 'rgba(30,20,12,0.35)';
-  ctx.fillRect(hearthX - 48 - tier * 4, hearthY + 8, 96 + tier * 8, 28);
-  ctx.fillStyle = 'rgba(50,32,18,0.5)';
-  ctx.beginPath();
-  ctx.moveTo(hearthX - 36 - tier * 2, hearthY + 8);
-  ctx.lineTo(hearthX - 28, hearthY - 22 - tier * 3);
-  ctx.lineTo(hearthX + 28 + tier * 2, hearthY - 22 - tier * 2);
-  ctx.lineTo(hearthX + 36 + tier * 4, hearthY + 8);
-  ctx.closePath();
-  ctx.fill();
-  if (tier >= 2) {
-    ctx.fillStyle = 'rgba(40,28,18,0.45)';
-    ctx.fillRect(hearthX - 90, hearthY - 8, 36, 22);
-    ctx.fillStyle = 'rgba(60,45,25,0.5)';
-    ctx.beginPath();
-    ctx.moveTo(hearthX - 82, hearthY - 8);
-    ctx.lineTo(hearthX - 74, hearthY - 24);
-    ctx.lineTo(hearthX - 58, hearthY - 24);
-    ctx.lineTo(hearthX - 50, hearthY - 8);
-    ctx.closePath();
-    ctx.fill();
-  }
-  if (tier >= 4) {
-    ctx.strokeStyle = 'rgba(140,160,180,0.25)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(hearthX + 52, hearthY - 18, 24, 32);
-    ctx.fillStyle = 'rgba(80,90,100,0.2)';
-    ctx.fillRect(hearthX + 56, hearthY - 28, 8, 12);
-  }
-  ctx.fillStyle = `rgba(255,140,50,${0.25 + pulse * 0.2 + tier * 0.03})`;
-  ctx.beginPath();
-  ctx.arc(hearthX, hearthY - 6, 5 + Math.sin(t * 2.2) * 1.5 + tier * 0.5, 0, Math.PI * 2);
-  ctx.fill();
+  drawWarCampAmbientBackdrop(ctx, BASE_W, META_SCREEN_TOP, BASE_H, fortressUpgrades);
 }
 
 function drawBetweenBattles() {
@@ -13536,9 +13494,22 @@ function drawBetweenBattles() {
   const isVictory = _battleResult === 'victory';
 
   // ── LEFT PANEL: Battle summary ──────────────────────────────
-  const _contentBot = H - FRAME_THICK - 8;
-  const lpX = FRAME_THICK + 4, lpY = META_SCREEN_TOP, lpW = 300, lpH = _contentBot - META_SCREEN_TOP;
-  drawFantasyPanel(lpX, lpY, lpW, lpH, 'rgba(4,2,12,0.97)', 0.88, 10);
+  const _wcLayout = isCampaignWarCamp();
+  const _wcHeaderH = _wcLayout ? WAR_CAMP_HEADER_H : 0;
+  const _wcCycleH = _wcLayout ? WAR_CAMP_CYCLE_H + 6 : 0;
+  const _contentTop = META_SCREEN_TOP + _wcHeaderH;
+  const _contentBot = H - FRAME_THICK - 8 - _wcCycleH;
+
+  if (_wcLayout) {
+    drawWarCampHeader(ctx, FRAME_THICK + 8, META_SCREEN_TOP + 6, W - FRAME_THICK * 2 - 16);
+  }
+
+  const lpX = FRAME_THICK + 4, lpY = _contentTop, lpW = 300, lpH = _contentBot - _contentTop;
+  if (_wcLayout) {
+    drawWarCampPanel(ctx, lpX, lpY, lpW, lpH);
+  } else {
+    drawFantasyPanel(lpX, lpY, lpW, lpH, 'rgba(4,2,12,0.97)', 0.88, 10);
+  }
   const lcx = lpX + lpW / 2;
 
   const lpSep = (y) => {
@@ -13918,14 +13889,18 @@ function drawBetweenBattles() {
   } // end skirmish left panel (non-campaign War Camp)
 
   // ── RIGHT PANEL: War Camp tabs (one view at a time) ─────────
-  const rpX = lpX + lpW + 8, rpY = META_SCREEN_TOP, rpW = W - (lpX + lpW + 8) - 12, rpH = _contentBot - META_SCREEN_TOP;
+  const rpX = lpX + lpW + 8, rpY = _contentTop, rpW = W - (lpX + lpW + 8) - 12, rpH = _contentBot - _contentTop;
   _navBtns = [];
   const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns, { pulseId: _warCampTabPulse });
   const rpContentY = rpY + _bbNavH + 4;
   const rpContentH = rpH - _bbNavH - 4;
   const rpY0 = rpContentY;
   const rpH0 = rpContentH;
-  drawFantasyPanel(rpX, rpY0, rpW, rpH0, 'rgba(4,2,14,0.97)', 0.88, 10);
+  if (_wcLayout) {
+    drawWarCampPanel(ctx, rpX, rpY0, rpW, rpH0);
+  } else {
+    drawFantasyPanel(rpX, rpY0, rpW, rpH0, 'rgba(4,2,14,0.97)', 0.88, 10);
+  }
   const rix = rpX + 10;
   const riW = rpW - 20;
 
@@ -13939,16 +13914,32 @@ function drawBetweenBattles() {
     recruit:  `Hire defenders · ${_effectiveRecruitCost}g each`,
     fortress: 'Meta buildings · reserve gold · fortress status',
   };
-  ctx.font = 'bold 12px monospace';
-  ctx.fillStyle = '#e8c040';
-  const _tabTitle = _warCampTab === 'warband'
-    ? (_wcSimple ? 'YOUR WARBAND' : 'WARBAND')
-    : _warCampTab === 'recruit' ? 'RECRUIT' : 'FORTRESS';
-  ctx.fillText(_tabTitle, rix, _wcCursor + 10);
-  ctx.font = '8px monospace';
-  ctx.fillStyle = 'rgba(160,140,100,0.62)';
-  ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 24);
-  _wcCursor += 32;
+  if (_wcLayout) {
+    drawWarCampSectionTitle(ctx, rix, _wcCursor, _warCampTab);
+    _wcCursor += 34;
+    const _bannerH = _warCampTab === 'fortress' ? 0 : 56;
+    if (_bannerH > 0) {
+      drawWarCampSectionBanner(ctx, rix, _wcCursor, riW, _bannerH, _warCampTab);
+      _wcCursor += _bannerH + 8;
+    }
+  } else {
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#e8c040';
+    const _tabTitle = _warCampTab === 'warband'
+      ? (_wcSimple ? 'YOUR WARBAND' : 'WARBAND')
+      : _warCampTab === 'recruit' ? 'RECRUIT' : 'FORTRESS';
+    ctx.fillText(_tabTitle, rix, _wcCursor + 10);
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(160,140,100,0.62)';
+    ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 24);
+    _wcCursor += 32;
+  }
+  if (_wcLayout) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(160,140,100,0.62)';
+    ctx.fillText(_wcTabHint[_warCampTab] ?? '', rix, _wcCursor + 8);
+    _wcCursor += 16;
+  }
 
   if (_warCampTab === 'warband') {
     const rCount = _roster.defenders.length;
@@ -14122,6 +14113,61 @@ function drawBetweenBattles() {
     const ry = listTop + i * rowH;
     const isRenaming  = _renameState?.defenderId === def.defenderId;
     const _cardBond = (_campaignState?.bonds ?? []).find(b => b.defenderIds.includes(def.defenderId));
+
+    if (_wcLayout && _wcSimple) {
+      drawWarCampDefenderCard(ctx, rpX + 6, ry, rpW - 12, rowH - 4, def, {
+        selected: isRenaming,
+        bond: !!_cardBond,
+      });
+      if (isRenaming) {
+        ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(200,160,60,0.55)';
+        ctx.fillText('Enter confirm · Esc cancel', rix + 52, ry + 28);
+      }
+      const bioW = 18, bioH = 12;
+      const bioX = rpX + rpW - 12 - bioW;
+      const bioY2 = ry + 4;
+      ctx.fillStyle = 'rgba(30,20,40,0.7)'; ctx.strokeStyle = 'rgba(120,90,180,0.35)'; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.roundRect(bioX, bioY2, bioW, bioH, 2); ctx.fill(); ctx.stroke();
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)'; ctx.textAlign = 'center';
+      ctx.fillText('📜', bioX + bioW / 2, bioY2 + 9);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: bioX, y: bioY2, w: bioW, h: bioH, action: 'openBio', defenderId: def.defenderId });
+      const hasName = Boolean(def.name?.trim());
+      const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
+      if (!hasName || def.careerLevel >= 1) {
+        const rnLabel = !hasName ? '✎' : '✏';
+        ctx.fillStyle = isRenaming ? 'rgba(80,60,10,0.9)' : 'rgba(40,35,15,0.6)';
+        ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : 'rgba(120,100,40,0.3)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.roundRect(rnX, rnY, rnW, rnH, 2); ctx.fill(); ctx.stroke();
+        ctx.font = '7px monospace'; ctx.fillStyle = isRenaming ? '#ffd040' : 'rgba(160,140,60,0.55)';
+        ctx.textAlign = 'center';
+        ctx.fillText(rnLabel, rnX + rnW / 2, rnY + 9);
+        ctx.textAlign = 'left';
+        _betweenBtns.push({ x: rnX, y: rnY, w: rnW, h: rnH, action: 'startRename', defenderId: def.defenderId });
+      }
+      const chipSlotW = Math.floor((riW - 6) / 2);
+      [0, 1].forEach(slotIdx => {
+        const itemId  = def.equipment[slotIdx];
+        const itemDef = itemId ? ITEM_DEFS[itemId] : null;
+        const cx2     = rix + slotIdx * (chipSlotW + 3);
+        const cy2     = ry + 56;
+        const cH      = 12;
+        const rarCol  = itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null;
+        const icon    = slotIdx === 0 ? '⚔' : '🛡';
+        ctx.fillStyle   = itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : 'rgba(30,20,10,0.5)';
+        ctx.strokeStyle = rarCol ?? 'rgba(80,60,30,0.3)';
+        ctx.lineWidth   = rarCol ? 0.8 : 0.5;
+        ctx.beginPath(); ctx.roundRect(cx2, cy2, chipSlotW, cH, 2); ctx.fill(); ctx.stroke();
+        ctx.font = '7px monospace';
+        ctx.fillStyle = rarCol ?? 'rgba(100,80,50,0.45)';
+        const label = itemDef ? `${icon} ${itemDef.name.slice(0, 10)}` : `${icon} —`;
+        ctx.fillText(label, cx2 + 3, cy2 + 9);
+        _betweenBtns.push({ x: cx2, y: cy2, w: chipSlotW, h: cH, action: 'cycleEquip', defenderId: def.defenderId, slotIdx });
+      });
+      return;
+    }
+
     // Bonded defender: warm amber tint on card background
     ctx.fillStyle = _cardBond ? 'rgba(200,150,50,0.07)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
     ctx.fillRect(rpX + 4, ry, rpW - 8, rowH - 2);
@@ -14228,7 +14274,7 @@ function drawBetweenBattles() {
     const barW   = riW - 58 - 44;
     ctx.fillStyle = 'rgba(60,50,30,0.7)';
     ctx.fillRect(barX, ry + 20, barW, 5);
-    ctx.fillStyle = def.careerLevel >= 10 ? '#f0d040' : `rgba(${glow},0.8)`;
+    ctx.fillStyle = def.careerLevel >= 10 ? '#f0d040' : (_wcLayout ? '#3a8fd8' : `rgba(${glow},0.8)`);
     ctx.fillRect(barX, ry + 20, barW * frac, 5);
     ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.5)'; ctx.textAlign = 'left';
     ctx.fillText(def.careerLevel >= 10 ? 'MAX' : `${def.xp}/${nextXP}xp`, barX + barW + 3, ry + 25);
@@ -14405,7 +14451,7 @@ function drawBetweenBattles() {
   }
   } // end warband tab
 
-  const recY = _wcCursor;
+  let recY = _wcCursor;
 
   if (_warCampTab === 'recruit') {
     const _recruitGate = canRecruitInCampaignWarCamp();
@@ -14485,6 +14531,13 @@ function drawBetweenBattles() {
 
   } else if (_warCampTab === 'fortress') {
     // ── FORTRESS NODES (meta buildings — no field layout) ─────────────────────
+    const upgrades = _campaignState?.fortressUpgrades ?? {};
+    if (_wcLayout) {
+      const mapH = 118;
+      drawWarCampFortressMap(ctx, rix, recY, riW, mapH, upgrades);
+      recY += mapH + 10;
+    }
+
     ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.5)';
     ctx.fillText(`◆ ${goldReserve}g reserve · fortress upgrades`, rix, recY + 10);
 
@@ -14508,7 +14561,6 @@ function drawBetweenBattles() {
       }
     }
 
-    const upgrades  = _campaignState?.fortressUpgrades ?? {};
     const nodeKeys  = ['barracks', 'armory', 'watchtower', 'wallworks', 'treasury'];
     ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(140,120,90,0.58)';
     ctx.fillText('FORTRESS NODES', rix, _fortStatusY + 10);
@@ -14623,6 +14675,17 @@ function drawBetweenBattles() {
   }
 
   ctx.restore(); // right panel clip
+
+  if (_wcLayout) {
+    drawWarCampCycle(
+      ctx,
+      FRAME_THICK + 4,
+      H - FRAME_THICK - 8 - WAR_CAMP_CYCLE_H,
+      W - FRAME_THICK * 2 - 8,
+      _warCampTab,
+    );
+  }
+
   ctx.restore(); // fade-in globalAlpha
 }
 

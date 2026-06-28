@@ -15,6 +15,7 @@ export default defineConfig({
         'src/combat/**/*.js',
         'src/roster/**/*.js',
         'src/ui/warCampPanel.js',
+        'src/ui/warCampVisual.js',
         'src/ui/structurePortrait.js',
         'src/ui/assaultPanels.js',
         'src/ui/uiTheme.js',

@@ -4,15 +4,15 @@
  */
 
 import { UI_COLORS } from './uiTheme.js';
+import {
+  drawWarCampPanel,
+  drawWarCampSectionBanner,
+  drawWarCampSectionTitle,
+  WAR_CAMP_THEME,
+} from './warCampVisual.js';
 
 function drawPanel(ctx, x, y, w, h, fill, borderA = 0.75, r = 8) {
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, r);
-  ctx.fill();
-  ctx.strokeStyle = `rgba(200,160,80,${borderA})`;
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  drawWarCampPanel(ctx, x, y, w, h, { fill, borderAlpha: borderA, radius: r });
 }
 
 function wrapLines(ctx, text, maxW) {
@@ -38,28 +38,29 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
   const { x, y, w, h } = panel;
   const cx = x + w / 2;
   const pad = 14;
-  let hy = y + 28;
 
   ctx.save();
   ctx.textAlign = 'center';
 
+  // Longhouse recruit art strip (mockup left column)
+  const bannerH = 56;
+  drawWarCampSectionBanner(ctx, x + pad, y + 8, w - pad * 2, bannerH, 'recruit');
+  let hy = y + bannerH + 22;
+
   ctx.font = 'bold 10px monospace';
   ctx.fillStyle = 'rgba(160,130,80,0.55)';
   ctx.fillText('COMMANDER BRIEFING', cx, hy);
-  hy += 20;
-
-  ctx.font = 'bold 22px monospace';
-  ctx.fillStyle = UI_COLORS.gold;
-  ctx.shadowColor = 'rgba(212,175,55,0.45)';
-  ctx.shadowBlur = 10;
-  ctx.fillText('WAR CAMP', cx, hy);
-  ctx.shadowBlur = 0;
   hy += 18;
 
+  drawWarCampSectionTitle(ctx, x + pad, hy - 8, 'recruit');
+  hy += 34;
+
   ctx.font = '9px monospace';
-  ctx.fillStyle = 'rgba(210,190,150,0.82)';
+  ctx.fillStyle = WAR_CAMP_THEME.subtitle;
+  ctx.textAlign = 'center';
   ctx.fillText('Who holds the line at the next assault?', cx, hy);
-  hy += 22;
+  hy += 20;
+  ctx.textAlign = 'left';
 
   // ── Warband snapshot ──────────────────────────────────────
   drawPanel(ctx, x + pad, hy, w - pad * 2, 52, 'rgba(12,10,20,0.92)', 0.55, 6);
