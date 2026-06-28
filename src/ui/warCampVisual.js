@@ -467,7 +467,7 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
 }
 
 /** Fortress upgrade row — clear UPGRADE affordance. */
-export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canBuy, btnsOut, key) {
+export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canBuy, btnsOut, key, goldReserve = 0) {
   const rowH = 44;
 
   // Row background — greener tint when affordable, golden when maxed
@@ -514,6 +514,10 @@ export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canB
     }
   }
 
+  const costLabel = (goldReserve > 0 && !maxed)
+    ? `${cost}g · ${Math.min(99, Math.round((cost / goldReserve) * 100))}%`
+    : `${cost}g`;
+
   if (!maxed) {
     const btnW = 82, btnH = 30;
     const btnX = x + w - btnW - 5;
@@ -529,7 +533,7 @@ export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canB
       ctx.shadowColor = 'rgba(60,220,50,0.3)'; ctx.shadowBlur = 4;
       ctx.fillText('UPGRADE', btnX + btnW / 2, btnY + 12);
       ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0e060';
-      ctx.fillText(`${cost}g`, btnX + btnW / 2, btnY + 24);
+      ctx.fillText(costLabel, btnX + btnW / 2, btnY + 24);
       ctx.shadowBlur = 0;
       btnsOut.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'upgradeFortress', key });
     } else {
@@ -542,7 +546,7 @@ export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canB
       ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(95,85,60,0.52)';
       ctx.fillText('UPGRADE', btnX + btnW / 2, btnY + 12);
       ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(115,100,65,0.48)';
-      ctx.fillText(`${cost}g`, btnX + btnW / 2, btnY + 24);
+      ctx.fillText(costLabel, btnX + btnW / 2, btnY + 24);
     }
     ctx.textAlign = 'left';
   } else {

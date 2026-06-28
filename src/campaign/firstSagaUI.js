@@ -49,6 +49,20 @@ export function drawFirstSagaCommandMap(ctx, {
   ctx.textAlign = 'center';
   ctx.fillText('REGION 1 — ASH FEN · WEST ROAD', cx, mapY + 22);
 
+  const nextAssault = FIRST_SAGA_ASSAULTS.find(a =>
+    isAssaultUnlocked(progress, mapIndex, a.nodeIndex)
+    && !run.nodesCleared.includes(a.nodeIndex)
+    && !FIRST_SAGA_ASSAULTS.some(b =>
+      b.nodeIndex < a.nodeIndex && !run.nodesCleared.includes(b.nodeIndex),
+    ),
+  );
+  if (nextAssault) {
+    const pulse = 0.55 + Math.sin(performance.now() * 0.005) * 0.25;
+    ctx.font = '7px monospace';
+    ctx.fillStyle = `rgba(240,200,100,${pulse})`;
+    ctx.fillText(`NEXT → ${nextAssault.codename.toUpperCase()} · tap glowing node`, cx, mapY + 36);
+  }
+
   const roadY = mapY + mapH * 0.55;
   const roadX0 = mapX + 36;
   const roadX1 = mapX + mapW - 36;

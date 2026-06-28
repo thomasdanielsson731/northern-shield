@@ -104,6 +104,7 @@ import {
   getSagaDebriefTitle,
   buildFortressDamageReport,
   formatDebriefCompactStats,
+  formatBossLootParchmentLine,
 } from '../campaign/debriefReport.js';
 import {
   formatDefenderPostBadge,
@@ -153,7 +154,9 @@ import {
   drawParchmentTextWash,
   drawParchmentInk,
   drawParchmentOutcomeBanner,
+  buildDebriefContextLines,
 } from '../ui/debriefJuice.js';
+import { drawTowerAttackVfx, drawEnemyAttackVfx, drawEnemyWalkDust } from '../combat/characterAttackVfx.js';
 import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { bakeAshfenTerrain } from '../assets/terrainArt.js';
@@ -162,6 +165,7 @@ import {
   getEquipCeremonyLayout,
   RUNE_CARVER_COLLAPSED_H,
   getThreatCardY,
+  WAR_CAMP_TAB_HINT_LINE,
 } from '../ui/warCampJuice.js';
 import {
   EQUIP_CEREMONY_FRAMES,
@@ -1559,7 +1563,9 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   _roster.releaseAll();
   _campaignState.defenders = _roster.toJSON();
 
-  _pendingCampaignEvent    = getAvailableEvent(_campaignState);
+  _pendingCampaignEvent = (isFirstSagaMap(_campaignMapIndex) && battlesCompleted < 2)
+    ? null
+    : getAvailableEvent(_campaignState);
   _eventCardAnim           = 0;
   _lastResolvedEventTitle  = null;
 
@@ -2368,6 +2374,12 @@ function enterCampaignWarCamp(opts = {}) {
   _betweenSubtab = 'recruit';
   _betweenFadeIn = 30;
   _runeCarverExpanded = false;
+  if (opts.openRecruit) {
+    _warCampTab = 'recruit';
+    _betweenSubtab = 'recruit';
+    _warCampTabPulse = 'recruit';
+    _hintSeen.recruitTab = false;
+  }
   if (!_hintSeen.warCamp && battlesCompleted <= 2) {
     _warCampWelcomeTimer = 280;
     _hintSeen.warCamp = true;
@@ -2384,7 +2396,7 @@ function enterCampaignWarCamp(opts = {}) {
       try { persistCampaign(); } catch {}
     }
   }
-  if (battlesCompleted === 1 && !_hintSeen.recruitTab && isFirstSagaRecruitUnlocked(_campaignState)) {
+  if (!_hintSeen.recruitTab && isFirstSagaRecruitUnlocked(_campaignState)) {
     _warCampTabPulse = 'recruit';
   } else if (battlesCompleted >= 3 && !_hintSeen.fortressTab && _warCampTab !== 'fortress') {
     _warCampTabPulse = 'fortress';
@@ -2516,9 +2528,7 @@ function completeSettlementCeremony() {
   _campaignState.campaignProgress = progress;
   _regionClearFx = { name: 'SAGA I — THE SETTLEMENT', timer: 420 };
   try { persistCampaign(); } catch {}
-  gamePhase = 'nodeMap';
-  _commandMapView = 'overview';
-  _selectedFrontId = null;
+  enterCampaignWarCamp({ freshVisit: true, openRecruit: true });
 }
 
 function canRecruitInCampaignWarCamp() {
@@ -9743,13 +9753,17 @@ function drawCampaignMetaBar(center) {
       ? `${assault.codename} · WEST · prepare the fortress`
       : 'Fortress Prep — click the stronghold';
   } else if (gamePhase === 'betweenBattles') {
-    subtitle = isCampaignWarCamp()
-      ? (_warCampTabPulse === 'recruit'
-        ? 'Hire defenders — RECRUIT tab'
-        : _warCampTabPulse === 'fortress'
-          ? 'Upgrade buildings — FORTRESS tab'
-          : 'Where heroes are made and legends are forged.')
-      : 'Between battles';
+    if (_warCampWelcomeTimer > 0) {
+      subtitle = WAR_CAMP_TAB_HINT_LINE;
+    } else {
+      subtitle = isCampaignWarCamp()
+        ? (_warCampTabPulse === 'recruit'
+          ? 'Hire defenders — RECRUIT tab'
+          : _warCampTabPulse === 'fortress'
+            ? 'Upgrade buildings — FORTRESS tab'
+            : 'Where heroes are made and legends are forged.')
+        : 'Between battles';
+    }
   } else if (gamePhase === 'debrief') {
     subtitle = 'AFTER ACTION';
   } else if (gamePhase === 'mapSelect') {
@@ -9856,7 +9870,13 @@ function drawCommandMapHint() {
   ctx.beginPath(); ctx.roundRect(56, hy, W - 112, hh, 4); ctx.fill();
   ctx.font = '7px monospace';
   ctx.fillStyle = '#a0e090';
-  ctx.fillText('Pick a front (N/E/S/W) → launch your first assault', W / 2, hy + 12);
+  const _sagaMap = isFirstSagaMap(_campaignMapIndex ?? 0);
+  ctx.fillText(
+    _sagaMap
+      ? 'Tap the glowing node on the west road → launch your first assault'
+      : 'Pick a front (N/E/S/W) → launch your first assault',
+    W / 2, hy + 12,
+  );
   ctx.restore();
 }
 
@@ -9882,18 +9902,23 @@ function drawOnboardingBanner() {
     }
   }
   if (_onboardingStep <= ONBOARDING.NONE || _onboardingStep >= ONBOARDING.DONE) return;
-  if (gamePhase !== 'nodeMap' && gamePhase !== 'playing') return;
+  if (gamePhase !== 'nodeMap' && gamePhase !== 'playing' && gamePhase !== 'fortressPrep') return;
   if (gamePhase === 'playing' && waveState === 'active') return;
   if (gamePhase === 'playing' && !isFortressPrepPhase() && _onboardingStep < ONBOARDING.DEPLOY) return;
   if (gamePhase === 'playing' && !isFortressPrepPhase() && canModifyWarbandDeployment()) return;
   if (isFortressPrepPhase() && _onboardingStep !== ONBOARDING.DEPLOY) return;
   const hint = resolveOnboardingHint(_onboardingStep, {
     frontView: gamePhase === 'nodeMap' && _commandMapView === 'front',
+    firstSaga: isFirstSagaMap(_campaignMapIndex ?? 0),
   });
   if (!hint) return;
   const W = BASE_W;
   const cmdHintOffset = (gamePhase === 'nodeMap' && _commandMapHintTimer > 0) ? 22 : 0;
-  const y = gamePhase === 'playing' ? GRID_TOP + 52 : META_SCREEN_TOP + 2 + cmdHintOffset;
+  const y = gamePhase === 'playing'
+    ? GRID_TOP + 52
+    : gamePhase === 'fortressPrep'
+      ? META_SCREEN_TOP + 24
+      : META_SCREEN_TOP + 2 + cmdHintOffset;
   ctx.save();
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(8,6,14,0.90)';
@@ -10104,7 +10129,7 @@ function drawTopBar() {
       ? assaultInfo.tierLabel.toUpperCase()
       : `ASSAULT ${_roman[dispIdx - 1] ?? dispIdx}`;
     const codename = assaultInfo
-      ? assaultInfo.codename.toUpperCase()
+      ? `WAVE ${dispIdx}/${nodeTotal} · ${assaultInfo.codename.toUpperCase()}`
       : `WAVE ${dispIdx} / ${nodeTotal}`;
     const battleNum = _roman[dispIdx - 1] ?? String(dispIdx);
     const isBossW   = _nodeWavePlan.waves[_nodeWaveIndex]?.isBoss ?? false;
@@ -10239,8 +10264,17 @@ function drawTopBar() {
       ctx.fillStyle = 'rgba(120,200,120,0.78)';
       ctx.fillText('Deploy warband — start wave when ready', midX, cy - 14);
     } else if (waveState === 'break') {
-      ctx.fillStyle = 'rgba(200,140,80,0.72)';
-      ctx.fillText('Assault underway — upgrade in War Camp after', midX, cy - 14);
+      if (isCampaignCombat() && _nodeWaveIndex > 0) {
+        const _secsLeft = Math.max(1, Math.ceil((60 - waveTimer) / 30));
+        ctx.fillStyle = 'rgba(200,140,80,0.72)';
+        ctx.fillText(
+          waveTimer >= 60 ? 'Next wave starting…' : `Next wave in ${_secsLeft}s — hold the line`,
+          midX, cy - 14,
+        );
+      } else {
+        ctx.fillStyle = 'rgba(200,140,80,0.72)';
+        ctx.fillText('Assault underway — regroup between waves', midX, cy - 14);
+      }
     }
   }
 
@@ -10254,6 +10288,15 @@ function drawTopBar() {
       ctx.font = '7px monospace';
       ctx.fillStyle = 'rgba(220,160,60,0.78)';
       ctx.fillText(`⚠ ${_warns[0]}`, midX, cy - 14);
+    } else {
+      const _nextIdx = _nodeWaveIndex + 1;
+      const _nextW = _nodeWavePlan.waves[_nextIdx];
+      if (_nextW?.isBoss) {
+        const _bPulse = 0.55 + Math.sin(performance.now() * 0.005) * 0.25;
+        ctx.font = '7px monospace';
+        ctx.fillStyle = `rgba(240,100,60,${_bPulse})`;
+        ctx.fillText(`☠ ${_nextW.bossName ?? 'CHIEFTAIN'}  NEXT WAVE`, midX, cy - 14);
+      }
     }
   }
 
@@ -12395,6 +12438,8 @@ function drawChronicleOverlay() {
   const typeY = chipY + CHIP_H + 5;
   const typeChips = [
     { id: null, lbl: 'ALL B' },
+    { id: 'victory', lbl: 'WIN' },
+    { id: 'defeat', lbl: 'LOSS' },
     { id: 'boss', lbl: 'BOSS' },
   ];
   let typeX = PAD;
@@ -12433,6 +12478,10 @@ function drawChronicleOverlay() {
       : [...battles].reverse();
     if (_chronicleBattleFilter === 'boss') {
       list = list.filter(b => (b.bossKills?.length ?? 0) > 0);
+    } else if (_chronicleBattleFilter === 'victory') {
+      list = list.filter(b => b.result === 'victory');
+    } else if (_chronicleBattleFilter === 'defeat') {
+      list = list.filter(b => b.result === 'defeat');
     }
     return list;
   })();
@@ -12522,7 +12571,14 @@ function drawDefenderBioOverlay(bioState) {
   }
   const bioText = bioState.bioText;
   if (bioState.revealChars === undefined) bioState.revealChars = 0;
-  if (bioState.revealChars < bioText.length) bioState.revealChars = Math.min(bioText.length, bioState.revealChars + 8);
+  if (bioState.revealChars < bioText.length) {
+    const prevTick = bioState._lastSfxChar ?? 0;
+    bioState.revealChars = Math.min(bioText.length, bioState.revealChars + 8);
+    if (bioState.revealChars - prevTick >= 24) {
+      sfxRename();
+      bioState._lastSfxChar = bioState.revealChars;
+    }
+  }
   const displayText = bioText.slice(0, bioState.revealChars);
   ctx.font = '8px monospace';
   // Cache wrapped lines after typewriter completes to skip per-frame wrapText
@@ -12815,7 +12871,7 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
 
   const proseAlpha = getDebriefContentAlpha(_debriefTimer);
   const proseLines = wrapText(ctx, `"${prose}"`, safe.width);
-  for (const line of proseLines.slice(0, 3)) {
+  for (const line of proseLines.slice(0, 4)) {
     drawParchmentInk(ctx, line, hx, hy, {
       font: 'bold 9px monospace',
       fill: '#1a0e04',
@@ -12833,14 +12889,68 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
     goldEarned,
     lives,
     maxLives: STARTING_LIVES,
-    mvpName: pickBattleMvp()?.name,
+    goldStolen: !isVictory ? goldStolen : 0,
+    casualties: _lastAssaultCasualtyCount,
   });
   drawParchmentInk(ctx, compact, hx, hy, {
     font: 'bold 8px monospace',
     fill: '#2a1808',
     haloWidth: 2.5,
   });
-  hy += 18;
+  hy += 16;
+
+  const mvpTower = pickBattleMvp();
+  if (mvpTower) {
+    const mvpPulse = getMvpPulseAlpha(_debriefTimer);
+    const mvpRgb = defenderGlowRgb(mvpTower);
+    const mvpLabel = mvpTower.name ?? TOWER_DEFS[mvpTower.type]?.label ?? mvpTower.type;
+    const mvpLine = `MVP  ${mvpLabel}  ·  ${mvpTower.killCount ?? 0} kills  ·  ${Math.round(mvpTower.damageDealt ?? 0)} dmg`;
+    drawParchmentInk(ctx, mvpLine, hx, hy, {
+      font: 'bold 8px monospace',
+      fill: `rgb(${mvpRgb})`,
+      alpha: mvpPulse,
+      haloWidth: 2.5,
+    });
+    hy += 14;
+  }
+
+  if (_lastBossLootItemId) {
+    const lootDef = ITEM_DEFS[_lastBossLootItemId];
+    const lootLine = formatBossLootParchmentLine(lootDef);
+    if (lootLine) {
+      const rarHex = RARITY_COLOR[lootDef.rarity] ?? '#6a3808';
+      drawParchmentInk(ctx, lootLine, hx, hy, {
+        font: 'bold 8px monospace',
+        fill: rarHex,
+        haloWidth: 2,
+      });
+      hy += 12;
+      drawParchmentInk(ctx, 'Equip in War Camp → Roster', hx, hy, {
+        font: '7px monospace',
+        fill: '#3a2410',
+        haloWidth: 1.5,
+        alpha: 0.85,
+      });
+      hy += 12;
+    }
+  }
+
+  const contextLines = buildDebriefContextLines({
+    isVictory,
+    nodeIndex,
+    casualties: _lastAssaultCasualtyCount,
+    defeatReason: _lastDefeatReason,
+    goldStolen: !isVictory ? goldStolen : 0,
+  });
+  for (const line of contextLines) {
+    drawParchmentInk(ctx, line, hx, hy, {
+      font: 'bold 8px monospace',
+      fill: '#4a2010',
+      haloWidth: 2,
+    });
+    hy += 12;
+  }
+  hy += 4;
 
   if (damage.lines.length > 0) {
     drawParchmentInk(ctx, '— FORTRESS REPORT —', hx, hy, {
@@ -12933,9 +13043,13 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
       _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'commandMap' });
     });
   } else {
-    ctx.font = '8px monospace';
-    ctx.fillStyle = 'rgba(140,120,80,0.45)';
-    ctx.fillText('…', hx, btnY + 18);
+    const remain = Math.max(0, 60 - _debriefTimer);
+    const secs = Math.max(1, Math.ceil(remain / 30));
+    drawParchmentInk(ctx, `After Action report · ${secs}s`, hx, btnY + 18, {
+      font: 'bold 8px monospace',
+      fill: '#3a2810',
+      haloWidth: 2,
+    });
   }
   ctx.textAlign = 'left';
 }
@@ -13407,6 +13521,21 @@ function _applyEventXp(def, xp) {
   }
 }
 
+function _campaignEventOutcomeHint(eventId, choice) {
+  if (choice === 'A') {
+    if (eventId === 'handelsman') return 'equipment acquired';
+    if (eventId === 'volva') return 'trait granted';
+    if (eventId === 'smeden') return 'warband gains XP';
+    if (eventId === 'skalden') return 'veteran gains XP';
+    if (eventId === 'leidangr') return 'recruit enlisted';
+    if (eventId === 'blotet') return 'warband blessed';
+    if (eventId === 'utilegumadr') return 'veteran scarred recruit';
+    if (eventId === 'runstenen') return 'talent unlocked';
+  }
+  if (eventId === 'runstenen') return '+1 ✦ star';
+  return null;
+}
+
 function applyCampaignEventChoice(eventId, choice) {
   if (!_campaignState) return;
   const cs = _campaignState;
@@ -13524,8 +13653,14 @@ function applyCampaignEventChoice(eventId, choice) {
   }
   _lastResolvedEventTitle = _pendingCampaignEvent?.title ?? null;
   const _spent = _goldBefore !== undefined && goldReserve < _goldBefore ? _goldBefore - goldReserve : 0;
+  const _hint = _campaignEventOutcomeHint(eventId, choice);
+  const _toastBits = [];
+  if (_spent > 0) _toastBits.push(`−${_spent}g`);
+  if (_hint) _toastBits.push(_hint);
   _eventOutcomeToast = {
-    text: _spent > 0 ? `${_lastResolvedEventTitle} — −${_spent}g reserve` : `${_lastResolvedEventTitle} resolved`,
+    text: _toastBits.length
+      ? `${_lastResolvedEventTitle} — ${_toastBits.join(' · ')}`
+      : `${_lastResolvedEventTitle} resolved`,
     timer: 120,
     color: UI_COLORS.gold,
   };
@@ -14427,7 +14562,7 @@ function drawBetweenBattles() {
 
     // ✏ rename — always for unnamed; edit for named / promoted
     const rnW = 18, rnH = 12, rnX = bioX - 22, rnY = ry + 4;
-    if (!hasName || hasName || def.careerLevel >= 1) {
+    if (!hasName || def.careerLevel >= 1) {
       const rnLabel = !hasName ? '✎' : '✏';
       ctx.fillStyle   = isRenaming ? 'rgba(80,60,10,0.9)' : (!hasName ? 'rgba(60,45,8,0.85)' : 'rgba(40,35,15,0.6)');
       ctx.strokeStyle = isRenaming ? 'rgba(255,200,60,0.7)' : (!hasName ? 'rgba(255,200,60,0.55)' : 'rgba(120,100,40,0.3)');
@@ -14786,7 +14921,7 @@ function drawBetweenBattles() {
       const maxed = lvl >= def.maxLevel;
       const cost  = maxed ? 0 : def.cost[lvl];
       const ry2   = _nodeBaseY + i * (nodeRowH + 4);
-      drawWarCampFortressRow(ctx, rix, ry2, riW, def, lvl, maxed, cost, goldReserve >= cost, _betweenBtns, key);
+      drawWarCampFortressRow(ctx, rix, ry2, riW, def, lvl, maxed, cost, goldReserve >= cost, _betweenBtns, key, goldReserve);
     });
 
     let _fortSummY = _nodeBaseY + nodeKeys.length * (nodeRowH + 4) + 4;
@@ -16114,7 +16249,11 @@ function draw() {
   }
 
   [...towers].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
-    .forEach(t => { t.selected = (t === selectedTower); t.draw(ctx); });
+    .forEach(t => {
+      t.selected = (t === selectedTower);
+      t.draw(ctx);
+      drawTowerAttackVfx(ctx, t, time);
+    });
 
   for (const t of towers) drawHeroCombatHpBar(t);
   drawFortressGateHpBars();
@@ -16408,7 +16547,12 @@ function draw() {
     ctx.beginPath(); ctx.arc(e.x, e.y, er * 2.4, 0, Math.PI * 2); ctx.fill();
   }
 
-  enemies.slice().sort((a, b) => a.y - b.y).forEach(e => e.draw(ctx));
+  const _combatT = time;
+  enemies.slice().sort((a, b) => a.y - b.y).forEach(e => {
+    drawEnemyWalkDust(ctx, e, _combatT);
+    e.draw(ctx);
+    drawEnemyAttackVfx(ctx, e, _combatT);
+  });
   drawAssaultEnemyTelegraph();
 
   // ── Post-draw overlays: elite rings, leaking warnings, boss aura ─────────────

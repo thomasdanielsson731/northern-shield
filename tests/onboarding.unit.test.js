@@ -16,9 +16,9 @@ describe('onboarding', () => {
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedHero')).toBe(ONBOARDING.DONE);
   });
 
-  it('returns hints for active steps', () => {
-    expect(getOnboardingHint(ONBOARDING.COMMAND_MAP)?.title).toBe('COMMAND MAP');
-    expect(getOnboardingHint(ONBOARDING.DONE)).toBeNull();
+  it('returns first saga hints when requested', () => {
+    expect(getOnboardingHint(ONBOARDING.COMMAND_MAP, { firstSaga: true })?.title).toBe('WEST ROAD');
+    expect(getOnboardingHint(ONBOARDING.DEPLOY, { firstSaga: true })?.line).toMatch(/WEST GATE/i);
   });
 
   it('shows launch hint on front panel after pick', () => {

@@ -4,6 +4,7 @@ import {
   getSagaDebriefTitle,
   buildFortressDamageReport,
   formatDebriefCompactStats,
+  formatBossLootParchmentLine,
 } from '../src/campaign/debriefReport.js';
 import {
   getDefenderPromotionTitle,
@@ -45,6 +46,20 @@ describe('debriefReport', () => {
     });
     expect(s).toContain('2/2 waves');
     expect(s).toContain('MVP Gunnar');
+  });
+
+  it('formats compact debrief stats with raid and casualties', () => {
+    const s = formatDebriefCompactStats({
+      waveNumber: 1, waveTotal: 1, slain: 6, goldEarned: 132, lives: 5, maxLives: 5,
+      goldStolen: 40, casualties: 1,
+    });
+    expect(s).toContain('−40g raided');
+    expect(s).toContain('1 fallen');
+  });
+
+  it('formats boss loot parchment line', () => {
+    expect(formatBossLootParchmentLine({ name: 'Iron Helm' })).toBe('⚔ Boss loot: Iron Helm');
+    expect(formatBossLootParchmentLine(null)).toBeNull();
   });
 
   it('formats compact debrief stats without wave total', () => {

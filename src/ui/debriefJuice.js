@@ -80,9 +80,9 @@ export function drawParchmentTextWash(ctx, safe) {
   const h = safe.bottom - safe.top;
   if (h <= 0) return;
   const g = ctx.createLinearGradient(safe.left, safe.top, safe.left, safe.bottom);
-  g.addColorStop(0, 'rgba(255,248,228,0.28)');
-  g.addColorStop(0.55, 'rgba(255,248,228,0.18)');
-  g.addColorStop(1, 'rgba(255,248,228,0.10)');
+  g.addColorStop(0, 'rgba(255,248,228,0.36)');
+  g.addColorStop(0.55, 'rgba(255,248,228,0.24)');
+  g.addColorStop(1, 'rgba(255,248,228,0.14)');
   ctx.fillStyle = g;
   ctx.fillRect(safe.left, safe.top, safe.width, h);
 }
@@ -130,4 +130,34 @@ export function drawParchmentOutcomeBanner(ctx, text, x, y, isVictory) {
   ctx.shadowBlur = 6;
   ctx.fillText(text, x, y);
   ctx.restore();
+}
+
+/** Context lines below stats on campaign assault parchment. */
+export function buildDebriefContextLines({
+  isVictory,
+  nodeIndex,
+  casualties = 0,
+  defeatReason = null,
+  goldStolen = 0,
+}) {
+  const lines = [];
+  if (isVictory && nodeIndex === 2) {
+    lines.push('The gate cracked. Salvage crews gathered timber.');
+  }
+  if (casualties > 0 && isVictory) {
+    lines.push(`${casualties} fallen — rally at next assault`);
+  }
+  if (!isVictory && defeatReason === 'field_wiped') {
+    lines.push('The line broke — all defenders fell');
+    lines.push('Retry restores full HP at deploy slots');
+  } else if (casualties > 0 && !isVictory) {
+    lines.push(`${casualties} fallen — full HP restored on retry`);
+  }
+  if (!isVictory && defeatReason === 'ramparts') {
+    lines.push('Ramparts breached — treasury exposed');
+  }
+  if (!isVictory && goldStolen > 0) {
+    lines.push(`Treasury raided: −${goldStolen}g`);
+  }
+  return lines;
 }

@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (RC hotfix — naming ceremony draw + War Camp gate)  
+**Last updated:** 2026-06-28 (Polish Board iter 23–32 — debrief MVP/boss loot, chronicle filters, saga NEXT hint)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -70,17 +70,11 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 
 ## Recently completed work
 
-- Post-A0 **hero naming ceremony** (`heroNamingCeremony` phase) — skald modal after A0 debrief
-- A1 balance pass 2 — between-wave 40% heal, lighter wave 2, slower wolf spawns
-- Assault melee damage floaters (`-dmg`, `-GATE`) + gate/hero hit flash
-- Campaign multi-wave banner (`ASSAULT · WAVE 2/3`)
-- `firstSaga.js` — explicit A0–A4 spawn tables + wave bands
-- `firstSagaUI.js` — west road command map (6 nodes) + ceremony screens
-- `settlementCeremony.js` — Settlement Oath flow, recruit #2 unlock
-- Region 2+ locked on campaign select (Saga II+)
-- Wood repair enforced before A3 horn; wall_scar auto-focus on A3 prep
-- Recruit tab locked until ceremony; Valkyrie/Military only in slice
-- **232** unit tests passing (+ First Saga logic harness: `npm run test:saga`)
+- **Wave 8–9 API art** — hero left-facing frames, enemy walk_b, promoted sprite sheets
+- **Combat animation** — `spriteAnim.js`, hero `moveAngle` facing, `characterAttackVfx` wired
+- **Debrief parchment** — layout synced to scroll art, ink/wash legibility, defeat context lines
+- **First Saga onboarding** — west road copy, fortress prep deploy hint, Settlement → RECRUIT tab
+- **371** unit tests passing
 
 ## Current implementation focus
 

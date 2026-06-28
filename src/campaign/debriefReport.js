@@ -138,13 +138,23 @@ export function formatDebriefCompactStats({
   lives,
   maxLives,
   mvpName,
+  goldStolen = 0,
+  casualties = 0,
 }) {
   const parts = [];
   if (waveTotal != null) parts.push(`${waveNumber}/${waveTotal} waves`);
   else if (waveNumber != null) parts.push(`${waveNumber} waves`);
   parts.push(`${slain ?? 0} slain`);
   parts.push(`◆${goldEarned ?? 0}g`);
+  if (goldStolen > 0) parts.push(`−${goldStolen}g raided`);
   parts.push(`${Math.max(0, lives ?? 0)}/${maxLives ?? 20} ramparts`);
+  if (casualties > 0) parts.push(`${casualties} fallen`);
   if (mvpName) parts.push(`MVP ${mvpName}`);
   return parts.join(' · ');
+}
+
+/** One-line boss loot callout for parchment debrief. */
+export function formatBossLootParchmentLine(itemDef) {
+  if (!itemDef?.name) return null;
+  return `⚔ Boss loot: ${itemDef.name}`;
 }

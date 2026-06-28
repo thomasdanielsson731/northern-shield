@@ -8,7 +8,21 @@ export const ONBOARDING = {
   DONE:        5,
 };
 
-export function getOnboardingHint(step) {
+export function getOnboardingHint(step, { firstSaga = false } = {}) {
+  if (firstSaga) {
+    switch (step) {
+      case ONBOARDING.COMMAND_MAP:
+        return { title: 'WEST ROAD', line: 'Tap the glowing node — your first assault awaits' };
+      case ONBOARDING.PICK_FRONT:
+        return { title: 'FIRST ASSAULT', line: 'Launch First Night from the highlighted node' };
+      case ONBOARDING.LAUNCH:
+        return { title: 'LAUNCH', line: 'Press LAUNCH on the highlighted assault row' };
+      case ONBOARDING.DEPLOY:
+        return { title: 'ASSIGN GATE', line: 'Tap WEST GATE · assign your berserker · sound the horn' };
+      default:
+        return null;
+    }
+  }
   switch (step) {
     case ONBOARDING.COMMAND_MAP:
       return { title: 'COMMAND MAP', line: 'Four fronts surround your fortress — pick one to begin' };
@@ -50,7 +64,7 @@ export function getRepairOnboardingHint(prepMeta, assaultNodeIndex, woodCost = 1
 /** Context-aware hint — front panel shows LAUNCH step after a front is picked. */
 export function resolveOnboardingHint(step, context = {}) {
   if (step === ONBOARDING.PICK_FRONT && context.frontView) {
-    return getOnboardingHint(ONBOARDING.LAUNCH);
+    return getOnboardingHint(ONBOARDING.LAUNCH, context);
   }
-  return getOnboardingHint(step);
+  return getOnboardingHint(step, context);
 }

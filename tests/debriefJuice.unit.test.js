@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors, getDebriefContentAlpha, getDebriefScrollSafeArea, getDebriefPanelDrawRect, formatDebriefAssaultHeader } from '../src/ui/debriefJuice.js';
+import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors, getDebriefContentAlpha, getDebriefScrollSafeArea, getDebriefPanelDrawRect, formatDebriefAssaultHeader, buildDebriefContextLines } from '../src/ui/debriefJuice.js';
 
 describe('debriefJuice', () => {
   it('pulses MVP label', () => {
@@ -53,5 +53,24 @@ describe('debriefJuice', () => {
   it('formats assault header for parchment', () => {
     expect(formatDebriefAssaultHeader({ codename: 'First Night', tierLabel: 'A0', frontId: 'west' }))
       .toBe('FIRST NIGHT  ·  A0  ·  WEST FRONT');
+  });
+
+  it('builds debrief context lines for defeat and timber teach', () => {
+    const lines = buildDebriefContextLines({
+      isVictory: true,
+      nodeIndex: 2,
+      casualties: 1,
+    });
+    expect(lines).toContain('The gate cracked. Salvage crews gathered timber.');
+    expect(lines.some(l => l.includes('fallen'))).toBe(true);
+
+    const defeat = buildDebriefContextLines({
+      isVictory: false,
+      nodeIndex: 0,
+      defeatReason: 'ramparts',
+      goldStolen: 40,
+    });
+    expect(defeat).toContain('Ramparts breached — treasury exposed');
+    expect(defeat).toContain('Treasury raided: −40g');
   });
 });
