@@ -16,8 +16,7 @@ import {
   drawPanelHpBar,
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
-import { drawProceduralStructureIcon } from '../ui/structurePortrait.js';
-import { drawStructureArtIcon } from '../assets/structureArt.js';
+import { drawStructureDockIcon, hasStructureArt, preloadStructureArt } from '../assets/structureArt.js';
 import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines } from '../ui/warCampPanel.js';
 import {
   drawWarCampAmbientBackdrop,
@@ -7693,59 +7692,12 @@ function drawRoleChip(x, y, text, glowRgb, { alpha = 1, align = 'left' } = {}) {
   return chipW;
 }
 
-/** Structure / tower portrait for build bar — sprite or procedural glyph. */
+/** Structure / tower portrait for build dock — Wave 10 PNG icons. */
 function drawStructurePortrait(cx, cy, itemId, size, affordable) {
   const def = TOWER_DEFS[itemId];
   const rgb = def?.glowRgb ?? '100,100,100';
-  const sprKey = DEFENDER_SPRITE_KEYS[itemId];
-  const sp     = sprKey ? SPRITES[sprKey] : null;
   drawDefenderPortraitGlow(cx, cy, rgb, size * 0.22, affordable ? 1 : 0.38);
-  if (drawStructureArtIcon(ctx, itemId, cx, cy, size, affordable)) return;
-  if (sp?.img?.complete && sp.img.naturalWidth > 0) {
-    ctx.save();
-    if (!affordable) ctx.globalAlpha = 0.45;
-    ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - size / 2, cy - size / 2, size, size);
-    ctx.restore();
-    return;
-  }
-  const glyphs = {
-    gate: null,
-  };
-  if (itemId === 'gate') {
-    ctx.save();
-    if (!affordable) ctx.globalAlpha = 0.42;
-    const shR = size * 0.38;
-    ctx.fillStyle = '#3a2410';
-    ctx.fillRect(cx - shR, cy - shR * 0.85, shR * 2, shR * 1.7);
-    ctx.strokeStyle = 'rgba(200,160,80,0.75)'; ctx.lineWidth = 1;
-    ctx.strokeRect(cx - shR + 0.5, cy - shR * 0.85 + 0.5, shR * 2 - 1, shR * 1.7 - 1);
-    ctx.strokeStyle = 'rgba(220,180,100,0.65)';
-    for (let i = -1; i <= 1; i++) {
-      ctx.beginPath();
-      ctx.moveTo(cx + i * shR * 0.45, cy - shR * 0.5);
-      ctx.lineTo(cx + i * shR * 0.45, cy + shR * 0.55);
-      ctx.stroke();
-    }
-    ctx.restore();
-    return;
-  }
-  if (itemId === 'wall' || itemId === 'reinforce') {
-    ctx.save();
-    if (!affordable) ctx.globalAlpha = 0.42;
-    const shR = size * 0.38;
-    const fill = itemId === 'reinforce' ? '#b89018' : '#b01808';
-    ctx.fillStyle = '#3a2410';
-    ctx.beginPath(); ctx.arc(cx, cy, shR + 1, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = fill;
-    ctx.beginPath(); ctx.arc(cx, cy, shR, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,220,180,0.35)';
-    ctx.beginPath(); ctx.arc(cx - shR * 0.2, cy - shR * 0.25, shR * 0.35, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(220,170,60,0.55)'; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.arc(cx, cy, shR, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-    return;
-  }
-  drawProceduralStructureIcon(ctx, cx, cy, itemId, size, affordable);
+  drawStructureDockIcon(ctx, itemId, cx, cy, size, affordable);
 }
 
 /** Mockup-style threat intel card on the battlefield during active waves. */
@@ -17576,16 +17528,26 @@ function drawDragGhost() {
     [TOWER_TYPES.BERSERK]:  'berserker',
     [TOWER_TYPES.VALKYRIE]: 'valkyrie',
     [TOWER_TYPES.MILITARY]: 'archer',
-    [TOWER_TYPES.CATAPULT]: 'catapult',
     [TOWER_TYPES.BLONDIE]:  'blondie',
   };
-  const _gsp = SPRITES[_ghostSpriteKeys[dragItem.id]];
   const ppx = gx + 4, ppy = gy + 3, ppw = gw - 8, pph = gh - 20;
-  if (_gsp && _gsp.img.complete && _gsp.img.naturalWidth > 0) {
-    ctx.drawImage(_gsp.img, 0, 0, _gsp.frameW, _gsp.frameH, ppx, ppy, ppw, pph);
+  const ghostCx = gx + gw / 2;
+  const ghostCy = gy + 14;
+  if (hasStructureArt(dragItem.id)) {
+    drawStructureDockIcon(ctx, dragItem.id, ghostCx, ghostCy, Math.min(ppw, pph), true);
+  } else if (_ghostSpriteKeys[dragItem.id]) {
+    const _gsp = SPRITES[_ghostSpriteKeys[dragItem.id]];
+    if (_gsp?.img?.complete && _gsp.img.naturalWidth > 0) {
+      ctx.drawImage(_gsp.img, 0, 0, _gsp.frameW, _gsp.frameH, ppx, ppy, ppw, pph);
+    } else {
+      ctx.beginPath();
+      ctx.arc(ghostCx, ghostCy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = dragItem.color;
+      ctx.fill();
+    }
   } else {
     ctx.beginPath();
-    ctx.arc(cx, gy + 14, 10, 0, Math.PI * 2);
+    ctx.arc(ghostCx, ghostCy, 10, 0, Math.PI * 2);
     ctx.fillStyle = dragItem.color;
     ctx.fill();
   }
