@@ -143,16 +143,17 @@ export function drawSpriteSheetFrame(
 }
 
 /** Ground pool + dark backing so dark API sprites stay readable on fen terrain. */
-export function drawUnitFooting(ctx, x, y, radius, rgb = '220,180,120') {
+export function drawUnitFooting(ctx, x, y, radius, rgb = '220,180,120', strength = 1) {
+  const s = strength;
   const g = ctx.createRadialGradient(x, y + radius * 0.15, 0, x, y + radius * 0.15, radius * 1.35);
-  g.addColorStop(0, `rgba(${rgb},0.28)`);
-  g.addColorStop(0.55, `rgba(${rgb},0.10)`);
+  g.addColorStop(0, `rgba(${rgb},${0.28 * s})`);
+  g.addColorStop(0.55, `rgba(${rgb},${0.10 * s})`);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(x, y + radius * 0.55, radius * 1.1, radius * 0.38, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillStyle = `rgba(0,0,0,${0.42 / s})`;
   ctx.beginPath();
   ctx.ellipse(x + 1, y + radius * 0.62, radius * 0.95, radius * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();

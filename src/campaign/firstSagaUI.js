@@ -235,7 +235,11 @@ export function drawSettlementCeremony(ctx, W, H, {
       btnsOut.push({ x: bx, y: by, w: chipW, h: chipH, action: 'pickRecruit', recruitType: type });
       bx += chipW + gap;
     }
-    hy = by + chipH + 20;
+    hy = by + chipH + 12;
+    ctx.font = '7px monospace';
+    ctx.fillStyle = 'rgba(140,120,80,0.55)';
+    ctx.fillText('Tap a class to continue', hx, hy);
+    hy += 14;
   }
 
   if (step === 4) {
@@ -250,7 +254,8 @@ export function drawSettlementCeremony(ctx, W, H, {
     hy += 16;
   }
 
-  if (stage.cta) {
+  if (stage.cta || (step === 3 && recruitType)) {
+    const ctaLabel = step === 3 ? 'Name them' : stage.cta;
     const btnW = 160;
     const btnH = 30;
     const btnX = hx - btnW / 2;
@@ -258,7 +263,7 @@ export function drawSettlementCeremony(ctx, W, H, {
     drawPanel(ctx, btnX, btnY, btnW, btnH, 'rgba(20,30,14,0.97)', 0.8, 6);
     ctx.font = 'bold 9px monospace';
     ctx.fillStyle = '#90c070';
-    ctx.fillText(stage.cta, hx, btnY + 19);
+    ctx.fillText(ctaLabel, hx, btnY + 19);
     btnsOut.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'advance' });
   }
 

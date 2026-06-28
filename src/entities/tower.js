@@ -35,7 +35,7 @@ function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowCol
     ? glowColor.replace(/rgba?\(([^)]+)\).*/, '$1').split(',').map(s => parseFloat(s.trim())).slice(0, 3)
     : null;
 
-  drawUnitFooting(ctx, x, y + bob.yOff, dw * 0.38, rimRgb ? rimRgb.join(',') : '220,180,120');
+  drawUnitFooting(ctx, x, y + bob.yOff, dw * 0.42, rimRgb ? rimRgb.join(',') : '255,200,120', 1.35);
 
   ctx.save();
   ctx.translate(x, y + bob.yOff);
@@ -48,7 +48,7 @@ function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowCol
     dw,
     lean: bob.lean ?? 0,
     rimRgb,
-    brighten: 1.42,
+    brighten: 1.62,
     outline: true,
   });
   ctx.restore();

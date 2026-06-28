@@ -24,10 +24,12 @@ export class Bullet {
     this.lastKillX    = 0;
     this.lastKillY    = 0;
     this.lastKillIsBoss = false;
+    this.lastHitDmg      = 0;
   }
 
   update(enemies = null) {
     this.bossDmg = null;  // reset each tick; game.js reads this to trigger boss-hit effects
+    this.lastHitDmg = 0;
     if (!this.alive) return 0;
     if (!this.target || !this.target.alive || this.target.reached) {
       this.alive = false;
@@ -50,6 +52,7 @@ export class Bullet {
         return 0;
       }
       const actualDamage = Math.min(this.damage, Math.max(0, this.target.hp));
+      this.lastHitDmg = actualDamage;
       this.target.hp = Math.max(0, this.target.hp - this.damage);
       if (this.source) this.source.damageDealt += actualDamage;
       this.target.hitFlash      = this.damage > 80 ? 14 : this.damage > 40 ? 9 : this.damage > 15 ? 5 : 3;

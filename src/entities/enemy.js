@@ -196,6 +196,7 @@ export class Enemy {
     // Per-unit motion desync — avoids lockstep C64 march
     this.animPhaseOff = Math.random() * 12;
     this.strideMul    = 0.78 + Math.random() * 0.44;
+    this.laneOffset   = 0;
     const speedJitter = 0.86 + Math.random() * 0.28;
     this.baseSpeed *= speedJitter;
     this.speed      *= speedJitter;
@@ -254,13 +255,30 @@ export class Enemy {
     const prevX = this.x;
     const prevY = this.y;
 
-    if (dist <= effectiveSpeed) {
-      this.x = target.x;
-      this.y = target.y;
-      this.pathIndex++;
+    // Lane offset — spread units perpendicular to path so groups don't stack
+    let goalX = target.x;
+    let goalY = target.y;
+    if (dist > 0.001 && !this.flying && Math.abs(this.laneOffset ?? 0) > 0.5) {
+      const perpX = -dy / dist;
+      const perpY = dx / dist;
+      goalX += perpX * this.laneOffset;
+      goalY += perpY * this.laneOffset;
+    }
+    const gdx = goalX - this.x;
+    const gdy = goalY - this.y;
+    const gdist = Math.sqrt(gdx * gdx + gdy * gdy);
+
+    if (gdist <= effectiveSpeed) {
+      this.x = goalX;
+      this.y = goalY;
+      if (dist <= effectiveSpeed) {
+        this.x = target.x;
+        this.y = target.y;
+        this.pathIndex++;
+      }
     } else {
-      this.x += (dx / dist) * effectiveSpeed;
-      this.y += (dy / dist) * effectiveSpeed;
+      this.x += (gdx / gdist) * effectiveSpeed;
+      this.y += (gdy / gdist) * effectiveSpeed;
     }
 
     this.velX = this.x - prevX;
@@ -393,22 +411,23 @@ export class Enemy {
     if (hpRatio < 0.50) ctx.filter = 'none';  // only reset when filter was applied
     ctx.restore();
 
-    // Target-priority — tiny icon only (no HEROES/WALLS text clutter)
+    // Target-priority — small dot (warband=amber, structure=steel, goal=gold)
     const _prio = getEnemyPrimaryTarget(this.type);
-    if (!this.isBoss && this.alive && _prio !== 'goal' && (this.moveSpeed ?? 0) > 0.05) {
+    if (!this.isBoss && this.alive && (this.moveSpeed ?? 0) > 0.05) {
       const pulse = 0.45 + Math.sin(performance.now() * 0.014 + this.x * 0.1) * 0.35;
-      ctx.font = 'bold 6px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = _prio === 'warband'
-        ? `rgba(224,128,64,${0.35 + pulse * 0.45})`
-        : `rgba(128,160,192,${0.35 + pulse * 0.45})`;
-      ctx.fillText(_prio === 'warband' ? '⚔' : '▣', this.x, this.y - this.radius - 6);
-    } else if (!this.isBoss && this.alive && _prio === 'goal' && (this.moveSpeed ?? 0) > 0.05) {
-      const pulse = 0.45 + Math.sin(performance.now() * 0.016 + this.x * 0.1) * 0.35;
-      ctx.font = 'bold 6px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(240,180,50,${0.35 + pulse * 0.45})`;
-      ctx.fillText('◎', this.x, this.y - this.radius - 6);
+      const dotY = this.y - this.radius - 5;
+      ctx.beginPath();
+      if (_prio === 'warband') {
+        ctx.fillStyle = `rgba(240,160,60,${0.40 + pulse * 0.50})`;
+        ctx.arc(this.x, dotY, 2.2, 0, Math.PI * 2);
+      } else if (_prio === 'goal') {
+        ctx.fillStyle = `rgba(240,200,60,${0.40 + pulse * 0.50})`;
+        ctx.arc(this.x, dotY, 2, 0, Math.PI * 2);
+      } else {
+        ctx.fillStyle = `rgba(140,170,210,${0.35 + pulse * 0.45})`;
+        ctx.arc(this.x, dotY, 2, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
 
     // Wounded shimmer — slow red outline (25-50% HP)
@@ -1294,36 +1313,72 @@ export class Enemy {
       ctx.shadowBlur = 0;
       ctx.restore();
     } else {
-      // Tray always visible — faint at full HP so first hit depletes a pre-existing resource
-      ctx.globalAlpha = pct < 1.0 ? 1 : 0.30;
+      const forceShow = _hpBarForceVisible;
+      const barHAdj = forceShow ? 6 : barH;
+      const barWAdj = forceShow ? barW * 1.08 : barW;
+      const barXAdj = this.x - barWAdj / 2;
+      const barYAdj = this.y - this.radius - (forceShow ? 12 : 10);
+      // Tray always visible — faint at full HP unless few enemies remain
+      ctx.globalAlpha = (pct < 1.0 || forceShow) ? 1 : 0.30;
       ctx.fillStyle = 'rgba(6,3,14,0.88)';
-      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+      ctx.fillRect(barXAdj - 1, barYAdj - 1, barWAdj + 2, barHAdj + 2);
       ctx.globalAlpha = 1;
-      if (pct < 1.0) {
+      if (pct < 1.0 || forceShow) {
         const _typeFill = {
           draugr: '#a84848', myling: '#7048c0', jotunn: '#5068a8', mara: '#7828a8',
           warg: '#a07028', einherjar: '#687040', fossegrim: '#288878',
         };
         const _baseFill = _typeFill[this.type];
-        const _urgency  = pct > 0.50 ? 1.0 : pct > 0.25 ? 0.72 : 0.48;
+        const _urgency  = forceShow && pct >= 1.0 ? 1.0 : pct > 0.50 ? 1.0 : pct > 0.25 ? 0.72 : 0.48;
         ctx.fillStyle = _baseFill
           ? `rgba(${parseInt(_baseFill.slice(1, 3), 16)},${parseInt(_baseFill.slice(3, 5), 16)},${parseInt(_baseFill.slice(5, 7), 16)},${_urgency})`
           : (pct > 0.50 ? '#48a038' : pct > 0.25 ? '#c8a030' : '#e84040');
-        ctx.fillRect(barX, barY, barW * pct, barH);
+        ctx.fillRect(barXAdj, barYAdj, barWAdj * (forceShow && pct >= 1.0 ? 1 : pct), barHAdj);
         // Colorblind-safe: tick marks at 25 / 50 / 75 %
         ctx.strokeStyle = 'rgba(0,0,0,0.50)';
         ctx.lineWidth   = 0.8;
         for (const t of [0.25, 0.5, 0.75]) {
-          const tx = barX + barW * t;
-          ctx.beginPath(); ctx.moveTo(tx, barY); ctx.lineTo(tx, barY + barH); ctx.stroke();
+          const tx = barXAdj + barWAdj * t;
+          ctx.beginPath(); ctx.moveTo(tx, barYAdj); ctx.lineTo(tx, barYAdj + barHAdj); ctx.stroke();
         }
         // Type accent border on HP bar tray for type-identification under crowding
         const _typeAccent = { draugr:'#a03030', myling:'#7030b0', jotunn:'#304080', mara:'#601890', warg:'#806020', einherjar:'#606030', fossegrim:'#205060' };
         const _accentColor = _typeAccent[this.type] ?? 'rgba(200,160,40,0.32)';
         ctx.strokeStyle = _accentColor;
         ctx.lineWidth   = 1;
-        ctx.strokeRect(barX - 0.5, barY - 0.5, barW + 1, barH + 1);
+        ctx.strokeRect(barXAdj - 0.5, barYAdj - 0.5, barWAdj + 1, barHAdj + 1);
       }
+    }
+  }
+}
+
+let _hpBarForceVisible = false;
+
+/** When true, non-boss HP bars render at full opacity even at 100% HP (≤5 enemies left). */
+export function setEnemyHpBarForceVisible(v) {
+  _hpBarForceVisible = !!v;
+}
+
+/** Push overlapping path enemies apart for readable silhouettes. */
+export function applyEnemySeparation(enemies) {
+  for (let i = 0; i < enemies.length; i++) {
+    const a = enemies[i];
+    if (!a.alive || a.reached || a.flying) continue;
+    for (let j = i + 1; j < enemies.length; j++) {
+      const b = enemies[j];
+      if (!b.alive || b.reached || b.flying) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const minSep = (a.radius + b.radius) * 0.92;
+      if (dist >= minSep) continue;
+      const push = (minSep - dist) * 0.38;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      a.x -= ux * push;
+      a.y -= uy * push;
+      b.x += ux * push;
+      b.y += uy * push;
     }
   }
 }

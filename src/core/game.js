@@ -1,6 +1,6 @@
 import { ctx, canvas } from './renderer.js';
 import { Grid, CELL } from '../grid/grid.js';
-import { Enemy, ENEMY_TYPES, ENEMY_DEFS, getEnemyGoldSteal, getEnemyTargetPriority, computeAssaultDefeatGoldRaid } from '../entities/enemy.js';
+import { Enemy, ENEMY_TYPES, ENEMY_DEFS, getEnemyGoldSteal, getEnemyTargetPriority, computeAssaultDefeatGoldRaid, applyEnemySeparation, setEnemyHpBarForceVisible } from '../entities/enemy.js';
 import { Tower, TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { SPRITES } from '../assets.js';
 import {
@@ -126,6 +126,7 @@ import {
   shouldPrioritizeFortressGates,
 } from '../combat/assaultTargeting.js';
 import { trimDmgFloaters } from '../combat/combatCaps.js';
+import { formatThreatStatusLine } from '../combat/threatStatus.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
@@ -2079,7 +2080,8 @@ function showAssaultDamageFloater(x, y, dmg, kind) {
     val: `-${dmg}`,
     life: 72, maxLife: 72,
     color: s.color,
-    large: kind === 'hero' || kind === 'gate',
+    large: false,
+    medium: kind === 'hero' || kind === 'gate',
     suffix: s.suffix,
     vy: -0.4,
     raw: true,
@@ -5056,7 +5058,8 @@ function scatterEnemySpawn(enemy, path) {
   const ux = dx / len;
   const uy = dy / len;
   const back = Math.random() * CELL_SIZE * 0.55;
-  const lateral = (Math.random() - 0.5) * CELL_SIZE * 0.42;
+  const lateral = (Math.random() - 0.5) * CELL_SIZE * 0.72;
+  enemy.laneOffset = lateral;
   enemy.x -= ux * back - uy * lateral;
   enemy.y -= uy * back + ux * lateral;
 }
@@ -6018,6 +6021,9 @@ canvas.addEventListener('mousedown', e => {
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
           if (btn.action === 'pickRecruit') {
             _settlementRecruitType = btn.recruitType;
+            if (_settlementCeremonyStep === 3) {
+              advanceSettlementCeremonyStep();
+            }
             return;
           }
           if (btn.action === 'advance') {
@@ -7108,6 +7114,18 @@ function update() {
       screenShake = Math.max(screenShake, 9);
       impactFlashes.push({ x: b.bossDmg.x, y: b.bossDmg.y, maxR: 32, life: 1, color: '#ff7030' });
     }
+    if (b.lastHitDmg > 0 && reward === 0 && b.target?.alive) {
+      const hx = b.target.x;
+      const hy = b.target.y - b.target.radius - 4;
+      const jitter = dmgFloaters.some(f => Math.abs(f.x - hx) < 8 && Math.abs(f.y - hy) < 8)
+        ? (Math.random() - 0.5) * 8 : 0;
+      dmgFloaters.push({
+        x: hx + jitter, y: hy,
+        val: `-${b.lastHitDmg}`, life: 48, maxLife: 48,
+        color: b.lastHitDmg >= 20 ? '#ff8060' : '#ffb890',
+        medium: true, suffix: '', vy: -0.35, raw: true,
+      });
+    }
     if (reward > 0) {
       slain++;
       waveSlainCount++;
@@ -7284,6 +7302,9 @@ function update() {
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (isPathlessMode()) updateEnemyPathlessTarget(enemies[i]);
     enemies[i].update();
+  }
+  applyEnemySeparation(enemies);
+  for (let i = enemies.length - 1; i >= 0; i--) {
     // FROST MARCH: enemy leaves a slow trail; enemies on trail get slowed
     if (currentWaveEvent?.special === 'frostMarch' && enemies[i].alive && !enemies[i].reached) {
       const _fc = grid.pixelToCell(enemies[i].x, enemies[i].y);
@@ -7762,17 +7783,14 @@ function drawThreatIntelCard() {
     ctx.fillStyle = '#ff8060';
     ctx.fillText(BOSS_CONFIGS[dispW]?.name ?? 'BOSS', cardX + 8, cardY + 24);
   } else {
-    const comp    = waveComposition(dispW);
-    const compStr = formatWaveEnemyComp(comp);
-    ctx.fillStyle = 'rgba(210,195,160,0.88)';
-    ctx.fillText(`${onField} on field`, cardX + 8, cardY + 22);
-    if (compStr.length <= 16) {
-      ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.65)';
-      ctx.fillText(compStr, cardX + 8, cardY + 31);
-    }
+    const comp       = waveComposition(dispW);
+    const incoming   = spawnQueue.length;
+    const threatLine = formatThreatStatusLine({ onField, incoming, waveTotal, comp });
+    ctx.fillStyle = 'rgba(210,195,160,0.92)';
+    ctx.fillText(threatLine.length > 22 ? threatLine.slice(0, 21) + '…' : threatLine, cardX + 8, cardY + 22);
     if (shouldPrioritizeFortressGates(isPathlessMode(), _fortressGateBreached, wallData)) {
       ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(200,160,80,0.75)';
-      ctx.fillText('▣ PORT objective', cardX + 8, cardY + (compStr.length <= 16 ? 40 : 31));
+      ctx.fillText('▣ PORT objective', cardX + 8, cardY + 31);
     }
   }
   ctx.restore();
@@ -9165,10 +9183,11 @@ function drawRightPanel() {
           : (BOSS_CONFIGS[waveNumber]?.name ?? 'BOSS');
         _row('Threat:', `☠ ${bName}`, UI_COLORS.threat);
       } else {
-        const comp = isCampaignCombat() ? {} : waveComposition(waveNumber);
+        const comp = isCampaignCombat() ? null : waveComposition(waveNumber);
+        const incoming = spawnQueue.length;
         const compStr = isCampaignCombat()
-          ? `${rem} remaining`
-          : (formatWaveEnemyComp(comp).length > 20 ? `${onField} on field` : `${onField} · ${formatWaveEnemyComp(comp)}`);
+          ? formatThreatStatusLine({ onField, incoming, waveTotal: rem, campaign: true })
+          : formatThreatStatusLine({ onField, incoming, waveTotal, comp });
         _row('Enemies:', compStr, tColor);
       }
       if (currentWaveEvent) {
@@ -10313,14 +10332,23 @@ function drawTopBar() {
     ctx.fillText(`⚑ ${currentWaveEvent.label}${_evSuffix}`, midX, cy - 14);
   }
 
-  // Alive enemy count — "◈ N left" when ≤5 remain during active wave
+  // Active wave — unified threat line (replaces duplicate counters)
   if (waveState === 'active') {
-    const _aliveCount = enemies.filter(e => e.alive && !e.reached).length;
-    if (_aliveCount > 0 && _aliveCount <= 5) {
-      const _cntPulse = 0.60 + 0.40 * Math.abs(Math.sin(performance.now() * 0.008));
-      ctx.font = '7px monospace';
-      ctx.fillStyle = `rgba(255,120,60,${_cntPulse})`;
-      ctx.fillText(`◈ ${_aliveCount} left`, midX, cy + 12);
+    const onField  = enemies.filter(e => e.alive && !e.reached).length;
+    const incoming = spawnQueue.length;
+    const comp     = isCampaignCombat() ? null : waveComposition(waveNumber);
+    const threatLine = isCampaignCombat()
+      ? formatThreatStatusLine({ onField, incoming, waveTotal: onField + incoming, campaign: true })
+      : formatThreatStatusLine({ onField, incoming, waveTotal, comp });
+    const rem = onField + incoming;
+    const remPulse = rem > 0 && rem <= 4 ? 0.75 + Math.sin(performance.now() * 0.008) * 0.25 : 1;
+    ctx.font = rem <= 4 && rem > 0 ? 'bold 6.5px monospace' : '6px monospace';
+    if (rem === 1) {
+      ctx.fillStyle = `rgba(169,50,38,${remPulse})`;
+      ctx.fillText('☠ LAST ENEMY', midX, line2Y + 8);
+    } else {
+      ctx.fillStyle = rem === 0 ? UI_COLORS.fortress : rem <= 4 ? `rgba(46,125,50,${remPulse})` : 'rgba(232,215,181,0.55)';
+      ctx.fillText(threatLine, midX, line2Y + 8);
     }
   }
 
@@ -10391,7 +10419,7 @@ function drawTopBar() {
     }
   }
 
-  // Phase / enemy count line (below center blocks)
+  // Phase line (below center blocks) — ready/break only; active wave uses unified threat line above
   ctx.textAlign = 'center';
   if (waveState !== 'active') {
     const readyPulse = 0.7 + Math.sin(performance.now() * 0.005) * 0.3;
@@ -10404,17 +10432,6 @@ function drawTopBar() {
     } else if (!isCampaignCombat() || waveState === 'countdown') {
       ctx.fillStyle = `rgba(46,125,50,${readyPulse})`;
       ctx.fillText('— READY —', midX, line2Y + 8);
-    }
-  } else {
-    const rem = spawnQueue.length + enemies.filter(e => e.alive).length;
-    const remPulse = rem > 0 && rem <= 4 ? 0.75 + Math.sin(performance.now() * 0.008) * 0.25 : 1;
-    ctx.font = rem <= 4 && rem > 0 ? 'bold 6.5px monospace' : '6px monospace';
-    if (rem === 1) {
-      ctx.fillStyle = `rgba(169,50,38,${remPulse})`;
-      ctx.fillText('☠ LAST ENEMY', midX, line2Y + 8);
-    } else {
-      ctx.fillStyle = rem === 0 ? UI_COLORS.fortress : rem <= 4 ? `rgba(46,125,50,${remPulse})` : 'rgba(232,215,181,0.45)';
-      ctx.fillText(`◈ ${rem} / ${waveTotal}`, midX, line2Y + 8);
     }
   }
 
@@ -11899,17 +11916,24 @@ function drawDmgFloaters() {
   if (dmgFloaters.length === 0) return;
   ctx.save();
   ctx.textAlign = 'center';
-  // Two passes: large floaters first (bottom z), then small; each pass sets state once
-  for (const large of [false, true]) {
-    ctx.shadowBlur = large ? 10 : 6;
+  // Three passes: small → medium → large
+  for (const tier of ['small', 'medium', 'large']) {
+    const isLarge  = tier === 'large';
+    const isMedium = tier === 'medium';
+    ctx.shadowBlur = isLarge ? 10 : isMedium ? 7 : 5;
     for (const f of dmgFloaters) {
-      if (!!f.large !== large) continue;
+      const fLarge  = !!f.large;
+      const fMedium = !!f.medium && !fLarge;
+      if (isLarge && !fLarge) continue;
+      if (isMedium && !fMedium) continue;
+      if (tier === 'small' && (fLarge || fMedium)) continue;
       const t     = 1 - f.life / f.maxLife;
       const alpha = f.life < 20 ? f.life / 20 : 1;
       const fy    = gridScreenY(f.y);
       const fx    = gridScreenX(f.x);
       ctx.globalAlpha = alpha;
-      ctx.font        = `bold ${large ? Math.round(13 + t * 4) : Math.round(9 + t * 3)}px monospace`;
+      const basePx = isLarge ? 12 : isMedium ? 9 : 8;
+      ctx.font        = `bold ${Math.round(basePx + t * (isLarge ? 3 : 2))}px monospace`;
       ctx.fillStyle   = f.color;
       ctx.shadowColor = f.color;
       const text = f.raw ? f.val : `+${f.val}${f.suffix ?? ''}`;
@@ -16366,14 +16390,27 @@ function draw() {
     }
   }
 
-  // Tower light pools — subtle during combat so sprites stay visible (berserk was glow-only)
+  // Tower light pools + ally read ring during combat
   for (const t of towers) {
     if (t.disabledTimer > 0) continue;
     const hero = isHeroTowerType(t.type);
     const inCombat = waveState === 'active';
-    const poolR = hero && inCombat ? CELL_SIZE * 0.32 : CELL_SIZE * 0.5;
-    const strength = hero && inCombat ? 0.28 : 1;
+    const poolR = hero && inCombat ? CELL_SIZE * 0.38 : CELL_SIZE * 0.5;
+    const strength = hero && inCombat ? 0.52 : 1;
     drawDefenderPortraitGlow(t.x, t.y + 2, t.glowRgb, poolR, strength);
+    if (hero && inCombat && t.glowRgb) {
+      const pulse = 0.55 + Math.sin(performance.now() * 0.006 + t.x * 0.02) * 0.25;
+      ctx.save();
+      ctx.strokeStyle = `rgba(${t.glowRgb},${0.38 + pulse * 0.28})`;
+      ctx.lineWidth   = 1.5;
+      ctx.shadowColor = `rgba(${t.glowRgb},0.45)`;
+      ctx.shadowBlur  = 6;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.radius + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
   }
 
   [...towers].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
@@ -16676,6 +16713,8 @@ function draw() {
   }
 
   const _combatT = time;
+  const _aliveOnField = enemies.filter(e => e.alive && !e.reached).length;
+  setEnemyHpBarForceVisible(waveState === 'active' && _aliveOnField > 0 && _aliveOnField <= 5);
   enemies.slice().sort((a, b) => a.y - b.y).forEach(e => {
     drawEnemyWalkDust(ctx, e, _combatT);
     e.draw(ctx);
