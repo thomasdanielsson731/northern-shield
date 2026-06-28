@@ -1,8 +1,11 @@
 /** Equip ceremony flash — ring, banner, and label timing (extracted for tests). */
 
 export const EQUIP_CEREMONY_FRAMES = 72;
+/** @deprecated use getEquipCeremonyLayout(metaScreenTop) */
 export const EQUIP_CEREMONY_RING_CY = 138;
+/** @deprecated use getEquipCeremonyLayout(metaScreenTop) */
 export const EQUIP_CEREMONY_NAME_Y = 134;
+/** @deprecated use getEquipCeremonyLayout(metaScreenTop) */
 export const EQUIP_CEREMONY_SUBTITLE_Y = 146;
 
 export function getEquipCeremonyProgress(timer, total = EQUIP_CEREMONY_FRAMES) {

@@ -6,6 +6,7 @@ import {
   drawWarCampSectionBanner,
   drawWarCampPortraitCard,
   drawWarCampFortressRow,
+  drawWarCampTabWelcomeHint,
   computeWarCampCardGrid,
   warCampCardOrigin,
   getCareerXpProgress,
@@ -57,7 +58,7 @@ describe('warCampVisual', () => {
     expect(() => drawWarCampHeader(ctx, 8, 8, 400)).not.toThrow();
     expect(() => drawWarCampCycle(ctx, 8, 500, 400, 'warband')).not.toThrow();
     expect(() => drawWarCampSectionBanner(ctx, 10, 40, 280, WAR_CAMP_BANNER_H, 'recruit')).not.toThrow();
-    expect(() => drawWarCampSectionBanner(ctx, 10, 96, 280, WAR_CAMP_BANNER_H, 'fortress')).not.toThrow();
+    expect(() => drawWarCampTabWelcomeHint(ctx, 10, 50, 280, 18, 200)).not.toThrow();
     expect(() => drawWarCampPortraitCard(ctx, 10, 100, 72, 112, {
       name: 'Gunnar',
       type: 'valkyrie',

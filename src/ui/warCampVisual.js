@@ -6,6 +6,7 @@
 import { UI_COLORS } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
+import { getWarCampWelcomeAlpha, WAR_CAMP_TAB_HINT_LINE } from './warCampJuice.js';
 
 export const WAR_CAMP_HEADER_H = 0;
 export const WAR_CAMP_CYCLE_H = 52;
@@ -239,6 +240,25 @@ export function drawWarCampSectionBanner(ctx, x, y, w, h, tabId) {
   ctx.font = '7px monospace';
   ctx.fillStyle = WAR_CAMP_THEME.subtitle;
   ctx.fillText(meta.subtitle, textX, y + Math.round(h * 0.68));
+}
+
+/** First-visit pointer — sits on tab row, not a full-width art strip. */
+export function drawWarCampTabWelcomeHint(ctx, tabX, tabY, tabW, tabH, timer) {
+  const alpha = getWarCampWelcomeAlpha(timer);
+  if (alpha <= 0) return;
+  const pulse = 0.55 + Math.sin(performance.now() * 0.007) * 0.35;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillStyle = `rgba(240,210,120,${0.75 + pulse * 0.2})`;
+  ctx.fillText('▼  ' + WAR_CAMP_TAB_HINT_LINE, tabX + tabW / 2, tabY - 6);
+  ctx.strokeStyle = `rgba(240,200,80,${0.25 + pulse * 0.35})`;
+  ctx.lineWidth = 1 + pulse * 0.6;
+  ctx.beginPath();
+  ctx.roundRect(tabX + 2, tabY - 2, tabW - 4, tabH + 4, 4);
+  ctx.stroke();
+  ctx.restore();
 }
 
 export function getCareerXpProgress(xp, level) {

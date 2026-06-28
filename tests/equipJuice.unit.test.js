@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   EQUIP_CEREMONY_FRAMES,
-  EQUIP_CEREMONY_RING_CY,
   getEquipCeremonyProgress,
   getEquipFlashAlpha,
   getEquipRingAlpha,
@@ -9,6 +8,7 @@ import {
   getEquipLabelAlpha,
   tickEquipCeremonyTimer,
 } from '../src/ui/equipJuice.js';
+import { getEquipCeremonyLayout } from '../src/ui/warCampJuice.js';
 
 describe('equipJuice', () => {
   it('progress rises as timer counts down', () => {
@@ -29,7 +29,7 @@ describe('equipJuice', () => {
     expect(getEquipRingAlpha(prog)).toBeGreaterThan(0);
     expect(getEquipLabelAlpha(42)).toBeGreaterThan(0);
     expect(getEquipLabelAlpha(20)).toBe(0);
-    expect(EQUIP_CEREMONY_RING_CY).toBeGreaterThan(120);
+    expect(getEquipCeremonyLayout(50).ringCy).toBeGreaterThan(120);
   });
 
   it('ticks ceremony timer', () => {

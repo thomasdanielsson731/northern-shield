@@ -26,6 +26,7 @@ import {
   warCampCardOrigin,
   drawWarCampPortraitCard,
   drawWarCampFortressRow,
+  drawWarCampTabWelcomeHint,
   WAR_CAMP_BANNER_H,
   WAR_CAMP_CYCLE_H,
 } from '../ui/warCampVisual.js';
@@ -148,10 +149,12 @@ import {
 } from '../ui/debriefJuice.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import {
+  getEquipCeremonyLayout,
+  RUNE_CARVER_COLLAPSED_H,
+  getThreatCardY,
+} from '../ui/warCampJuice.js';
+import {
   EQUIP_CEREMONY_FRAMES,
-  EQUIP_CEREMONY_RING_CY,
-  EQUIP_CEREMONY_NAME_Y,
-  EQUIP_CEREMONY_SUBTITLE_Y,
   getEquipCeremonyProgress,
   getEquipFlashAlpha,
   getEquipRingAlpha,
@@ -740,6 +743,7 @@ let _eventOutcomeToast   = null;      // { text, timer, color }
 let _chronicleBattleFilter = null;    // null | 'victory' | 'defeat' | 'boss'
 let _goldPoolsHintTimer  = 0;
 let _warCampWelcomeTimer = 0;
+let _runeCarverExpanded    = false;
 let _skirmishDiscoveryTimer = 0;
 let _persistCampaignDirty = false;
 let _warCampTabPulse       = null;   // 'recruit' | 'fortress' — pulse tab on first visits
@@ -2349,6 +2353,7 @@ function enterCampaignWarCamp(opts = {}) {
   _warCampTab = 'warband';
   _betweenSubtab = 'recruit';
   _betweenFadeIn = 30;
+  _runeCarverExpanded = false;
   if (!_hintSeen.warCamp && battlesCompleted <= 2) {
     _warCampWelcomeTimer = 280;
     _hintSeen.warCamp = true;
@@ -5993,6 +5998,8 @@ canvas.addEventListener('mousedown', e => {
               try { persistCampaign(); } catch {}
               sfxRune();
             }
+          } else if (btn.action === 'toggleRuneCarver') {
+            _runeCarverExpanded = !_runeCarverExpanded;
           } else if (btn.action === 'warChestDonate') {
             const cost = getWarChestCost(false);
             if (goldReserve >= cost) {
@@ -7575,10 +7582,11 @@ function drawThreatIntelCard() {
   const tColor  = isBossW ? '#ff3820' : tRatio > 0.8 ? '#ff6020' : tRatio > 0.5 ? '#e8c040' : '#50d870';
   const onField = enemies.filter(e => e.alive && !e.reached).length;
   const dossierUp = selectedTower && HERO_BUILD_ITEMS.some(h => h.id === selectedTower.type);
+  const loneStand = !gameOver && towers.length === 1 && lives <= 2;
   const cardX   = assaultPlayfieldWide()
     ? FRAME_THICK + LEFT_DOCK_W + 6
     : playfieldLeft() + 6;
-  const cardY   = dossierUp ? GRID_BOTTOM - 88 : GRID_TOP + 6;
+  const cardY   = getThreatCardY(GRID_TOP, GRID_BOTTOM, dossierUp, loneStand);
   const cardW   = 118;
   const cardH   = isBossW ? 40 : (shouldPrioritizeFortressGates(isPathlessMode(), _fortressGateBreached, wallData) ? 44 : 34);
   const _glass  = assaultUiGlass();
@@ -9848,6 +9856,7 @@ function drawEquipCeremony() {
   const def = _roster?.defenders?.find(d => d.defenderId === _equipFlash.defenderId);
   const prog = getEquipCeremonyProgress(_equipFlash.timer, EQUIP_CEREMONY_FRAMES);
   const flashAlpha = getEquipFlashAlpha(_equipFlash.timer);
+  const layout = getEquipCeremonyLayout(META_SCREEN_TOP);
   if (flashAlpha > 0) {
     ctx.save();
     ctx.globalAlpha = flashAlpha;
@@ -9864,7 +9873,7 @@ function drawEquipCeremony() {
       ctx.strokeStyle = _equipFlash.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(BASE_W / 2, EQUIP_CEREMONY_RING_CY, ringR, 0, Math.PI * 2);
+      ctx.arc(BASE_W / 2, layout.ringCy, ringR, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -9889,10 +9898,10 @@ function drawEquipCeremony() {
     ctx.shadowColor = _equipFlash.color;
     ctx.shadowBlur = 10;
     const _itemLabel = _equipFlash.itemName ? ` — ${_equipFlash.itemName}` : '';
-    ctx.fillText(`⚔ ${def.name}${_itemLabel}`, BASE_W / 2, EQUIP_CEREMONY_NAME_Y);
+    ctx.fillText(`⚔ ${def.name}${_itemLabel}`, BASE_W / 2, layout.nameY);
     ctx.font = '7px monospace';
     ctx.fillStyle = 'rgba(232,215,181,0.72)';
-    ctx.fillText(_equipFlash.itemName ? 'EQUIPPED' : 'GEAR UPDATED', BASE_W / 2, EQUIP_CEREMONY_SUBTITLE_Y);
+    ctx.fillText(_equipFlash.itemName ? 'EQUIPPED' : 'GEAR UPDATED', BASE_W / 2, layout.subtitleY);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
@@ -11924,13 +11933,16 @@ function drawHelpOverlay() {
     ['Scroll',      'Zoom in / out'],
     ['Mid-drag',    'Pan grid'],
     ['↑↓←→',       'Pan grid'],
-    ['1-9',         _assault ? 'Select hero / structure hotkey' : 'Select tower / wall hotkey'],
+    ['1-9',         _assault ? 'Select hero / gate / siege hotkey' : 'Select tower / wall hotkey'],
     ['Esc',         'Deselect / close'],
     ['? / H',       'This cheatsheet'],
   ];
   if (_assault) {
     shortcuts.push(['—', 'Heroes auto-move · Hydda heals wounded allies']);
     shortcuts.push(['MOVE', 'Manual reposition (selected hero panel)']);
+  } else if (gamePhase === 'betweenBattles' && isCampaignWarCamp()) {
+    shortcuts.push(['—', 'War Camp tabs: Warband · Recruit · Fortress']);
+    shortcuts.push(['—', 'Tap ⚔ / 🛡 on hero cards to equip from stash']);
   } else {
     shortcuts.push(['—', 'Build maze walls — path must stay open']);
   }
@@ -13495,7 +13507,7 @@ function drawBetweenBattles() {
   const _contentTop = META_SCREEN_TOP;
   const _contentBot = H - FRAME_THICK - 8;
 
-  const lpX = FRAME_THICK + 4, lpY = _contentTop, lpW = 300, lpH = _contentBot - _contentTop;
+  const lpX = FRAME_THICK + 8, lpY = _contentTop, lpW = 300, lpH = _contentBot - _contentTop;
   if (_wcLayout) {
     drawWarCampPanel(ctx, lpX, lpY, lpW, lpH);
   } else {
@@ -13888,6 +13900,9 @@ function drawBetweenBattles() {
     : null;
   const _tabPulse = _warCampTabPulse ?? (_fortUpgradePulse ? 'fortress' : null);
   const _bbNavH = drawHorizTabs(rpX, rpY, rpW, WAR_CAMP_TABS, _warCampTab, _navBtns, { pulseId: _tabPulse });
+  if (_wcLayout && _warCampWelcomeTimer > 0) {
+    drawWarCampTabWelcomeHint(ctx, rpX, rpY, rpW, _bbNavH, _warCampWelcomeTimer);
+  }
   const rpContentY = rpY + _bbNavH + 4;
   const rpContentH = rpH - _bbNavH - 4;
   const rpY0 = rpContentY;
@@ -13984,16 +13999,39 @@ function drawBetweenBattles() {
   }
 
   ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
-  _wcCursor += 8;
+  if (_warCampTab === 'warband' && !_wcSimple) {
+    ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
+    _wcCursor += 8;
+  }
 
-  // Rune Carver — hidden in First Saga slice
+  // Rune Carver — collapsed by default; hidden in First Saga slice
   if (_warCampTab === 'warband' && stars > 0 && !_wcSimple) {
+    if (!_runeCarverExpanded) {
+      drawWarCampPanel(ctx, rix, _wcCursor, riW, RUNE_CARVER_COLLAPSED_H, {
+        fill: 'rgba(20,12,32,0.92)', borderAlpha: 0.55, radius: 4,
+      });
+      ctx.font = 'bold 7px monospace';
+      ctx.fillStyle = '#c8a8ff';
+      ctx.fillText('✦ RUNE CARVER', rix + 8, _wcCursor + 14);
+      ctx.font = '7px monospace';
+      ctx.fillStyle = '#f0d040';
+      ctx.fillText(`${stars} ★`, rix + 92, _wcCursor + 14);
+      ctx.textAlign = 'right';
+      ctx.font = '6px monospace';
+      ctx.fillStyle = 'rgba(160,130,200,0.7)';
+      ctx.fillText('tap to forge runes ▼', rix + riW - 6, _wcCursor + 14);
+      ctx.textAlign = 'left';
+      _betweenBtns.push({ x: rix, y: _wcCursor, w: riW, h: RUNE_CARVER_COLLAPSED_H, action: 'toggleRuneCarver' });
+      _wcCursor += RUNE_CARVER_COLLAPSED_H + 6;
+    } else {
     ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#c8a8ff';
     ctx.fillText('✦ RUNE CARVER', rix, _wcCursor + 9);
-    ctx.textAlign = 'right'; ctx.font = '8px monospace'; ctx.fillStyle = '#f0d040';
-    ctx.fillText(`${stars} ★`, rix + riW, _wcCursor + 9);
+    ctx.textAlign = 'right'; ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,200,0.65)';
+    ctx.fillText('▲ collapse', rix + riW, _wcCursor + 9);
+    ctx.font = '8px monospace'; ctx.fillStyle = '#f0d040';
+    ctx.fillText(`${stars} ★`, rix + riW - 58, _wcCursor + 9);
     ctx.textAlign = 'left';
+    _betweenBtns.push({ x: rix + riW - 70, y: _wcCursor, w: 70, h: 14, action: 'toggleRuneCarver' });
     _wcCursor += 14;
     const slotW = Math.floor((riW - (RUNE_DEFS.length - 1) * 3) / RUNE_DEFS.length);
     for (let _ri = 0; _ri < RUNE_DEFS.length; _ri++) {
@@ -14022,6 +14060,7 @@ function drawBetweenBattles() {
     ctx.strokeStyle = 'rgba(180,140,60,0.22)'; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(rpX + 6, _wcCursor); ctx.lineTo(rpX + rpW - 6, _wcCursor); ctx.stroke();
     _wcCursor += 8;
+    }
   }
 
   // Promotion banner — warband tab only
@@ -14504,7 +14543,7 @@ function drawBetweenBattles() {
   if (freeItemCount > 0 && listBot + 24 < rpY0 + rpH0) {
     ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(160,130,60,0.55)';
     ctx.textAlign = 'left';
-    ctx.fillText(`◈ ${freeItemCount} item${freeItemCount !== 1 ? 's' : ''} in stash — tap equip chips`, rix, listBot + 12);
+    ctx.fillText(`◈ ${freeItemCount} item${freeItemCount !== 1 ? 's' : ''} in stash — tap ⚔ or 🛡 on a card`, rix, listBot + 12);
   }
   } // end warband tab
 
@@ -14707,9 +14746,10 @@ function assaultFieldHasGate() {
 }
 
 function spawnEquipSparkles(color) {
+  const { sparkleY } = getEquipCeremonyLayout(META_SCREEN_TOP);
   _equipSparkles = Array.from({ length: 14 }, () => ({
     x: BASE_W / 2 + (Math.random() - 0.5) * 100,
-    y: 118 + (Math.random() - 0.5) * 24,
+    y: sparkleY + (Math.random() - 0.5) * 24,
     vx: (Math.random() - 0.5) * 1.8,
     vy: -0.6 - Math.random() * 1.4,
     life: 32 + Math.random() * 24,
