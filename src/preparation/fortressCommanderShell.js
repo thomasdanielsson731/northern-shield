@@ -11,6 +11,7 @@ import {
   getSkaldPostCounsel,
   getPreferredPostLabel,
 } from '../roster/postTitles.js';
+import { drawFortressPrepSprite } from './fortressPrepArt.js';
 
 export const PREP_HOTSPOTS = {
   WEST_GATE: 'west_gate',
@@ -299,6 +300,7 @@ function drawSchematicLegend(ctx, pf) {
 }
 
 function drawLonghouseGraphic(ctx, box) {
+  if (drawFortressPrepSprite(ctx, 'longhouse', box)) return;
   ctx.fillStyle = '#2a1808';
   ctx.fillRect(box.x, box.y + box.h * 0.38, box.w, box.h * 0.62);
   ctx.fillStyle = '#4a3020';
@@ -318,6 +320,7 @@ function drawLonghouseGraphic(ctx, box) {
 }
 
 function drawWatchTowerGraphic(ctx, box) {
+  if (drawFortressPrepSprite(ctx, 'watchTower', box)) return;
   ctx.fillStyle = '#5a4838';
   ctx.fillRect(box.x, box.y + box.h * 0.08, box.w, box.h * 0.22);
   ctx.fillStyle = '#4a3828';
@@ -377,6 +380,16 @@ function drawWestGateGraphic(ctx, box, prepMeta, selected) {
 
 function drawTreasuryGraphic(ctx, box, locked) {
   const alpha = locked ? 0.35 : 1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (drawFortressPrepSprite(ctx, 'treasury', box)) {
+    if (locked) {
+      ctx.fillStyle = 'rgba(8,12,18,0.45)';
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    }
+    ctx.restore();
+    return;
+  }
   ctx.globalAlpha = alpha;
   ctx.fillStyle = '#3a3010';
   ctx.fillRect(box.x, box.y, box.w, box.h);
@@ -397,7 +410,7 @@ function drawTreasuryGraphic(ctx, box, locked) {
   ctx.textAlign = 'center';
   ctx.fillStyle = locked ? 'rgba(120,110,80,0.5)' : '#e8c860';
   ctx.fillText('◆', cx, cy + 4);
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function drawHeroMedallion(ctx, box, def) {
