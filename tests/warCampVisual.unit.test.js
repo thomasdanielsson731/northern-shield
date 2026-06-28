@@ -9,6 +9,7 @@ import {
   computeWarCampCardGrid,
   warCampCardOrigin,
   getCareerXpProgress,
+  getWarCampArtCropAspect,
   WAR_CAMP_BANNER_H,
   WAR_CAMP_CYCLE_H,
   WAR_CAMP_GRID_COLS,
@@ -40,6 +41,11 @@ describe('warCampVisual', () => {
     expect(isWarCampArtReady()).toBe(false);
   });
 
+  it('section banner crops keep natural aspect', () => {
+    expect(getWarCampArtCropAspect('recruit')).toBeLessThan(1);
+    expect(getWarCampArtCropAspect('fortress')).toBeGreaterThan(1);
+  });
+
   it('getCareerXpProgress clamps 0–1', () => {
     expect(getCareerXpProgress(0, 1)).toBe(0);
     expect(getCareerXpProgress(99999, 10)).toBe(1);
@@ -51,6 +57,7 @@ describe('warCampVisual', () => {
     expect(() => drawWarCampHeader(ctx, 8, 8, 400)).not.toThrow();
     expect(() => drawWarCampCycle(ctx, 8, 500, 400, 'warband')).not.toThrow();
     expect(() => drawWarCampSectionBanner(ctx, 10, 40, 280, WAR_CAMP_BANNER_H, 'recruit')).not.toThrow();
+    expect(() => drawWarCampSectionBanner(ctx, 10, 96, 280, WAR_CAMP_BANNER_H, 'fortress')).not.toThrow();
     expect(() => drawWarCampPortraitCard(ctx, 10, 100, 72, 112, {
       name: 'Gunnar',
       type: 'valkyrie',

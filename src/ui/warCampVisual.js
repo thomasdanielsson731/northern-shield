@@ -40,18 +40,54 @@ export function isWarCampArtReady() {
   return Boolean(_warCampArt.complete && _warCampArt.naturalWidth > 0);
 }
 
-export function drawWarCampArtCrop(ctx, x, y, w, h, cropKey = 'full', alpha = 1) {
+/** @returns {number} crop width ÷ height */
+export function getWarCampArtCropAspect(cropKey = 'full') {
+  const c = ART_CROPS[cropKey] ?? ART_CROPS.full;
+  return c.sw / c.sh;
+}
+
+export function drawWarCampArtCrop(ctx, x, y, w, h, cropKey = 'full', alpha = 1, fit = 'stretch') {
   if (!isWarCampArtReady()) return false;
   const c = ART_CROPS[cropKey] ?? ART_CROPS.full;
   const iw = _warCampArt.naturalWidth;
   const ih = _warCampArt.naturalHeight;
+  const sx = c.sx * iw;
+  const sy = c.sy * ih;
+  const sw = c.sw * iw;
+  const sh = c.sh * ih;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.drawImage(
-    _warCampArt,
-    c.sx * iw, c.sy * ih, c.sw * iw, c.sh * ih,
-    x, y, w, h,
-  );
+  if (fit === 'stretch') {
+    ctx.drawImage(_warCampArt, sx, sy, sw, sh, x, y, w, h);
+  } else {
+    const srcAspect = sw / sh;
+    const dstAspect = w / h;
+    let dw = w;
+    let dh = h;
+    let dx = x;
+    let dy = y;
+    if (fit === 'cover') {
+      if (dstAspect > srcAspect) {
+        dh = w / srcAspect;
+        dy = y + (h - dh) / 2;
+      } else {
+        dw = h * srcAspect;
+        dx = x + (w - dw) / 2;
+      }
+    } else {
+      if (dstAspect > srcAspect) {
+        dw = h * srcAspect;
+        dx = x + (w - dw) / 2;
+      } else {
+        dh = w / srcAspect;
+        dy = y + (h - dh) / 2;
+      }
+    }
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.drawImage(_warCampArt, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
   ctx.restore();
   return true;
 }
@@ -160,20 +196,49 @@ export function drawWarCampAmbientBackdrop(ctx, W, top, H, fortressUpgrades = {}
   ctx.fillRect(0, top, W, h);
 }
 
-/** Section banner — one art crop per active tab (the only mockup art on screen). */
+const SECTION_BANNER_META = {
+  recruit:  { crop: 'recruit',  title: 'RECRUIT',  subtitle: 'Hire defenders for the warband' },
+  fortress: { crop: 'fortress', title: 'FORTRESS', subtitle: 'Upgrade buildings with reserve gold' },
+  warband:  { crop: 'warband',  title: 'WARBAND',  subtitle: 'Manage roster and equipment' },
+};
+
+/** Section header — compact art thumb (cover fit) + title; no full-width stretch. */
 export function drawWarCampSectionBanner(ctx, x, y, w, h, tabId) {
-  drawWarCampPanel(ctx, x, y, w, h, { fill: 'rgba(8,6,12,0.85)', radius: 6 });
-  const crop = tabId === 'recruit' ? 'recruit' : tabId === 'fortress' ? 'fortress' : 'warband';
-  const drew = drawWarCampArtCrop(ctx, x + 1, y + 1, w - 2, h - 2, crop, 0.92);
+  const meta = SECTION_BANNER_META[tabId] ?? SECTION_BANNER_META.warband;
+  drawWarCampPanel(ctx, x, y, w, h, { fill: 'rgba(8,6,12,0.88)', radius: 6 });
+
+  const pad = 4;
+  const thumbH = h - pad * 2;
+  const cropAspect = getWarCampArtCropAspect(meta.crop);
+  const thumbW = Math.max(28, Math.min(Math.floor(thumbH * cropAspect), Math.floor(w * 0.22)));
+  const thumbX = x + pad;
+  const thumbY = y + pad;
+
+  ctx.fillStyle = 'rgba(24,18,12,0.92)';
+  ctx.beginPath();
+  ctx.roundRect(thumbX, thumbY, thumbW, thumbH, 4);
+  ctx.fill();
+
+  const drew = drawWarCampArtCrop(ctx, thumbX, thumbY, thumbW, thumbH, meta.crop, 0.96, 'cover');
   if (!drew) {
-    ctx.fillStyle = 'rgba(40,28,18,0.6)';
-    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.fillStyle = 'rgba(40,28,18,0.75)';
+    ctx.fillRect(thumbX, thumbY, thumbW, thumbH);
   }
-  const grad = ctx.createLinearGradient(x, y + h * 0.4, x, y + h);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, 'rgba(8,4,2,0.75)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = 'rgba(150,120,70,0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.roundRect(thumbX, thumbY, thumbW, thumbH, 4);
+  ctx.stroke();
+
+  const textX = thumbX + thumbW + 10;
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillStyle = WAR_CAMP_THEME.title;
+  ctx.fillText(meta.title, textX, y + Math.round(h * 0.40));
+  ctx.font = '7px monospace';
+  ctx.fillStyle = WAR_CAMP_THEME.subtitle;
+  ctx.fillText(meta.subtitle, textX, y + Math.round(h * 0.68));
 }
 
 export function getCareerXpProgress(xp, level) {
