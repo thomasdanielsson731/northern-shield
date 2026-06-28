@@ -1,5 +1,6 @@
 import { CAMPAIGN_MAP_COUNT } from './campaignMaps.js';
 import { FORTRESS_DEFS } from '../fortress/fortress.js';
+import { trimCampaignCollections } from './scaleLimits.js';
 
 const DEFAULT_FORTRESS_UPGRADES = Object.fromEntries(
   Object.keys(FORTRESS_DEFS).map(k => [k, 0])
@@ -36,7 +37,7 @@ export function validateCampaignState(state) {
   }
   s.fortressUpgrades = fu;
 
-  return s;
+  return trimCampaignCollections(s);
 }
 
 /** Verify checksum written by saveCampaign; clamp inflated values if tampered. */

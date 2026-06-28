@@ -43,4 +43,11 @@ describe('saveValidate', () => {
     expect(v.fortressUpgrades.treasury).toBe(0);
     expect(v.fortressUpgrades.barracks).toBe(0);
   });
+
+  it('trims chronicle on validate load', () => {
+    const s = createNewCampaign();
+    s.chronicle.battles = Array.from({ length: 250 }, (_, i) => ({ battleNumber: i }));
+    const v = validateCampaignState(s);
+    expect(v.chronicle.battles.length).toBe(200);
+  });
 });

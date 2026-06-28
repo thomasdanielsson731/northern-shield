@@ -28,6 +28,12 @@ import { ONBOARDING, advanceOnboarding, resolveOnboardingHint, getRepairOnboardi
 import { getSpriteScale, setSpriteScale, changeSpriteScale } from '../config.js';
 import { saveCampaign, loadCampaign, createNewCampaign } from '../campaign/save.js';
 import {
+  trimChronicleBattles,
+  trimArrayTail,
+  MAX_BATTLE_HISTORY,
+  validateMapBests,
+} from '../campaign/scaleLimits.js';
+import {
   SLOT_COUNT, loadSlotsMeta, migrateLegacyToSlots, loadSession, saveSession,
   slotHasSave, deleteSlot, createCampaignInSlot, touchSlotMeta,
 } from '../campaign/saveSlots.js';
@@ -95,6 +101,7 @@ import {
   isStructureWallTarget,
   shouldPrioritizeFortressGates,
 } from '../combat/assaultTargeting.js';
+import { trimDmgFloaters } from '../combat/combatCaps.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
@@ -723,6 +730,7 @@ let _chronicleBattleFilter = null;    // null | 'victory' | 'defeat' | 'boss'
 let _goldPoolsHintTimer  = 0;
 let _warCampWelcomeTimer = 0;
 let _skirmishDiscoveryTimer = 0;
+let _persistCampaignDirty = false;
 let _warCampTabPulse       = null;   // 'recruit' | 'fortress' — pulse tab on first visits
 let _structuresTabPulse    = 0;      // frames — pulse STRUCTURES tab during deploy onboarding
 let _pendingAssaultNode    = null;   // assault node queued from command map / war camp
@@ -978,7 +986,7 @@ let _pendingScore = null;  // score awaiting player name entry
 // ── per-map best scores ────────────────────────────────────────────────────────
 const MAP_BEST_KEY = 'northern-shield-map-best';
 let _mapBests = {};
-try { _mapBests = JSON.parse(localStorage.getItem(MAP_BEST_KEY)) || {}; } catch {}
+try { _mapBests = validateMapBests(JSON.parse(localStorage.getItem(MAP_BEST_KEY))); } catch { _mapBests = {}; }
 let _currentMapName = '';
 
 function saveMapBest(mapName, waves, slain) {
@@ -1358,6 +1366,9 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   }
   _chronicleBattleData.prose = generateBattleReport(_chronicleBattleData, _chron);
   _chron.battles.push(_chronicleBattleData);
+  _chron.battles = trimChronicleBattles(_chron.battles);
+  _campaignState.battleHistory = trimArrayTail(_campaignState.battleHistory, MAX_BATTLE_HISTORY);
+  if (_chronicleProseCache.size > 0) _chronicleProseCache.clear();
 
   _reserveContrib = result === 'defeat'
     ? Math.floor(goldEarned * 0.08)
@@ -1833,8 +1844,17 @@ function restoreGameSession(session) {
 
 function persistCampaign() {
   if (!_campaignState || _activeSlotIndex == null) return;
+  _persistCampaignDirty = true;
+}
+
+function _flushPersistCampaign() {
+  if (!_persistCampaignDirty || !_campaignState || _activeSlotIndex == null) return;
+  _persistCampaignDirty = false;
   _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), ..._hintSeen };
-  saveCampaign(_campaignState, localStorage, _activeSlotIndex);
+  const ok = saveCampaign(_campaignState, localStorage, _activeSlotIndex);
+  if (!ok) {
+    _uiToast = { text: 'SAVE FAILED — browser storage may be full', timer: 140, color: '#e84040' };
+  }
   const session = serializeGameSession();
   saveSession(session, _activeSlotIndex);
   _slotsMeta = touchSlotMeta(_activeSlotIndex, _campaignState, session);
@@ -6642,6 +6662,7 @@ canvas.addEventListener('wheel', e => {
     const lm = _structureListLayout(FRAME_THICK, GRID_TOP, LEFT_DOCK_W, leftDockPanelHeight());
     _structureScrollY = Math.max(0, Math.min(lm.maxScroll, _structureScrollY + e.deltaY * 0.45));
     _buildBtnsCache = null;
+    _buildBtnsCache = null;
     return;
   }
 
@@ -7212,6 +7233,7 @@ function update() {
       dmgFloaters.length--;
     }
   }
+  trimDmgFloaters(dmgFloaters);
 
   // Update splash rings
   for (let i = splashRings.length - 1; i >= 0; i--) {
@@ -13488,7 +13510,8 @@ function drawBetweenBattles() {
     drawWarCampBackdrop(_campaignState?.fortressUpgrades ?? {});
   } else {
     const t = performance.now() * 0.001;
-    for (const s of STARS) {
+    for (let si = 0; si < STARS.length; si += 2) {
+      const s = STARS[si];
       const sx = s.x * W, sy = s.y * H;
       const alpha = 0.25 + Math.sin(t * 0.4 + s.phase) * 0.18;
       ctx.beginPath();
@@ -13496,7 +13519,7 @@ function drawBetweenBattles() {
       ctx.fillStyle = `rgba(200,210,255,${alpha})`;
       ctx.fill();
     }
-    for (let _p = 0; _p < 24; _p++) {
+    for (let _p = 0; _p < 16; _p++) {
       const _seed = _p * 2.39996;
       const _speed = 0.035 + (_p % 4) * 0.015;
       const _px = (Math.cos(_seed * 3.7) * 0.5 + 0.5) * W;
@@ -17026,6 +17049,7 @@ function gameLoop() {
     }
   }
   _frameTick++;
+  _flushPersistCampaign();
   if (_structuresTabPulse > 0) _structuresTabPulse--;
   if (_settlementStoneFlash > 0) _settlementStoneFlash = tickStoneFlash(_settlementStoneFlash);
   tickAssaultDamageFlashes();
@@ -17038,7 +17062,12 @@ function gameLoop() {
 
 computeScale();
 window.addEventListener('resize', computeScale);
-window.addEventListener('beforeunload', () => { if (_activeSlotIndex != null) persistCampaign(); });
+window.addEventListener('beforeunload', () => {
+  if (_campaignState && _activeSlotIndex != null) {
+    _persistCampaignDirty = true;
+    _flushPersistCampaign();
+  }
+});
 initTerrain();
 _slotsMeta = migrateLegacyToSlots();
 gameLoop();

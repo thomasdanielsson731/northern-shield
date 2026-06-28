@@ -1,5 +1,6 @@
 import { createEmptyCampaignProgress } from './campaignMaps.js';
 import { simpleSaveChecksum, verifySaveChecksum } from './saveValidate.js';
+import { trimCampaignCollections, SAVE_SIZE_WARN_BYTES, estimateSaveBytes } from './scaleLimits.js';
 import { slotCampaignKey } from './saveSlots.js';
 
 export const CAMPAIGN_KEY = 'ns-campaign-v2';
@@ -34,10 +35,18 @@ export function createNewCampaign() {
 // storage parameter is injectable for testing; defaults to the global localStorage
 export function saveCampaign(state, storage = localStorage, slotIndex = null) {
   try {
-    const payload = { ...state, _ck: simpleSaveChecksum(state) };
+    const trimmed = trimCampaignCollections(state);
+    const payload = { ...trimmed, _ck: simpleSaveChecksum(trimmed) };
     const key = slotIndex != null ? slotCampaignKey(slotIndex) : CAMPAIGN_KEY;
-    storage.setItem(key, JSON.stringify(payload));
-  } catch {}
+    const json = JSON.stringify(payload);
+    if (estimateSaveBytes(trimmed) > SAVE_SIZE_WARN_BYTES) {
+      console.warn('[Northern Shield] Save size large — chronicle may need trimming.');
+    }
+    storage.setItem(key, json);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function loadCampaign(storage = localStorage, slotIndex = null) {
