@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   EQUIP_CEREMONY_FRAMES,
+  EQUIP_CEREMONY_RING_CY,
   getEquipCeremonyProgress,
   getEquipFlashAlpha,
   getEquipRingAlpha,
@@ -28,6 +29,7 @@ describe('equipJuice', () => {
     expect(getEquipRingAlpha(prog)).toBeGreaterThan(0);
     expect(getEquipLabelAlpha(42)).toBeGreaterThan(0);
     expect(getEquipLabelAlpha(20)).toBe(0);
+    expect(EQUIP_CEREMONY_RING_CY).toBeGreaterThan(120);
   });
 
   it('ticks ceremony timer', () => {

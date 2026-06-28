@@ -1,6 +1,9 @@
 /** Equip ceremony flash — ring, banner, and label timing (extracted for tests). */
 
 export const EQUIP_CEREMONY_FRAMES = 72;
+export const EQUIP_CEREMONY_RING_CY = 138;
+export const EQUIP_CEREMONY_NAME_Y = 134;
+export const EQUIP_CEREMONY_SUBTITLE_Y = 146;
 
 export function getEquipCeremonyProgress(timer, total = EQUIP_CEREMONY_FRAMES) {
   return 1 - timer / total;

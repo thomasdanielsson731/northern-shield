@@ -23,6 +23,10 @@ export default defineConfig({
         'src/ui/settlementJuice.js',
         'src/ui/equipJuice.js',
         'src/ui/skirmishJuice.js',
+        'src/ui/celebrationJuice.js',
+        'src/ui/flawlessJuice.js',
+        'src/ui/slotSelectJuice.js',
+        'src/ui/commandMapJuice.js',
       ],
       exclude: [
         'src/campaign/sagaPlaytestHarness.js',

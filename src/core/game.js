@@ -131,6 +131,9 @@ import {
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import {
   EQUIP_CEREMONY_FRAMES,
+  EQUIP_CEREMONY_RING_CY,
+  EQUIP_CEREMONY_NAME_Y,
+  EQUIP_CEREMONY_SUBTITLE_Y,
   getEquipCeremonyProgress,
   getEquipFlashAlpha,
   getEquipRingAlpha,
@@ -143,6 +146,27 @@ import {
   tickSkirmishDiscoveryTimer,
   SKIRMISH_DISCOVERY_FRAMES,
 } from '../ui/skirmishJuice.js';
+import {
+  getCelebrationFadeAlpha,
+  tickFxTimer,
+  getMapUnlockBandY,
+  getRegionClearTextY,
+  getToastFadeAlpha,
+} from '../ui/celebrationJuice.js';
+import {
+  getFlawlessNotifAlpha,
+  getFlawlessNotifY,
+  tickFlawlessTimer,
+} from '../ui/flawlessJuice.js';
+import {
+  SLOT_DELETE_MODAL,
+  getDeleteConfirmBackdropAlpha,
+  getDeleteConfirmPulse,
+} from '../ui/slotSelectJuice.js';
+import {
+  getCommandMapHintAlpha,
+  tickCommandMapHintTimer,
+} from '../ui/commandMapJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -6675,7 +6699,7 @@ function update() {
     startNextWave();
   }
 
-  if (flawlessTimer > 0) flawlessTimer--;
+  if (flawlessTimer > 0) flawlessTimer = tickFlawlessTimer(flawlessTimer);
 
   if (pendingSell) {
     pendingSell.timer--;
@@ -9657,8 +9681,8 @@ function drawCampaignMetaBar(center) {
 
 function drawUiToast() {
   if (!_uiToast || _uiToast.timer <= 0) return;
-  _uiToast.timer--;
-  const alpha = Math.min(1, _uiToast.timer / 25);
+  _uiToast.timer = tickFxTimer(_uiToast.timer);
+  const alpha = getToastFadeAlpha(_uiToast.timer, 25);
   const cx = gridScreenX(COLS * CELL_SIZE / 2);
   const cy = GRID_TOP + 18;
   ctx.save();
@@ -9676,23 +9700,24 @@ function drawUiToast() {
 
 function drawMapUnlockCelebration() {
   if (!_mapUnlockFx || _mapUnlockFx.timer <= 0) return;
-  _mapUnlockFx.timer--;
-  const alpha = Math.min(1, _mapUnlockFx.timer / 40);
+  _mapUnlockFx.timer = tickFxTimer(_mapUnlockFx.timer);
+  const alpha = getCelebrationFadeAlpha(_mapUnlockFx.timer, 40);
   const W = BASE_W, H = BASE_H;
+  const bandY = getMapUnlockBandY(H);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(4,2,10,0.72)';
-  ctx.fillRect(0, H * 0.35, W, 80);
+  ctx.fillRect(0, bandY, W, 80);
   ctx.font = 'bold 16px monospace';
   ctx.fillStyle = UI_COLORS.gold;
   ctx.shadowColor = 'rgba(212,175,55,0.8)';
   ctx.shadowBlur = 12;
-  ctx.fillText('NEW REGION UNLOCKED', W / 2, H * 0.35 + 32);
+  ctx.fillText('NEW REGION UNLOCKED', W / 2, bandY + 32);
   ctx.font = '11px monospace';
   ctx.fillStyle = UI_COLORS.parchment;
   ctx.shadowBlur = 4;
-  ctx.fillText(_mapUnlockFx.name, W / 2, H * 0.35 + 52);
+  ctx.fillText(_mapUnlockFx.name, W / 2, bandY + 52);
   ctx.shadowBlur = 0;
   ctx.restore();
   if (_mapUnlockFx.timer <= 0) _mapUnlockFx = null;
@@ -9700,18 +9725,19 @@ function drawMapUnlockCelebration() {
 
 function drawRegionClearFanfare() {
   if (!_regionClearFx || _regionClearFx.timer <= 0) return;
-  _regionClearFx.timer--;
-  const alpha = Math.min(1, _regionClearFx.timer / 50);
+  _regionClearFx.timer = tickFxTimer(_regionClearFx.timer);
+  const alpha = getCelebrationFadeAlpha(_regionClearFx.timer, 50);
   const W = BASE_W;
+  const titleY = getRegionClearTextY(META_SCREEN_TOP);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
   ctx.font = 'bold 14px monospace';
   ctx.fillStyle = UI_COLORS.fortress;
-  ctx.fillText(`✓ ${_regionClearFx.name} SECURED`, W / 2, META_SCREEN_TOP + 56);
+  ctx.fillText(`✓ ${_regionClearFx.name} SECURED`, W / 2, titleY);
   ctx.font = '8px monospace';
   ctx.fillStyle = UI_COLORS.parchment;
-  ctx.fillText('All fronts cleared — choose your next region', W / 2, META_SCREEN_TOP + 72);
+  ctx.fillText('All fronts cleared — choose your next region', W / 2, titleY + 16);
   ctx.restore();
   if (_regionClearFx.timer <= 0) _regionClearFx = null;
 }
@@ -9721,8 +9747,8 @@ function drawCommandMapHint() {
   if (_onboardingStep === ONBOARDING.COMMAND_MAP) return;
   if (_onboardingStep >= ONBOARDING.PICK_FRONT && _onboardingStep <= ONBOARDING.LAUNCH) return;
   if (_commandMapView === 'front') return;
-  _commandMapHintTimer--;
-  const alpha = Math.min(1, _commandMapHintTimer / 60);
+  _commandMapHintTimer = tickCommandMapHintTimer(_commandMapHintTimer);
+  const alpha = getCommandMapHintAlpha(_commandMapHintTimer);
   const W = BASE_W;
   const hy = META_SCREEN_TOP + 2;
   const hh = 18;
@@ -9806,7 +9832,7 @@ function drawEquipCeremony() {
       ctx.strokeStyle = _equipFlash.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(BASE_W / 2, 122, ringR, 0, Math.PI * 2);
+      ctx.arc(BASE_W / 2, EQUIP_CEREMONY_RING_CY, ringR, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -9831,10 +9857,10 @@ function drawEquipCeremony() {
     ctx.shadowColor = _equipFlash.color;
     ctx.shadowBlur = 10;
     const _itemLabel = _equipFlash.itemName ? ` — ${_equipFlash.itemName}` : '';
-    ctx.fillText(`⚔ ${def.name}${_itemLabel}`, BASE_W / 2, 118);
+    ctx.fillText(`⚔ ${def.name}${_itemLabel}`, BASE_W / 2, EQUIP_CEREMONY_NAME_Y);
     ctx.font = '7px monospace';
     ctx.fillStyle = 'rgba(232,215,181,0.72)';
-    ctx.fillText(_equipFlash.itemName ? 'EQUIPPED' : 'GEAR UPDATED', BASE_W / 2, 130);
+    ctx.fillText(_equipFlash.itemName ? 'EQUIPPED' : 'GEAR UPDATED', BASE_W / 2, EQUIP_CEREMONY_SUBTITLE_Y);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
@@ -9842,8 +9868,8 @@ function drawEquipCeremony() {
 
 function drawEventOutcomeToast() {
   if (!_eventOutcomeToast || _eventOutcomeToast.timer <= 0) return;
-  _eventOutcomeToast.timer--;
-  const alpha = Math.min(1, _eventOutcomeToast.timer / 20);
+  _eventOutcomeToast.timer = tickFxTimer(_eventOutcomeToast.timer);
+  const alpha = getToastFadeAlpha(_eventOutcomeToast.timer);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
@@ -11831,10 +11857,9 @@ function drawEnemyIntroBanner() {
 
 function drawFlawlessNotif() {
   if (flawlessTimer <= 0) return;
-  const alpha = Math.min(1, flawlessTimer / 30) * (flawlessTimer < 60 ? flawlessTimer / 60 : 1);
-  const t     = 1 - flawlessTimer / 180;
+  const alpha = getFlawlessNotifAlpha(flawlessTimer);
   const hasBossBar = enemies.some(e => e.isBoss && e.alive && !e.reached);
-  const cy    = (hasBossBar ? GRID_TOP + 50 : GRID_TOP + 28) + t * 8;
+  const cy = getFlawlessNotifY(flawlessTimer, GRID_TOP, hasBossBar);
   ctx.save();
   ctx.textAlign   = 'center';
   ctx.font        = 'bold 13px monospace';
@@ -14728,29 +14753,31 @@ function drawSlotSelect() {
   ctx.fillText('Start a new campaign in any empty slot · × removes a save', W / 2, H - 22);
 
   if (_slotDeleteConfirm != null) {
-    const ow = 300, oh = 104;
+    const { w: ow, h: oh } = SLOT_DELETE_MODAL;
     const ox = (W - ow) / 2, oy = (H - oh) / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillStyle = `rgba(0,0,0,${getDeleteConfirmBackdropAlpha()})`;
     ctx.fillRect(0, 0, W, H);
     drawFantasyPanel(ox, oy, ow, oh, 'rgba(18,10,4,0.98)', 0.88, 8);
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 12px monospace';
     ctx.fillStyle = UI_COLORS.threat;
-    ctx.fillText(`DELETE SLOT ${_slotDeleteConfirm + 1}?`, W / 2, oy + 30);
+    ctx.fillText(`DELETE SLOT ${_slotDeleteConfirm + 1}?`, W / 2, oy + 32);
     ctx.font = '8px monospace';
     ctx.fillStyle = '#c0a080';
-    ctx.fillText('All campaign progress in this slot will be lost.', W / 2, oy + 48);
+    ctx.fillText('All campaign progress in this slot will be lost.', W / 2, oy + 50);
     ctx.fillStyle = '#a08050';
-    ctx.fillText('This cannot be undone.', W / 2, oy + 62);
+    ctx.fillText('This cannot be undone.', W / 2, oy + 64);
 
-    const btnW = 88, btnH = 26, btnY = oy + oh - 36;
+    const btnW = 96, btnH = 28, btnY = oy + oh - 38;
     const yesX = W / 2 - btnW - 8, noX = W / 2 + 8;
+    const pulse = getDeleteConfirmPulse(performance.now());
+    drawFantasyPanel(yesX - 1, btnY - 1, btnW + 2, btnH + 2, `rgba(220,80,40,${pulse * 0.35})`, 0.85, 5);
     drawFantasyPanel(yesX, btnY, btnW, btnH, 'rgba(60,16,8,0.95)', 0.65, 5);
     drawFantasyPanel(noX, btnY, btnW, btnH, 'rgba(12,8,4,0.95)', 0.55, 5);
-    ctx.font = '8px monospace';
+    ctx.font = 'bold 8px monospace';
     ctx.fillStyle = '#e08060';
-    ctx.fillText('DELETE', yesX + btnW / 2, btnY + 15);
+    ctx.fillText('DELETE', yesX + btnW / 2, btnY + 17);
     ctx.fillStyle = '#c0a060';
-    ctx.fillText('CANCEL', noX + btnW / 2, btnY + 15);
+    ctx.fillText('CANCEL', noX + btnW / 2, btnY + 17);
     _slotConfirmBtns.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'confirmDelete' });
     _slotConfirmBtns.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'cancelDelete' });
   }
