@@ -7,6 +7,15 @@ export function computeBetweenBattlesFadeAlpha(framesRemaining) {
   return Math.min(1, (BETWEEN_FADE_FRAMES - framesRemaining) / 20);
 }
 
+/** Staggered panel reveal — delay is 0–1 fraction of fade window (FENRIR-05). */
+export function computeBetweenSectionAlpha(framesRemaining, delayFraction = 0) {
+  if (framesRemaining <= 0) return 1;
+  const elapsed = BETWEEN_FADE_FRAMES - framesRemaining;
+  const delayFrames = delayFraction * BETWEEN_FADE_FRAMES;
+  if (elapsed < delayFrames) return 0;
+  return Math.min(1, (elapsed - delayFrames) / 14);
+}
+
 export function tickBtParticle(p, bounds) {
   p.x += p.dx;
   p.y += p.dy;

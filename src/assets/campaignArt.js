@@ -16,6 +16,8 @@ const ART = {
   ceremonyNaming: '/assets/ui/ui_ceremony_naming@960x540.png',
   ceremonySettlement: '/assets/ui/ui_ceremony_settlement_oath@960x540.png',
   debriefPanel: '/assets/ui/ui_debrief_panel@640x480.png',
+  heroCardFrame: '/assets/ui/ui_hero_card_frame@200x320.png',
+  berserkMedallion: '/assets/ui/icon_hero_berserk_medallion@24.png',
   advisorPrep: '/assets/portraits/portrait_advisor_prep@96x112.png',
   assaultIcons: [
     '/assets/ui/icons/icon_assault_a0@32.png',
@@ -120,5 +122,26 @@ export function drawAdvisorPortraitArt(ctx, x, y, size = 40) {
   ctx.clip();
   ctx.drawImage(img, x, y, size, size * 1.15);
   ctx.restore();
+  return true;
+}
+
+/** Hero warband card frame — stretch to rect. */
+export function drawHeroCardFrame(ctx, x, y, w, h, alpha = 1) {
+  if (!isCampaignArtReady('heroCardFrame')) return false;
+  const img = _images.heroCardFrame;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  return true;
+}
+
+/** Class medallion for prep gate chip (24px art). */
+export function drawHeroMedallionArt(ctx, cx, cy, towerType, size = 22) {
+  const t = (towerType ?? '').toLowerCase();
+  const key = t === 'berserk' && isCampaignArtReady('berserkMedallion') ? 'berserkMedallion' : null;
+  if (!key) return false;
+  const img = _images[key];
+  ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
   return true;
 }

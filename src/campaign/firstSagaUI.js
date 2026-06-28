@@ -22,6 +22,7 @@ import {
   getHeroNamingGlow,
 } from '../ui/settlementJuice.js';
 import { drawCampaignArtCover, drawAssaultNodeIcon } from '../assets/campaignArt.js';
+import { drawFortressPrepSprite } from '../preparation/fortressPrepArt.js';
 
 function drawPanel(ctx, x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) {
   ctx.fillStyle = fillStyle;
@@ -174,6 +175,11 @@ export function drawSettlementCeremony(ctx, W, H, {
   drawPanel(ctx, panX, panY, panW, panH, 'rgba(8,4,18,0.99)');
   const hx = panX + panW / 2;
   let hy = panY + 28;
+
+  if (step === 1) {
+    const gateBox = { x: hx - 70, y: panY + panH - 100, w: 140, h: 90 };
+    drawFortressPrepSprite(ctx, 'westGateStoneCeremony', gateBox);
+  }
 
   ctx.textAlign = 'center';
   ctx.font = 'bold 11px monospace';

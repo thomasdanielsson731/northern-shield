@@ -10,6 +10,7 @@ import {
 describe('onboarding', () => {
   it('advances command map → pick front → deploy', () => {
     expect(advanceOnboarding(ONBOARDING.COMMAND_MAP, 'openFront')).toBe(ONBOARDING.PICK_FRONT);
+    expect(advanceOnboarding(ONBOARDING.COMMAND_MAP, 'startAssault')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.PICK_FRONT, 'startAssault')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.LAUNCH, 'startAssault')).toBe(ONBOARDING.DEPLOY);
     expect(advanceOnboarding(ONBOARDING.DEPLOY, 'placedHero')).toBe(ONBOARDING.DONE);

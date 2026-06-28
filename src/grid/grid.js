@@ -1,5 +1,5 @@
 import { SPRITES } from '../assets.js';
-import { getSpriteScale } from '../config.js';
+import { getSpriteScale, getCombatSpriteScale } from '../config.js';
 
 function _drawVikingShield(ctx, sx, sy, r, isBlue) {
   // Wooden rim
@@ -57,6 +57,8 @@ export class Grid {
     this.hoardPulse      = 0;  // set by game.js each frame: coin-landing bounce
     this.fortressUpgrades = {}; // set by game.js: { barracks, armory, watchtower, wallworks } levels
     this.bannerWaveBoost = 0;  // set by game.js on wave clear, decays each drawn frame
+    /** When true, goal cell skips decorative buildings (campaign assault clarity). */
+    this.minimalGoalDecor = false;
   }
 
   setFortressUpgrades(upgrades) {
@@ -195,8 +197,8 @@ export class Grid {
 
     const sp = SPRITES['portal'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
-      const scale = getSpriteScale();
-      const dw = cs * 8.5 * scale;
+      const scale = getCombatSpriteScale();
+      const dw = cs * (this.minimalGoalDecor ? 5.2 : 6.8) * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
       ctx.shadowColor = `rgba(140,60,255,${0.70 + pulse * 0.30})`;
@@ -382,7 +384,7 @@ export class Grid {
     const pulse      = 0.5 + Math.sin(time * pulseSpeed) * 0.5;
 
     // ── Fortress complex — decorative buildings around the goal ───────────────
-    {
+    if (!this.minimalGoalDecor) {
       ctx.save();
       ctx.globalAlpha = 0.60;
 
@@ -588,8 +590,9 @@ export class Grid {
 
     const sp = SPRITES['trelleborg'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
-      const scale = getSpriteScale();
-      const dw = cs * 7 * scale;
+      const scale = getCombatSpriteScale();
+      const fortMul = this.minimalGoalDecor ? 4.2 : 5.5;
+      const dw = cs * fortMul * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
       if (hr < 0.66) {

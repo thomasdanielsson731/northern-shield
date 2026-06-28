@@ -53,11 +53,17 @@ function advanceToward(tower, tx, ty, stopDist, speed, fieldW, fieldH) {
   const dx = tx - tower.x;
   const dy = ty - tower.y;
   const dist = Math.hypot(dx, dy);
-  tower.aimAngle = Math.atan2(dy, dx);
-  if (dist <= stopDist) return;
+  const angle = Math.atan2(dy, dx);
+  tower.moveAngle = angle;
+  tower.aimAngle = angle;
+  if (dist <= stopDist) {
+    tower.moveSpeed = 0;
+    return;
+  }
 
   const step = Math.min(speed, dist - stopDist);
   const len  = dist || 1;
+  tower.moveSpeed = speed;
   const margin = 10;
   tower.x = Math.max(margin, Math.min(fieldW - margin, tower.x + (dx / len) * step));
   tower.y = Math.max(margin, Math.min(fieldH - margin, tower.y + (dy / len) * step));

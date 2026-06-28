@@ -1,14 +1,13 @@
 import { SPRITES } from '../assets.js';
-import { getSpriteScale } from '../config.js';
-
-// Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
-function angleToRow(angle) {
-  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 0;
-  if (a < 3 * Math.PI / 4) return 1;
-  if (a < 5 * Math.PI / 4) return 2;
-  return 3;
-}
+import { getSpriteScale, getCombatSpriteScale } from '../config.js';
+import {
+  pickAnimColumn,
+  computeWalkBob,
+  resolveFacingAngle,
+  drawSpriteSheetFrame,
+  drawUnitFooting,
+} from '../combat/spriteAnim.js';
+import { drawEnemyAttackVfx, drawEnemyWalkDust } from '../combat/characterAttackVfx.js';
 
 export const ENEMY_TYPES = {
   RAIDER:    'raider',
@@ -188,6 +187,18 @@ export class Enemy {
     this.staggerVX     = 0;
     this.staggerVY     = 0;
     this.staggerTimer  = 0;
+    this.velX          = 0;
+    this.velY          = 0;
+    this.moveSpeed     = 0;
+    this.attackAnimTimer = 0;
+    this.attackAnimMax   = 14;
+
+    // Per-unit motion desync — avoids lockstep C64 march
+    this.animPhaseOff = Math.random() * 12;
+    this.strideMul    = 0.78 + Math.random() * 0.44;
+    const speedJitter = 0.86 + Math.random() * 0.28;
+    this.baseSpeed *= speedJitter;
+    this.speed      *= speedJitter;
 
     // Fossegrim heal aura — counts down to next heal pulse
     this.healTimer     = Math.floor((def.healAura?.cooldownFrames ?? 0) * 0.5);
@@ -240,6 +251,8 @@ export class Enemy {
     const dx   = target.x - this.x;
     const dy   = target.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    const prevX = this.x;
+    const prevY = this.y;
 
     if (dist <= effectiveSpeed) {
       this.x = target.x;
@@ -249,6 +262,11 @@ export class Enemy {
       this.x += (dx / dist) * effectiveSpeed;
       this.y += (dy / dist) * effectiveSpeed;
     }
+
+    this.velX = this.x - prevX;
+    this.velY = this.y - prevY;
+    this.moveSpeed = Math.hypot(this.velX, this.velY);
+    if (this.attackAnimTimer > 0) this.attackAnimTimer--;
   }
 
   draw(ctx) {
@@ -270,7 +288,7 @@ export class Enemy {
         ctx.translate(this.x, this.y);
         ctx.scale(1 + (1 - t) * 0.4, 1 + (1 - t) * 0.4);
         ctx.translate(-this.x, -this.y);
-        this._drawSprite(ctx);
+        this._drawSprite(ctx, { dying: true });
         ctx.restore();
       }
       return;
@@ -375,30 +393,22 @@ export class Enemy {
     if (hpRatio < 0.50) ctx.filter = 'none';  // only reset when filter was applied
     ctx.restore();
 
-    // Target-priority telegraph (first priority in chain)
+    // Target-priority — tiny icon only (no HEROES/WALLS text clutter)
     const _prio = getEnemyPrimaryTarget(this.type);
-    if (!this.isBoss && this.alive && _prio !== 'goal') {
-      const pulse = 0.5 + Math.sin(performance.now() * 0.012 + this.x * 0.1) * 0.5;
-      const icon  = _prio === 'warband' ? '⚔' : '▣';
-      const label = _prio === 'warband' ? 'HEROES' : 'WALLS';
-      ctx.font = 'bold 7px monospace';
+    if (!this.isBoss && this.alive && _prio !== 'goal' && (this.moveSpeed ?? 0) > 0.05) {
+      const pulse = 0.45 + Math.sin(performance.now() * 0.014 + this.x * 0.1) * 0.35;
+      ctx.font = 'bold 6px monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = _prio === 'warband'
-        ? `rgba(224,128,64,${0.55 + pulse * 0.45})`
-        : `rgba(128,160,192,${0.55 + pulse * 0.45})`;
-      ctx.fillText(icon, this.x, this.y - this.radius - 9);
-      ctx.font = '5px monospace';
-      ctx.fillStyle = `rgba(232,215,181,${0.35 + pulse * 0.35})`;
-      ctx.fillText(label, this.x, this.y - this.radius - 2);
-    } else if (!this.isBoss && this.alive && _prio === 'goal') {
-      const pulse = 0.5 + Math.sin(performance.now() * 0.014 + this.x * 0.1) * 0.5;
-      ctx.font = 'bold 7px monospace';
+        ? `rgba(224,128,64,${0.35 + pulse * 0.45})`
+        : `rgba(128,160,192,${0.35 + pulse * 0.45})`;
+      ctx.fillText(_prio === 'warband' ? '⚔' : '▣', this.x, this.y - this.radius - 6);
+    } else if (!this.isBoss && this.alive && _prio === 'goal' && (this.moveSpeed ?? 0) > 0.05) {
+      const pulse = 0.45 + Math.sin(performance.now() * 0.016 + this.x * 0.1) * 0.35;
+      ctx.font = 'bold 6px monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(240,180,50,${0.55 + pulse * 0.45})`;
-      ctx.fillText('◎', this.x, this.y - this.radius - 9);
-      ctx.font = '5px monospace';
-      ctx.fillStyle = `rgba(232,215,181,${0.35 + pulse * 0.35})`;
-      ctx.fillText('GOLD', this.x, this.y - this.radius - 2);
+      ctx.fillStyle = `rgba(240,180,50,${0.35 + pulse * 0.45})`;
+      ctx.fillText('◎', this.x, this.y - this.radius - 6);
     }
 
     // Wounded shimmer — slow red outline (25-50% HP)
@@ -539,47 +549,76 @@ export class Enemy {
     if (!this.isBoss) this._drawHpBar(ctx);
   }
 
-  _drawSprite(ctx) {
+  _drawSprite(ctx, { dying = false } = {}) {
     const spriteKey = this.isBoss && this.bossName === 'ASH-WARDEN' ? 'ashWarden' : this.type;
     const sp = SPRITES[spriteKey];
     if (!sp || !sp.img.complete || sp.img.naturalWidth === 0) return false;
 
-    const frame = Math.floor(performance.now() / 180) % 2;  // cycle IDLE/WALK frames only
-    const dh    = this.radius * (this.isBoss ? 7.8 : 6.0);
-    const dw    = dh * sp.frameW / sp.frameH;
-    // Apply experimental sprite scale multiplier
-    const scale = getSpriteScale();
-    const dhs = Math.round(dh * scale);
-    const dws = Math.round(dw * scale);
-
-    // Ground shadow
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.beginPath();
-    ctx.ellipse(this.x + 1, this.y + this.radius * 0.55, dws * 0.52, dws * 0.18, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(this.x, this.y);
+    const localT = performance.now() * 0.001 + (this.animPhaseOff ?? 0);
     const nextPt = this.path && this.pathIndex + 1 < this.path.length
       ? this.path[this.pathIndex + 1] : null;
-    const dx = nextPt ? nextPt.x - this.x : 1;
-    const dy = nextPt ? nextPt.y - this.y : 0;
-    const row = sp.rows >= 4 ? angleToRow(Math.atan2(dy, dx)) : 0;
-    if (sp.rows < 4 && dx < 0) ctx.scale(-1, 1);
-    ctx.drawImage(sp.img,
-      frame * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
-      -dws / 2, -dhs * 0.88, dws, dhs);
+    const fallbackDx = nextPt ? nextPt.x - this.x : 1;
+    const fallbackDy = nextPt ? nextPt.y - this.y : 0;
+    const aimAngle = resolveFacingAngle(this.velX, this.velY, fallbackDx, fallbackDy);
+    const attacking = (this.attackAnimTimer ?? 0) > 0;
+    const moving = !dying && (this.moveSpeed ?? 0) > 0.08;
+    const col = pickAnimColumn({
+      dying,
+      attacking,
+      moving,
+      walkPhase: localT,
+      gait: moving ? 'twoStep' : 'hold',
+    });
+    const bob = computeWalkBob(this.moveSpeed ?? 0, localT, {
+      movingThreshold: 0.08,
+      strideMul: this.strideMul ?? 1,
+    });
+
+    const dh = this.radius * (this.isBoss ? 6.4 : 5.2);
+    const scale = getCombatSpriteScale();
+    const dhs = Math.round(dh * scale);
+    const dws = Math.round(dhs * sp.frameW / sp.frameH);
+    const rimParts = (this.highlightColor ?? '#e0c090').replace('#', '');
+    const rimRgb = rimParts.length === 6
+      ? [
+        parseInt(rimParts.slice(0, 2), 16),
+        parseInt(rimParts.slice(2, 4), 16),
+        parseInt(rimParts.slice(4, 6), 16),
+      ]
+      : [224, 192, 144];
+
+    if (!dying) {
+      drawUnitFooting(ctx, this.x, this.y + bob.yOff, dws * 0.38, rimRgb.join(','));
+    }
+
+    const walkAltRow = (sp.rows >= 2 && col === 1 && Math.floor(localT * 4.6) % 2 === 1) ? 1 : 0;
+
+    ctx.save();
+    ctx.translate(this.x, this.y + bob.yOff);
+    ctx.scale(1, bob.scaleY);
+    drawSpriteSheetFrame(ctx, sp, {
+      col,
+      x: 0,
+      y: 0,
+      aimAngle,
+      dw: dws,
+      lean: bob.lean ?? 0,
+      rimRgb,
+      brighten: 1.38,
+      outline: true,
+      walkAltRow,
+    });
     ctx.restore();
 
-    // Flying badge for Myling
-    if (this.flying) {
+    if (!dying) drawEnemyWalkDust(ctx, this, localT, bob);
+    if (!dying) drawEnemyAttackVfx(ctx, this, localT);
+
+    if (!dying && this.flying) {
       ctx.save();
       ctx.fillStyle = 'rgba(200,230,255,0.65)';
       ctx.beginPath();
       const fty = this.y - this.radius * 1.7;
-      ctx.moveTo(this.x,     fty - 3.5);
+      ctx.moveTo(this.x, fty - 3.5);
       ctx.lineTo(this.x - 3, fty + 2.5);
       ctx.lineTo(this.x + 3, fty + 2.5);
       ctx.closePath();

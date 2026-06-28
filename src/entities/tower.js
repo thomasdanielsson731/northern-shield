@@ -1,6 +1,6 @@
 import { Bullet } from './bullet.js';
 import { SPRITES } from '../assets.js';
-import { getSpriteScale } from '../config.js';
+import { getSpriteScale, getCombatSpriteScale } from '../config.js';
 import { getDefenderName } from '../roster/names.js';
 import { careerBonusForLevel } from '../roster/defender.js';
 import { getTalentBonuses } from '../roster/talents.js';
@@ -13,40 +13,67 @@ import {
   isHeroLevelMilestone,
 } from '../roster/heroLevel.js';
 import {
+  pickAnimColumn,
+  computeWalkBob,
+  resolveFacingAngle,
+  drawSpriteSheetFrame,
+  drawUnitFooting,
+} from '../combat/spriteAnim.js';
+import { drawTowerAttackVfx } from '../combat/characterAttackVfx.js';
+import {
   getMaxLevelForTowerType,
   getStructureLevelStatMultipliers,
   getStructureUpgradeCost,
 } from '../roster/structureLevel.js';
 
-// Map an angle (radians) to a direction row: 0=right, 1=down, 2=left, 3=up.
-function angleToRow(angle) {
-  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 0;
-  if (a < 3 * Math.PI / 4) return 1;
-  if (a < 5 * Math.PI / 4) return 2;
-  return 3;
-}
-
-// Draw one frame from a sprite sheet.
-// Supports 4-col×1-row (single direction, flips for left) and
-// 4-col×4-row (directional: rows 0=right,1=down,2=left,3=up) layouts.
-function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null, level = 1) {
+function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowColor = null, level = 1, bob = { yOff: 0, scaleY: 1, lean: 0 }) {
   const sp = SPRITES[spriteKey];
   if (!sp) return false;
-  // Apply experimental sprite scale multiplier
-  const scale = getSpriteScale();
+  const scale = getCombatSpriteScale();
   dw = Math.round(dw * scale);
-  const dh = Math.round(dw * sp.frameH / sp.frameW);
-  const glowBlur = level >= 8 ? 20 : level >= 5 ? 17 : 14;
-  const row = sp.rows >= 4 ? angleToRow(aimAngle) : 0;
+  const rimRgb = glowColor
+    ? glowColor.replace(/rgba?\(([^)]+)\).*/, '$1').split(',').map(s => parseFloat(s.trim())).slice(0, 3)
+    : null;
+
+  drawUnitFooting(ctx, x, y + bob.yOff, dw * 0.38, rimRgb ? rimRgb.join(',') : '220,180,120');
+
   ctx.save();
-  ctx.translate(x, y);
-  if (sp.rows < 4 && Math.cos(aimAngle) < 0) ctx.scale(-1, 1);
-  if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = glowBlur; }
-  ctx.drawImage(sp.img, frame * sp.frameW, row * sp.frameH, sp.frameW, sp.frameH,
-    -dw / 2, -dh * 0.88, dw, dh);
+  ctx.translate(x, y + bob.yOff);
+  ctx.scale(1, bob.scaleY);
+  const drew = drawSpriteSheetFrame(ctx, sp, {
+    col: frame,
+    x: 0,
+    y: 0,
+    aimAngle,
+    dw,
+    lean: bob.lean ?? 0,
+    rimRgb,
+    brighten: 1.42,
+    outline: true,
+  });
   ctx.restore();
-  return true;
+  return drew;
+}
+
+function heroAnimFrame(tower, t) {
+  const moving = (tower.moveSpeed ?? 0) > 0.25;
+  return pickAnimColumn({
+    dying: false,
+    attacking: tower.fireFlash > 0,
+    moving,
+    walkPhase: t + (tower._animOff ?? 0),
+    gait: moving ? 'twoStep' : 'hold',
+  });
+}
+
+function heroWalkBob(tower, t) {
+  return computeWalkBob(tower.moveSpeed ?? 0, t + (tower._animOff ?? 0));
+}
+
+/** Locomotion faces movement; idle/attack faces combat target (may differ while kiting). */
+export function heroSpriteFacingAngle(tower) {
+  if ((tower.moveSpeed ?? 0) > 0.25 && tower.moveAngle != null) return tower.moveAngle;
+  return tower.aimAngle ?? tower.moveAngle ?? 0;
 }
 
 export const TOWER_TYPES = {
@@ -327,6 +354,9 @@ export class Tower {
     this.slowFactor    = def.slowFactor    ?? 1;
     this.slowDuration  = def.slowDuration  ?? 0;
     this.bulletShape   = def.bulletShape   ?? 'orb';
+    this.moveSpeed      = 0;
+    this.moveAngle     = -Math.PI / 2;
+    this._animOff       = Math.random() * 8;
     this.aimAngle      = -Math.PI / 2;
     this.fireFlash       = 0;
     this.maxFireFlash    = def.fireFlashDuration ?? 8;
@@ -594,7 +624,7 @@ export class Tower {
       this._shadowGrad = g;
     }
     ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : (isHero ? 0.38 : 0.52);
+    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : (isHero ? 0.22 : 0.52);
     ctx.fillStyle = this._shadowGrad;
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
@@ -654,32 +684,9 @@ export class Tower {
     else                                           this._drawBlondie(ctx, t);
     if (useFpScale) ctx.restore();
 
-    // Attack flash
+    // Attack VFX — per-class (characterAttackVfx)
     if (this.fireFlash > 0) {
-      const alpha = this.fireFlash / this.maxFireFlash;
-      ctx.save();
-      if (this.type === TOWER_TYPES.BERSERK) {
-        // Axe sweep arc
-        ctx.shadowColor = 'rgba(200,80,20,0.85)';
-        ctx.shadowBlur  = 20 * alpha;
-        ctx.strokeStyle = `rgba(255,100,30,${alpha * 0.9})`;
-        ctx.lineWidth   = 5 * alpha;
-        ctx.lineCap     = 'round';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.range, this.aimAngle - 1.1, this.aimAngle + 1.1);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.strokeStyle = `rgba(255,255,200,${alpha * 0.85})`;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur  = 14 * alpha;
-        ctx.lineWidth   = 2.5 * alpha;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius + 2 + (this.maxFireFlash - this.fireFlash) * 1.5, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      }
-      ctx.restore();
+      drawTowerAttackVfx(ctx, this, t);
       this.fireFlash--;
     }
 
@@ -838,7 +845,7 @@ export class Tower {
     ctx.ellipse(x + 2, y + 9, 9, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (drawSpriteFrame(ctx, 'berserker', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 68, 'rgba(220,70,10,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'berserker', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 58, 'rgba(255,120,40,0.95)', this.level, heroWalkBob(this, t))) return;
 
     const axeSpin = t * (this.fireFlash > 0 ? 12 : 3.5);
 
@@ -1013,7 +1020,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'valkyrie', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 72, 'rgba(220,180,60,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'valkyrie', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 72, 'rgba(220,180,60,0.9)', this.level, heroWalkBob(this, t))) return;
 
     const glow     = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
@@ -1163,7 +1170,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 8, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'archer', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 62, 'rgba(90,140,190,0.75)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'archer', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 62, 'rgba(90,140,190,0.75)', this.level, heroWalkBob(this, t))) return;
 
     // Legs
     ctx.fillStyle = '#2e1008';
@@ -1301,7 +1308,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'catapult', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 68, 'rgba(200,130,30,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'catapult', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 68, 'rgba(200,130,30,0.85)', this.level, heroWalkBob(this, t))) return;
 
     const pulse  = 0.6 + Math.sin(t * 2.8) * 0.4;
     const swingOffset = this.fireFlash > 0 ? (this.fireFlash / (this.maxFireFlash || 6)) * 0.25 : 0;
@@ -1394,7 +1401,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x + 1, y + 8, 8, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'blondie', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 64, 'rgba(255,110,200,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'blondie', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 64, 'rgba(255,110,200,0.9)', this.level, heroWalkBob(this, t))) return;
 
     const pulse = 0.55 + Math.sin(t * 2.5) * 0.45;
     const spin  = t * 1.6;
@@ -1499,7 +1506,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'piltorn', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 62, 'rgba(100,140,190,0.8)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'piltorn', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 62, 'rgba(100,140,190,0.8)', this.level, heroWalkBob(this, t))) return;
 
     // Stone tower body
     ctx.fillStyle = '#4a3a2e';
@@ -1594,7 +1601,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 9, 2.3, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'hydda', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 58, 'rgba(50,200,90,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'hydda', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 58, 'rgba(50,200,90,0.85)', this.level, heroWalkBob(this, t))) return;
 
     // Hut walls — weathered wood planks
     ctx.fillStyle = '#5a3818';
@@ -1694,7 +1701,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'isjatten', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 72, 'rgba(100,190,255,0.9)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 72, 'rgba(100,190,255,0.9)', this.level, heroWalkBob(this, t))) return;
 
     // Giant icy body — large crystalline form
     ctx.save();
@@ -1823,7 +1830,7 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 12, 3, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'drakship', this.fireFlash > 0 ? 2 : (Math.floor(t / 0.7) % 2), x, y, this.aimAngle, 70, 'rgba(200,100,30,0.85)', this.level)) return;
+    if (drawSpriteFrame(ctx, 'drakship', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 70, 'rgba(200,100,30,0.85)', this.level, heroWalkBob(this, t))) return;
 
     // Ship hull — rotates with aim direction
     ctx.save();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors } from '../src/ui/debriefJuice.js';
+import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors, getDebriefContentAlpha, getDebriefScrollSafeArea, getDebriefPanelDrawRect, formatDebriefAssaultHeader } from '../src/ui/debriefJuice.js';
 
 describe('debriefJuice', () => {
   it('pulses MVP label', () => {
@@ -29,5 +29,29 @@ describe('debriefJuice', () => {
     expect(win.fill).toBe('#f0c840');
     expect(loss.fill).toBe('#e04040');
     expect(win.shadowBlur).toBeGreaterThan(loss.shadowBlur);
+  });
+
+  it('fades debrief prose in after delay', () => {
+    expect(getDebriefContentAlpha(0)).toBe(0);
+    expect(getDebriefContentAlpha(30)).toBe(1);
+  });
+
+  it('insets debrief text inside parchment safe area', () => {
+    const safe = getDebriefScrollSafeArea(100, 50, 480, 340);
+    expect(safe.left).toBeGreaterThan(180);
+    expect(safe.right).toBeLessThan(500);
+    expect(safe.top).toBeGreaterThan(115);
+    expect(safe.width).toBeLessThanOrEqual(230);
+  });
+
+  it('matches cover-fit draw rect for debrief panel', () => {
+    const draw = getDebriefPanelDrawRect(100, 50, 480, 340);
+    expect(draw.h).toBeGreaterThan(340);
+    expect(draw.y).toBeLessThan(50);
+  });
+
+  it('formats assault header for parchment', () => {
+    expect(formatDebriefAssaultHeader({ codename: 'First Night', tierLabel: 'A0', frontId: 'west' }))
+      .toBe('FIRST NIGHT  ·  A0  ·  WEST FRONT');
   });
 });

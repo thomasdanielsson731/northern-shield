@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeBetweenBattlesFadeAlpha,
+  computeBetweenSectionAlpha,
   tickBtParticle,
   createBtParticlePool,
   getVictoryHeaderStyle,
@@ -12,6 +13,12 @@ describe('betweenBattlesJuice', () => {
     expect(computeBetweenBattlesFadeAlpha(0)).toBe(1);
     expect(computeBetweenBattlesFadeAlpha(30)).toBe(0);
     expect(computeBetweenBattlesFadeAlpha(20)).toBe(0.5);
+  });
+
+  it('staggers section reveal after delay', () => {
+    expect(computeBetweenSectionAlpha(30, 0.15)).toBe(0);
+    expect(computeBetweenSectionAlpha(20, 0)).toBeGreaterThan(0);
+    expect(computeBetweenSectionAlpha(0, 0.5)).toBe(1);
   });
 
   it('wraps ambient particles', () => {

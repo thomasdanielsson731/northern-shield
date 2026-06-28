@@ -7,6 +7,7 @@ import { UI_COLORS } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 import { getWarCampWelcomeAlpha, WAR_CAMP_TAB_HINT_LINE } from './warCampJuice.js';
+import { drawHeroCardFrame } from '../assets/campaignArt.js';
 
 export const WAR_CAMP_HEADER_H = 0;
 export const WAR_CAMP_CYCLE_H = 52;
@@ -35,7 +36,7 @@ const ART_CROPS = {
 };
 
 const _warCampArt = new Image();
-_warCampArt.src = '/assets/ui/war_camp_bg_age1@1024x512.png';
+_warCampArt.src = '/assets/ui/ui_war_camp_bg_age1@1024x512.png';
 const _warCampArtLegacy = new Image();
 _warCampArtLegacy.src = '/assets/ui/war_camp_bg.png';
 
@@ -334,11 +335,19 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
 
   const glow = TOWER_DEFS?.[def.type]?.glowRgb ?? '180,150,80';
   const fill = bond ? 'rgba(32,24,14,0.96)' : 'rgba(12,10,16,0.96)';
-  drawWarCampPanel(ctx, x, y, w, h, {
-    fill: selected ? 'rgba(28,32,20,0.98)' : fill,
-    borderAlpha: selected ? 0.95 : 0.7,
-    radius: 5,
-  });
+  if (!drawHeroCardFrame(ctx, x, y, w, h, 0.92)) {
+    drawWarCampPanel(ctx, x, y, w, h, {
+      fill: selected ? 'rgba(28,32,20,0.98)' : fill,
+      borderAlpha: selected ? 0.95 : 0.7,
+      radius: 5,
+    });
+  } else if (selected) {
+    ctx.strokeStyle = 'rgba(232,208,96,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x + 1, y + 1, w - 2, h - 2, 4);
+    ctx.stroke();
+  }
 
   // Class tint strip at top (mockup card rim)
   ctx.fillStyle = `rgba(${glow},0.22)`;
@@ -459,47 +468,93 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
 
 /** Fortress upgrade row — clear UPGRADE affordance. */
 export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canBuy, btnsOut, key) {
-  ctx.fillStyle = 'rgba(14,12,18,0.85)';
-  ctx.strokeStyle = maxed ? 'rgba(200,170,80,0.45)' : 'rgba(100,90,70,0.35)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, 36, 4);
-  ctx.fill();
-  ctx.stroke();
+  const rowH = 44;
 
+  // Row background — greener tint when affordable, golden when maxed
+  ctx.fillStyle = maxed ? 'rgba(20,16,8,0.92)' : (canBuy ? 'rgba(6,20,6,0.95)' : 'rgba(14,12,18,0.85)');
+  ctx.strokeStyle = maxed ? 'rgba(200,170,80,0.55)' : (canBuy ? 'rgba(60,200,60,0.50)' : 'rgba(70,60,45,0.22)');
+  ctx.lineWidth = canBuy && !maxed ? 1.2 : 0.7;
+  ctx.beginPath(); ctx.roundRect(x, y, w, rowH, 4); ctx.fill(); ctx.stroke();
+
+  // Left accent bar: green=affordable, gold=maxed, none=locked
+  if (!maxed && canBuy) {
+    ctx.fillStyle = 'rgba(60,200,60,0.85)';
+    ctx.fillRect(x, y + 6, 3, rowH - 12);
+  } else if (maxed) {
+    ctx.fillStyle = 'rgba(200,160,40,0.70)';
+    ctx.fillRect(x, y + 6, 3, rowH - 12);
+  }
+
+  // Icon + label
   ctx.textAlign = 'left';
   ctx.font = 'bold 9px monospace';
-  ctx.fillStyle = maxed ? '#f0d040' : '#d8c890';
-  ctx.fillText(`${def.icon} ${def.label}`, x + 8, y + 15);
-  ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(160,145,120,0.65)';
-  const desc = maxed ? 'Fully upgraded' : (def.levelDesc?.[lvl] ?? '');
-  ctx.fillText(desc.length > 36 ? `${desc.slice(0, 35)}…` : desc, x + 8, y + 27);
+  ctx.fillStyle = maxed ? '#f0d040' : (canBuy ? '#a8e098' : '#c8b880');
+  ctx.fillText(`${def.icon} ${def.label}`, x + 10, y + 15);
 
-  ctx.font = '7px monospace';
-  ctx.fillStyle = 'rgba(160,140,100,0.55)';
-  ctx.textAlign = 'right';
-  ctx.fillText(`Lv ${lvl}/${def.maxLevel}`, x + w - 8, y + 13);
+  // Description — next-level benefit
+  ctx.font = '6px monospace';
+  ctx.fillStyle = maxed ? 'rgba(200,170,80,0.58)' : (canBuy ? 'rgba(140,210,130,0.70)' : 'rgba(120,110,90,0.48)');
+  const desc = maxed ? 'Fully upgraded' : (def.levelDesc?.[lvl] ?? '');
+  ctx.fillText(desc.length > 28 ? `${desc.slice(0, 27)}…` : desc, x + 10, y + 29);
+
+  // Level pips (filled/empty dots)
+  const btnZoneW = 88;
+  const pipRight = x + w - btnZoneW - 8;
+  for (let d = 0; d < def.maxLevel; d++) {
+    const filled = d < lvl;
+    const px = pipRight - (def.maxLevel - 1 - d) * 9;
+    const py = y + 14;
+    ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+    if (filled) {
+      ctx.fillStyle = maxed ? '#f0d040' : 'rgba(70,200,50,0.90)';
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(48,42,34,0.70)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(75,65,50,0.40)'; ctx.lineWidth = 0.5; ctx.stroke();
+    }
+  }
 
   if (!maxed) {
-    const btnW = 72, btnH = 22;
-    const btnX = x + w - btnW - 6;
-    const btnY = y + 7;
-    ctx.fillStyle = canBuy ? 'rgba(12,32,12,0.95)' : 'rgba(28,22,14,0.85)';
-    ctx.strokeStyle = canBuy ? 'rgba(100,210,100,0.65)' : 'rgba(80,70,50,0.35)';
-    ctx.lineWidth = canBuy ? 1 : 0.7;
-    ctx.beginPath();
-    ctx.roundRect(btnX, btnY, btnW, btnH, 3);
-    ctx.fill();
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 7px monospace';
-    ctx.fillStyle = canBuy ? '#88ee66' : 'rgba(120,110,70,0.45)';
-    ctx.fillText(`UPGRADE ${cost}g`, btnX + btnW / 2, btnY + 14);
-    ctx.textAlign = 'left';
+    const btnW = 82, btnH = 30;
+    const btnX = x + w - btnW - 5;
+    const btnY = y + (rowH - btnH) / 2;
     if (canBuy) {
+      // Affordable — vivid green border, two-line UPGRADE + Xg
+      ctx.fillStyle = 'rgba(10,40,10,0.98)';
+      ctx.strokeStyle = 'rgba(60,220,60,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 5); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(130,240,90,0.95)';
+      ctx.shadowColor = 'rgba(60,220,50,0.3)'; ctx.shadowBlur = 4;
+      ctx.fillText('UPGRADE', btnX + btnW / 2, btnY + 12);
+      ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0e060';
+      ctx.fillText(`${cost}g`, btnX + btnW / 2, btnY + 24);
+      ctx.shadowBlur = 0;
       btnsOut.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'upgradeFortress', key });
+    } else {
+      // Can't afford — muted gray
+      ctx.fillStyle = 'rgba(22,18,14,0.70)';
+      ctx.strokeStyle = 'rgba(60,50,38,0.28)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 5); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(95,85,60,0.52)';
+      ctx.fillText('UPGRADE', btnX + btnW / 2, btnY + 12);
+      ctx.font = '9px monospace'; ctx.fillStyle = 'rgba(115,100,65,0.48)';
+      ctx.fillText(`${cost}g`, btnX + btnW / 2, btnY + 24);
     }
+    ctx.textAlign = 'left';
+  } else {
+    // MAX badge
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#e8c840';
+    ctx.shadowColor = 'rgba(200,150,0,0.3)'; ctx.shadowBlur = 4;
+    ctx.fillText('✦ MAX', x + w - 6, y + 19);
+    ctx.shadowBlur = 0;
+    ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(175,145,65,0.55)';
+    ctx.fillText(`lvl ${lvl}`, x + w - 6, y + 31);
+    ctx.textAlign = 'left';
   }
 }
 

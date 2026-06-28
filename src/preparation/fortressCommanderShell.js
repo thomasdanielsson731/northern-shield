@@ -15,6 +15,7 @@ import {
   drawAdvisorPortraitArt,
 } from '../assets/campaignArt.js';
 import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey } from './fortressPrepArt.js';
+import { drawHeroMedallionArt } from '../assets/campaignArt.js';
 
 export const PREP_HOTSPOTS = {
   WEST_GATE: 'west_gate',
@@ -428,6 +429,7 @@ function drawTreasuryGraphic(ctx, box, locked) {
 function drawHeroMedallion(ctx, box, def) {
   const mx = box.x + box.w / 2;
   const my = box.y - 8;
+  if (def && drawHeroMedallionArt(ctx, mx, my, def.type, 22)) return;
   ctx.beginPath();
   ctx.arc(mx, my, 11, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(74,111,165,0.9)';
@@ -854,6 +856,9 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
   ctx.textAlign = 'center';
   ctx.fillStyle = hornEnabled ? '#f0e060' : 'rgba(160,120,90,0.55)';
   ctx.fillText(state.hornAnim > 0 ? '…' : '▶ SOUND HORN', px + pad + hornW / 2, hornY + 24);
+  if (drawFortressPrepSprite(ctx, 'horn', { x: px + pad + hornW - 44, y: hornY + 4, w: 36, h: 32 })) {
+    // horn art on button
+  }
 
   if (hornEnabled) {
     state.hornBtn = { x: px + pad, y: hornY, w: hornW, h: hornH, action: 'horn' };

@@ -25,6 +25,7 @@ export function getOnboardingHint(step) {
 
 export function advanceOnboarding(step, action) {
   if (step >= ONBOARDING.DONE) return step;
+  if (action === 'startAssault' && step <= ONBOARDING.LAUNCH) return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.COMMAND_MAP && action === 'openFront') return ONBOARDING.PICK_FRONT;
   if (step === ONBOARDING.PICK_FRONT && action === 'startAssault') return ONBOARDING.DEPLOY;
   if (step === ONBOARDING.LAUNCH && action === 'startAssault') return ONBOARDING.DEPLOY;
