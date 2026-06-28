@@ -11,6 +11,9 @@ import {
   getSkaldPostCounsel,
   getPreferredPostLabel,
 } from '../roster/postTitles.js';
+import {
+  drawAdvisorPortraitArt,
+} from '../assets/campaignArt.js';
 import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey } from './fortressPrepArt.js';
 
 export const PREP_HOTSPOTS = {
@@ -767,6 +770,7 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
 }
 
 function drawAdvisorPortrait(ctx, x, y, advisorKey) {
+  if (drawAdvisorPortraitArt(ctx, x, y, 40)) return;
   const a = ADVISORS[advisorKey] ?? ADVISORS.captain;
   ctx.fillStyle = 'rgba(8,12,20,0.95)';
   ctx.beginPath();

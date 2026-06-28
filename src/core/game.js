@@ -147,7 +147,7 @@ import {
   getDebriefContinuePulse,
   getDebriefHeaderColors,
 } from '../ui/debriefJuice.js';
-import { tickStoneFlash } from '../ui/settlementJuice.js';
+import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
 import {
   getEquipCeremonyLayout,
   RUNE_CARVER_COLLAPSED_H,
@@ -7478,15 +7478,20 @@ function formatBattleStat(n) {
 function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1) {
   const rgb = defenderGlowRgb(towerType);
   drawDefenderPortraitGlow(cx, cy, towerType, r, strength);
-  const key = DEFENDER_SPRITE_KEYS[towerType];
-  const sp  = key ? SPRITES[key] : null;
-  if (sp?.img?.complete && sp.img.naturalWidth > 0) {
-    ctx.save();
-    ctx.globalAlpha = strength;
-    const sz = r * 2.15;
-    ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - sz / 2, cy - sz / 2, sz, sz);
-    ctx.restore();
-  } else {
+  ctx.save();
+  ctx.globalAlpha = strength;
+  let drew = drawCampaignPortrait(ctx, towerType, cx, cy, r);
+  if (!drew) {
+    const key = DEFENDER_SPRITE_KEYS[towerType];
+    const sp  = key ? SPRITES[key] : null;
+    if (sp?.img?.complete && sp.img.naturalWidth > 0) {
+      const sz = r * 2.15;
+      ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - sz / 2, cy - sz / 2, sz, sz);
+      drew = true;
+    }
+  }
+  ctx.restore();
+  if (!drew) {
     ctx.fillStyle = `rgba(${rgb},${0.35 * strength})`;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   }
@@ -12691,7 +12696,9 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
   const slideY = panY + Math.round((1 - fadeT) * 24);
   const hx = panX + panW / 2;
 
-  drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+  if (!drawCampaignArtCover(ctx, 'debriefPanel', panX, slideY, panW, panH, 0.96)) {
+    drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+  }
 
   const nodeIndex = _campaignNodeIndex ?? 0;
   const assault = getAssaultInfo(_campaignMapIndex, nodeIndex);
@@ -12893,7 +12900,9 @@ function drawDebrief() {
     ctx.restore();
     return;
   }
-  drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+  if (!drawCampaignArtCover(ctx, 'debriefPanel', panX, slideY, panW, panH, 0.96)) {
+    drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
+  }
 
   // ── Result header ────────────────────────────────────────────────────────────
   const hx = panX + panW / 2;

@@ -35,10 +35,18 @@ const ART_CROPS = {
 };
 
 const _warCampArt = new Image();
-_warCampArt.src = '/assets/ui/war_camp_bg.png';
+_warCampArt.src = '/assets/ui/war_camp_bg_age1@1024x512.png';
+const _warCampArtLegacy = new Image();
+_warCampArtLegacy.src = '/assets/ui/war_camp_bg.png';
+
+function _activeWarCampArt() {
+  if (_warCampArt.complete && _warCampArt.naturalWidth > 0) return _warCampArt;
+  if (_warCampArtLegacy.complete && _warCampArtLegacy.naturalWidth > 0) return _warCampArtLegacy;
+  return null;
+}
 
 export function isWarCampArtReady() {
-  return Boolean(_warCampArt.complete && _warCampArt.naturalWidth > 0);
+  return Boolean(_activeWarCampArt());
 }
 
 /** @returns {number} crop width ÷ height */
@@ -48,10 +56,11 @@ export function getWarCampArtCropAspect(cropKey = 'full') {
 }
 
 export function drawWarCampArtCrop(ctx, x, y, w, h, cropKey = 'full', alpha = 1, fit = 'stretch') {
-  if (!isWarCampArtReady()) return false;
+  const art = _activeWarCampArt();
+  if (!art) return false;
   const c = ART_CROPS[cropKey] ?? ART_CROPS.full;
-  const iw = _warCampArt.naturalWidth;
-  const ih = _warCampArt.naturalHeight;
+  const iw = art.naturalWidth;
+  const ih = art.naturalHeight;
   const sx = c.sx * iw;
   const sy = c.sy * ih;
   const sw = c.sw * iw;
@@ -59,7 +68,7 @@ export function drawWarCampArtCrop(ctx, x, y, w, h, cropKey = 'full', alpha = 1,
   ctx.save();
   ctx.globalAlpha = alpha;
   if (fit === 'stretch') {
-    ctx.drawImage(_warCampArt, sx, sy, sw, sh, x, y, w, h);
+    ctx.drawImage(art, sx, sy, sw, sh, x, y, w, h);
   } else {
     const srcAspect = sw / sh;
     const dstAspect = w / h;
@@ -87,7 +96,7 @@ export function drawWarCampArtCrop(ctx, x, y, w, h, cropKey = 'full', alpha = 1,
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.clip();
-    ctx.drawImage(_warCampArt, sx, sy, sw, sh, dx, dy, dw, dh);
+    ctx.drawImage(art, sx, sy, sw, sh, dx, dy, dw, dh);
   }
   ctx.restore();
   return true;

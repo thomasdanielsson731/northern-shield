@@ -21,6 +21,7 @@ import {
   getSettlementStepGlow,
   getHeroNamingGlow,
 } from '../ui/settlementJuice.js';
+import { drawCampaignArtCover, drawAssaultNodeIcon } from '../assets/campaignArt.js';
 
 function drawPanel(ctx, x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) {
   ctx.fillStyle = fillStyle;
@@ -40,6 +41,8 @@ export function drawFirstSagaCommandMap(ctx, {
   settlementDone = false,
 }) {
   const cx = mapX + mapW / 2;
+  drawCampaignArtCover(ctx, 'commandMapRegion1', mapX, mapY, mapW, mapH, 0.55);
+
   ctx.font = 'bold 10px monospace';
   ctx.fillStyle = 'rgba(160,140,90,0.65)';
   ctx.textAlign = 'center';
@@ -111,6 +114,7 @@ export function drawFirstSagaCommandMap(ctx, {
     ctx.font = '7px monospace';
     ctx.fillStyle = cleared ? 'rgba(120,180,100,0.75)' : 'rgba(160,140,100,0.65)';
     ctx.fillText(node.codename, nx, roadY + 28);
+    drawAssaultNodeIcon(ctx, i, nx, roadY - 18, 18);
 
     const hitW = 56;
     const hitH = 52;
@@ -141,8 +145,10 @@ export function drawSettlementCeremony(ctx, W, H, {
   const fade = 1;
   ctx.save();
   ctx.globalAlpha = fade * 0.92;
-  ctx.fillStyle = 'rgba(4,2,8,1)';
-  ctx.fillRect(0, 0, W, H);
+  if (!drawCampaignArtCover(ctx, 'ceremonySettlement', 0, 0, W, H, 0.85)) {
+    ctx.fillStyle = 'rgba(4,2,8,1)';
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.globalAlpha = 1;
 
   if (stoneFlash > 0) {
@@ -254,8 +260,10 @@ export function drawHeroNamingCeremony(ctx, W, H, {
   nameValid,
 }) {
   ctx.save();
-  ctx.fillStyle = 'rgba(4,2,8,0.96)';
-  ctx.fillRect(0, 0, W, H);
+  if (!drawCampaignArtCover(ctx, 'ceremonyNaming', 0, 0, W, H, 0.88)) {
+    ctx.fillStyle = 'rgba(4,2,8,0.96)';
+    ctx.fillRect(0, 0, W, H);
+  }
 
   const panW = 420;
   const panH = 240;
