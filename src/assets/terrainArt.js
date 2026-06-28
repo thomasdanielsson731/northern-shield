@@ -46,6 +46,10 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
   const goalCol = goal?.col ?? cols - 1;
   const goalRow = goal?.row ?? Math.floor(rows / 2);
 
+  // Warm dark earth base — ensures API tile transparency still reads as ground
+  tc.fillStyle = '#2c1e0e';
+  tc.fillRect(0, 0, width, height);
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = col * cellSize;
@@ -53,22 +57,29 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
       const onPad = inFortressPad(col, row, goal);
 
       if (onPad) {
-        const warm = 38 + ((col + row) % 3) * 4;
-        tc.fillStyle = `rgb(${warm + 18},${warm + 8},${warm - 10})`;
+        // Fortress courtyard — warm stone floor, slightly lighter than outside
+        const warm = 46 + ((col + row) % 3) * 5;
+        tc.fillStyle = `rgb(${warm + 24},${warm + 10},${warm - 6})`;
         tc.fillRect(x, y, cellSize, cellSize);
-        tc.fillStyle = 'rgba(90,70,45,0.12)';
+        // Subtle stone grid lines
+        tc.fillStyle = 'rgba(0,0,0,0.12)';
         tc.fillRect(x, y, cellSize, 1);
+        tc.fillRect(x, y, 1, cellSize);
         continue;
       }
 
+      // Ground tiles at higher opacity so they read clearly
       const variant = (col + row * 3) % 2;
       const tile = variant ? groundB : groundA;
-      tc.save();
-      tc.globalAlpha = 0.88;
+      tc.globalAlpha = 0.92;
       tc.drawImage(tile, x, y, cellSize, cellSize);
-      tc.fillStyle = 'rgba(32,28,22,0.14)';
-      tc.fillRect(x, y, cellSize, cellSize);
-      tc.restore();
+      tc.globalAlpha = 1;
+
+      // Subtle per-cell variation — breaks flat repetition
+      if (((col * 7 + row * 13) % 5) === 0) {
+        tc.fillStyle = 'rgba(60,42,18,0.10)';
+        tc.fillRect(x, y, cellSize, cellSize);
+      }
 
       if (!pathless && ready('path') && Math.abs(row - pathRow) <= 1 && col >= (spawn?.col ?? 0) && col <= goalCol) {
         tc.drawImage(pathTile, x, y, cellSize, cellSize);
@@ -76,21 +87,30 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
     }
   }
 
-  // Pathless assault — smooth worn lane (no repeating log tiles)
+  // Pathless assault — clear worn dirt lane with visible edges
   if (pathless && spawn && goal) {
     const laneY = pathRow * cellSize + cellSize / 2;
     const x0 = Math.max(0, spawn.col * cellSize);
     const x1 = Math.min(width, (goalCol + 1) * cellSize);
-    const laneH = cellSize * 2.4;
+    const laneH = cellSize * 2.8;
+
+    // Main lane body
     const lg = tc.createLinearGradient(x0, laneY, x1, laneY);
-    lg.addColorStop(0, 'rgba(48,38,28,0.15)');
-    lg.addColorStop(0.12, 'rgba(78,62,44,0.92)');
-    lg.addColorStop(0.88, 'rgba(78,62,44,0.92)');
-    lg.addColorStop(1, 'rgba(48,38,28,0.15)');
+    lg.addColorStop(0,    'rgba(60,46,26,0.0)');
+    lg.addColorStop(0.06, 'rgba(92,70,36,0.80)');
+    lg.addColorStop(0.94, 'rgba(92,70,36,0.80)');
+    lg.addColorStop(1,    'rgba(60,46,26,0.0)');
     tc.fillStyle = lg;
     tc.fillRect(x0, laneY - laneH / 2, x1 - x0, laneH);
-    tc.fillStyle = 'rgba(130,105,72,0.22)';
-    tc.fillRect(x0 + cellSize * 0.5, laneY - cellSize * 0.12, x1 - x0 - cellSize, cellSize * 0.24);
+
+    // Center worn track — lighter strip
+    tc.fillStyle = 'rgba(120,92,52,0.32)';
+    tc.fillRect(x0 + cellSize, laneY - cellSize * 0.2, x1 - x0 - cellSize * 2, cellSize * 0.4);
+
+    // Lane edge shadow lines
+    tc.fillStyle = 'rgba(16,10,4,0.28)';
+    tc.fillRect(x0, laneY - laneH / 2, x1 - x0, 2);
+    tc.fillRect(x0, laneY + laneH / 2 - 2, x1 - x0, 2);
   }
 
   if (ready('spawnMist') && spawn) {
@@ -98,20 +118,18 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
     const mx = spawn.col * cellSize + cellSize / 2 - mist.naturalWidth * 0.35;
     const my = spawn.row * cellSize + cellSize / 2 - mist.naturalHeight * 0.45;
     tc.save();
-    tc.globalAlpha = 0.45;
+    tc.globalAlpha = 0.42;
     tc.drawImage(mist, mx, my, mist.naturalWidth * 0.55, mist.naturalHeight * 0.55);
     tc.restore();
   }
 
-  tc.fillStyle = 'rgba(28,22,16,0.08)';
-  tc.fillRect(0, 0, width, height);
-
+  // Light edge vignette — just enough to push focus toward center
   const vg = tc.createRadialGradient(
     goalCol * cellSize, goalRow * cellSize, cellSize * 2,
-    width / 2, height / 2, width * 0.82,
+    width / 2, height / 2, width * 0.75,
   );
   vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,0.16)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.12)');
   tc.fillStyle = vg;
   tc.fillRect(0, 0, width, height);
 

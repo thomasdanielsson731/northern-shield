@@ -1406,16 +1406,9 @@ function recordBattleResult(result, { skipDebrief = false } = {}) {
   _campaignState.battleHistory = trimArrayTail(_campaignState.battleHistory, MAX_BATTLE_HISTORY);
   if (_chronicleProseCache.size > 0) _chronicleProseCache.clear();
 
-  _reserveContrib = result === 'defeat'
-    ? Math.floor(goldEarned * 0.08)
-    : Math.floor(goldEarned * 0.25);
-  if (result === 'defeat' && _campaignNodeMode) {
-    const reservePenalty = Math.floor(goldReserve * 0.12) + Math.floor(goldStolen * 0.25);
-    if (reservePenalty > 0) {
-      goldReserve = Math.max(0, goldReserve - reservePenalty);
-      _reserveContrib = 0;
-    }
-  }
+  // Defeat: reserve is untouched — you only lose the gold earned in that assault.
+  // Victory: 25% of earned gold flows into reserve.
+  _reserveContrib = result === 'victory' ? Math.floor(goldEarned * 0.25) : 0;
   goldReserve += _reserveContrib;
   _campaignState.goldReserve       = goldReserve;
   _campaignState.equipmentInventory = _equipmentInventory.slice();
@@ -4117,8 +4110,8 @@ function initTerrain(options = {}) {
   if (!skipProcedural) {
   terrainUsesSprite = false;
 
-  // Dark tundra base — lifted midtones so buildable ground reads against UI chrome
-    tc.fillStyle = '#1c3014';
+  // Forest floor base — warm mid-tone so patchy vegetation reads clearly
+    tc.fillStyle = '#253c18';
     tc.fillRect(0, 0, W, H);
 
     // Per-cell micro-variation — breaks up the flat base
