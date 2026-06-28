@@ -27,6 +27,7 @@ export default defineConfig({
         'src/ui/flawlessJuice.js',
         'src/ui/slotSelectJuice.js',
         'src/ui/commandMapJuice.js',
+        'src/ui/hintJuice.js',
       ],
       exclude: [
         'src/campaign/sagaPlaytestHarness.js',

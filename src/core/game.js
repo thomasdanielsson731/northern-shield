@@ -167,6 +167,7 @@ import {
   getCommandMapHintAlpha,
   tickCommandMapHintTimer,
 } from '../ui/commandMapJuice.js';
+import { getHintFadeAlpha, tickHintTimer } from '../ui/hintJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
 import { pickWarbandHealTargets, getHyddaHealAmount } from '../roster/warbandHeal.js';
 import { MAX_HERO_LEVEL, getHeroUpgradeCost, getHyddaHealCount } from '../roster/heroLevel.js';
@@ -9912,8 +9913,8 @@ function drawAutoMoveHint() {
 
 function drawGoldPoolsHint() {
   if (_goldPoolsHintTimer <= 0) return;
-  _goldPoolsHintTimer--;
-  const alpha = Math.min(1, _goldPoolsHintTimer / 40);
+  _goldPoolsHintTimer = tickHintTimer(_goldPoolsHintTimer);
+  const alpha = getHintFadeAlpha(_goldPoolsHintTimer);
   const cx = BASE_W - FRAME_THICK - 120;
   const cy = FRAME_THICK + 52;
   ctx.save();
