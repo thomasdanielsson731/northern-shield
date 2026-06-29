@@ -171,6 +171,52 @@ export function drawWarCampPanel(ctx, x, y, w, h, opts = {}) {
   ctx.stroke();
 }
 
+/** Frosted glass chip — compact Hall overlays and floating CTAs. */
+export function drawWarCampGlassChip(ctx, x, y, w, h, opts = {}) {
+  const {
+    title = '',
+    subtitle = '',
+    action = null,
+    btnsOut = null,
+    extra = {},
+    radius = 8,
+    borderAlpha = 0.42,
+  } = opts;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,8,16,0.58)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.fill();
+
+  const gloss = ctx.createLinearGradient(x, y, x, y + h);
+  gloss.addColorStop(0, 'rgba(255,255,255,0.10)');
+  gloss.addColorStop(0.45, 'rgba(255,255,255,0.02)');
+  gloss.addColorStop(1, 'rgba(0,0,0,0.08)');
+  ctx.fillStyle = gloss;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = `rgba(200,170,100,${borderAlpha})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  const ty = subtitle ? y + 13 : y + h / 2 + 3;
+  ctx.font = 'bold 7px monospace';
+  ctx.fillStyle = WAR_CAMP_THEME.gold;
+  ctx.fillText(title, x + 10, ty);
+  if (subtitle) {
+    ctx.font = '6px monospace';
+    ctx.fillStyle = 'rgba(200,185,155,0.82)';
+    const line = subtitle.length > 54 ? `${subtitle.slice(0, 53)}…` : subtitle;
+    ctx.fillText(line, x + 10, y + 26);
+  }
+  if (action && btnsOut) {
+    btnsOut.push({ x, y, w, h, action, ...extra });
+  }
+  ctx.restore();
+}
+
 /** Full-width WARCAMP header + tagline — title lives in meta bar; kept for tests/skirmish reuse. */
 export function drawWarCampHeader(ctx, x, y, w) {
   ctx.save();

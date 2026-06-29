@@ -14,7 +14,8 @@ import {
 import {
   drawAdvisorPortraitArt,
 } from '../assets/campaignArt.js';
-import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey } from './fortressPrepArt.js';
+import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey, isFortressPrepArtReady } from './fortressPrepArt.js';
+import { PREP_HOTSPOT_LAYOUT, resolvePrepHotspotRect } from './fortressPrepLayout.js';
 import { drawHeroMedallionArt } from '../assets/campaignArt.js';
 
 export const PREP_HOTSPOTS = {
@@ -44,14 +45,8 @@ const ADVISORS = {
   skald: { name: 'Skald', color: '#e8c8a0' },
 };
 
-/** Schematic layout — fractions of playfield [x, y, w, h]. */
-const HOTSPOT_LAYOUT = {
-  [PREP_HOTSPOTS.WATCH_TOWER]: { fx: 0.48, fy: 0.22, fw: 0.14, fh: 0.16 },
-  [PREP_HOTSPOTS.WEST_GATE]:   { fx: 0.38, fy: 0.38, fw: 0.22, fh: 0.20 },
-  [PREP_HOTSPOTS.WALL_SCAR]:   { fx: 0.34, fy: 0.36, fw: 0.30, fh: 0.08 },
-  [PREP_HOTSPOTS.LONGHOUSE]:   { fx: 0.08, fy: 0.64, fw: 0.20, fh: 0.18 },
-  [PREP_HOTSPOTS.TREASURY]:    { fx: 0.72, fy: 0.64, fw: 0.18, fh: 0.16 },
-};
+/** @deprecated use PREP_HOTSPOT_LAYOUT from fortressPrepLayout.js */
+const HOTSPOT_LAYOUT = PREP_HOTSPOT_LAYOUT;
 
 export function createPrepShellState() {
   return {
@@ -260,15 +255,18 @@ export function getPrepInstructionHint(ctx) {
 }
 
 export function hotspotRect(playfield, hotspotId) {
-  const L = HOTSPOT_LAYOUT[hotspotId];
+  const L = PREP_HOTSPOT_LAYOUT[hotspotId];
   if (!L) return null;
+  const r = resolvePrepHotspotRect(L, playfield, {
+    useArtSpace: isFortressPrepArtReady('schematicPlate'),
+  });
   return {
-    x: playfield.x + L.fx * playfield.w,
-    y: playfield.y + L.fy * playfield.h,
-    w: L.fw * playfield.w,
-    h: L.fh * playfield.h,
-    cx: playfield.x + (L.fx + L.fw / 2) * playfield.w,
-    cy: playfield.y + (L.fy + L.fh / 2) * playfield.h,
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
+    cx: r.x + r.w / 2,
+    cy: r.y + r.h / 2,
   };
 }
 
@@ -335,9 +333,9 @@ function drawPrepPulse(ctx, box, now) {
 }
 
 function drawWestApproach(ctx, pf, gateBox, now) {
-  const fromX = pf.x + 12;
-  const toX = gateBox.x - 6;
-  const midY = gateBox.y + gateBox.h * 0.55;
+  const fromX = pf.x + 8;
+  const toX = gateBox.x + gateBox.w * 0.15;
+  const midY = gateBox.y + gateBox.h * 0.62;
   const dash = 5 + Math.sin(now * 0.003) * 2;
   ctx.save();
   ctx.setLineDash([6, 5]);
@@ -566,7 +564,7 @@ function drawHeroMedallion(ctx, box, def) {
 }
 
 function hitTestHotspots(mouseX, mouseY, playfield, state) {
-  const ids = Object.keys(HOTSPOT_LAYOUT);
+  const ids = Object.keys(PREP_HOTSPOT_LAYOUT);
   for (let i = ids.length - 1; i >= 0; i--) {
     const id = ids[i];
     const r = hotspotRect(playfield, id);
@@ -757,41 +755,49 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const bgGrad = ctx.createLinearGradient(pf.x, pf.y, pf.x, pf.y + pf.h);
   bgGrad.addColorStop(0, '#1a2838');
   bgGrad.addColorStop(1, '#0e1418');
-  if (!drawFortressPrepBackground(ctx, pf)) {
+  const hasPlate = drawFortressPrepBackground(ctx, pf);
+  if (!hasPlate) {
     ctx.fillStyle = bgGrad;
     ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
   } else {
-    ctx.fillStyle = 'rgba(8,12,18,0.35)';
+    ctx.fillStyle = 'rgba(8,12,18,0.18)';
     ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
   }
 
-  const cx = pf.x + pf.w * 0.5;
-  const cy = pf.y + pf.h * 0.48;
-  const ringRx = pf.w * 0.34;
-  const ringRy = pf.h * 0.28;
-  ctx.strokeStyle = 'rgba(80,100,120,0.22)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, ringRx, ringRy, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.font = '6px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(100,120,140,0.35)';
-  ctx.fillText('FORTRESS RING', cx, cy + 4);
+  if (!hasPlate) {
+    const cx = pf.x + pf.w * 0.5;
+    const cy = pf.y + pf.h * 0.48;
+    const ringRx = pf.w * 0.34;
+    const ringRy = pf.h * 0.28;
+    ctx.strokeStyle = 'rgba(80,100,120,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, ringRx, ringRy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = '6px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(100,120,140,0.35)';
+    ctx.fillText('FORTRESS RING', cx, cy + 4);
 
-  ctx.fillStyle = 'rgba(40,55,40,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + pf.h * 0.06, ringRx * 0.92, ringRy * 0.55, 0, 0, Math.PI * 2);
-  ctx.fill();
+    ctx.fillStyle = 'rgba(40,55,40,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + pf.h * 0.06, ringRx * 0.92, ringRy * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
+  const gateBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WEST_GATE), pf, cam);
   const wallR = hotspotRect(pf, PREP_HOTSPOTS.WALL_SCAR);
   const wallBox = boxFromRect(wallR, pf, cam);
-  if (!drawFortressPrepSprite(ctx, 'wallScar', wallBox)) {
-    ctx.fillStyle = '#3a2818';
-    ctx.fillRect(wallBox.x, wallBox.y, wallBox.w, wallBox.h);
-    ctx.strokeStyle = '#5a4030';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(wallBox.x + 0.5, wallBox.y + 0.5, wallBox.w - 1, wallBox.h - 1);
+
+  const scarActive = prepMeta.westGateScarred && !prepMeta.westGateRepaired;
+  if (scarActive) {
+    if (!drawFortressPrepSprite(ctx, 'wallScar', wallBox)) {
+      ctx.fillStyle = '#3a2818';
+      ctx.fillRect(wallBox.x, wallBox.y, wallBox.w, wallBox.h);
+      ctx.strokeStyle = '#5a4030';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(wallBox.x + 0.5, wallBox.y + 0.5, wallBox.w - 1, wallBox.h - 1);
+    }
   }
 
   const lhBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.LONGHOUSE), pf, cam);
@@ -807,10 +813,9 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const towerBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WATCH_TOWER), pf, cam);
   drawWatchTowerGraphic(ctx, towerBox);
 
-  const gateBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WEST_GATE), pf, cam);
   drawWestGateGraphic(ctx, gateBox, prepMeta, state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE);
 
-  if (prepMeta.westGateScarred && !prepMeta.westGateRepaired) {
+  if (scarActive) {
     ctx.strokeStyle = 'rgba(180,60,40,0.85)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -846,8 +851,12 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
 
   drawHotspotLabel(
     ctx, gateBox, 'WEST GATE',
-    gateNeedsHero ? 'Click — assign hero' : (gateDef?.name || gateDef?.type || 'Posted'),
-    { urgent: gateNeedsHero },
+    scarActive
+      ? 'Splintered palisade — repair'
+      : gateNeedsHero
+        ? 'Palisade gate — assign hero'
+        : (gateDef?.name || gateDef?.type || 'Posted'),
+    { urgent: gateNeedsHero || scarActive },
   );
   drawHotspotLabel(
     ctx, towerBox, 'WATCH TOWER',
@@ -862,11 +871,8 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
     treasuryUnlocked ? 'Gold reserve chest' : 'Unlocks after A0',
     { muted: !treasuryUnlocked },
   );
-  if (!prepMeta.westGateScarred || prepMeta.westGateRepaired) {
-    drawHotspotLabel(ctx, wallBox, 'PALISADE', prepMeta.westGateRepaired ? 'Mended' : 'West face');
-  }
 
-  for (const id of Object.keys(HOTSPOT_LAYOUT)) {
+  for (const id of Object.keys(PREP_HOTSPOT_LAYOUT)) {
     const r = hotspotRect(pf, id);
     const box = boxFromRect(r, pf, cam);
     if (state.selectedHotspot === id) {

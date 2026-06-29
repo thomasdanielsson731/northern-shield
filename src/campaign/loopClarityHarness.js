@@ -39,14 +39,14 @@ export function runLoopClarityChecks() {
   checks.push(check(
     'loop.hub.treasury-gate',
     'Milestones',
-    'Treasury locked before First Night (First Saga)',
+    'Fortress locked before First Night (First Saga)',
     !getHubBuildingMilestone('fortress', { simplifiedSaga: true, battlesCompleted: 0 }).available,
   ));
 
   checks.push(check(
     'loop.hub.treasury-open',
     'Milestones',
-    'Treasury opens after first assault',
+    'Fortress opens after first assault',
     getHubBuildingMilestone('fortress', { simplifiedSaga: true, battlesCompleted: 1 }).available,
   ));
 

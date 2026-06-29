@@ -57,7 +57,7 @@ export function getHubBuildingMilestone(id, state = {}) {
     if (simplifiedSaga && battlesCompleted < 1) {
       return {
         available: false,
-        reason: 'Treasury opens after First Night.',
+        reason: 'Fortress opens after First Night.',
       };
     }
     if (simplifiedSaga && battlesCompleted === 1) {
@@ -65,7 +65,7 @@ export function getHubBuildingMilestone(id, state = {}) {
         available: true,
         pulse: true,
         reason: 'Reserve gold unlocked — upgrade the palisade.',
-        banner: 'TREASURY OPEN',
+        banner: 'FORTRESS OPEN',
       };
     }
     return { available: true };
@@ -130,7 +130,7 @@ export function getProgressionBuildingTitle(mode) {
   const titles = {
     warband: 'HALL OF HEROES',
     recruit: 'BARRACKS',
-    fortress: 'TREASURY',
+    fortress: 'FORTRESS',
     runeSmith: 'RUNE SMITH',
   };
   return titles[mode] ?? 'SETTLEMENT';

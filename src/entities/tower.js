@@ -20,6 +20,7 @@ import {
   drawSpriteContourShadow,
 } from '../combat/spriteAnim.js';
 import { drawTowerAttackVfx } from '../combat/characterAttackVfx.js';
+import { triggerHeroAttackLunge, getHeroLungeOffset } from '../combat/combatJuice.js';
 import {
   getMaxLevelForTowerType,
   getStructureLevelStatMultipliers,
@@ -517,6 +518,7 @@ export class Tower {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
+      triggerHeroAttackLunge(this, this.lastTargetX ?? this.x + 1, this.lastTargetY ?? this.y);
       return { type: 'heal', count: getHyddaHealCount(this.level) };
     }
 
@@ -524,12 +526,14 @@ export class Tower {
     if (this.type === TOWER_TYPES.ISJATTEN) {
       if (this.fireCooldown > 0) { this.fireCooldown--; return null; }
       const rangeSq = this.range * this.range;
-      let killed = 0, hit = false;
+      let killed = 0, hit = false, aimX = this.x + 1, aimY = this.y;
       for (const enemy of enemies) {
         if (!enemy.alive || enemy.reached) continue;
         const dx = enemy.x - this.x, dy = enemy.y - this.y;
         if (dx * dx + dy * dy > rangeSq) continue;
         hit = true;
+        aimX = enemy.x;
+        aimY = enemy.y;
         enemy.hp -= Math.round(this.damage * (Tower.dmgMult ?? 1) * (this._synergyDmgBoost ?? 1));
         enemy.hitFlash    = this.damage > 20 ? 6 : 4;
         enemy.hitFlashMax = enemy.hitFlash;
@@ -542,6 +546,7 @@ export class Tower {
       if (!hit) return null;
       this.fireCooldown = this.level >= 5 ? Math.min(this.fireRate, 120) : this.fireRate;
       this.fireFlash = this.maxFireFlash;
+      triggerHeroAttackLunge(this, aimX, aimY);
       return { type: 'nova', x: this.x, y: this.y, r: this.range, killed };
     }
 
@@ -582,6 +587,7 @@ export class Tower {
       this.lastTargetX = target.x; this.lastTargetY = target.y; this.targetLineTimer = 20;
       this.fireCooldown = this.fireRate;
       this.fireFlash    = this.maxFireFlash;
+      triggerHeroAttackLunge(this, target.x, target.y);
       return 0;
     }
 
@@ -600,8 +606,9 @@ export class Tower {
   drawCombatSpriteOnly(ctx, t) {
     if (!isHeroTowerType(this.type)) return;
     const bob = heroWalkBob(this, t);
-    const x = this.x;
-    const y = this.y;
+    const lunge = getHeroLungeOffset(this);
+    const x = this.x + lunge.x;
+    const y = this.y + lunge.y;
     const angle = heroSpriteFacingAngle(this);
     const glow = this.glowRgb ? `rgba(${this.glowRgb},0.95)` : null;
     if      (this.type === TOWER_TYPES.BERSERK)    drawSpriteFrame(ctx, 'berserker', heroAnimFrame(this, t), x, y, angle, 58, glow ?? 'rgba(255,120,40,0.95)', this.level, bob);
@@ -695,11 +702,17 @@ export class Tower {
     // scaled up to fill their footprint.
     const fpScale = Math.sqrt(this.footprint.w * this.footprint.h);
     const useFpScale = fpScale > 1.01 && this.type !== TOWER_TYPES.CATAPULT;
+    const lunge = isHero ? getHeroLungeOffset(this) : { x: 0, y: 0 };
+    const lungeActive = isHero && (lunge.x !== 0 || lunge.y !== 0);
     if (useFpScale) {
       ctx.save();
       ctx.translate(this.x, this.y);
       ctx.scale(fpScale, fpScale);
       ctx.translate(-this.x, -this.y);
+    }
+    if (lungeActive) {
+      ctx.save();
+      ctx.translate(lunge.x, lunge.y);
     }
     if      (this.type === TOWER_TYPES.BERSERK)    this._drawBerserk(ctx, t);
     else if (this.type === TOWER_TYPES.VALKYRIE)   this._drawValkyrie(ctx, t);
@@ -715,6 +728,7 @@ export class Tower {
     else if (this.type === TOWER_TYPES.RUNESHRINE) this._drawRuneShrine(ctx, t);
     else if (this.type === TOWER_TYPES.BARRACKS)   this._drawBarracks(ctx, t);
     else                                           this._drawBlondie(ctx, t);
+    if (lungeActive) ctx.restore();
     if (useFpScale) ctx.restore();
 
     // Attack VFX — per-class (characterAttackVfx)

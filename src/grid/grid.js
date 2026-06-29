@@ -55,6 +55,8 @@ export class Grid {
     this.cellSize = cellSize;
     this.cells = Array.from({ length: rows }, () => new Array(cols).fill(CELL.EMPTY));
     this.useCampaignPalisade = false;
+    /** Illustrated ring art instead of per-cell palisade tiles (campaign assault combat). */
+    this.usePalisadeRingArt = false;
     this.healthRatio     = 1;  // set by game.js each frame: lives / STARTING_LIVES
     this.gold            = 0;  // set by game.js each frame: current gold
     this.hoardPulse      = 0;  // set by game.js each frame: coin-landing bounce
@@ -602,6 +604,9 @@ export class Grid {
       ctx.restore();
     }
 
+    // Campaign assault — courtyard buildings drawn by drawCampaignAssaultFortressDecor; skip hoard flood.
+    if (this.minimalGoalDecor) return;
+
     const sp = SPRITES['trelleborg'];
     if (sp && sp.img.complete && sp.img.naturalWidth > 0) {
       const scale = getCombatSpriteScale();
@@ -1096,6 +1101,7 @@ export class Grid {
   drawFortificationAt(ctx, col, row, time = 0) {
     const type = this.getCell(col, row);
     if (type !== CELL.WALL && type !== CELL.GATE) return;
+    if (this.usePalisadeRingArt) return;
     const cs = this.cellSize;
     const x = col * cs;
     const y = row * cs;
@@ -1132,7 +1138,7 @@ export class Grid {
     const isCorner = [3, 6, 9, 12].includes(adj);
     const variant = hpFrac < 0.45 ? 'damaged' : isCorner ? 'corner' : 'segment';
 
-    if (drawPalisadeTile(ctx, x, y, cs, variant)) {
+    if (drawPalisadeTile(ctx, x - 0.5, y - 0.5, cs + 1, variant)) {
       if (!N && adj !== 0) {
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
         ctx.fillRect(x, y, cs, cs * 0.14);

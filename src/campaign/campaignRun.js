@@ -94,22 +94,52 @@ export function attachDeploySnapshot(fieldState, deploySnapshot) {
   return { ...fieldState, deploySnapshot };
 }
 
-/** Strip combat vitals and restore fallen slots before a fresh assault. */
-export function prepareFieldForNewAssault(fieldState) {
+function towerLayoutKey(t) {
+  return `${t.col}_${t.row}_${t.type}`;
+}
+
+/** Full repair after an assault — restore walls, fallen heroes, and destroyed structures. */
+export function repairFieldStateAfterAssault(fieldState, deploySnapshot = null) {
   if (!fieldState) return { gold: 0, towers: [], walls: {} };
-  let field = fieldState.deploySnapshot
-    ? mergeFallenHeroesIntoFieldState(fieldState, fieldState.deploySnapshot)
+  const snap = deploySnapshot ?? fieldState.deploySnapshot ?? null;
+
+  let field = snap
+    ? mergeFallenHeroesIntoFieldState(fieldState, snap)
     : { ...fieldState, towers: [...(fieldState.towers ?? [])] };
+
+  if (snap?.towers) {
+    const living = new Set((field.towers ?? []).map(towerLayoutKey));
+    for (const t of snap.towers) {
+      if (!isHeroTowerType(t.type) && !living.has(towerLayoutKey(t))) {
+        field.towers.push({ ...t });
+        living.add(towerLayoutKey(t));
+      }
+    }
+  }
+
+  const wallKeys = new Set([
+    ...Object.keys(field.walls ?? {}),
+    ...Object.keys(snap?.walls ?? {}),
+  ]);
   const walls = {};
-  for (const [key, w] of Object.entries(field.walls ?? {})) {
+  for (const key of wallKeys) {
+    const w = snap?.walls?.[key] ?? field.walls?.[key];
+    if (!w) continue;
     const maxHp = w.maxHp ?? w.hp ?? 100;
     walls[key] = { ...w, hp: maxHp, maxHp };
   }
+
   const towers = (field.towers ?? []).map(t => {
     const { combatHp, combatMaxHp, structureHp, structureMaxHp, ...rest } = t;
     return rest;
   });
+
   return { ...field, towers, walls };
+}
+
+/** Strip combat vitals and restore fallen slots before a fresh assault. */
+export function prepareFieldForNewAssault(fieldState) {
+  return repairFieldStateAfterAssault(fieldState, fieldState?.deploySnapshot ?? null);
 }
 
 /**

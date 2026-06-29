@@ -34,7 +34,7 @@ export function pickAnimColumn({ dying, attacking, moving, walkPhase = 0, gait =
   if (attacking) return ANIM.ATTACK;
   if (moving) {
     if (gait === 'twoStep') {
-      return Math.floor(walkPhase * 4.6) % 2 === 0 ? ANIM.WALK_B : ANIM.IDLE;
+      return Math.floor(walkPhase * 6.2) % 2 === 0 ? ANIM.WALK_B : ANIM.IDLE;
     }
     return ANIM.WALK_B;
   }
@@ -47,9 +47,9 @@ export function computeWalkBob(moveSpeed, phaseSec, { movingThreshold = 0.2, str
     const breathe = Math.sin(phaseSec * 2.4 * strideMul) * 0.35;
     return { yOff: breathe, scaleY: 1 + breathe * 0.003, lean: 0 };
   }
-  const strideHz = (9 + Math.min(moveSpeed, 2.5) * 2.2) * strideMul;
-  const stride = Math.sin(phaseSec * strideHz) * moveSpeed * 0.32;
-  const squash = 1 + Math.abs(Math.sin(phaseSec * strideHz)) * 0.045;
+  const strideHz = (10 + Math.min(moveSpeed, 2.5) * 2.6) * strideMul;
+  const stride = Math.sin(phaseSec * strideHz) * moveSpeed * 0.42;
+  const squash = 1 + Math.abs(Math.sin(phaseSec * strideHz)) * 0.055;
   const lean = Math.sin(phaseSec * strideHz + 0.35) * 0.04 * Math.sign(moveSpeed || 1);
   return { yOff: stride, scaleY: squash, lean };
 }

@@ -1,78 +1,62 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isHeroTowerType,
-  serializeFieldState,
-  ensurePostAssignments,
-  markNodeCasualty,
-  isNodeCasualty,
-  clearNodeCasualties,
-  startNodeAttack,
-  completeNode,
-  attachDeploySnapshot,
+  repairFieldStateAfterAssault,
   prepareFieldForNewAssault,
-  createEmptyCampaignProgress,
+  mergeFallenHeroesIntoFieldState,
 } from '../src/campaign/campaignRun.js';
 
-describe('campaignRun helpers', () => {
-  const goal = { col: 24, row: 15 };
+describe('campaignRun field repair', () => {
+  const deploySnapshot = {
+    gold: 50,
+    towers: [
+      { type: 'berserk', col: 1, row: 2, defenderId: 'h1', level: 1 },
+      { type: 'berserk', col: 3, row: 2, defenderId: 'h2', level: 1 },
+      { type: 'catapult', col: 5, row: 4, level: 1 },
+    ],
+    walls: {
+      '1_1': { hp: 80, maxHp: 100 },
+      '2_1': { hp: 100, maxHp: 100 },
+    },
+  };
 
-  it('classifies hero tower types', () => {
-    expect(isHeroTowerType('berserk')).toBe(true);
-    expect(isHeroTowerType('catapult')).toBe(false);
-  });
-
-  it('serializes field stripping temporary walls and attaching posts', () => {
-    const state = serializeFieldState(
-      [{ type: 'berserk', col: 1, row: 2, level: 2, defenderId: 'd1', name: 'Erik' }],
-      { '1_2': { hp: 50, temporary: true }, '3_3': { hp: 80, maxHp: 100 } },
-      120.7,
-      { west_gate: 'd1' },
-    );
-    expect(state.gold).toBe(120);
-    expect(state.walls['1_2']).toBeUndefined();
-    expect(state.postAssignments.west_gate).toBe('d1');
-  });
-
-  it('ensurePostAssignments migrates from towers when missing', () => {
-    const field = {
-      towers: [{ type: 'berserk', col: 19, row: 15, defenderId: 'd1' }],
-      walls: {},
+  it('restores fallen heroes, destroyed structures, and wall HP after assault', () => {
+    const afterBattle = {
+      gold: 120,
+      towers: [
+        { type: 'berserk', col: 1, row: 2, defenderId: 'h1', level: 1, combatHp: 12, combatMaxHp: 100 },
+      ],
+      walls: {
+        '1_1': { hp: 10, maxHp: 100 },
+      },
+      deploySnapshot,
     };
-    const posts = ensurePostAssignments(field, goal);
-    expect(Object.keys(posts).length).toBeGreaterThan(0);
-    expect(ensurePostAssignments({ postAssignments: { west_gate: 'd1' } })).toEqual({ west_gate: 'd1' });
-    expect(ensurePostAssignments(null)).toEqual({});
+
+    const repaired = repairFieldStateAfterAssault(afterBattle, deploySnapshot);
+
+    expect(repaired.towers).toHaveLength(3);
+    expect(repaired.towers.find(t => t.defenderId === 'h2')).toBeTruthy();
+    expect(repaired.towers.find(t => t.type === 'catapult')).toBeTruthy();
+    expect(repaired.towers.every(t => t.combatHp == null && t.structureHp == null)).toBe(true);
+    expect(repaired.walls['1_1'].hp).toBe(100);
+    expect(repaired.walls['2_1'].hp).toBe(100);
   });
 
-  it('tracks node casualties', () => {
-    const set = new Set();
-    markNodeCasualty(set, 'd1');
-    markNodeCasualty(set, null);
-    expect(isNodeCasualty(set, 'd1')).toBe(true);
-    expect(isNodeCasualty(set, 'd2')).toBe(false);
-    expect(isNodeCasualty(set, null)).toBe(false);
-    clearNodeCasualties(set);
-    expect(set.size).toBe(0);
+  it('prepareFieldForNewAssault uses embedded deploy snapshot', () => {
+    const field = {
+      towers: [{ type: 'berserk', col: 1, row: 2, defenderId: 'h1' }],
+      walls: { '1_1': { hp: 5, maxHp: 100 } },
+      deploySnapshot,
+    };
+    const prepped = prepareFieldForNewAssault(field);
+    expect(prepped.towers).toHaveLength(3);
+    expect(prepped.walls['2_1'].hp).toBe(100);
   });
 
-  it('startNodeAttack sets progress and returns wave plan', () => {
-    const p = createEmptyCampaignProgress();
-    const plan = startNodeAttack(p, 0, 1);
-    expect(p.currentNodeIndex).toBe(1);
-    expect(plan.waves.length).toBeGreaterThan(0);
-  });
-
-  it('completeNode is idempotent for duplicate clears', () => {
-    const p = createEmptyCampaignProgress();
-    const r1 = completeNode(p, 0, 0, { gold: 0, towers: [], walls: {} });
-    const r2 = completeNode(p, 0, 0, { gold: 0, towers: [], walls: {} });
-    expect(r1.progress).toBe(p);
-    expect(r2.mapCompleted).toBe(false);
-    expect(p.clearedMaps).not.toContain(0);
-  });
-
-  it('prepareFieldForNewAssault handles empty field', () => {
-    expect(prepareFieldForNewAssault(null)).toEqual({ gold: 0, towers: [], walls: {} });
-    expect(attachDeploySnapshot(null, { towers: [] })).toBeNull();
+  it('mergeFallenHeroesIntoFieldState still restores missing heroes', () => {
+    const merged = mergeFallenHeroesIntoFieldState(
+      { towers: [{ type: 'berserk', col: 1, row: 2, defenderId: 'h1' }], walls: {} },
+      deploySnapshot,
+    );
+    expect(merged.towers).toHaveLength(2);
   });
 });

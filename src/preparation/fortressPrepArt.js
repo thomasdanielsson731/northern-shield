@@ -3,6 +3,8 @@
  * @see design/art/BATCH_PROMPTS.md Wave 1
  */
 
+import { getPrepBackdropRect } from './fortressPrepLayout.js';
+
 const PREP_ART = {
   watchTower: '/assets/fortress/fort_watch_tower@80x100.png',
   longhouse: '/assets/fortress/fort_longhouse@140x90.png',
@@ -43,11 +45,18 @@ export function drawFortressPrepSprite(ctx, key, box) {
   return true;
 }
 
-/** Full playfield schematic backdrop when promoted art is available. */
+/** Full playfield schematic backdrop — cover-fit to art plate aspect. */
 export function drawFortressPrepBackground(ctx, pf) {
   const img = _images.schematicPlate;
   if (!isFortressPrepArtReady('schematicPlate')) return false;
-  ctx.drawImage(img, pf.x, pf.y, pf.w, pf.h);
+  const rect = getPrepBackdropRect(pf);
+  ctx.fillStyle = '#0e1418';
+  ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
+  ctx.drawImage(
+    img,
+    0, 0, img.naturalWidth, img.naturalHeight,
+    rect.dx, rect.dy, rect.dw, rect.dh,
+  );
   return true;
 }
 

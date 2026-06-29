@@ -9,7 +9,8 @@ import { getHubBuildingMilestone } from './hubMilestones.js';
 import {
   drawSettlementHubBackdrop,
   drawHubBuildingSprite,
-  isSettlementHubBackdropUsable,
+  drawAssaultEmblemFallback,
+  isSettlementHubBackdropReady,
 } from './settlementHubArt.js';
 import {
   HUB_BUILDING_LAYOUT,
@@ -21,8 +22,8 @@ import {
 export const HUB_BUILDINGS = [
   {
     id: 'command',
-    label: 'WAR HORN',
-    sublabel: 'Assaults · Command Map',
+    label: 'ASSAULTS',
+    sublabel: 'Command Map · The wilds',
     kind: 'assault',
   },
   {
@@ -33,8 +34,8 @@ export const HUB_BUILDINGS = [
   },
   {
     id: 'fortress',
-    label: 'TREASURY',
-    sublabel: 'Fortress upgrades',
+    label: 'FORTRESS',
+    sublabel: 'Upgrade walls & structures',
     kind: 'progression',
   },
   {
@@ -72,9 +73,8 @@ export const HUB_BUILDINGS = [
 export function hubRect(building, layout) {
   const norm = HUB_BUILDING_LAYOUT[building.id];
   if (!norm) return { x: 0, y: 0, w: 0, h: 0 };
-  return resolveHubBuildingRect(norm, layout, {
-    useArtSpace: isSettlementHubBackdropUsable(),
-  });
+  const useArt = isSettlementHubBackdropReady();
+  return resolveHubBuildingRect(norm, layout, { useArtSpace: useArt });
 }
 
 export function getHubBuildingAvailability(id, state = {}) {
@@ -99,7 +99,11 @@ export function hubBuildingAction(id) {
 function drawHubBuilding(ctx, box, building, avail, pulse) {
   const locked = !avail.available;
   const hot = pulse && avail.pulse;
-  const hasSprite = drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 });
+  const isEmblem = building.id === 'command';
+  const hasSprite = isEmblem
+    ? (drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 })
+      || drawAssaultEmblemFallback(ctx, box, { locked, alpha: locked ? 0.55 : 1, pulse: hot }))
+    : drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 });
 
   if (!hasSprite) {
     const fill = locked
@@ -109,7 +113,7 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
         : 'rgba(18,16,22,0.92)';
     const border = locked ? 0.35 : hot ? 0.95 : 0.72;
     drawWarCampPanel(ctx, box.x, box.y, box.w, box.h, { fill, borderAlpha: border, radius: 6 });
-  } else if (hot) {
+  } else if (hot && !isEmblem) {
     const p = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
     ctx.save();
     ctx.strokeStyle = `rgba(200,170,100,${0.22 + p * 0.28})`;
@@ -124,15 +128,16 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
   ctx.font = 'bold 8px monospace';
   ctx.fillStyle = locked ? 'rgba(120,110,90,0.55)' : UI_COLORS.gold;
   const labelAbove = building.id === 'recruit' || building.id === 'chronicle'
-    || building.id === 'fortress' || building.id === 'runeSmith' || building.id === 'skirmish';
+    || building.id === 'fortress' || building.id === 'runeSmith' || building.id === 'skirmish'
+    || building.id === 'warband' || isEmblem;
   const labelY = hasSprite
-    ? (labelAbove ? box.y + 9 : box.y + box.h * 0.12)
+    ? (labelAbove ? box.y - 4 : box.y + box.h * 0.12)
     : box.y + box.h * 0.38;
   ctx.fillText(building.label, box.x + box.w / 2, labelY);
-  if (building.id === 'command') {
+  if (isEmblem) {
     ctx.font = '6px monospace';
     ctx.fillStyle = locked ? 'rgba(100,90,70,0.45)' : 'rgba(160,140,100,0.55)';
-    ctx.fillText('Assaults · Command Map', box.x + box.w / 2, labelY + 11);
+    ctx.fillText('Command Map · The wilds', box.x + box.w / 2, labelY + 11);
     ctx.font = 'bold 8px monospace';
     ctx.fillStyle = locked ? 'rgba(120,110,90,0.55)' : UI_COLORS.gold;
   }
@@ -146,7 +151,7 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
   if (avail.banner && !locked) {
     ctx.font = 'bold 5.5px monospace';
     ctx.fillStyle = avail.unread ? 'rgba(240,200,120,0.85)' : 'rgba(200,170,100,0.75)';
-    const bannerY = building.id === 'command' ? labelY + 22 : labelY + 11;
+    const bannerY = isEmblem ? labelY + 22 : labelY + 11;
     ctx.fillText(avail.banner, box.x + box.w / 2, bannerY);
   }
   if (!hasSprite) {
@@ -157,7 +162,7 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
       : building.sublabel;
     ctx.fillText(sub, box.x + box.w / 2, box.y + box.h * 0.62);
 
-    if (building.kind === 'assault') {
+    if (building.kind === 'assault' && !isEmblem) {
       ctx.font = '14px monospace';
       ctx.fillText('📯', box.x + box.w / 2, box.y + box.h * 0.82);
     } else if (building.id === 'warband') {
@@ -194,7 +199,7 @@ export function drawSettlementHub(ctx, layout, hubState, btnsOut = []) {
   ctx.textAlign = 'center';
   ctx.font = '7px monospace';
   ctx.fillStyle = 'rgba(180,160,120,0.45)';
-  ctx.fillText('Tap a building — War Horn for assaults', x + w / 2, y + 16);
+  ctx.fillText('Tap a building — crossed swords for assaults', x + w / 2, y + 16);
   ctx.textAlign = 'left';
 
   const hotspots = [];
@@ -220,10 +225,10 @@ export function getHubInstructionHint(hubState) {
     return { title: 'NEW SAGA ENTRY', line: 'Chronicle stone has an unread battle record' };
   }
   if (hubState?.battlesCompleted === 0) {
-    return { title: 'FIRST STEP', line: 'War Horn → pick First Night → prepare the gate' };
+    return { title: 'FIRST STEP', line: 'Assaults emblem → pick First Night → prepare the gate' };
   }
   if (next) {
-    return { title: 'NEXT ASSAULT', line: `${next.codename} — War Horn when ready` };
+    return { title: 'NEXT ASSAULT', line: `${next.codename} — Assaults when ready` };
   }
   return { title: 'SETTLEMENT', line: 'Grow your kingdom between assaults' };
 }

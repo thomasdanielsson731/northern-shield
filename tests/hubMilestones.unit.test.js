@@ -7,16 +7,16 @@ import {
 import { applySettlementComplete } from '../src/campaign/settlementCeremony.js';
 
 describe('hubMilestones', () => {
-  it('locks treasury before First Night on First Saga', () => {
+  it('locks fortress before First Night on First Saga', () => {
     const m = getHubBuildingMilestone('fortress', { simplifiedSaga: true, battlesCompleted: 0 });
     expect(m.available).toBe(false);
     expect(m.reason).toMatch(/First Night/i);
   });
 
-  it('opens treasury with banner after first assault', () => {
+  it('opens fortress with banner after first assault', () => {
     const m = getHubBuildingMilestone('fortress', { simplifiedSaga: true, battlesCompleted: 1 });
     expect(m.available).toBe(true);
-    expect(m.banner).toMatch(/TREASURY/i);
+    expect(m.banner).toMatch(/FORTRESS/i);
   });
 
   it('locks barracks until settlement ceremony', () => {
@@ -38,7 +38,7 @@ describe('hubMilestones', () => {
 
   it('maps hub buildings to progression modes', () => {
     expect(hubBuildingToProgressionMode('fortress')).toBe('fortress');
-    expect(getProgressionBuildingTitle('fortress')).toBe('TREASURY');
+    expect(getProgressionBuildingTitle('fortress')).toBe('FORTRESS');
   });
 
   it('chronicle unread milestone pulses NEW ENTRY', () => {

@@ -8,6 +8,8 @@ import {
   drawSpriteContourShadow,
 } from '../combat/spriteAnim.js';
 import { drawEnemyAttackVfx, drawEnemyWalkDust } from '../combat/characterAttackVfx.js';
+import { getEnemyHopOffset, tickEnemyHitHop } from '../combat/combatJuice.js';
+import { drawCombatFieldHpBar, combatFieldHpBarHeight, combatFieldHpAccent } from '../ui/assaultPanels.js';
 
 export const ENEMY_TYPES = {
   RAIDER:    'raider',
@@ -183,6 +185,8 @@ export class Enemy {
     this.slowImmune   = false;
     this.hitFlash     = 0;    // frames of hit ring remaining
     this.hitFlashMax  = 0;    // max frames set when hit (for alpha normalization)
+    this.hitHop       = 0;    // damage pop — decays each draw
+    this.hitHopMax    = 0;
     this.empPulseTimer = 0;   // cooldown between EMP shockwave rings
     this.staggerVX     = 0;
     this.staggerVY     = 0;
@@ -311,6 +315,11 @@ export class Enemy {
       }
       return;
     }
+
+    tickEnemyHitHop(this);
+    const hopY = getEnemyHopOffset(this);
+    ctx.save();
+    if (hopY) ctx.translate(0, hopY);
 
     // Boss ground aura — pulsing crimson ring that scales with threat
     if (this.isBoss) {
@@ -550,6 +559,7 @@ export class Enemy {
     }
 
     if (!this.isBoss) this._drawHpBar(ctx);
+    ctx.restore();
   }
 
   _drawSprite(ctx, { dying = false } = {}) {
@@ -1275,40 +1285,13 @@ export class Enemy {
       ctx.restore();
     } else {
       const forceShow = _hpBarForceVisible;
-      const barHAdj = forceShow ? 6 : barH;
-      const barWAdj = forceShow ? barW * 1.08 : barW;
-      const barXAdj = this.x - barWAdj / 2;
-      const barYAdj = this.y - this.radius - (forceShow ? 12 : 10);
-      // Tray always visible — faint at full HP unless few enemies remain
-      ctx.globalAlpha = (pct < 1.0 || forceShow) ? 1 : 0.30;
-      ctx.fillStyle = 'rgba(6,3,14,0.88)';
-      ctx.fillRect(barXAdj - 1, barYAdj - 1, barWAdj + 2, barHAdj + 2);
-      ctx.globalAlpha = 1;
-      if (pct < 1.0 || forceShow) {
-        const _typeFill = {
-          draugr: '#a84848', myling: '#7048c0', jotunn: '#5068a8', mara: '#7828a8',
-          warg: '#a07028', einherjar: '#687040', fossegrim: '#288878',
-        };
-        const _baseFill = _typeFill[this.type];
-        const _urgency  = forceShow && pct >= 1.0 ? 1.0 : pct > 0.50 ? 1.0 : pct > 0.25 ? 0.72 : 0.48;
-        ctx.fillStyle = _baseFill
-          ? `rgba(${parseInt(_baseFill.slice(1, 3), 16)},${parseInt(_baseFill.slice(3, 5), 16)},${parseInt(_baseFill.slice(5, 7), 16)},${_urgency})`
-          : (pct > 0.50 ? '#48a038' : pct > 0.25 ? '#c8a030' : '#e84040');
-        ctx.fillRect(barXAdj, barYAdj, barWAdj * (forceShow && pct >= 1.0 ? 1 : pct), barHAdj);
-        // Colorblind-safe: tick marks at 25 / 50 / 75 %
-        ctx.strokeStyle = 'rgba(0,0,0,0.50)';
-        ctx.lineWidth   = 0.8;
-        for (const t of [0.25, 0.5, 0.75]) {
-          const tx = barXAdj + barWAdj * t;
-          ctx.beginPath(); ctx.moveTo(tx, barYAdj); ctx.lineTo(tx, barYAdj + barHAdj); ctx.stroke();
-        }
-        // Type accent border on HP bar tray for type-identification under crowding
-        const _typeAccent = { draugr:'#a03030', myling:'#7030b0', jotunn:'#304080', mara:'#601890', warg:'#806020', einherjar:'#606030', fossegrim:'#205060' };
-        const _accentColor = _typeAccent[this.type] ?? 'rgba(200,160,40,0.32)';
-        ctx.strokeStyle = _accentColor;
-        ctx.lineWidth   = 1;
-        ctx.strokeRect(barXAdj - 0.5, barYAdj - 0.5, barWAdj + 1, barHAdj + 1);
-      }
+      const pct = pctFull;
+      const barH = combatFieldHpBarHeight(pct);
+      const barY = this.y - this.radius - barH - 4;
+      drawCombatFieldHpBar(ctx, this.x, barY, pct, combatFieldHpAccent(pct), {
+        dimAtFull: true,
+        forceShow,
+      });
     }
   }
 }

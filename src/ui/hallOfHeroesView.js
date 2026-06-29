@@ -1,30 +1,60 @@
 /**
- * Hall of Heroes — mockup-style warband view (plinths + dossier + roster strip).
- * Backdrop has EMPTY plinths only — heroes are engine overlays.
- * @see design/art/BATCH_PROMPTS.md Wave 13
+ * Hall of Heroes — longhouse interior with full-body statue overlays (no plinth art).
+ * @see design/art/BATCH_PROMPTS.md Wave 13 / 13.1b
  */
 
 import { UI_COLORS } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
-import { computeCoverFitRect } from '../assets/campaignArt.js';
-import { WAR_CAMP_THEME } from './warCampVisual.js';
+import { computeContentCoverFit, mapContentNormToScreen } from '../assets/artAlignment.js';
+import { getWarCampObjectives } from './warCampPanel.js';
+import { drawWarCampGlassChip, WAR_CAMP_THEME } from './warCampVisual.js';
+import { drawHallHeroStatue, isHallHeroStatueReady } from './hallHeroStatues.js';
 
 const HALL_ART_W = 1536;
 const HALL_ART_H = 1024;
 
-/** Plinth tops in backdrop art space (0–1) — tune to generated plate. */
+/** Painted hall band — statue feet anchors are normalized inside this crop only. */
+export const HALL_ART_CONTENT = {
+  sx: 0,
+  sy: 0.04,
+  sw: 1.0,
+  sh: 0.92,
+};
+
+export const HALL_FRAME_INSET_BOTTOM = 12;
+
+/** Walkable wooden floor inside the hall plate (content-normalized 0–1). */
+export const HALL_FLOOR_BOUNDS = {
+  minX: 0.20,
+  maxX: 0.80,
+  minY: 0.62,
+  maxY: 0.75,
+};
+
+/** Max heroes shown as floor statues without scrolling. */
+export const HALL_MAX_STATUES = 10;
+
+/**
+ * Statue foot anchors — kept inside HALL_FLOOR_BOUNDS (open floor, not benches/pillars).
+ * z: 0 = back row, 1 = front row.
+ */
 export const HALL_PLINTH_NORM = [
-  { nx: 0.20, ny: 0.56, scale: 0.90 },
-  { nx: 0.35, ny: 0.53, scale: 0.95 },
-  { nx: 0.50, ny: 0.51, scale: 1.0 },
-  { nx: 0.65, ny: 0.53, scale: 0.95 },
-  { nx: 0.80, ny: 0.56, scale: 0.90 },
+  { nx: 0.22, ny: 0.64, scale: 0.64, z: 0 },
+  { nx: 0.34, ny: 0.63, scale: 0.66, z: 0 },
+  { nx: 0.46, ny: 0.62, scale: 0.68, z: 0 },
+  { nx: 0.58, ny: 0.63, scale: 0.66, z: 0 },
+  { nx: 0.70, ny: 0.64, scale: 0.64, z: 0 },
+  { nx: 0.26, ny: 0.71, scale: 0.74, z: 1 },
+  { nx: 0.38, ny: 0.72, scale: 0.78, z: 1 },
+  { nx: 0.50, ny: 0.71, scale: 0.80, z: 1 },
+  { nx: 0.62, ny: 0.72, scale: 0.78, z: 1 },
+  { nx: 0.74, ny: 0.71, scale: 0.74, z: 1 },
 ];
 
 const HALL_ART = {
-  interior: '/assets/ui/ui_hall_of_heroes_interior@1536x1024.png',
-  rosterSlot: '/assets/ui/ui_hall_roster_slot@56x56.png',
+  interior: '/assets/ui/ui_hall_of_heroes_interior_noplinths@1536x1024.png',
+  interiorLegacy: '/assets/ui/ui_hall_of_heroes_interior@1536x1024.png',
   dossier: '/assets/ui/ui_hall_dossier_panel@280x420.png',
 };
 
@@ -49,13 +79,16 @@ function dossierRevealAlpha(focusId) {
 
 export function getHallInstructionHint(state = {}) {
   if (state.focusId) {
-    return { title: 'DOSSIER', line: 'Esc closes panel · click plinth again to dismiss' };
+    return { title: 'DOSSIER', line: 'Esc closes panel · click statue again to dismiss' };
   }
   if (state.renameActive) {
     return { title: 'NAMING', line: 'Type a name · Enter saves · Esc cancels' };
   }
+  if ((state.defenderCount ?? 0) > HALL_MAX_STATUES) {
+    return { title: 'HALL OF HEROES', line: '◀ ▶ scroll for more · click a statue for dossier' };
+  }
   if ((state.defenderCount ?? 0) > 0) {
-    return { title: 'HALL OF HEROES', line: 'Select a hero on a plinth to open their dossier' };
+    return { title: 'HALL OF HEROES', line: 'Click a statue to open their dossier' };
   }
   return { title: 'HALL OF HEROES', line: 'Recruit defenders at the Barracks' };
 }
@@ -66,99 +99,206 @@ function ready(key) {
 }
 
 export function isHallOfHeroesViewReady() {
-  return ready('interior');
+  return ready('interior') || ready('interiorLegacy');
 }
 
 function hallCoverFit(hall) {
-  return computeCoverFitRect(HALL_ART_W, HALL_ART_H, hall.x, hall.y, hall.w, hall.h);
+  return computeContentCoverFit(HALL_ART_W, HALL_ART_H, HALL_ART_CONTENT, hall.x, hall.y, hall.w, hall.h);
 }
 
-/** Map art-normalized point → screen coords in hall clip rect. */
+/** Map content-normalized point (0–1 in HALL_ART_CONTENT) → screen coords. */
 export function hallArtToScreen(hall, nx, ny) {
-  const fit = hallCoverFit(hall);
-  return {
-    x: fit.dx + nx * fit.dw,
-    y: fit.dy + ny * fit.dh,
-  };
+  return mapContentNormToScreen(hallCoverFit(hall), nx, ny);
 }
 
-/** Layout — dossier column only after player selects a hero. */
+/** Layout — full-bleed hall; dossier floats on select. No bottom portrait strip. */
 export function computeHallOfHeroesLayout(x, y, w, h, hasFocus = false) {
-  const pad = 6;
-  const gap = 8;
-  const dossierW = hasFocus ? Math.min(268, Math.max(200, Math.floor(w * 0.30))) : 0;
-  const hallW = w - dossierW - (hasFocus ? gap : 0) - pad * 2;
-  const rosterH = Math.min(62, Math.max(48, Math.floor(h * 0.16)));
-  const hallH = h - rosterH - pad * 2 - 4;
+  const pad = 2;
+  const hall = { x: x + pad, y: y + pad, w: w - pad * 2, h: h - pad * 2 };
+  let dossier = null;
+  if (hasFocus) {
+    const dw = Math.min(252, Math.max(200, Math.floor(hall.w * 0.30)));
+    const dh = Math.min(hall.h - 20, Math.floor(h * 0.68));
+    dossier = {
+      x: hall.x + hall.w - dw - 8,
+      y: hall.y + 10,
+      w: dw,
+      h: dh,
+    };
+  }
   return {
-    hall: { x: x + pad, y: y + pad, w: hallW, h: hallH },
-    dossier: hasFocus
-      ? { x: x + pad + hallW + gap, y: y + pad, w: dossierW, h: h - pad * 2 }
-      : null,
-    roster: { x: x + pad, y: y + h - rosterH - pad, w: w - pad * 2, h: rosterH },
-    maxPlinths: HALL_PLINTH_NORM.length,
+    hall,
+    dossier,
+    roster: null,
+    maxPlinths: HALL_MAX_STATUES,
   };
 }
 
-/** Fixed plinth anchors from backdrop art (up to 5). */
-export function computeHallPlinthSlots(count, hall) {
-  const n = Math.min(HALL_PLINTH_NORM.length, Math.max(1, count));
-  const anchors = HALL_PLINTH_NORM.slice(0, n);
-  if (count < HALL_PLINTH_NORM.length && count > 0) {
-    const mid = (HALL_PLINTH_NORM.length - count) / 2;
-    return HALL_PLINTH_NORM.slice(mid, mid + count).map((a) => {
-      const p = hallArtToScreen(hall, a.nx, a.ny);
-      return { x: p.x, y: p.y, scale: a.scale };
+/** Content rect inside outer frame — hall fills almost all inner area. */
+export function computeHallImmersiveRect(frameThick, contentTop, contentBot, baseW, useBottomBarSlot = false) {
+  const pad = 3;
+  const extraH = useBottomBarSlot ? 46 : 0;
+  return {
+    x: frameThick + pad,
+    y: contentTop + pad,
+    w: baseW - (frameThick + pad) * 2,
+    h: contentBot - contentTop - pad * 2 + extraH - HALL_FRAME_INSET_BOTTOM,
+  };
+}
+
+/** Top-left guidance + bottom-right back chip — glass overlays on hall plate. */
+export function drawHallImmersiveChrome(ctx, rect, layout, chrome, btnsOut = []) {
+  const chipPad = 10;
+
+  if (chrome?.guidance) {
+    const gw = Math.min(228, Math.max(168, Math.floor(rect.w * 0.34)));
+    drawWarCampGlassChip(ctx, rect.x + chipPad, rect.y + chipPad, gw, chrome.guidance.subtitle ? 40 : 28, {
+      title: chrome.guidance.title ?? 'WHAT TO DO NOW',
+      subtitle: chrome.guidance.subtitle ?? '',
     });
   }
-  return anchors.map((a) => {
-    const p = hallArtToScreen(hall, a.nx, a.ny);
-    return { x: p.x, y: p.y, scale: a.scale };
+
+  if (chrome?.showBackToTown) {
+    const bw = 124;
+    const bh = 34;
+    const bx = rect.x + rect.w - bw - chipPad;
+    const by = rect.y + rect.h - bh - chipPad;
+    drawWarCampGlassChip(ctx, bx, by, bw, bh, {
+      title: '← BACK TO TOWN',
+      subtitle: 'Return to settlement',
+      action: 'returnToSettlement',
+      btnsOut,
+    });
+  }
+}
+
+/** Build compact objective copy for the hall glass card. */
+export function getHallObjectiveGuidance(state = {}) {
+  if (state.focusId) {
+    return { title: 'DOSSIER', subtitle: 'Esc closes · tap statue again to dismiss' };
+  }
+  const active = getWarCampObjectives(state).find(o => o.active && !o.done);
+  if (active) {
+    return { title: 'WHAT TO DO NOW', subtitle: active.label };
+  }
+  if ((state.defenderCount ?? 0) > HALL_MAX_STATUES) {
+    return { title: 'HALL OF HEROES', subtitle: 'Scroll the line · tap a statue' };
+  }
+  if ((state.defenderCount ?? 0) > 0) {
+    return { title: 'HALL OF HEROES', subtitle: 'Tap a statue to open dossier' };
+  }
+  return { title: 'HALL OF HEROES', subtitle: 'Recruit defenders at the Barracks' };
+}
+
+/** Spread N defenders across the fixed anchor set (even spacing). */
+export function pickHallStatueSlotIndices(count, total = HALL_PLINTH_NORM.length) {
+  const n = Math.max(1, Math.min(count, total));
+  if (n >= total) return Array.from({ length: total }, (_, i) => i);
+  if (n === 1) return [Math.floor(total / 2)];
+  const indices = [];
+  for (let i = 0; i < n; i++) {
+    indices.push(Math.round((i * (total - 1)) / (n - 1)));
+  }
+  return indices;
+}
+
+/** Clamp anchor into the painted walkable floor band. */
+export function clampHallFloorNorm(nx, ny) {
+  const b = HALL_FLOOR_BOUNDS;
+  return {
+    nx: Math.max(b.minX, Math.min(b.maxX, nx)),
+    ny: Math.max(b.minY, Math.min(b.maxY, ny)),
+  };
+}
+
+/** Screen rect for the hall floor — used to clip statue overlays. */
+export function getHallFloorScreenRect(hall) {
+  const tl = hallArtToScreen(hall, HALL_FLOOR_BOUNDS.minX, HALL_FLOOR_BOUNDS.minY);
+  const br = hallArtToScreen(hall, HALL_FLOOR_BOUNDS.maxX, HALL_FLOOR_BOUNDS.maxY);
+  return {
+    x: tl.x,
+    y: tl.y,
+    w: Math.max(8, br.x - tl.x),
+    h: Math.max(8, br.y - tl.y),
+  };
+}
+
+/** Floor statue anchors — scattered rows, up to HALL_MAX_STATUES slots. */
+export function computeHallPlinthSlots(count, hall) {
+  const indices = pickHallStatueSlotIndices(count, HALL_PLINTH_NORM.length);
+  return indices.map((idx) => {
+    const a = HALL_PLINTH_NORM[idx];
+    const c = clampHallFloorNorm(a.nx, a.ny);
+    const p = hallArtToScreen(hall, c.nx, c.ny);
+    return { x: p.x, y: p.y, scale: a.scale, z: a.z ?? 0 };
   });
 }
 
-function drawInterior(ctx, hall) {
-  if (!ready('interior')) return false;
-  const img = _images.interior;
+/** Shared longhouse interior plate — Hall of Heroes + Treasury immersive views. */
+export function drawHallInteriorBackdrop(ctx, hall, { warmGold = false } = {}) {
+  const key = ready('interior') ? 'interior' : (ready('interiorLegacy') ? 'interiorLegacy' : null);
+  if (!key) return false;
+  const img = _images[key];
   const fit = hallCoverFit(hall);
   ctx.save();
   ctx.beginPath();
-  ctx.roundRect(hall.x, hall.y, hall.w, hall.h, 6);
+  ctx.rect(hall.x, hall.y, hall.w, hall.h);
   ctx.clip();
   ctx.fillStyle = '#0a0810';
   ctx.fillRect(hall.x, hall.y, hall.w, hall.h);
   ctx.globalAlpha = 0.98;
-  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, fit.dx, fit.dy, fit.dw, fit.dh);
+  const c = HALL_ART_CONTENT;
+  ctx.drawImage(
+    img,
+    c.sx * img.naturalWidth, c.sy * img.naturalHeight,
+    c.sw * img.naturalWidth, c.sh * img.naturalHeight,
+    fit.dx, fit.dy, fit.dw, fit.dh,
+  );
   const vig = ctx.createLinearGradient(hall.x, hall.y, hall.x, hall.y + hall.h);
-  vig.addColorStop(0, 'rgba(8,6,10,0.20)');
-  vig.addColorStop(0.5, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(4,3,6,0.40)');
+  vig.addColorStop(0, 'rgba(8,6,10,0.14)');
+  vig.addColorStop(0.55, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(4,3,6,0.32)');
   ctx.fillStyle = vig;
   ctx.globalAlpha = 1;
   ctx.fillRect(hall.x, hall.y, hall.w, hall.h);
+  if (warmGold) {
+    const glow = ctx.createRadialGradient(
+      hall.x + hall.w * 0.5, hall.y + hall.h * 0.62, hall.w * 0.05,
+      hall.x + hall.w * 0.5, hall.y + hall.h * 0.62, hall.w * 0.55,
+    );
+    glow.addColorStop(0, 'rgba(220,160,50,0.10)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(hall.x, hall.y, hall.w, hall.h);
+  }
   ctx.restore();
   return true;
 }
 
-function drawRosterSlotFrame(ctx, x, y, w, h, selected) {
-  if (ready('rosterSlot')) {
-    ctx.drawImage(_images.rosterSlot, x, y, w, h);
-  } else {
-    ctx.fillStyle = 'rgba(10,8,12,0.92)';
-    ctx.strokeStyle = selected ? 'rgba(200,170,90,0.85)' : 'rgba(120,100,70,0.45)';
-    ctx.lineWidth = selected ? 1.4 : 0.8;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 4);
-    ctx.fill();
-    ctx.stroke();
+function drawHallScrollChrome(ctx, hall, scrollOffset, total, btnsOut) {
+  const maxVisible = HALL_MAX_STATUES;
+  const maxScroll = Math.max(0, total - maxVisible);
+  if (maxScroll <= 0) return;
+  const arrowY = hall.y + hall.h * 0.42;
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  if (scrollOffset > 0) {
+    ctx.fillStyle = 'rgba(200,170,90,0.72)';
+    ctx.fillText('◀', hall.x + 14, arrowY);
+    btnsOut.push({ x: hall.x + 2, y: arrowY - 14, w: 24, h: 28, action: 'scrollRoster', dir: -1 });
   }
-  if (selected) {
-    ctx.strokeStyle = 'rgba(232,208,96,0.75)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x - 1, y - 1, w + 2, h + 2, 5);
-    ctx.stroke();
+  if (scrollOffset < maxScroll) {
+    ctx.fillStyle = 'rgba(200,170,90,0.72)';
+    ctx.fillText('▶', hall.x + hall.w - 14, arrowY);
+    btnsOut.push({ x: hall.x + hall.w - 26, y: arrowY - 14, w: 24, h: 28, action: 'scrollRoster', dir: 1 });
   }
+  ctx.textAlign = 'left';
+}
+
+function statueDisplayHeight(hall, scale, selected, totalCount = 1) {
+  const rowFactor = totalCount > 4 ? 0.30 : totalCount > 2 ? 0.34 : 0.38;
+  const base = hall.h * rowFactor;
+  return base * scale * (selected ? 1.04 : 1);
 }
 
 function getCareerXpProgress(xp, lvl) {
@@ -169,7 +309,8 @@ function getCareerXpProgress(xp, lvl) {
 }
 
 /**
- * Hall view — heroes on backdrop plinths; dossier appears only when focusId is set.
+ * Hall view — all defenders as floor statues; dossier on select.
+ * @param {'all'|'base'|'overlays'} [opts.phase]
  */
 export function drawHallOfHeroesView(ctx, rect, opts = {}) {
   const {
@@ -181,159 +322,152 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
     slotMetaBuilder = null,
     btnsOut = [],
     scrollOffset = 0,
+    phase = 'all',
   } = opts;
+
+  const drawBase = phase === 'all' || phase === 'base';
+  const drawOverlays = phase === 'all' || phase === 'overlays';
 
   const focus = focusId ? defenders.find(d => d.defenderId === focusId) : null;
   const layout = computeHallOfHeroesLayout(rect.x, rect.y, rect.w, rect.h, Boolean(focus));
-  const { hall, dossier, roster } = layout;
+  const { hall, dossier } = layout;
 
-  drawInterior(ctx, hall);
-
-  const plinthCount = Math.min(layout.maxPlinths, defenders.length);
-  const emptyPlinths = layout.maxPlinths - plinthCount;
-  if (emptyPlinths > 0 && plinthCount < layout.maxPlinths) {
-    const ghostSlots = computeHallPlinthSlots(layout.maxPlinths, hall);
-    for (let gi = plinthCount; gi < ghostSlots.length; gi++) {
-      const g = ghostSlots[gi];
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      ctx.strokeStyle = 'rgba(140,120,80,0.35)';
-      ctx.lineWidth = 1;
-      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([3, 4]);
-      ctx.beginPath();
-      ctx.ellipse(g.x, g.y + 4, 18 * g.scale, 6 * g.scale, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
-      ctx.restore();
-    }
-  }
-
-  const plinthStart = Math.min(scrollOffset, Math.max(0, defenders.length - plinthCount));
-  const plinthDefs = defenders.slice(plinthStart, plinthStart + plinthCount);
+  const maxVisible = HALL_MAX_STATUES;
+  const maxScroll = Math.max(0, defenders.length - maxVisible);
+  const scroll = Math.min(Math.max(0, scrollOffset), maxScroll);
+  const visibleCount = Math.min(maxVisible, defenders.length);
+  const plinthDefs = defenders.slice(scroll, scroll + visibleCount);
   const slots = computeHallPlinthSlots(plinthDefs.length, hall);
+  const statueEntries = plinthDefs.map((def, i) => ({ def, slot: slots[i] }));
+  statueEntries.sort((a, b) => (a.slot.z ?? 0) - (b.slot.z ?? 0));
 
-  for (let i = 0; i < plinthDefs.length; i++) {
-    const def = plinthDefs[i];
-    const slot = slots[i];
-    const selected = focus?.defenderId === def.defenderId;
-    const scale = slot.scale * (selected ? 1.05 : 1);
+  if (drawBase) {
+    drawHallInteriorBackdrop(ctx, hall);
 
-    const pr = 26 * scale;
-    const portraitY = slot.y - 42 * scale;
-    if (drawPortrait) {
-      if (selected) {
-        const g = ctx.createRadialGradient(slot.x, portraitY, 0, slot.x, portraitY, pr * 2.2);
-        g.addColorStop(0, 'rgba(200,150,60,0.18)');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(slot.x, portraitY, pr * 2.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      drawPortrait(ctx, slot.x, portraitY, def.type, pr, { muted: true });
-    }
-
-    if (selected) {
-      ctx.strokeStyle = 'rgba(232,208,96,0.55)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(slot.x, portraitY, pr + 3, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    const hasName = Boolean(def.name?.trim());
-    const isRenaming = renameState?.defenderId === def.defenderId;
-    const displayName = isRenaming
-      ? (renameState.draft ?? '') + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
-      : (hasName ? def.name : '—');
-
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 7px monospace';
-    ctx.fillStyle = isRenaming ? '#ffd878' : (hasName ? UI_COLORS.parchment : 'rgba(130,120,100,0.5)');
-    ctx.fillText(String(displayName).slice(0, 12), slot.x, slot.y + 10);
-
-    const role = TOWER_DEFS[def.type]?.label ?? def.type;
-    ctx.font = '5.5px monospace';
-    ctx.fillStyle = WAR_CAMP_THEME.subtitle;
-    ctx.fillText(role.length > 14 ? `${role.slice(0, 13)}…` : role, slot.x, slot.y + 20);
-
-    const lvl = def.careerLevel ?? 1;
-    ctx.font = '5px monospace';
-    ctx.fillStyle = 'rgba(180,160,120,0.7)';
-    ctx.fillText(`Lv ${lvl}`, slot.x, slot.y + 29);
-
-    const hitW = 56 * scale;
-    const hitH = 80 * scale;
-    btnsOut.push({
-      x: slot.x - hitW / 2,
-      y: portraitY - pr - 6,
-      w: hitW,
-      h: hitH,
-      action: 'focusDefender',
-      defenderId: def.defenderId,
-    });
-    ctx.textAlign = 'left';
-  }
-
-  if (!focus && defenders.length > 0) {
-    ctx.textAlign = 'center';
-    ctx.font = '7px monospace';
-    ctx.fillStyle = 'rgba(160,140,100,0.45)';
-    ctx.fillText('Select a hero on a plinth', hall.x + hall.w / 2, hall.y + hall.h - 10);
-    ctx.textAlign = 'left';
-  }
-
-  if (focus && dossier) {
-    const dossierAlpha = dossierRevealAlpha(focus.defenderId);
+    const floorRect = getHallFloorScreenRect(hall);
     ctx.save();
-    ctx.globalAlpha = dossierAlpha;
-    drawDossierPanel(ctx, dossier, focus, {
-      renameState,
-      equipFlash,
-      slotMetaBuilder,
-      btnsOut,
-    });
-    ctx.restore();
-    if (renameState?.defenderId === focus.defenderId) {
-      const pulse = 0.55 + Math.sin(performance.now() * 0.008) * 0.35;
+    ctx.beginPath();
+    ctx.rect(floorRect.x, floorRect.y, floorRect.w, floorRect.h);
+    ctx.clip();
+
+    for (const { def, slot } of statueEntries) {
+      const selected = focus?.defenderId === def.defenderId;
+      const footY = slot.y;
+      const statueH = statueDisplayHeight(hall, slot.scale, selected, plinthDefs.length);
+      const useStatue = isHallHeroStatueReady(def.type);
+
       ctx.save();
-      ctx.strokeStyle = `rgba(255,200,80,${0.35 + pulse * 0.4})`;
-      ctx.lineWidth = 1.6;
-      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([5, 3]);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.roundRect(dossier.x - 2, dossier.y - 2, dossier.w + 4, dossier.h + 4, 9);
-      ctx.stroke();
-      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+      ctx.ellipse(slot.x, footY + 2, statueH * 0.14, statueH * 0.04, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
+
+      if (useStatue) {
+        if (selected) {
+          const g = ctx.createRadialGradient(slot.x, footY - statueH * 0.45, 0, slot.x, footY - statueH * 0.45, statueH * 0.55);
+          g.addColorStop(0, 'rgba(200,150,60,0.18)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(slot.x, footY - statueH * 0.45, statueH * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        drawHallHeroStatue(ctx, slot.x, footY, def.type, statueH, { muted: true, selected });
+      } else if (drawPortrait) {
+        const pr = statueH * 0.14;
+        const portraitY = footY - statueH * 0.5;
+        drawPortrait(ctx, slot.x, portraitY, def.type, pr, { muted: true });
+      }
+
+      const hasName = Boolean(def.name?.trim());
+      const isRenaming = renameState?.defenderId === def.defenderId;
+      const displayName = isRenaming
+        ? (renameState.draft ?? '') + (Math.floor(performance.now() / 450) % 2 === 0 ? '|' : '')
+        : (hasName ? def.name : '—');
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 6.5px monospace';
+      ctx.fillStyle = isRenaming ? '#ffd878' : (hasName ? UI_COLORS.parchment : 'rgba(130,120,100,0.5)');
+      ctx.fillText(String(displayName).slice(0, 11), slot.x, footY + 9);
+
+      const hitW = Math.max(52, statueH * 0.22);
+      const hitH = statueH + 18;
+      btnsOut.push({
+        x: slot.x - hitW / 2,
+        y: footY - statueH - 4,
+        w: hitW,
+        h: hitH,
+        action: 'focusDefender',
+        defenderId: def.defenderId,
+      });
+      ctx.textAlign = 'left';
+    }
+
+    ctx.restore();
+  }
+
+  if (drawOverlays) {
+    if (!focus && defenders.length > 0) {
+      ctx.textAlign = 'center';
+      ctx.font = '7px monospace';
+      ctx.fillStyle = 'rgba(160,140,100,0.42)';
+      ctx.fillText('Select a statue to open dossier', hall.x + hall.w / 2, hall.y + hall.h - 8);
+      ctx.textAlign = 'left';
+    }
+
+    drawHallScrollChrome(ctx, hall, scroll, defenders.length, btnsOut);
+
+    if (focus && dossier) {
+      const dossierAlpha = dossierRevealAlpha(focus.defenderId);
+      ctx.save();
+      ctx.globalAlpha = dossierAlpha;
+      drawDossierPanel(ctx, dossier, focus, {
+        renameState,
+        equipFlash,
+        slotMetaBuilder,
+        btnsOut,
+        drawPortrait,
+      });
+      ctx.restore();
+      if (renameState?.defenderId === focus.defenderId) {
+        const pulse = 0.55 + Math.sin(performance.now() * 0.008) * 0.35;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,200,80,${0.35 + pulse * 0.4})`;
+        ctx.lineWidth = 1.6;
+        if (typeof ctx.setLineDash === 'function') ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.roundRect(dossier.x - 2, dossier.y - 2, dossier.w + 4, dossier.h + 4, 9);
+        ctx.stroke();
+        if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+        ctx.restore();
+      }
     }
   }
 
-  drawRosterStrip(ctx, roster, defenders, focus?.defenderId, {
-    drawPortrait,
-    btnsOut,
-    scrollOffset,
-  });
-
-  return focus?.defenderId ?? null;
+  return { layout, focusId: focus?.defenderId ?? null };
 }
 
 function drawDossierPanel(ctx, rect, def, opts) {
-  const { renameState, equipFlash, slotMetaBuilder, btnsOut } = opts;
+  const { renameState, equipFlash, slotMetaBuilder, btnsOut, drawPortrait } = opts;
+  ctx.save();
+  ctx.fillStyle = 'rgba(12,9,14,0.94)';
+  ctx.beginPath();
+  ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150,120,70,0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
   if (ready('dossier')) {
+    ctx.globalAlpha = 0.35;
     ctx.drawImage(_images.dossier, rect.x, rect.y, rect.w, rect.h);
-  } else {
-    ctx.fillStyle = 'rgba(8,6,12,0.94)';
-    ctx.strokeStyle = 'rgba(150,120,70,0.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
-    ctx.fill();
-    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
+  ctx.restore();
 
   const pad = 12;
   const cx = rect.x + rect.w / 2;
-  let ly = rect.y + pad + 8;
+  let ly = rect.y + pad + 6;
 
   const hasName = Boolean(def.name?.trim());
   const isRenaming = renameState?.defenderId === def.defenderId;
@@ -345,13 +479,41 @@ function drawDossierPanel(ctx, rect, def, opts) {
   ctx.font = 'bold 11px monospace';
   ctx.fillStyle = isRenaming ? '#ffd878' : UI_COLORS.gold;
   ctx.fillText(String(displayName).slice(0, 14), cx, ly);
-  ly += 14;
+  ly += 13;
 
   const role = TOWER_DEFS[def.type]?.label ?? def.type;
   ctx.font = '7px monospace';
   ctx.fillStyle = WAR_CAMP_THEME.subtitle;
   ctx.fillText(role, cx, ly);
-  ly += 16;
+  ly += 12;
+
+  const heroH = Math.min(108, Math.floor(rect.h * 0.28));
+  const heroY = ly + heroH * 0.52;
+  const useStatue = isHallHeroStatueReady(def.type);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.roundRect(rect.x + pad, ly, rect.w - pad * 2, heroH, 5);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,100,70,0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  if (useStatue) {
+    drawHallHeroStatue(ctx, cx, ly + heroH - 6, def.type, heroH - 10, { muted: false, selected: true });
+  } else if (drawPortrait) {
+    drawPortrait(ctx, cx, heroY, def.type, heroH * 0.22, { muted: false });
+  }
+  ctx.restore();
+  ly += heroH + 8;
+
+  const kills = def.careerKills ?? 0;
+  const battles = def.battlesPlayed ?? 0;
+  ctx.font = '6px monospace';
+  ctx.fillStyle = 'rgba(160,150,130,0.78)';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${kills} slain · ${battles} battle${battles !== 1 ? 's' : ''}`, cx, ly);
+  ly += 12;
+  ctx.textAlign = 'left';
 
   const lvl = def.careerLevel ?? 1;
   const prog = getCareerXpProgress(def.xp ?? 0, lvl);
@@ -359,7 +521,6 @@ function drawDossierPanel(ctx, rect, def, opts) {
   const barX = rect.x + pad;
   const barW = rect.w - pad * 2;
 
-  ctx.textAlign = 'left';
   ctx.font = '6px monospace';
   ctx.fillStyle = 'rgba(160,150,130,0.75)';
   ctx.fillText(`Level ${lvl}`, barX, ly);
@@ -376,7 +537,7 @@ function drawDossierPanel(ctx, rect, def, opts) {
     ctx.roundRect(barX, ly, Math.max(3, barW * prog), 4, 2);
     ctx.fill();
   }
-  ly += 18;
+  ly += 16;
 
   ctx.textAlign = 'left';
   ctx.font = 'bold 6px monospace';
@@ -451,41 +612,4 @@ function drawDossierPanel(ctx, rect, def, opts) {
   btnsOut.push({ x: rnX, y: bioY, w: bioW, h: bioH, action: 'startRename', defenderId: def.defenderId });
 
   ctx.textAlign = 'left';
-}
-
-function drawRosterStrip(ctx, rect, defenders, focusId, opts) {
-  const { drawPortrait, btnsOut, scrollOffset = 0 } = opts;
-  const slotSize = Math.min(52, Math.floor((rect.w - 8) / Math.min(10, Math.max(1, defenders.length))) - 4);
-  const gap = 4;
-  const maxVisible = Math.floor((rect.w + gap) / (slotSize + gap));
-  const start = Math.min(scrollOffset, Math.max(0, defenders.length - maxVisible));
-
-  ctx.font = 'bold 6px monospace';
-  ctx.fillStyle = 'rgba(140,120,80,0.5)';
-  ctx.fillText('ALL HEROES', rect.x, rect.y + 8);
-
-  const rowY = rect.y + 14;
-  let sx = rect.x;
-  for (let i = start; i < Math.min(defenders.length, start + maxVisible); i++) {
-    const def = defenders[i];
-    const selected = def.defenderId === focusId;
-    drawRosterSlotFrame(ctx, sx, rowY, slotSize, slotSize, selected);
-    if (drawPortrait) {
-      const pr = slotSize * 0.38;
-      drawPortrait(ctx, sx + slotSize / 2, rowY + slotSize / 2 - 2, def.type, pr, { muted: true });
-    }
-    if (selected) {
-      ctx.strokeStyle = 'rgba(232,208,96,0.75)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(sx - 1, rowY - 1, slotSize + 2, slotSize + 2, 5);
-      ctx.stroke();
-    }
-    btnsOut.push({
-      x: sx, y: rowY, w: slotSize, h: slotSize,
-      action: 'focusDefender',
-      defenderId: def.defenderId,
-    });
-    sx += slotSize + gap;
-  }
 }

@@ -14,6 +14,8 @@ import {
 } from '../ui/uiTheme.js';
 import {
   drawPanelHpBar,
+  drawCombatFieldHpBar,
+  combatFieldHpAccent,
   getHeroHpFrac,
 } from '../ui/assaultPanels.js';
 import { drawStructureDockIcon, hasStructureArt, preloadStructureArt } from '../assets/structureArt.js';
@@ -40,6 +42,7 @@ import {
   drawWarCampTabWelcomeHint,
   drawHallOfHeroesBackdrop,
   isHallOfHeroesBackdropReady,
+  drawWarCampGlassChip,
   WAR_CAMP_BANNER_H,
   WAR_CAMP_BOTTOM_BAR_H,
 } from '../ui/warCampVisual.js';
@@ -47,7 +50,20 @@ import {
   drawHallOfHeroesView,
   isHallOfHeroesViewReady,
   getHallInstructionHint,
+  computeHallImmersiveRect,
+  drawHallImmersiveChrome,
+  getHallObjectiveGuidance,
+  HALL_MAX_STATUES,
 } from '../ui/hallOfHeroesView.js';
+import {
+  drawTreasuryView,
+  isTreasuryViewReady,
+  getTreasuryInstructionHint,
+  getTreasuryObjectiveGuidance,
+  computeTreasuryImmersiveRect,
+  shouldShowFortressUpgradeView,
+  shouldShowHallOfHeroesView,
+} from '../ui/treasuryView.js';
 import {
   drawSettlementHub,
   getHubInstructionHint,
@@ -122,6 +138,7 @@ import {
   mergeFallenHeroesIntoFieldState,
   attachDeploySnapshot,
   prepareFieldForNewAssault,
+  repairFieldStateAfterAssault,
   completeNode,
   canPlaceHero,
   canPlaceStructure,
@@ -198,9 +215,23 @@ import {
   buildDebriefContextLines,
 } from '../ui/debriefJuice.js';
 import { drawTowerAttackVfx, drawEnemyAttackVfx, drawEnemyWalkDust } from '../combat/characterAttackVfx.js';
+import {
+  computeHitFeel,
+  applyEnemyHitKnock,
+  applyEnemyDeathFlair,
+  clearPathlessFootDust,
+  emitPathlessFootDust,
+  emitLaneWearMark,
+  tickPathlessFootDust,
+  tickLaneWearMarks,
+  tickHeroAttackLunge,
+  isOnPathlessLane,
+  drawPathlessFootDust,
+  drawLaneWearMarks,
+} from '../combat/combatJuice.js';
 import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
-import { bakeAshfenTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGrade } from '../assets/terrainArt.js';
+import { bakeAshfenTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGradeBg, drawCampaignPalisadeRing, drawPathlessAssaultLane } from '../assets/terrainArt.js';
 import { drawFortressPrepSprite } from '../preparation/fortressPrepArt.js';
 import { drawBossBannerArt, drawEquipRingArt } from '../assets/combatArt.js';
 import {
@@ -247,6 +278,7 @@ import {
 import {
   getCommandMapHintAlpha,
   tickCommandMapHintTimer,
+  findAdjacentUnlockedRegion,
 } from '../ui/commandMapJuice.js';
 import { getHintFadeAlpha, tickHintTimer } from '../ui/hintJuice.js';
 import { updateHeroMovement, snapWarbandToDeploy } from '../roster/heroMovement.js';
@@ -754,9 +786,15 @@ let _warCampTab         = 'warband';     // 'warband' | 'recruit' | 'fortress'
 let _pendingDismiss     = null;          // defenderId awaiting dismiss confirm
 let _rosterScrollOffset = 0;            // how many defender rows scrolled past top
 let _hallFocusDefenderId = null;        // selected hero in Hall of Heroes view
+let _hallImmersiveActive = false;       // true when immersive hall base was drawn this frame
+let _treasuryFocusKey = null;           // selected fortress node in Treasury view
+let _treasuryImmersiveActive = false;   // true when immersive treasury base was drawn this frame
 let _renameState        = null;          // { defenderId, draft } while canvas rename is active
 let _enemyIntroSeen     = new Set();     // enemy types shown intro banner this campaign
 let _enemyIntroBanner   = null;          // { type, timer, label, hint } for first-encounter tooltip
+let _firstNightDramaShown = false;       // First Saga A0 — mist emergence beat
+let _assaultWave1SpawnDrama = false;     // Wave 1 first-spawn slow-mo on saga assaults
+let _spawnMistDramaTimer = 0;            // Brief fen mist boost after wave-1 emergence
 let _enemyIntroQueue    = [];            // queued { label, hint } banners waiting to display
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
 let _renameHintUntil    = 0;             // performance.now() deadline for first rename hint
@@ -1221,6 +1259,8 @@ function restartCombatState() {
   waveLeak      = false;
   selectedTower = null;
   screenShake   = 0;
+  combatHitStop = 0;
+  clearPathlessFootDust();
   goldSpent     = 0;
   goldEarned    = 0;
   goldStolen    = 0;
@@ -1259,6 +1299,9 @@ function restartCombatState() {
   _rosterScrollOffset = 0;
   _renameState       = null;
   _enemyIntroBanner  = null;
+  _firstNightDramaShown = false;
+  _assaultWave1SpawnDrama = false;
+  _spawnMistDramaTimer = 0;
   _enemyIntroQueue   = [];
   _starsEarnedThisBattle = 0;
   _defKillMilestones = new Set();
@@ -2268,11 +2311,8 @@ function drawHeroCombatHpBar(tower) {
   if (tower.combatHp == null || tower.combatMaxHp == null) return;
   if (!isPathlessMode()) return;
   const frac = Math.max(0, Math.min(1, tower.combatHp / tower.combatMaxHp));
-  const barW = CELL_SIZE * 0.9;
-  const barH = frac < 0.25 ? 4 : 3;
-  const bx = tower.x - barW / 2;
   const by = tower.y + CELL_SIZE * 0.36;
-  const accent = frac > 0.5 ? UI_COLORS.fortress : frac > 0.25 ? UI_COLORS.gold : UI_COLORS.threat;
+  const accent = combatFieldHpAccent(frac);
   ctx.save();
   if ((tower.combatHitFlash ?? 0) > 0) {
     const hf = tower.combatHitFlash / 12;
@@ -2282,26 +2322,20 @@ function drawHeroCombatHpBar(tower) {
     ctx.arc(tower.x, tower.y, CELL_SIZE * 0.42, 0, Math.PI * 2);
     ctx.stroke();
   }
-  drawPanelHpBar(ctx, bx, by, barW, barH, frac, accent);
+  const { w: barW, h: barH, bx } = drawCombatFieldHpBar(ctx, tower.x, by, frac, accent);
   if (tower._rankIndex != null && tower._rankIndex < VETERAN_RANKS.length - 1) {
     const rankCol = VETERAN_RANKS[tower._rankIndex]?.color ?? '#8090c0';
     ctx.fillStyle = rankCol;
     ctx.beginPath();
-    ctx.arc(tower.x - barW / 2 - 4, by + barH / 2, 3, 0, Math.PI * 2);
+    ctx.arc(bx - 4, by + barH / 2, 3, 0, Math.PI * 2);
     ctx.fill();
-  }
-  if (frac < 0.25 && frac > 0) {
-    const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
-    ctx.strokeStyle = `rgba(169,50,38,${0.35 + pulse * 0.45})`;
-    ctx.lineWidth = 0.8;
-    ctx.strokeRect(bx - 1, by - 1, barW + 2, barH + 2);
   }
   ctx.restore();
 }
 
 function initHeroCombatHp(tower) {
-  tower.combatHp    = getHeroCombatHp(tower);
-  tower.combatMaxHp = tower.combatHp;
+  tower.combatHp    = 100;
+  tower.combatMaxHp = 100;
   const def = _roster?.find(tower.defenderId);
   if (def) {
     const rank = getRank(def);
@@ -2392,6 +2426,9 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   _campaignMapIndex  = mapIndex;
   _campaignNodeIndex = nodeIndex;
   _campaignNodeMode  = true;
+  _firstNightDramaShown = false;
+  _assaultWave1SpawnDrama = false;
+  _spawnMistDramaTimer = 0;
   _navActiveId       = 'battle';
   showRuneMenu       = false;
   _nodeWavePlan      = buildNodeWavePlan(mapIndex, nodeIndex);
@@ -2473,9 +2510,9 @@ function finishCampaignNodeVictory() {
   const progress = ensureCampaignProgress();
   let field = serializeFieldState(towers, wallData, gold);
   if (_assaultDeploySnapshot) {
-    field = mergeFallenHeroesIntoFieldState(field, _assaultDeploySnapshot);
     field = attachDeploySnapshot(field, _assaultDeploySnapshot);
   }
+  field = repairFieldStateAfterAssault(field, _assaultDeploySnapshot);
   field = applyFirstSagaAssaultRewards(field, _campaignNodeIndex);
   const _completeMeta = completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
   const updatedProgress = _completeMeta.progress;
@@ -2513,6 +2550,7 @@ function finishCampaignNodeVictory() {
   victory = true;
   _battleResult = 'victory';
   _debriefTimer = 0;
+  gameOver = false;
   gamePhase = 'debrief';
 }
 
@@ -2536,15 +2574,14 @@ function enterSettlementHub() {
 function openProgressionBuilding(opts = {}) {
   _fromSettlementHub = true;
   _progressionBuilding = opts.tab ?? hubBuildingToProgressionMode(opts.hubId) ?? 'warband';
+  _hallFocusDefenderId = null;
+  _treasuryFocusKey = null;
   enterCampaignWarCamp({
     freshVisit: opts.freshVisit ?? true,
     openRecruit: opts.openRecruit,
     singleBuilding: true,
+    warCampTab: opts.tab,
   });
-  if (opts.tab) {
-    _warCampTab = opts.tab === 'runeSmith' ? 'warband' : opts.tab;
-    _betweenSubtab = _warCampTab;
-  }
   if (opts.expandRuneCarver) _runeCarverExpanded = true;
 }
 
@@ -2562,6 +2599,7 @@ function handleHubBuildingAction(action) {
   switch (action) {
     case 'openCommandMap':
       _hubPulseBuilding = null;
+      _campaignRegionActive = true;
       _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
       _selectedFrontId = _lastClearedFrontId;
       gamePhase = 'nodeMap';
@@ -2662,10 +2700,15 @@ function enterCampaignWarCamp(opts = {}) {
   _returnToNodeMapAfterDebrief = false;
   gameOver = false;
   victory = false;
-  _warCampTab = opts.singleBuilding && _progressionBuilding
-    ? (_progressionBuilding === 'runeSmith' ? 'warband' : _progressionBuilding)
-    : 'warband';
-  _betweenSubtab = _warCampTab;
+  if (opts.warCampTab) {
+    _warCampTab = opts.warCampTab === 'runeSmith' ? 'warband' : opts.warCampTab;
+    _betweenSubtab = _warCampTab;
+  } else {
+    _warCampTab = opts.singleBuilding && _progressionBuilding
+      ? (_progressionBuilding === 'runeSmith' ? 'warband' : _progressionBuilding)
+      : 'warband';
+    _betweenSubtab = _warCampTab;
+  }
   _betweenFadeIn = 30;
   _runeCarverExpanded = false;
   if (opts.openRecruit) {
@@ -2699,6 +2742,17 @@ function enterCampaignWarCamp(opts = {}) {
   gridPanX = 0;
   gridPanY = 0;
   gamePhase = 'betweenBattles';
+}
+
+function switchCommandMapRegion(mapIndex) {
+  const progress = ensureCampaignProgress();
+  if (mapIndex == null || mapIndex < 0 || mapIndex >= progress.mapsUnlocked) return;
+  if (isFirstSagaSliceLockedRegion(mapIndex)) return;
+  _campaignMapIndex = mapIndex;
+  _campaignMapPage = Math.floor(mapIndex / CAMPAIGN_MAPS_PER_PAGE);
+  _commandMapView = 'overview';
+  _selectedFrontId = null;
+  _campaignRegionActive = true;
 }
 
 function isCampaignWarCamp() {
@@ -2741,8 +2795,8 @@ function routeAfterHeroNaming() {
   victory = false;
   if (pending.action === 'nextAssault' && pending.nodeIndex != null) {
     enterFieldPrep(_campaignMapIndex, pending.nodeIndex);
-  } else if (pending.action === 'retryAssault') {
-    enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+  } else if (pending.action === 'retryAssault' || pending.action === 'replayAssault') {
+    enterFieldPrep(_campaignMapIndex, pending.nodeIndex ?? _campaignNodeIndex);
   } else if (pending.action === 'commandMap') {
     _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
     _selectedFrontId = _lastClearedFrontId;
@@ -2770,8 +2824,8 @@ function routeAfterCampaignDebrief(btn) {
     enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
   } else if (btn.action === 'warCamp' || btn.action === 'settlementHub') {
     enterSettlementHub();
-  } else if (btn.action === 'retryAssault') {
-    enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+  } else if (btn.action === 'retryAssault' || btn.action === 'replayAssault') {
+    enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? _campaignNodeIndex);
   } else if (btn.action === 'commandMap') {
     _commandMapView = _lastClearedFrontId ? 'front' : 'overview';
     _selectedFrontId = _lastClearedFrontId;
@@ -2829,12 +2883,18 @@ function completeSettlementCeremony() {
 }
 
 function canRecruitInCampaignWarCamp() {
-  if (!isCampaignWarCamp() || !isFirstSagaMap(_campaignMapIndex)) return { ok: true };
-  if (!isFirstSagaRecruitUnlocked(_campaignState)) {
-    return { ok: false, reason: 'Recruitment opens after the Settlement Oath.' };
+  const count = _roster?.defenders?.length ?? 0;
+  if (isCampaignWarCamp() && isFirstSagaMap(_campaignMapIndex)) {
+    if (!isFirstSagaRecruitUnlocked(_campaignState)) {
+      return { ok: false, reason: 'Recruitment opens after the Settlement Oath.' };
+    }
+    if (count >= 2) {
+      return { ok: false, reason: 'The saga warband is full for this chapter.' };
+    }
+    return { ok: true };
   }
-  if ((_roster?.defenders?.length ?? 0) >= 2) {
-    return { ok: false, reason: 'The saga warband is full for this chapter.' };
+  if (count >= MAX_FIELD_HEROES) {
+    return { ok: false, reason: `Warband full — ${MAX_FIELD_HEROES} heroes maximum.` };
   }
   return { ok: true };
 }
@@ -2913,7 +2973,8 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
 
   const progress = ensureCampaignProgress();
   const run = getMapRun(progress, mapIndex);
-  const field = run?.fieldState ?? { gold: 0, towers: [], walls: {} };
+  const rawField = run?.fieldState ?? { gold: 0, towers: [], walls: {} };
+  const field = repairFieldStateAfterAssault(rawField, rawField.deploySnapshot ?? null);
   restoreCampaignField(field, { skipTowers: true });
   _postAssignments = { ...ensurePostAssignments(field, GOAL, FORTRESS_RING_R) };
   _prepShell = createPrepShellState();
@@ -3234,9 +3295,9 @@ function finishCampaignNodeDefeat(reason = 'ramparts') {
   const progress = ensureCampaignProgress();
   let field = serializeFieldState(towers, wallData, gold);
   if (_assaultDeploySnapshot) {
-    field = mergeFallenHeroesIntoFieldState(field, _assaultDeploySnapshot);
     field = attachDeploySnapshot(field, _assaultDeploySnapshot);
   }
+  field = repairFieldStateAfterAssault(field, _assaultDeploySnapshot);
   const run = getMapRun(progress, _campaignMapIndex);
   if (run) run.fieldState = field;
   _campaignState.campaignProgress = progress;
@@ -3253,7 +3314,7 @@ function finishCampaignNodeDefeat(reason = 'ramparts') {
   _battleResult = 'defeat';
   _lastDefeatReason = reason;
   _debriefTimer = 0;
-  gameOver = true;
+  gameOver = false;
   gamePhase = 'debrief';
   sfxGameOver();
 }
@@ -3609,6 +3670,7 @@ function getWaveBands(waveNum) {
 
 let particles     = [];
 let screenShake   = 0;
+let combatHitStop = 0;   // micro freeze frames on heavy hits
 let goldSpent     = 0;
 let goldEarned    = 0;
 let goldStolen    = 0;   // gold plundered by enemies that breached the hoard
@@ -4073,6 +4135,18 @@ function startNextWave() {
   }
 
   sfxWaveStart();
+  if (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && waveNumber === 1) {
+    const _sagaTitles = {
+      0: 'FIRST NIGHT — THE MIST STIRS',
+      1: 'ASH ROAD — RAIDERS IN THE LANE',
+      2: 'BROKEN WATCH — HOLD THE RING',
+      3: 'MENDED WOOD — THE FEN CLOSES IN',
+    };
+    const title = _sagaTitles[_campaignNodeIndex] ?? 'SAGA ASSAULT';
+    chapterBannerText  = title;
+    chapterBannerTimer = Math.max(chapterBannerTimer, 240);
+    if (_campaignNodeIndex === 0) sfxChapterBanner();
+  }
   spawnParticles(GRID_LEFT + SPAWN.col * CELL_SIZE + CELL_SIZE / 2, GRID_TOP + SPAWN.row * CELL_SIZE + CELL_SIZE / 2, '#c89040', 12);
 }
 
@@ -5312,6 +5386,31 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
 
   enemies.push(newEnemy);
   scatterEnemySpawn(newEnemy, path);
+
+  if (!_firstNightDramaShown && _campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && _campaignNodeIndex === 0) {
+    _firstNightDramaShown = true;
+    _enemyIntroBanner = {
+      label: 'FROM THE MIST',
+      hint: 'Raiders stagger from the fen — hold the gate.',
+      timer: 260,
+      maxTimer: 260,
+      category: 'undead',
+    };
+    sfxEnemyIntro();
+    screenShake = Math.max(screenShake, 5);
+    portalFlash = 10;
+    portalFlashColor = 'blue';
+    combatHitStop = Math.max(combatHitStop, 8);
+    _spawnMistDramaTimer = 90;
+  } else if (!_assaultWave1SpawnDrama && _campaignNodeMode && isPathlessMode() && isFirstSagaMap(_campaignMapIndex) && waveNumber === 1) {
+    _assaultWave1SpawnDrama = true;
+    screenShake = Math.max(screenShake, 4);
+    portalFlash = 8;
+    portalFlashColor = 'blue';
+    combatHitStop = Math.max(combatHitStop, 6);
+    _spawnMistDramaTimer = 60;
+  }
+
   return newEnemy;
 }
 
@@ -5886,6 +5985,20 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { _campaignMapPage = Math.min(maxPage, _campaignMapPage + 1); return; }
   }
 
+  if (gamePhase === 'nodeMap') {
+    const progress = ensureCampaignProgress();
+    if (e.key === 'ArrowLeft') {
+      const prev = findAdjacentUnlockedRegion(progress, _campaignMapIndex, -1, isFirstSagaSliceLockedRegion);
+      if (prev != null) switchCommandMapRegion(prev);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      const next = findAdjacentUnlockedRegion(progress, _campaignMapIndex, 1, isFirstSagaSliceLockedRegion);
+      if (next != null) switchCommandMapRegion(next);
+      return;
+    }
+  }
+
   if (gamePhase === 'debrief') {
     if ((e.key === ' ' || e.key === 'Enter') && _debriefTimer >= 60) {
       e.preventDefault();
@@ -5927,8 +6040,13 @@ window.addEventListener('keydown', e => {
     if (_retirementCeremony) { _retirementCeremony = null;  return; }
     if (_showChronicle)      { _showChronicle = false; _chronicleDefFilter = null; _navActiveId = 'battle'; return; }
     if (_hallFocusDefenderId && gamePhase === 'betweenBattles'
-        && _warCampTab === 'warband' && isHallOfHeroesViewReady()) {
+        && shouldShowHallOfHeroesView(_warCampTab, _progressionBuilding)) {
       _hallFocusDefenderId = null;
+      return;
+    }
+    if (_treasuryFocusKey && gamePhase === 'betweenBattles'
+        && shouldShowFortressUpgradeView(_warCampTab, _progressionBuilding)) {
+      _treasuryFocusKey = null;
       return;
     }
     if (_renameState)        { _renameState  = null;  return; }
@@ -6202,8 +6320,12 @@ canvas.addEventListener('mousedown', e => {
           if (btn.action === 'back') {
             if (_campaignRegionActive && _campaignMapIndex != null) enterSettlementHub();
             else gamePhase = 'campaignSelect';
-          } else if (btn.action === 'warCamp' || btn.action === 'settlementHub') {
+          } else if (btn.action === 'returnToSettlement' || btn.action === 'warCamp' || btn.action === 'settlementHub') {
             enterSettlementHub();
+          } else if (btn.action === 'switchRegion') {
+            switchCommandMapRegion(btn.mapIndex);
+          } else if (btn.action === 'openRegionPicker') {
+            gamePhase = 'campaignSelect';
           } else if (btn.action === 'skirmish') {
             _hintSeen.skirmishDiscovery = true;
             _skirmishDiscoveryTimer = 0;
@@ -6407,8 +6529,8 @@ canvas.addEventListener('mousedown', e => {
             gamePhase = 'nodeMap';
           } else if (btn.action === 'nextAssault') {
             enterFieldPrep(_campaignMapIndex, btn.nodeIndex);
-          } else if (btn.action === 'retryAssault') {
-            enterFieldPrep(_campaignMapIndex, _campaignNodeIndex);
+          } else if (btn.action === 'retryAssault' || btn.action === 'replayAssault') {
+            enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? _campaignNodeIndex);
           } else if (btn.action === 'prepareField') {
             enterFieldPrep(_campaignMapIndex, btn.nodeIndex ?? _pendingNextAssaultNode ?? null);
           } else if (btn.action === 'mapSelect') {
@@ -6588,9 +6710,14 @@ canvas.addEventListener('mousedown', e => {
             const def = _roster?.find(btn.defenderId);
             if (def && def.careerLevel >= 1) _renameState = { defenderId: def.defenderId, draft: def.name };
           } else if (btn.action === 'scrollRoster') {
-            _rosterScrollOffset = Math.max(0, _rosterScrollOffset + btn.dir);
+            const maxScroll = shouldShowHallOfHeroesView(_warCampTab, _progressionBuilding)
+              ? Math.max(0, (_roster?.defenders.length ?? 0) - HALL_MAX_STATUES)
+              : Number.MAX_SAFE_INTEGER;
+            _rosterScrollOffset = Math.max(0, Math.min(maxScroll, _rosterScrollOffset + btn.dir));
           } else if (btn.action === 'focusDefender') {
             _hallFocusDefenderId = _hallFocusDefenderId === btn.defenderId ? null : btn.defenderId;
+          } else if (btn.action === 'focusFortressNode') {
+            _treasuryFocusKey = _treasuryFocusKey === btn.key ? null : btn.key;
           } else if (btn.action === 'cycleEquip') {
             const def = _roster.find(btn.defenderId);
             if (def) {
@@ -6674,6 +6801,8 @@ canvas.addEventListener('mousedown', e => {
             _warCampTab = btn.tab;
             _betweenSubtab = btn.tab;
             _rosterScrollOffset = 0;
+            if (btn.tab !== 'warband') _hallFocusDefenderId = null;
+            if (btn.tab !== 'fortress') _treasuryFocusKey = null;
             if (_warCampTabPulse === btn.tab) {
               _warCampTabPulse = null;
               if (btn.tab === 'recruit') {
@@ -7171,6 +7300,13 @@ function update() {
   if (gameOver || gamePhase !== 'playing' || isPaused) return;
   if (isFortressPrepPhase()) return;
 
+  if (combatHitStop > 0) {
+    combatHitStop--;
+    return;
+  }
+
+  if (_spawnMistDramaTimer > 0) _spawnMistDramaTimer--;
+
   // Treasury stage advancement pulse
   {
     const _curStage = getHoardStage(gold).level;
@@ -7288,6 +7424,7 @@ function update() {
 
   // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
+    tickHeroAttackLunge(tower);
     // Apply synergy stat boosts temporarily around update()
     const _origRange    = tower.range;
     const _origSplash   = tower.splashDamage;
@@ -7407,9 +7544,21 @@ function update() {
       b._pierceSfxDone = true;
       sfxChainKill();
     }
-    // Boss hit (not kill): strong impact ring + screen shake
+    if (b.lastHitDmg > 0 && b.target) {
+      const isKill = reward > 0;
+      const isCrit = b.lastHitDmg >= 28 || (b.damage >= 30 && b.lastHitDmg >= b.damage * 0.9);
+      const feel = computeHitFeel(b.lastHitDmg, {
+        isCrit,
+        isKill,
+        isBossHit: !!b.bossDmg,
+        campaign: isCampaignAssaultBattle(),
+      });
+      screenShake = Math.max(screenShake, feel.shake);
+      combatHitStop = Math.max(combatHitStop, feel.hitStop);
+      applyEnemyHitKnock(b.target, b.lastHitDmg, b.x, b.y, { campaign: isCampaignAssaultBattle() });
+    }
+    // Boss hit (not kill): strong impact ring
     if (b.bossDmg) {
-      screenShake = Math.max(screenShake, 9);
       impactFlashes.push({ x: b.bossDmg.x, y: b.bossDmg.y, maxR: 32, life: 1, color: '#ff7030' });
     }
     if (b.lastHitDmg > 0 && reward === 0 && b.target?.alive) {
@@ -7464,6 +7613,13 @@ function update() {
       } else {
         const _killType = (b.canPierce && b.alive) ? null : b.target?.type;
         const _killColor = (b.canPierce && b.alive) ? '#c0a060' : (b.target?.highlightColor ?? b.target?.color ?? '#c0a060');
+        if (b.target && isPathlessMode() && isCampaignAssaultBattle()) {
+          const flair = applyEnemyDeathFlair(b.target, _killType ?? 'raider');
+          if (flair.shake) screenShake = Math.max(screenShake, flair.shake);
+          for (const burst of flair.particles ?? []) {
+            spawnParticles(burst.x, burst.y, burst.color, burst.count ?? 5);
+          }
+        }
         const _pc = _killType === ENEMY_TYPES.JOTUNN ? 22 : _killType === ENEMY_TYPES.MARA ? 12 : _killType === ENEMY_TYPES.MYLING ? 8 : 7;
         spawnParticles(killX, killY, _killColor, _pc);
         if (_killType === ENEMY_TYPES.JOTUNN) {
@@ -7545,23 +7701,6 @@ function update() {
       if (b.slowDuration > 0 && b.target?.slowImmune) {
         dmgFloaters.push({ x: b.target.x, y: b.target.y - 16, val: 'IMMUNE', life: 44, maxLife: 44, color: '#ffcc00', suffix: '' });
       }
-      // Enemy stagger pushback on heavy hits (Catapult, Berserker, Drakship, Valkyrie)
-      if (b.damage > 40 && b.target != null) {
-        const tgt = b.target;
-        const nxt = tgt.path?.[tgt.pathIndex + 1];
-        if (nxt) {
-          const ddx = nxt.x - tgt.x, ddy = nxt.y - tgt.y;
-          const dlen = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (dlen > 0) {
-            tgt.staggerVX    = -(ddx / dlen) * 2;
-            tgt.staggerVY    = -(ddy / dlen) * 2;
-            tgt.staggerTimer = 4;
-            // Immediate push so killing blows also show recoil during death animation
-            tgt.x += tgt.staggerVX;
-            tgt.y += tgt.staggerVY;
-          }
-        }
-      }
       // Impact flash for direct-hit bullets (splash already has splashRings)
       if (b.splashRadius === 0) {
         const flashColor = b.shape === 'spear' ? '#f0e0a0'
@@ -7600,6 +7739,23 @@ function update() {
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (isPathlessMode()) updateEnemyPathlessTarget(enemies[i]);
     enemies[i].update();
+  }
+  if (isPathlessMode() && SPAWN && GOAL) {
+    tickPathlessFootDust();
+    tickLaneWearMarks();
+    const dustPhase = _frameTick * 0.5;
+    const _campAssault = isCampaignAssaultBattle();
+    for (const e of enemies) {
+      if (!e.alive || e.reached) continue;
+      if (!isOnPathlessLane(e.x, e.y, SPAWN, GOAL, CELL_SIZE)) continue;
+      const spd = e.speed ?? 0;
+      if (spd < 0.08) continue;
+      if (Math.floor(dustPhase + e.x * 0.08) % 3 !== 0) continue;
+      emitPathlessFootDust(e.x, e.y + e.radius * 0.45, Math.min(1.3, spd * 0.45), { campaign: _campAssault });
+      if (Math.floor(dustPhase + e.x * 0.05) % 9 === 0) {
+        emitLaneWearMark(e.x, e.y + e.radius * 0.55, Math.min(1.2, spd * 0.35));
+      }
+    }
   }
   applyEnemySeparation(enemies);
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -8401,6 +8557,8 @@ function drawExtraPortalPaths() {
 // Draw glowing gate markers at the 4 cardinal gaps in the fortress ring
 function drawRingGateMarkers() {
   if (!hasFortressRing()) return;
+  // Campaign assault — palisade art + west gate sprite; four gold lanterns read as debug UI.
+  if (_campaignNodeMode && isPathlessMode()) return;
   const cs = CELL_SIZE;
   const _R = FORTRESS_RING_R;
   const _t = performance.now() * 0.001;
@@ -10197,6 +10355,13 @@ function drawCampaignMetaBar(center) {
       });
       subtitle = hallHint.line;
       metaCenter = { line1: hallHint.title, line2: hallHint.line, color: UI_COLORS.gold };
+    } else if (_progressionBuilding === 'fortress' && isTreasuryViewReady()) {
+      const treasuryHint = getTreasuryInstructionHint({
+        focusKey: _treasuryFocusKey,
+        goldReserve,
+      });
+      subtitle = treasuryHint.line;
+      metaCenter = { line1: treasuryHint.title, line2: treasuryHint.line, color: UI_COLORS.gold };
     } else if (_progressionBuilding) {
       subtitle = getProgressionBuildingTitle(_progressionBuilding);
     } else if (_warCampWelcomeTimer > 0) {
@@ -11371,7 +11536,7 @@ function drawBottomBuildBar() {
 function drawHud() {
   if (gamePhase === 'playing') drawDefenderDossier();
 
-  if (!gameOver) return;
+  if (!gameOver || gamePhase !== 'playing') return;
 
   const { width, height } = getViewSize();
   const cx = gridScreenX(COLS * CELL_SIZE / 2);
@@ -13265,7 +13430,7 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
   const nodeIndex = _campaignNodeIndex ?? 0;
   const assault = getAssaultInfo(_campaignMapIndex, nodeIndex);
   const field = _campaignMapIndex != null
-    ? getMapRun(ensureCampaignProgress(), _campaignMapIndex).fieldState
+    ? (getMapRun(ensureCampaignProgress(), _campaignMapIndex)?.fieldState ?? null)
     : null;
   const postAssignments = field?.postAssignments ?? _postAssignments ?? {};
   const gateHeroId = postAssignments.west_gate?.defenderId;
@@ -13444,17 +13609,20 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
     }
   }
   ctx.restore();
+  ctx.restore();
   ctx.textAlign = 'left';
 
   _debriefBtns = [];
   const _canContinue = _debriefTimer >= 60;
   const btnY = slideY + panH - 40;
   const btnH = 28;
-  const btnW = 132;
-  const gap = 10;
   const prepNode = isVictory ? _pendingNextAssaultNode : _campaignNodeIndex;
-  const showPrep = prepNode != null;
-  const btnCount = showPrep ? 3 : 2;
+  const showNext = isVictory && prepNode != null;
+  const showRetry = !isVictory && _campaignNodeIndex != null;
+  const showReplay = isVictory && _campaignNodeIndex != null;
+  const btnCount = (showNext ? 1 : 0) + (showRetry ? 1 : 0) + (showReplay ? 1 : 0) + 2;
+  const btnW = btnCount > 3 ? 108 : 132;
+  const gap = btnCount > 3 ? 8 : 10;
   const totalW = btnCount * btnW + (btnCount - 1) * gap;
   let btnX = hx - totalW / 2;
 
@@ -13467,18 +13635,48 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
     };
 
     let routeIdx = 0;
-    if (showPrep) {
+    if (showNext) {
       drawRoute(routeIdx++, () => {
         drawFantasyPanel(btnX, btnY, btnW, btnH,
-          isVictory ? 'rgba(28,40,16,0.97)' : 'rgba(40,16,16,0.97)', 0.75, 6);
+          'rgba(28,40,16,0.97)', 0.75, 6);
         ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
-        ctx.fillStyle = isVictory ? '#a8e070' : '#e08060';
-        ctx.fillText(isVictory ? 'PREPARE FORTRESS' : 'RETRY ASSAULT', btnX + btnW / 2, btnY + 18);
+        ctx.fillStyle = '#a8e070';
+        ctx.fillText('NEXT ASSAULT', btnX + btnW / 2, btnY + 18);
         _debriefBtns.push({
           x: btnX, y: btnY, w: btnW, h: btnH,
-          action: isVictory ? 'nextAssault' : 'retryAssault',
+          action: 'nextAssault',
           nodeIndex: prepNode,
+        });
+      });
+      btnX += btnW + gap;
+    }
+    if (showRetry) {
+      drawRoute(routeIdx++, () => {
+        drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(40,16,16,0.97)', 0.75, 6);
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#e08060';
+        ctx.fillText('RETRY ASSAULT', btnX + btnW / 2, btnY + 18);
+        _debriefBtns.push({
+          x: btnX, y: btnY, w: btnW, h: btnH,
+          action: 'retryAssault',
+          nodeIndex: _campaignNodeIndex,
+        });
+      });
+      btnX += btnW + gap;
+    }
+    if (showReplay) {
+      drawRoute(routeIdx++, () => {
+        drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(32,36,16,0.97)', 0.75, 6);
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#d0b050';
+        ctx.fillText('REPLAY ASSAULT', btnX + btnW / 2, btnY + 18);
+        _debriefBtns.push({
+          x: btnX, y: btnY, w: btnW, h: btnH,
+          action: 'replayAssault',
+          nodeIndex: _campaignNodeIndex,
         });
       });
       btnX += btnW + gap;
@@ -13524,26 +13722,27 @@ function drawDebrief() {
   const W = BASE_W, H = BASE_H;
   const isVictory = _battleResult === 'victory';
 
-  // Dark backdrop
-  const _t   = Math.min(1, _debriefTimer / 20);
+  const _t = Math.min(1, _debriefTimer / 20);
+
+  // Dark backdrop — fade independently so assault parchment stays readable
   ctx.save();
   ctx.globalAlpha = _t * 0.88;
   ctx.fillStyle   = 'rgba(4,2,8,1)';
   ctx.fillRect(0, 0, W, H);
-  ctx.globalAlpha = 1;
+  ctx.restore();
 
   const panW = 460, panH = 360;
   const panX = Math.round((W - panW) / 2);
   const panY = Math.round((H - panH) / 2) - 8;
   const slideY = panY + Math.round((1 - _t) * 24);
 
-  ctx.globalAlpha = _t;
   if (_returnToNodeMapAfterDebrief) {
     drawCampaignAssaultDebrief(W, H, isVictory, _t);
-    ctx.globalAlpha = 1;
-    ctx.restore();
     return;
   }
+
+  ctx.save();
+  ctx.globalAlpha = _t;
   drawFantasyPanel(panX, slideY, panW, panH, 'rgba(8,4,18,0.99)');
 
   // ── Result header ────────────────────────────────────────────────────────────
@@ -13788,9 +13987,11 @@ function drawDebrief() {
   if (_returnToNodeMapAfterDebrief && _canContinue) {
     const assaultInfo = getAssaultInfo(_campaignMapIndex, _campaignNodeIndex);
     const nextNode = isVictory ? _pendingNextAssaultNode : null;
-    const btnCount = (nextNode != null || !isVictory) ? 2 : 1;
-    const btnW = 148;
-    const gap = 12;
+    const showRetry = !isVictory && _campaignNodeIndex != null;
+    const showReplay = isVictory && _campaignNodeIndex != null;
+    const btnCount = (nextNode != null ? 1 : 0) + (showRetry ? 1 : 0) + (showReplay ? 1 : 0) + 1;
+    const btnW = btnCount > 2 ? 120 : 148;
+    const gap = 10;
     const totalW = btnCount * btnW + (btnCount - 1) * gap;
     let btnX = hx - totalW / 2;
 
@@ -13801,12 +14002,19 @@ function drawDebrief() {
       ctx.fillText('NEXT ASSAULT →', btnX + btnW / 2, btnY + 18);
       _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'nextAssault', nodeIndex: nextNode });
       btnX += btnW + gap;
-    } else if (!isVictory) {
+    } else if (showRetry) {
       drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(40,16,16,0.97)', 0.75, 6);
       ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
       ctx.fillStyle = '#e08060';
       ctx.fillText('RETRY ASSAULT', btnX + btnW / 2, btnY + 18);
-      _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'retryAssault' });
+      _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'retryAssault', nodeIndex: _campaignNodeIndex });
+      btnX += btnW + gap;
+    } else if (showReplay) {
+      drawFantasyPanel(btnX, btnY, btnW, btnH, 'rgba(32,36,16,0.97)', 0.75, 6);
+      ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#d0b050';
+      ctx.fillText('REPLAY ASSAULT', btnX + btnW / 2, btnY + 18);
+      _debriefBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'replayAssault', nodeIndex: _campaignNodeIndex });
       btnX += btnW + gap;
     }
 
@@ -14155,8 +14363,174 @@ function drawSettlementHubScreen() {
   }, _hubBtns);
 }
 
+/** Hall of Heroes — backdrop+statues (base) or dossier+roster (overlays, after frame). */
+function drawBetweenBattlesHallImmersive(W, H, contentTop, contentBot, btSec, phase = 'base') {
+  const useBottomSlot = Boolean(_fromSettlementHub || _progressionBuilding);
+  const hallRect = computeHallImmersiveRect(FRAME_THICK, contentTop, contentBot, W, useBottomSlot);
+
+  if (_hallFocusDefenderId && !_roster.defenders.some(d => d.defenderId === _hallFocusDefenderId)) {
+    _hallFocusDefenderId = null;
+  }
+
+  const _wcProgress = ensureCampaignProgress();
+  const _nextNode = _pendingNextAssaultNode ?? getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex;
+  const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
+  const _nai = _prepNode != null ? getAssaultInfo(_campaignMapIndex, _prepNode) : null;
+  const _fu = goldReserve > 0
+    ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
+    : null;
+
+  const _RARITY_BG = { common: 'rgba(168,168,168,0.14)', rare: 'rgba(64,144,255,0.14)', epic: 'rgba(204,68,255,0.14)', legendary: 'rgba(255,144,32,0.14)' };
+  const slotMetaBuilder = (def) => [0, 1].map(slotIdx => {
+    const itemId = def.equipment[slotIdx];
+    const itemDef = itemId ? ITEM_DEFS[itemId] : null;
+    return {
+      itemDef,
+      rarCol: itemDef ? (RARITY_COLOR[itemDef.rarity] ?? '#aaa') : null,
+      rarityBg: itemDef ? (_RARITY_BG[itemDef.rarity] ?? 'rgba(168,168,168,0.14)') : null,
+    };
+  });
+
+  const hallOpts = {
+    defenders: _roster.defenders,
+    focusId: _hallFocusDefenderId,
+    renameState: _renameState,
+    equipFlash: _equipFlash,
+    slotMetaBuilder,
+    scrollOffset: _rosterScrollOffset,
+    drawPortrait: (c, px, py, type, pr, o = {}) => drawMiniDefenderPortrait(px, py, type, pr, 1, { muted: o.muted !== false }),
+    btnsOut: _betweenBtns,
+  };
+
+  const guidance = getHallObjectiveGuidance({
+    focusId: _hallFocusDefenderId,
+    defenderCount: _roster.defenders.length,
+    tabPulseTarget: isSimplifiedWarCamp(_campaignMapIndex) ? _warCampTabPulse : null,
+    nextAssault: _nai ? { codename: _nai.codename } : null,
+    equipmentCount: _equipmentInventory.length,
+    fortressUpgrade: _fu,
+    activeTab: _warCampTab,
+  });
+
+  if (phase === 'base') {
+    _hallImmersiveActive = true;
+    ctx.globalAlpha = btSec(0.22);
+    drawHallOfHeroesView(ctx, hallRect, { ...hallOpts, phase: 'base' });
+    if (_roster.defenders.length === 0) {
+      ctx.textAlign = 'center';
+      ctx.font = '10px monospace';
+      ctx.fillStyle = 'rgba(120,100,70,0.45)';
+      ctx.fillText('No defenders in warband yet', hallRect.x + hallRect.w / 2, hallRect.y + hallRect.h / 2);
+      ctx.textAlign = 'left';
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (phase !== 'overlays') return;
+
+  const { layout } = drawHallOfHeroesView(ctx, hallRect, { ...hallOpts, phase: 'overlays' });
+
+  drawHallImmersiveChrome(ctx, hallRect, layout, {
+    guidance,
+    showBackToTown: useBottomSlot,
+  }, _betweenBtns);
+
+  if (_renameState) {
+    ctx.save();
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,200,80,0.72)';
+    ctx.fillText('Press Enter to confirm · Esc to cancel', W / 2, contentBot - 4);
+    ctx.restore();
+  }
+
+  if (!useBottomSlot) {
+    drawWarCampBottomBar(ctx, { baseW: W, baseH: H, frameThick: FRAME_THICK }, {
+      tabPulseTarget: isSimplifiedWarCamp(_campaignMapIndex) ? _warCampTabPulse : null,
+      activeTab: _warCampTab,
+      nextAssault: _nai ? {
+        codename: _nai.codename,
+        tierLabel: _nai.tierLabel,
+        nodeIndex: _prepNode,
+        isRetry: _battleResult === 'defeat' && _nextNode == null,
+      } : null,
+      fortressUpgrade: _fu,
+      showReturnToHub: false,
+      buildingOnly: false,
+    }, _betweenBtns);
+  }
+}
+
+/** Treasury — backdrop+buildings (base) or dossier+chrome (overlays, after frame). */
+function drawBetweenBattlesTreasuryImmersive(W, H, contentTop, contentBot, btSec, phase = 'base') {
+  const useBottomSlot = Boolean(_fromSettlementHub || _progressionBuilding);
+  const treasuryRect = computeTreasuryImmersiveRect(FRAME_THICK, contentTop, contentBot, W, useBottomSlot);
+
+  if (_treasuryFocusKey && !FORTRESS_DEFS[_treasuryFocusKey]) {
+    _treasuryFocusKey = null;
+  }
+
+  const upgrades = _campaignState?.fortressUpgrades ?? {};
+  const _fu = goldReserve > 0
+    ? getNextFortressUpgradeOffer(upgrades, goldReserve)
+    : null;
+
+  const treasuryOpts = {
+    upgrades,
+    goldReserve,
+    focusKey: _treasuryFocusKey,
+    btnsOut: _betweenBtns,
+  };
+
+  const guidance = getTreasuryObjectiveGuidance({
+    focusKey: _treasuryFocusKey,
+    goldReserve,
+    nextUpgrade: _fu,
+  });
+
+  if (phase === 'base') {
+    _treasuryImmersiveActive = true;
+    ctx.globalAlpha = btSec(0.22);
+    drawTreasuryView(ctx, treasuryRect, { ...treasuryOpts, phase: 'base' });
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (phase !== 'overlays') return;
+
+  const { layout } = drawTreasuryView(ctx, treasuryRect, { ...treasuryOpts, phase: 'overlays' });
+
+  drawHallImmersiveChrome(ctx, treasuryRect, layout, {
+    guidance,
+    showBackToTown: useBottomSlot,
+  }, _betweenBtns);
+
+  if (!useBottomSlot) {
+    const _wcProgress = ensureCampaignProgress();
+    const _nextNode = _pendingNextAssaultNode ?? getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex;
+    const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
+    const _nai = _prepNode != null ? getAssaultInfo(_campaignMapIndex, _prepNode) : null;
+    drawWarCampBottomBar(ctx, { baseW: W, baseH: H, frameThick: FRAME_THICK }, {
+      tabPulseTarget: isSimplifiedWarCamp(_campaignMapIndex) ? _warCampTabPulse : null,
+      activeTab: _warCampTab,
+      nextAssault: _nai ? {
+        codename: _nai.codename,
+        tierLabel: _nai.tierLabel,
+        nodeIndex: _prepNode,
+        isRetry: _battleResult === 'defeat' && _nextNode == null,
+      } : null,
+      fortressUpgrade: _fu,
+      showReturnToHub: false,
+      buildingOnly: false,
+    }, _betweenBtns);
+  }
+}
+
 function drawBetweenBattles() {
   _betweenBtns = [];
+  _hallImmersiveActive = false;
+  _treasuryImmersiveActive = false;
   const W = BASE_W, H = BASE_H;
 
   // W100 Campaign Victory overlay — shown once, dismissed by click
@@ -14176,9 +14550,13 @@ function drawBetweenBattles() {
   drawBtAmbientParticles();
   tickEquipCeremony();
 
-  if (isCampaignWarCamp()) {
+  const _preflightHall = isCampaignWarCamp()
+    && shouldShowHallOfHeroesView(_warCampTab, _progressionBuilding);
+  const _preflightTreasury = isCampaignWarCamp()
+    && shouldShowFortressUpgradeView(_warCampTab, _progressionBuilding);
+  if (isCampaignWarCamp() && !_preflightHall && !_preflightTreasury) {
     drawWarCampBackdrop(_campaignState?.fortressUpgrades ?? {});
-  } else {
+  } else if (!isCampaignWarCamp()) {
     const t = performance.now() * 0.001;
     for (let si = 0; si < STARS.length; si += 2) {
       const s = STARS[si];
@@ -14209,8 +14587,27 @@ function drawBetweenBattles() {
 
   // ── LEFT PANEL: Battle summary ──────────────────────────────
   const _wcLayout = isCampaignWarCamp();
-  const _contentTop = _wcLayout ? getWarCampContentTop(FRAME_THICK) : META_SCREEN_TOP;
-  const _contentBot = H - FRAME_THICK - 8 - (_wcLayout ? WAR_CAMP_BOTTOM_BAR_H : 0);
+  const _hallView = shouldShowHallOfHeroesView(_warCampTab, _progressionBuilding);
+  const _treasuryView = shouldShowFortressUpgradeView(_warCampTab, _progressionBuilding);
+  const _immersiveView = _hallView || _treasuryView;
+  const _contentTop = _wcLayout
+    ? (_immersiveView && _progressionBuilding
+      ? FRAME_THICK + META_TOP_BAR_COMPACT_H + 4
+      : getWarCampContentTop(FRAME_THICK))
+    : META_SCREEN_TOP;
+  const _contentBot = H - FRAME_THICK - 8 - (_wcLayout && !_immersiveView ? WAR_CAMP_BOTTOM_BAR_H : 0);
+
+  if (_hallView) {
+    drawBetweenBattlesHallImmersive(W, H, _contentTop, _contentBot, btSec, 'base');
+    ctx.restore();
+    return;
+  }
+
+  if (_treasuryView) {
+    drawBetweenBattlesTreasuryImmersive(W, H, _contentTop, _contentBot, btSec, 'base');
+    ctx.restore();
+    return;
+  }
 
   const lpX = FRAME_THICK + 8, lpY = _contentTop, lpW = 300, lpH = _contentBot - _contentTop;
   if (_wcLayout) {
@@ -14614,7 +15011,6 @@ function drawBetweenBattles() {
   const rpContentH = rpH - _bbNavH - 4;
   const rpY0 = rpContentY;
   const rpH0 = rpContentH;
-  const _hallView = _wcLayout && _warCampTab === 'warband' && isHallOfHeroesViewReady();
   const _hallBackdrop = _wcLayout && _warCampTab === 'warband' && !_hallView && isHallOfHeroesBackdropReady();
   if (_wcLayout) {
     if (_hallView) {
@@ -15970,8 +16366,10 @@ function drawNodeMap() {
   }
 
   const _hasHint = isTutorialNode(_campaignMapIndex, _nextNode) || _warnings.length;
-  const mapX = 40, mapY = _top + (_hasHint ? 40 : 26);
-  const mapW = W - 80, mapH = H - 168 - (mapY - _top);
+  const _showRegionNav = progress.mapsUnlocked > 1;
+  const _regionNavH = _showRegionNav ? 34 : 0;
+  const mapX = 40, mapY = _top + (_hasHint ? 40 : 26) + _regionNavH;
+  const mapW = W - 80, mapH = H - 168 - (mapY - _top) - (_campaignRegionActive ? 8 : 0);
   drawFantasyPanel(mapX, mapY, mapW, mapH, 'rgba(8,12,8,0.95)', 0.65, 10);
 
   ctx.save();
@@ -16039,6 +16437,56 @@ function drawNodeMap() {
   }
 
   const mapName = meta?.name ?? 'REGION';
+
+  if (_showRegionNav) {
+    const navY = mapY - _regionNavH + 6;
+    const prevIdx = findAdjacentUnlockedRegion(progress, _campaignMapIndex, -1, isFirstSagaSliceLockedRegion);
+    const nextIdx = findAdjacentUnlockedRegion(progress, _campaignMapIndex, 1, isFirstSagaSliceLockedRegion);
+    const chipH = 30;
+    const chipW = 108;
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillStyle = UI_COLORS.gold;
+    ctx.fillText(`REGION ${_campaignMapIndex + 1}`, W / 2, navY + 10);
+    ctx.font = '7px monospace';
+    ctx.fillStyle = 'rgba(160,140,100,0.65)';
+    ctx.fillText(mapName, W / 2, navY + 22);
+    ctx.textAlign = 'left';
+
+    if (prevIdx != null) {
+      const prevMeta = getCampaignMapMeta(prevIdx);
+      const prevShort = (prevMeta?.name ?? 'Prev').split(' ')[0];
+      drawWarCampGlassChip(ctx, mapX, navY, chipW, chipH, {
+        title: '◀ REGION',
+        subtitle: prevShort,
+        action: 'switchRegion',
+        extra: { mapIndex: prevIdx },
+        btnsOut: _nodeMapBtns,
+      });
+    }
+    if (nextIdx != null) {
+      const nextMeta = getCampaignMapMeta(nextIdx);
+      const nextShort = (nextMeta?.name ?? 'Next').split(' ')[0];
+      drawWarCampGlassChip(ctx, mapX + mapW - chipW, navY, chipW, chipH, {
+        title: 'REGION ▶',
+        subtitle: nextShort,
+        action: 'switchRegion',
+        extra: { mapIndex: nextIdx },
+        btnsOut: _nodeMapBtns,
+      });
+    }
+    if (progress.mapsUnlocked > 2) {
+      const allW = 96;
+      drawWarCampGlassChip(ctx, W / 2 - allW / 2, navY + chipH + 4, allW, 22, {
+        title: 'ALL REGIONS',
+        subtitle: `${progress.mapsUnlocked} unlocked`,
+        action: 'openRegionPicker',
+        btnsOut: _nodeMapBtns,
+      });
+    }
+  }
+
   if (isFirstSagaMap(_campaignMapIndex)) {
     drawFirstSagaCommandMap(ctx, {
       mapX, mapY, mapW, mapH,
@@ -16054,35 +16502,26 @@ function drawNodeMap() {
     _drawCommandMapOverview(progress, run, mapX, mapY, mapW, mapH, portalCount, layout, mapName);
   }
 
-  const backX = 24, backY = H - 36;
-  drawFantasyPanel(backX, backY, 90, 22, 'rgba(12,8,4,0.72)', 0.55, 6);
-  ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c0a060';
-  ctx.fillText(_campaignRegionActive ? '◀ SETTLEMENT' : '◀ MAPS', backX + 45, backY + 14);
-  _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 22, action: 'back' });
-
-  const sk = getSkirmishLinkRect(W, backY - 2);
-  const skDisc = _skirmishDiscoveryTimer > 0 && !_hintSeen.skirmishDiscovery;
-  if (skDisc) _skirmishDiscoveryTimer = tickSkirmishDiscoveryTimer(_skirmishDiscoveryTimer);
-  if (skDisc) drawGuidedPulse(sk.x - 2, sk.y - 2, sk.w + 4, sk.h + 4, 6);
-  drawFantasyPanel(sk.x, sk.y, sk.w, sk.h, skDisc ? 'rgba(36,26,10,0.88)' : 'rgba(30,22,8,0.72)', skDisc ? 0.75 : 0.55, 6);
-  ctx.font = 'bold 8px monospace';
-  ctx.fillStyle = skDisc ? '#f0d878' : '#c0a060';
-  ctx.fillText('⚔ SKIRMISH', sk.x + sk.w / 2, backY + 13);
-  ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(160,140,100,0.55)';
-  ctx.fillText('classic TD', sk.x + sk.w / 2, backY + 22);
-  _nodeMapBtns.push({ x: sk.x, y: sk.y, w: sk.w, h: sk.h, action: 'skirmish' });
-  if (skDisc) {
-    ctx.font = '7px monospace';
-    ctx.fillStyle = `rgba(240,210,120,${getSkirmishDiscoveryPulseAlpha(performance.now())})`;
-    ctx.fillText('Optional 100-wave maze mode', W / 2, backY - 12);
+  if (_campaignRegionActive) {
+    const chipPad = 10;
+    const bw = 124;
+    const bh = 34;
+    const bx = W - FRAME_THICK - bw - chipPad;
+    const by = H - FRAME_THICK - bh - chipPad;
+    drawWarCampGlassChip(ctx, bx, by, bw, bh, {
+      title: '← BACK TO TOWN',
+      subtitle: 'Return to settlement',
+      action: 'returnToSettlement',
+      btnsOut: _nodeMapBtns,
+    });
+  } else {
+    const backX = 24, backY = H - 36;
+    drawFantasyPanel(backX, backY, 90, 22, 'rgba(12,8,4,0.72)', 0.55, 6);
+    ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c0a060';
+    ctx.fillText('◀ MAPS', backX + 45, backY + 14);
+    _nodeMapBtns.push({ x: backX, y: backY, w: 90, h: 22, action: 'back' });
+    ctx.textAlign = 'left';
   }
-
-  const campX = W - 114;
-  drawFantasyPanel(campX, backY, 100, 22, 'rgba(20,30,14,0.72)', 0.55, 6);
-  ctx.fillStyle = '#90c070';
-  ctx.fillText('SETTLEMENT', campX + 50, backY + 14);
-  _nodeMapBtns.push({ x: campX, y: backY, w: 100, h: 22, action: 'settlementHub' });
 
   const heroes = run.fieldState?.towers?.filter(t => isHeroTowerType(t.type)).length ?? 0;
   const structs = run.fieldState?.towers?.filter(t => !isHeroTowerType(t.type)).length ?? 0;
@@ -16195,7 +16634,10 @@ function _drawFrontAssaultPanel(progress, layout, run, mapX, mapY, mapW, mapH, f
     const isNext     = !clearedRow && unlocked;
     const rowW = panelW - 56;
 
-    if (isNext) {
+    if (clearedRow && unlocked) {
+      ctx.fillStyle = 'rgba(200,160,50,0.06)';
+      ctx.beginPath(); ctx.roundRect(listX - 8, rowY - 14, rowW + 16, rowH - 4, 4); ctx.fill();
+    } else if (isNext) {
       ctx.fillStyle = 'rgba(200,160,50,0.08)';
       ctx.beginPath(); ctx.roundRect(listX - 8, rowY - 14, rowW + 16, rowH - 4, 4); ctx.fill();
       if (_onboardingStep === ONBOARDING.LAUNCH
@@ -16212,16 +16654,16 @@ function _drawFrontAssaultPanel(progress, layout, run, mapX, mapY, mapW, mapH, f
 
     if (!assault.isBoss) {
       ctx.font = '7px monospace';
-      ctx.fillStyle = clearedRow ? 'rgba(80,120,70,0.6)' : 'rgba(140,120,80,0.55)';
-      ctx.fillText(assault.codename, listX, rowY + 12);
+      ctx.fillStyle = clearedRow ? 'rgba(100,150,80,0.65)' : 'rgba(140,120,80,0.55)';
+      ctx.fillText(clearedRow ? 'Replay for gold' : assault.codename, listX, rowY + 12);
     }
 
     ctx.textAlign = 'right';
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = clearedRow ? '#60c840' : isNext ? '#f0c040' : 'rgba(60,50,35,0.4)';
-    ctx.fillText(clearedRow ? '✓' : isNext ? '→' : '·', panelX + panelW - 28, rowY + 2);
+    ctx.fillText(clearedRow ? '↻' : isNext ? '→' : '·', panelX + panelW - 28, rowY + 2);
 
-    if (unlocked && !clearedRow) {
+    if (unlocked) {
       _nodeMapBtns.push({
         x: listX - 8, y: rowY - 16, w: rowW + 16, h: rowH,
         action: 'attack', nodeIndex: assault.nodeIndex,
@@ -16640,6 +17082,16 @@ function draw() {
     drawEventOutcomeToast();
     drawWarCampWelcome();
     drawFrames();
+    if (_hallImmersiveActive) {
+      const _hallContentTop = getWarCampContentTop(FRAME_THICK);
+      const _hallContentBot = BASE_H - FRAME_THICK - 8;
+      drawBetweenBattlesHallImmersive(BASE_W, BASE_H, _hallContentTop, _hallContentBot, () => 1, 'overlays');
+    }
+    if (_treasuryImmersiveActive) {
+      const _treasuryContentTop = getWarCampContentTop(FRAME_THICK);
+      const _treasuryContentBot = BASE_H - FRAME_THICK - 8;
+      drawBetweenBattlesTreasuryImmersive(BASE_W, BASE_H, _treasuryContentTop, _treasuryContentBot, () => 1, 'overlays');
+    }
     drawCampaignMetaBar();
     if (_showChronicle)    drawChronicleOverlay();
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
@@ -16689,7 +17141,8 @@ function draw() {
     drawCampaignAssaultPlayfieldBackdrop(ctx, _pfLeft, GRID_TOP, _pfW, _pfH, time);
   }
   if (screenShake > 0) screenShake *= 0.86;
-  const _shakeMag = screenShake > 20 ? Math.min(screenShake, 10) : Math.min(screenShake, 4);
+  const _shakeCap = isCampaignAssaultBattle() ? 8 : 4;
+  const _shakeMag = screenShake > 20 ? Math.min(screenShake, 10) : Math.min(screenShake, _shakeCap);
   const shakeX = _shakeMag > 0.3 ? (Math.random() - 0.5) * _shakeMag * 2 : 0;
   const shakeY = _shakeMag > 0.3 ? (Math.random() - 0.5) * _shakeMag * 2 : 0;
   ctx.translate(_pfLeft + gridPanX + playfieldShiftX() + shakeX, GRID_TOP + gridPanY + playfieldShiftY() + shakeY);
@@ -16707,6 +17160,7 @@ function draw() {
   grid.minimalGoalDecor = _campaignNodeMode && isPathlessMode();
   grid.useCampaignPalisade = _campaignNodeMode && isPathlessMode();
   grid.useAshfenSpawn = grid.useCampaignPalisade;
+  grid.usePalisadeRingArt = grid.useCampaignPalisade && hideAssaultBattleGrid();
   grid.campaignPrepMeta = _prepFieldMeta ?? null;
 
   // Grass terrain (blit pre-rendered offscreen canvas — free per frame)
@@ -16714,11 +17168,18 @@ function draw() {
 
   // Path — drawn behind walls, towers, and enemies
   drawPath();
+  if (isPathlessMode() && SPAWN && GOAL) {
+    drawPathlessAssaultLane(ctx, SPAWN, GOAL, COLS, ROWS, CELL_SIZE, time);
+    drawLaneWearMarks(ctx);
+  }
+  if (_campaignNodeMode && isPathlessMode() && hideAssaultBattleGrid()) {
+    drawCampaignAssaultColorGradeBg(ctx, COLS, ROWS, CELL_SIZE, GOAL, FORTRESS_RING_R, time);
+  }
   drawExtraPortalPaths();
   drawRingGateMarkers();
 
   // ── Fortress warm light — large amber glow from fortress area ────────────
-  {
+  if (!grid.minimalGoalDecor) {
     const hgx    = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
     const hgy    = GOAL.row * CELL_SIZE + CELL_SIZE / 2;
     const gPulse = 0.5 + Math.sin(performance.now() * 0.0018) * 0.5;
@@ -16834,7 +17295,11 @@ function draw() {
   grid.draw(ctx, time, _gridAlpha, { skipFortifications: true });
 
   if (grid.useAshfenSpawn) {
-    drawAnimatedSpawnFenMist(ctx, SPAWN, CELL_SIZE, time);
+    drawAnimatedSpawnFenMist(ctx, SPAWN, CELL_SIZE, time, { drama: _spawnMistDramaTimer > 0 });
+  }
+
+  if (grid.usePalisadeRingArt) {
+    drawCampaignPalisadeRing(ctx, GOAL, FORTRESS_RING_R, CELL_SIZE, time, { spawnCol: SPAWN?.col });
   }
 
   // Wall level tints — per-level color overlay to make upgrade investment visible
@@ -16896,9 +17361,12 @@ function draw() {
     const hero = isHeroTowerType(t.type);
     const inCombat = waveState === 'active';
     const poolR = hero && inCombat ? CELL_SIZE * 0.38 : CELL_SIZE * 0.5;
-    const strength = hero && inCombat ? 0.52 : 1;
+    const campaignAssault = isCampaignAssaultBattle();
+    const strength = hero && inCombat
+      ? (campaignAssault ? 0.26 : 0.52)
+      : (campaignAssault ? 0.62 : 1);
     drawDefenderPortraitGlow(t.x, t.y + 2, t.glowRgb, poolR, strength);
-    if (hero && inCombat && t.glowRgb) {
+    if (hero && inCombat && t.glowRgb && !isCampaignAssaultBattle()) {
       const pulse = 0.55 + Math.sin(performance.now() * 0.006 + t.x * 0.02) * 0.25;
       ctx.save();
       ctx.strokeStyle = `rgba(${t.glowRgb},${0.38 + pulse * 0.28})`;
@@ -16914,7 +17382,7 @@ function draw() {
   drawFortificationsAndTowersDepthSorted(ctx, time);
 
   if (grid.useCampaignPalisade && hideAssaultBattleGrid()) {
-    drawCampaignPalisadeTorchPools(ctx, wallData, CELL_SIZE, time);
+    drawCampaignPalisadeTorchPools(ctx, wallData, CELL_SIZE, time, { strength: isCampaignAssaultBattle() ? 0.42 : 1 });
   }
 
   for (const t of towers) drawHeroCombatHpBar(t);
@@ -17207,6 +17675,9 @@ function draw() {
   });
   drawAssaultEnemyTelegraph();
   redrawHeroSpritesOverFortifications(ctx, time);
+  if (isPathlessMode() && SPAWN && GOAL) {
+    drawPathlessFootDust(ctx);
+  }
 
   // ── Post-draw overlays: elite rings, leaking warnings, boss aura ─────────────
   if (!gameOver) {
@@ -17317,10 +17788,6 @@ function draw() {
   bullets.forEach(b => b.draw(ctx));
   drawParticles();
   drawImpactFlashes();
-
-  if (_campaignNodeMode && isPathlessMode() && hideAssaultBattleGrid()) {
-    drawCampaignAssaultColorGrade(ctx, COLS, ROWS, CELL_SIZE, GOAL, FORTRESS_RING_R, time);
-  }
 
   // ── Mara EMP shockwave rings (amber-red: danger, not frost) ────────────────
   for (const er of empRings) {

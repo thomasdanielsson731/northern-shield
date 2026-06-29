@@ -11,7 +11,7 @@ import { getHubBuildingMilestone } from '../src/settlement/hubMilestones.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('settlementHub', () => {
-  it('defines hub buildings including war horn and halls', () => {
+  it('defines hub buildings including assaults emblem and halls', () => {
     const ids = HUB_BUILDINGS.map(b => b.id);
     expect(ids).toContain('command');
     expect(ids).toContain('warband');
@@ -19,10 +19,13 @@ describe('settlementHub', () => {
     expect(ids).toContain('runeSmith');
   });
 
-  it('hubRect maps normalized layout to pixels', () => {
-    const r = hubRect(HUB_BUILDINGS[0], { x: 10, y: 20, w: 400, h: 300 });
-    expect(r.x).toBeGreaterThan(10);
-    expect(r.w).toBeGreaterThan(40);
+  it('hubRect maps assault emblem into left wilds', () => {
+    const command = HUB_BUILDINGS.find(b => b.id === 'command');
+    const r = hubRect(command, { x: 10, y: 20, w: 400, h: 300 });
+    expect(r.x).toBeLessThan(30);
+    expect(r.w).toBeGreaterThanOrEqual(35);
+    const hall = hubRect(HUB_BUILDINGS.find(b => b.id === 'warband'), { x: 10, y: 20, w: 400, h: 300 });
+    expect(r.x + r.w).toBeLessThan(hall.x + hall.w * 0.35);
   });
 
   it('locks barracks until settlement on first saga', () => {
@@ -55,9 +58,9 @@ describe('settlementHub', () => {
     expect(btns.some(b => b.action === 'openWarband')).toBe(true);
   });
 
-  it('instruction hint points new players to war horn', () => {
+  it('instruction hint points new players to assaults emblem', () => {
     const hint = getHubInstructionHint({ battlesCompleted: 0 });
-    expect(hint.line).toMatch(/War Horn/i);
+    expect(hint.line).toMatch(/Assaults emblem/i);
   });
 
   it('getHubInstructionHint prioritizes chronicle unread', () => {

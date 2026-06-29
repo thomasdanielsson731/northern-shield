@@ -13,8 +13,8 @@ import { findWoundedWarbandTarget, HYDDA_HEAL_RANGE } from './warbandHeal.js';
 const MELEE_TYPES  = new Set(['berserk']);
 const HEALER_TYPES = new Set(['hydda']);
 
-const MOVE_SPEED_MELEE  = 1.85;
-const MOVE_SPEED_RANGED = 1.45;
+const MOVE_SPEED_MELEE  = 2.05;
+const MOVE_SPEED_RANGED = 1.62;
 
 // Heroes disengage / return home when no enemy is closer than this many cells.
 const HERO_SIGHT_CELLS = 12;

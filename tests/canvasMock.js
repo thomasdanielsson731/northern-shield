@@ -8,6 +8,7 @@ export function mockCtx() {
     fill() {},
     stroke() {},
     beginPath() {},
+    rect() {},
     closePath() {},
     moveTo() {},
     lineTo() {},
@@ -20,6 +21,7 @@ export function mockCtx() {
     arc() {},
     clip() {},
     translate() {},
+    rotate() {},
     scale() {},
     createLinearGradient() {
       return { addColorStop() {} };

@@ -27,6 +27,45 @@ export function drawPanelHpBar(ctx, x, y, w, h, frac, accent) {
   ctx.shadowBlur = 0;
 }
 
+/** In-field HP bar width — matches hero bars at default cell size (14 × 0.9). */
+export const COMBAT_FIELD_HP_W = 12.6;
+
+export function combatFieldHpBarHeight(frac) {
+  return frac < 0.25 ? 4 : 3;
+}
+
+export function combatFieldHpAccent(frac) {
+  const f = Math.max(0, Math.min(1, frac));
+  return f > 0.5 ? UI_COLORS.fortress : f > 0.25 ? UI_COLORS.gold : UI_COLORS.threat;
+}
+
+/**
+ * Slim rounded combat HP bar — shared by pathless heroes and enemies.
+ * @param {{ dimAtFull?: boolean, forceShow?: boolean }} opts
+ */
+export function drawCombatFieldHpBar(ctx, cx, by, frac, accent, opts = {}) {
+  const f = Math.max(0, Math.min(1, frac));
+  const barW = COMBAT_FIELD_HP_W;
+  const barH = combatFieldHpBarHeight(f);
+  const bx = cx - barW / 2;
+  const col = accent ?? combatFieldHpAccent(f);
+  const showFill = f < 1.0 || opts.forceShow;
+  const dimTray = opts.dimAtFull && !showFill;
+
+  ctx.save();
+  if (dimTray) ctx.globalAlpha = 0.32;
+  drawPanelHpBar(ctx, bx, by, barW, barH, showFill ? f : 0, col);
+  ctx.restore();
+
+  if (f < 0.25 && f > 0) {
+    const pulse = 0.5 + Math.sin(performance.now() * 0.012) * 0.5;
+    ctx.strokeStyle = `rgba(169,50,38,${0.35 + pulse * 0.45})`;
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(bx - 1, by - 1, barW + 2, barH + 2);
+  }
+  return { w: barW, h: barH, bx, by };
+}
+
 export function getHeroHpFrac(tower) {
   if (tower.combatMaxHp == null || tower.combatMaxHp <= 0) return 1;
   return Math.max(0, (tower.combatHp ?? 0) / tower.combatMaxHp);

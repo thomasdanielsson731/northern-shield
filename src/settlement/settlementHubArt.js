@@ -3,11 +3,11 @@
  * @see design/art/BATCH_PROMPTS.md Wave 11
  */
 
-import { getHubBackdropRect, getHubPlayfield, HUB_ART_H, HUB_ART_W } from './settlementHubLayout.js';
+import { getHubContentDestRect, getHubPlayfield, HUB_ART_CONTENT, HUB_ART_H, HUB_ART_W } from './settlementHubLayout.js';
 
 const HUB_ART_SRC = {
   backdrop: '/assets/ui/ui_settlement_hub_bg_age1@960x540.png',
-  warHorn: '/assets/settlement/hub_building_war_horn@96x80.png',
+  assaultEmblem: '/assets/settlement/hub_emblem_assault@72x72.png',
   hall: '/assets/settlement/hub_building_hall@140x100.png',
   treasury: '/assets/settlement/hub_building_treasury@80x72.png',
   barracks: '/assets/settlement/hub_building_barracks@96x80.png',
@@ -17,7 +17,7 @@ const HUB_ART_SRC = {
 };
 
 export const HUB_BUILDING_ART = {
-  command: 'warHorn',
+  command: 'assaultEmblem',
   warband: 'hall',
   fortress: 'treasury',
   recruit: 'barracks',
@@ -82,7 +82,10 @@ function ready(key) {
 }
 
 export function isSettlementHubBackdropUsable() {
-  return _backdropUsable && ready('backdrop');
+  if (!ready('backdrop')) return false;
+  // Panorama plates with large letterbox voids still align via art-space layout once loaded.
+  const img = _images.backdrop;
+  return (img.naturalWidth >= 640 && img.naturalHeight >= 360);
 }
 
 export function isSettlementHubBackdropReady() {
@@ -201,7 +204,10 @@ export function drawSettlementHubBackdrop(ctx, layout) {
 
   if (ready('backdrop')) {
     const img = _images.backdrop;
-    const rect = getHubBackdropRect(layout);
+    const rect = getHubContentDestRect(layout);
+    const c = HUB_ART_CONTENT;
+    const sw = img.naturalWidth || HUB_ART_W;
+    const sh = img.naturalHeight || HUB_ART_H;
     ctx.save();
     ctx.fillStyle = '#0a0810';
     ctx.fillRect(x, y, w, h);
@@ -209,7 +215,7 @@ export function drawSettlementHubBackdrop(ctx, layout) {
     ctx.globalAlpha = alpha;
     ctx.drawImage(
       img,
-      0, 0, img.naturalWidth || HUB_ART_W, img.naturalHeight || HUB_ART_H,
+      c.sx * sw, c.sy * sh, c.sw * sw, c.sh * sh,
       rect.dx, rect.dy, rect.dw, rect.dh,
     );
     const vig = ctx.createLinearGradient(x, y, x, y + h);
@@ -231,14 +237,74 @@ export function drawHubBuildingSprite(ctx, buildingId, box, { alpha = 1, locked 
   const artKey = HUB_BUILDING_ART[buildingId];
   if (!artKey || !ready(artKey)) return false;
   const img = _images[artKey];
-  const scale = Math.min(box.w / img.naturalWidth, box.h / img.naturalHeight) * 0.92;
+  const scale = Math.min(box.w / img.naturalWidth, box.h / img.naturalHeight) * 0.95;
   const dw = img.naturalWidth * scale;
   const dh = img.naturalHeight * scale;
-  const dx = box.x + (box.w - dw) / 2;
-  const dy = box.y + box.h - dh - box.h * 0.04;
+  const centerAnchored = buildingId === 'command';
+  const anchorX = box.x + box.w / 2;
+  const anchorY = centerAnchored ? box.y + box.h / 2 : box.y + box.h;
+  const dx = anchorX - dw / 2;
+  const dy = centerAnchored ? anchorY - dh / 2 : anchorY - dh;
   ctx.save();
   ctx.globalAlpha = alpha * (locked ? 0.45 : 1);
   ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  return true;
+}
+
+/** Procedural crossed swords while assault emblem PNG loads. */
+export function drawAssaultEmblemFallback(ctx, box, { alpha = 1, locked = false, pulse = false } = {}) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const size = Math.min(box.w, box.h) * 0.42;
+  const t = performance.now() * 0.003;
+  const glow = pulse ? 0.55 + Math.sin(t) * 0.25 : 0.45;
+
+  ctx.save();
+  ctx.globalAlpha = alpha * (locked ? 0.45 : 1);
+
+  const mist = ctx.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 1.35);
+  mist.addColorStop(0, `rgba(200,150,60,${0.14 * glow})`);
+  mist.addColorStop(0.55, `rgba(120,160,200,${0.06 * glow})`);
+  mist.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = mist;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 1.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(18,14,10,0.85)';
+  ctx.lineWidth = Math.max(1.4, size * 0.08);
+  ctx.lineCap = 'round';
+
+  function drawBlade(angle) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    const bladeGrad = ctx.createLinearGradient(0, -size, 0, size * 0.55);
+    bladeGrad.addColorStop(0, '#f0d868');
+    bladeGrad.addColorStop(0.55, '#c89830');
+    bladeGrad.addColorStop(1, '#8a6020');
+    ctx.strokeStyle = 'rgba(12,10,8,0.9)';
+    ctx.lineWidth = Math.max(1.6, size * 0.09);
+    ctx.beginPath();
+    ctx.moveTo(0, size * 0.55);
+    ctx.lineTo(0, -size * 0.92);
+    ctx.stroke();
+    ctx.strokeStyle = bladeGrad;
+    ctx.lineWidth = Math.max(1.1, size * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(0, size * 0.48);
+    ctx.lineTo(0, -size * 0.88);
+    ctx.stroke();
+    ctx.fillStyle = '#5c3820';
+    ctx.fillRect(-size * 0.12, size * 0.42, size * 0.24, size * 0.16);
+    ctx.fillStyle = '#a06820';
+    ctx.fillRect(-size * 0.05, size * 0.36, size * 0.10, size * 0.22);
+    ctx.restore();
+  }
+
+  drawBlade(-0.55);
+  drawBlade(0.55);
   ctx.restore();
   return true;
 }

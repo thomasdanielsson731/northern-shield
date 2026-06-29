@@ -16,10 +16,20 @@ describe('settlementHubLayout', () => {
     expect(play.y + play.h).toBeLessThan(layout.y + layout.h);
   });
 
-  it('places war horn at west gate and barracks in training yard', () => {
+  it('places assault emblem west of the hill crest', () => {
     expect(HUB_BUILDING_LAYOUT.command.fx).toBeLessThan(HUB_BUILDING_LAYOUT.warband.fx);
+    expect(HUB_BUILDING_LAYOUT.command.emblem).toBe(true);
     expect(HUB_BUILDING_LAYOUT.recruit.fx).toBeGreaterThan(HUB_BUILDING_LAYOUT.warband.fx);
     expect(HUB_BUILDING_LAYOUT.recruit.fy).toBeLessThan(HUB_BUILDING_LAYOUT.chronicle.fy);
+  });
+
+  it('anchors building feet near ground line in content space', () => {
+    for (const [id, norm] of Object.entries(HUB_BUILDING_LAYOUT)) {
+      if (id === 'slots' || norm.emblem) continue;
+      const foot = norm.fy + norm.fh;
+      expect(foot, id).toBeGreaterThan(0.82);
+      expect(foot, id).toBeLessThan(0.98);
+    }
   });
 
   it('draws barracks in front of hall (higher z)', () => {
@@ -29,10 +39,11 @@ describe('settlementHubLayout', () => {
     expect(barracksIdx).toBeGreaterThan(hallIdx);
   });
 
-  it('resolves building rects in playfield space by default', () => {
+  it('resolves building rects in art space when backdrop ready', () => {
     const norm = HUB_BUILDING_LAYOUT.recruit;
-    const box = resolveHubBuildingRect(norm, layout);
+    const box = resolveHubBuildingRect(norm, layout, { useArtSpace: true });
     expect(box.w).toBeGreaterThan(40);
-    expect(box.y).toBeLessThan(layout.y + layout.h * 0.65);
+    expect(box.y + box.h).toBeLessThan(layout.y + layout.h * 0.92);
+    expect(box.y + box.h).toBeGreaterThan(layout.y + layout.h * 0.55);
   });
 });
