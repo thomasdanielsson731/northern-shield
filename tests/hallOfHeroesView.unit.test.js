@@ -4,6 +4,7 @@ import {
   computeHallPlinthSlots,
   drawHallOfHeroesView,
   isHallOfHeroesViewReady,
+  getHallInstructionHint,
 } from '../src/ui/hallOfHeroesView.js';
 import { mockCtx } from './canvasMock.js';
 
@@ -49,5 +50,11 @@ describe('hallOfHeroesView', () => {
       btnsOut: [],
       drawPortrait: () => {},
     })).not.toThrow();
+  });
+
+  it('getHallInstructionHint reflects focus and rename state', () => {
+    expect(getHallInstructionHint({ focusId: 'd1' }).title).toBe('DOSSIER');
+    expect(getHallInstructionHint({ renameActive: true }).title).toBe('NAMING');
+    expect(getHallInstructionHint({ defenderCount: 1 }).line).toMatch(/plinth/i);
   });
 });
