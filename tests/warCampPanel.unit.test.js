@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { drawCampaignWarCampBriefing, isSimplifiedWarCamp, buildWarCampStatusLines, buildWarCampBondLines, shouldPulseWarCampTab, getWarCampTabHint, formatWarCampBondLine } from '../src/ui/warCampPanel.js';
+import {
+  drawCampaignWarCampBriefing,
+  isSimplifiedWarCamp,
+  buildWarCampStatusLines,
+  buildWarCampBondLines,
+  shouldPulseWarCampTab,
+  getWarCampTabHint,
+  formatWarCampBondLine,
+  getWarCampObjectives,
+  getWarCampInstructionHint,
+  getWarCampTabGuidance,
+  drawWarCampBottomBar,
+} from '../src/ui/warCampPanel.js';
 import { mockCtx } from './canvasMock.js';
 
 describe('warCampPanel', () => {
@@ -8,7 +20,7 @@ describe('warCampPanel', () => {
     expect(isSimplifiedWarCamp(1)).toBe(false);
   });
 
-  it('drawCampaignWarCampBriefing renders next assault CTA', () => {
+  it('drawCampaignWarCampBriefing renders briefing without embedded CTA', () => {
     const ctx = mockCtx();
     const btns = [];
     expect(() => drawCampaignWarCampBriefing(ctx, { x: 20, y: 40, w: 280, h: 400 }, {
@@ -23,26 +35,43 @@ describe('warCampPanel', () => {
         isRetry: false,
       },
       goldReserve: 34,
-      chronicleProse: 'The warband held the west gate.',
+      chronicleCount: 2,
       statusLines: [],
     }, btns)).not.toThrow();
-    expect(btns.some(b => b.action === 'nextAssault')).toBe(true);
-    expect(btns.some(b => b.action === 'commandMap')).toBe(true);
+    expect(btns.some(b => b.action === 'openChronicle')).toBe(true);
+    expect(btns.some(b => b.action === 'nextAssault')).toBe(false);
   });
 
-  it('drawCampaignWarCampBriefing shows retry assault action', () => {
+  it('drawWarCampBottomBar places prepare fortress CTA bottom right', () => {
     const ctx = mockCtx();
     const btns = [];
-    drawCampaignWarCampBriefing(ctx, { x: 20, y: 40, w: 280, h: 400 }, {
-      defenderNames: ['A', 'B', 'C', 'D'],
-      defenderCount: 5,
+    drawWarCampBottomBar(ctx, { baseW: 800, baseH: 600, frameThick: 16 }, {
+      tabPulseTarget: null,
+      activeTab: 'warband',
       nextAssault: {
-        codename: 'Ash Gate', tierLabel: 'A0', frontLabel: 'West',
-        waveCount: 1, nodeIndex: 0, isRetry: true,
+        codename: 'Wolf Smoke',
+        tierLabel: 'A1',
+        nodeIndex: 1,
+        isRetry: false,
       },
-      goldReserve: 12,
-      chronicleProse: 'A long chronicle line that should wrap across multiple rows when rendered.',
-      statusLines: [{ text: 'Scar on west gate', color: '#A93226' }],
+    }, btns);
+    const primary = btns.find(b => b.action === 'nextAssault');
+    const map = btns.find(b => b.action === 'commandMap');
+    expect(primary).toBeTruthy();
+    expect(primary.x).toBeGreaterThan(500);
+    expect(map).toBeTruthy();
+    expect(map.x).toBeLessThan(200);
+  });
+
+  it('drawWarCampBottomBar shows retry assault action', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    drawWarCampBottomBar(ctx, { baseW: 800, baseH: 600, frameThick: 16 }, {
+      tabPulseTarget: null,
+      activeTab: 'warband',
+      nextAssault: {
+        codename: 'Ash Gate', tierLabel: 'A0', nodeIndex: 0, isRetry: true,
+      },
     }, btns);
     expect(btns.some(b => b.action === 'retryAssault')).toBe(true);
   });
@@ -65,7 +94,7 @@ describe('warCampPanel', () => {
       { fortressUpgrade: { label: 'Barracks', nextLevel: 2, cost: 40 } },
     );
     expect(lines.some(l => l.text.includes('scarred'))).toBe(true);
-    expect(lines.some(l => l.text.includes('Repair'))).toBe(true);
+    expect(lines.some(l => l.text.includes('repair'))).toBe(true);
     expect(lines.some(l => l.text.includes('Barracks'))).toBe(true);
     expect(buildWarCampStatusLines({ westGateRepaired: true })[0].text).toMatch(/patch/);
   });
@@ -86,5 +115,35 @@ describe('warCampPanel', () => {
     expect(lines[0].text).toMatch(/Shield-Brothers/);
     expect(formatWarCampBondLine(bonds[1], names)).toMatch(/Ulfr & Gunnar/);
     expect(buildWarCampBondLines([], names)).toEqual([]);
+  });
+
+  it('war camp objectives point to prepare fortress', () => {
+    const base = {
+      tabPulseTarget: null,
+      activeTab: 'warband',
+      nextAssault: { codename: 'Wolf Smoke' },
+      equipmentCount: 0,
+    };
+    const steps = getWarCampObjectives(base);
+    expect(steps.find(s => s.id === 'prep')?.active).toBe(true);
+    expect(getWarCampInstructionHint(base)?.title).toBe('NEXT STEP');
+    expect(getWarCampTabGuidance(base).line).toMatch(/PREPARE FORTRESS bottom right/i);
+  });
+
+  it('war camp objectives pulse recruit tab', () => {
+    const state = { tabPulseTarget: 'recruit', activeTab: 'warband', nextAssault: null };
+    expect(getWarCampObjectives(state)[0].id).toBe('recruit');
+    expect(getWarCampTabGuidance({ ...state, tabPulseTarget: 'recruit' }).tab).toBe('recruit');
+  });
+
+  it('drawWarCampBottomBar buildingOnly shows return to town only', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    const result = drawWarCampBottomBar(ctx, { baseW: 800, baseH: 600, frameThick: 12 }, {
+      buildingOnly: true,
+    }, btns);
+    expect(result.primary?.action).toBe('returnToSettlement');
+    expect(btns).toHaveLength(1);
+    expect(btns[0].action).toBe('returnToSettlement');
   });
 });
