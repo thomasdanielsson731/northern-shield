@@ -99,6 +99,9 @@ function markActiveWarCampSteps(steps) {
 
 /** Top meta-bar / banner copy for War Camp. */
 export function getWarCampInstructionHint(state) {
+  if (state.chronicleUnread) {
+    return { title: 'CHRONICLE', line: 'Unread saga entry — open Chronicle', urgent: false };
+  }
   const active = getWarCampObjectives(state).find(s => s.active && !s.done);
   if (!active) return null;
 
