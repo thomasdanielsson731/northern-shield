@@ -40,4 +40,10 @@ describe('hubMilestones', () => {
     expect(hubBuildingToProgressionMode('fortress')).toBe('fortress');
     expect(getProgressionBuildingTitle('fortress')).toBe('TREASURY');
   });
+
+  it('chronicle unread milestone pulses NEW ENTRY', () => {
+    const m = getHubBuildingMilestone('chronicle', { chronicleCount: 3, chronicleUnread: true });
+    expect(m.unread).toBe(true);
+    expect(m.banner).toBe('NEW ENTRY');
+  });
 });
