@@ -14,6 +14,7 @@ export function getHubBuildingMilestone(id, state = {}) {
   const {
     campaignState,
     chronicleCount = 0,
+    chronicleUnread = false,
     battlesCompleted = 0,
     simplifiedSaga = false,
     mapIndex = 0,
@@ -96,6 +97,9 @@ export function getHubBuildingMilestone(id, state = {}) {
   if (id === 'chronicle') {
     if (chronicleCount <= 0) {
       return { available: false, reason: 'No battles recorded yet.' };
+    }
+    if (chronicleUnread) {
+      return { available: true, pulse: true, unread: true, banner: 'NEW ENTRY' };
     }
     return { available: true, banner: chronicleCount === 1 ? 'FIRST ENTRY' : null };
   }
