@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-28 (Polish Board iter 23–32 — debrief MVP/boss loot, chronicle filters, saga NEXT hint)  
+**Last updated:** 2026-06-29 (Polish Board iter 53–72 — hall dossier UX, settlement chronicle unread, `__NS_TEST_HOOKS__`)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -74,7 +74,8 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 - **Combat animation** — `spriteAnim.js`, hero `moveAngle` facing, `characterAttackVfx` wired
 - **Debrief parchment** — layout synced to scroll art, ink/wash legibility, defeat context lines
 - **First Saga onboarding** — west road copy, fortress prep deploy hint, Settlement → RECRUIT tab
-- **371** unit tests passing
+- **Polish Board iter 53–72** — Hall dossier fade/Esc, settlement chronicle unread, `__NS_TEST_HOOKS__`, polish audit expansion
+- **424** unit tests passing
 
 ## Current implementation focus
 
