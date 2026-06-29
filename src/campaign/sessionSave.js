@@ -1,5 +1,5 @@
 const VALID_PHASES = new Set([
-  'campaignSelect', 'nodeMap', 'betweenBattles', 'debrief', 'playing', 'mapSelect',
+  'campaignSelect', 'nodeMap', 'betweenBattles', 'settlementHub', 'debrief', 'playing', 'mapSelect',
   'fortressPrep', 'settlementCeremony', 'heroNamingCeremony',
 ]);
 

@@ -143,6 +143,122 @@ export function getPrepRepairTeachHint(prepMeta) {
   return 'Splintered palisade — gather timber from assault rewards';
 }
 
+/** Ordered prep checklist — required steps gate the horn; optional scout is last. */
+export function getPrepObjectives(ctx) {
+  const {
+    pendingAssaultNode,
+    postAssignments,
+    prepMeta,
+    assaultNodeIndex,
+    assault,
+  } = ctx;
+
+  const steps = [];
+
+  if (pendingAssaultNode == null) {
+    steps.push({
+      id: 'pick_assault',
+      label: 'Pick an assault on the Command Map',
+      required: true,
+      done: false,
+    });
+    return markActivePrepObjective(steps, ctx);
+  }
+
+  const gateAssigned = Boolean(postAssignments?.west_gate?.defenderId);
+  steps.push({
+    id: 'assign_gate',
+    label: 'Assign a hero to the West Gate',
+    required: true,
+    done: gateAssigned,
+  });
+
+  const needsRepair = !!(
+    prepMeta?.westGateScarred
+    && !prepMeta?.westGateRepaired
+    && assaultNodeIndex != null
+    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
+  );
+  if (needsRepair) {
+    const wood = prepMeta?.wood ?? 0;
+    steps.push({
+      id: 'repair_gate',
+      label: wood >= GATE_REPAIR_WOOD_COST
+        ? `Repair the west wall (${GATE_REPAIR_WOOD_COST} wood)`
+        : 'Gather timber, then repair the west wall',
+      required: true,
+      done: false,
+    });
+  }
+
+  steps.push({
+    id: 'sound_horn',
+    label: assault
+      ? `Sound the horn — ${assault.codename}`
+      : 'Sound the horn to begin the assault',
+    required: true,
+    done: false,
+  });
+
+  const towerAssigned = Boolean(postAssignments?.watch_tower?.defenderId);
+  if (gateAssigned && !needsRepair) {
+    steps.push({
+      id: 'assign_tower',
+      label: 'Post a scout on the Watch Tower (optional)',
+      required: false,
+      done: towerAssigned,
+    });
+  }
+
+  return markActivePrepObjective(steps, ctx);
+}
+
+function markActivePrepObjective(steps, ctx) {
+  const hornBlocked = getHornBlockReason(ctx);
+  let activeRequired = false;
+  for (const step of steps) {
+    if (step.done) {
+      step.active = false;
+      continue;
+    }
+    if (step.id === 'sound_horn') {
+      step.active = !hornBlocked;
+      continue;
+    }
+    if (step.required && !activeRequired) {
+      step.active = true;
+      activeRequired = true;
+    } else {
+      step.active = false;
+    }
+  }
+  if (!activeRequired) {
+    const optional = steps.find(s => !s.required && !s.done);
+    if (optional) optional.active = true;
+  }
+  return steps;
+}
+
+/** Top-banner copy for the current prep step. */
+export function getPrepInstructionHint(ctx) {
+  const active = getPrepObjectives(ctx).find(s => s.active && !s.done);
+  if (!active) return null;
+
+  const titles = {
+    pick_assault: 'COMMAND MAP',
+    assign_gate: 'ASSIGN GATE',
+    repair_gate: 'MEND THE GATE',
+    assign_tower: 'WATCH TOWER',
+    sound_horn: 'SOUND HORN',
+  };
+
+  return {
+    title: titles[active.id] ?? 'FORTRESS PREP',
+    line: active.label,
+    urgent: active.id === 'repair_gate',
+  };
+}
+
 export function hotspotRect(playfield, hotspotId) {
   const L = HOTSPOT_LAYOUT[hotspotId];
   if (!L) return null;
@@ -286,20 +402,25 @@ function drawSchematicHint(ctx, pf, text) {
   ctx.fillText(text, hx + tw / 2, hy + 13);
 }
 
-function drawSchematicLegend(ctx, pf) {
-  const lines = [
-    { color: 'rgba(232,208,96,0.75)', text: 'Click a building' },
-    { color: 'rgba(74,111,165,0.9)', text: '● Hero posted' },
-    { color: 'rgba(200,90,70,0.75)', text: '← Enemy approach' },
-  ];
+function drawPrepObjectiveLegend(ctx, pf, panelCtx) {
+  const objectives = getPrepObjectives(panelCtx);
+  const lines = objectives.filter(o => o.required || !o.done).slice(0, 5);
   const lx = pf.x + 10;
-  let ly = pf.y + pf.h - 10 - lines.length * 11;
+  let ly = pf.y + pf.h - 10 - lines.length * 12;
   ctx.textAlign = 'left';
-  for (const line of lines) {
-    ctx.fillStyle = line.color;
-    ctx.font = '6px monospace';
-    ctx.fillText(line.text, lx, ly);
-    ly += 11;
+  ctx.font = 'bold 6px monospace';
+  ctx.fillStyle = 'rgba(232,208,96,0.55)';
+  ctx.fillText('YOUR ORDERS', lx, ly - 8);
+  for (const obj of lines) {
+    const mark = obj.done ? '✓' : (obj.active ? '▶' : '○');
+    ctx.font = obj.active ? 'bold 6.5px monospace' : '6px monospace';
+    ctx.fillStyle = obj.done
+      ? 'rgba(120,140,100,0.55)'
+      : obj.active
+        ? 'rgba(232,208,96,0.9)'
+        : 'rgba(140,155,170,0.55)';
+    ctx.fillText(`${mark} ${obj.label}`, lx, ly);
+    ly += 12;
   }
 }
 
@@ -559,8 +680,8 @@ function advisorLines(hotspot, ctx) {
         advisor: 'captain',
         title: 'Fortress Overview',
         lines: [
-          'West Gate — assign your fighter (required).',
-          'Watch Tower — optional scout. Then sound the horn.',
+          'Click a building on the schematic.',
+          'Complete your orders, then sound the horn.',
         ],
       };
   }
@@ -766,7 +887,7 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
     }
   }
 
-  drawSchematicLegend(ctx, pf);
+  drawPrepObjectiveLegend(ctx, pf, drawCtx);
 
   ctx.restore();
 }
@@ -787,60 +908,107 @@ function drawAdvisorPortrait(ctx, x, y, advisorKey) {
   ctx.fillText(a.name.slice(0, 1), x + 20, y + 24);
 }
 
+function drawPrepShellPanel(ctx, x, y, w, h) {
+  const radius = 8;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.85)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 4;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.fillStyle = 'rgba(10,6,20,0.94)';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.strokeStyle = 'rgba(180,110,30,0.7)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 2, w - 4, h - 4, Math.max(radius - 2, 2));
+  ctx.strokeStyle = 'rgba(255,200,80,0.2)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
 export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) {
   state.panelBtns = [];
   state.hornBtn = null;
 
-  ctx.fillStyle = 'rgba(10,6,20,0.94)';
-  ctx.fillRect(px, py, pw, ph);
+  const shellInset = 4;
+  const ix = px + shellInset;
+  const iy = py + shellInset;
+  const iw = pw - shellInset * 2;
+  const ih = ph - shellInset * 2;
+  drawPrepShellPanel(ctx, ix, iy, iw, ih);
 
   const pad = 10;
-  let ly = py + pad + 8;
+  const contentX = ix + pad;
+  const btnW = iw - pad * 2;
+  let ly = iy + pad + 8;
   const content = advisorLines(state.selectedHotspot, panelCtx);
   const actions = panelActions(state.selectedHotspot, panelCtx);
+
+  const bottomPad = 10;
+  const hornH = 38;
+  const navH = 22;
+  const stackGap = 8;
+  const hornY = iy + ih - bottomPad - hornH;
+  const navY = hornY - stackGap - navH;
+  const maxActionBottom = navY - 8;
 
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'left';
   ctx.fillStyle = UI_COLORS.gold;
-  ctx.fillText(content.title.toUpperCase(), px + pad, ly);
+  ctx.fillText(content.title.toUpperCase(), contentX, ly);
   ly += 14;
 
-  drawAdvisorPortrait(ctx, px + pad, ly, content.advisor);
+  const activeStep = getPrepObjectives(panelCtx).find(o => o.active && !o.done);
+  if (activeStep) {
+    ctx.font = '6.5px monospace';
+    ctx.fillStyle = activeStep.id === 'sound_horn'
+      ? 'rgba(232,208,96,0.8)'
+      : 'rgba(160,190,210,0.75)';
+    ctx.fillText(`Next: ${activeStep.label}`, contentX, ly);
+    ly += 12;
+  }
+
+  drawAdvisorPortrait(ctx, contentX, ly, content.advisor);
   ly += 48;
 
   ctx.font = '7.5px monospace';
   ctx.fillStyle = 'rgba(232,215,181,0.85)';
   for (const line of content.lines.slice(0, 2)) {
-    ctx.fillText(line, px + pad, ly);
+    ctx.fillText(line, contentX, ly);
     ly += 12;
   }
   ly += 8;
 
-  const btnW = pw - pad * 2;
   const btnH = 28;
   for (const act of actions) {
+    if (ly + btnH > maxActionBottom) break;
     ctx.fillStyle = 'rgba(20,32,48,0.95)';
     ctx.strokeStyle = 'rgba(120,160,200,0.5)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(px + pad, ly, btnW, btnH, 4);
+    ctx.roundRect(contentX, ly, btnW, btnH, 4);
     ctx.fill();
     ctx.stroke();
     ctx.font = 'bold 8px monospace';
     ctx.fillStyle = '#c8dce8';
-    ctx.fillText(act.label, px + pad + 8, ly + 18);
-    state.panelBtns.push({ ...act, x: px + pad, y: ly, w: btnW, h: btnH });
+    ctx.fillText(act.label, contentX + 8, ly + 18);
+    state.panelBtns.push({ ...act, x: contentX, y: ly, w: btnW, h: btnH });
     ly += btnH + 6;
   }
 
   const hornBlock = getHornBlockReason(panelCtx);
-  const hornY = py + ph - 52;
-  const hornW = pw - pad * 2;
-  const hornH = 40;
+  const hornW = btnW;
   const hornEnabled = !hornBlock && state.hornAnim <= 0;
   const hornPulse = hornEnabled ? 0.75 + Math.sin(performance.now() * 0.004) * 0.25 : 0.35;
 
-  state.hornHoverZone = { x: px + pad, y: hornY, w: hornW, h: hornH };
+  state.hornHoverZone = { x: contentX, y: hornY, w: hornW, h: hornH };
 
   ctx.fillStyle = hornEnabled
     ? `rgba(80,60,12,${0.85 + hornPulse * 0.1})`
@@ -848,39 +1016,45 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
   ctx.strokeStyle = hornEnabled ? UI_COLORS.gold : 'rgba(120,80,60,0.5)';
   ctx.lineWidth = hornEnabled ? 2 : 1;
   ctx.beginPath();
-  ctx.roundRect(px + pad, hornY, hornW, hornH, 6);
+  ctx.roundRect(contentX, hornY, hornW, hornH, 6);
   ctx.fill();
   ctx.stroke();
 
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = hornEnabled ? '#f0e060' : 'rgba(160,120,90,0.55)';
-  ctx.fillText(state.hornAnim > 0 ? '…' : '▶ SOUND HORN', px + pad + hornW / 2, hornY + 24);
-  if (drawFortressPrepSprite(ctx, 'horn', { x: px + pad + hornW - 44, y: hornY + 4, w: 36, h: 32 })) {
+  ctx.fillText(state.hornAnim > 0 ? '…' : '▶ SOUND HORN', contentX + hornW / 2, hornY + 23);
+  if (drawFortressPrepSprite(ctx, 'horn', { x: contentX + hornW - 40, y: hornY + 3, w: 34, h: 30 })) {
     // horn art on button
   }
 
   if (hornEnabled) {
-    state.hornBtn = { x: px + pad, y: hornY, w: hornW, h: hornH, action: 'horn' };
+    state.hornBtn = { x: contentX, y: hornY, w: hornW, h: hornH, action: 'horn' };
   } else if (state.hornHover && hornBlock) {
     ctx.font = '6px monospace';
     ctx.fillStyle = 'rgba(232,180,120,0.75)';
-    ctx.fillText(hornBlock, px + pad + hornW / 2, hornY - 4);
+    ctx.fillText(hornBlock, contentX + hornW / 2, hornY - 4);
   }
 
-  ly = py + ph - 96;
-  const navH = 22;
   const halfW = (btnW - 4) / 2;
   ctx.fillStyle = 'rgba(12,8,4,0.85)';
-  ctx.fillRect(px + pad, ly, halfW, navH);
-  ctx.fillRect(px + pad + halfW + 4, ly, halfW, navH);
+  ctx.strokeStyle = 'rgba(120,90,50,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(contentX, navY, halfW, navH, 3);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(contentX + halfW + 4, navY, halfW, navH, 3);
+  ctx.fill();
+  ctx.stroke();
   ctx.font = '6.5px monospace';
   ctx.fillStyle = '#a08050';
-  ctx.fillText('WAR CAMP', px + pad + halfW / 2, ly + 14);
-  ctx.fillText('MAP', px + pad + halfW + 4 + halfW / 2, ly + 14);
+  ctx.fillText('SETTLEMENT', contentX + halfW / 2, navY + 14);
+  ctx.fillText('MAP', contentX + halfW + 4 + halfW / 2, navY + 14);
   state.panelBtns.push(
-    { action: 'warCamp', x: px + pad, y: ly, w: halfW, h: navH },
-    { action: 'commandMap', x: px + pad + halfW + 4, y: ly, w: halfW, h: navH },
+    { action: 'settlementHub', x: contentX, y: navY, w: halfW, h: navH },
+    { action: 'commandMap', x: contentX + halfW + 4, y: navY, w: halfW, h: navH },
   );
 
   ctx.textAlign = 'left';

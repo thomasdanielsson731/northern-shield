@@ -53,6 +53,11 @@ describe('sessionSave', () => {
     expect(s.heroNamingCeremony.pending.nodeIndex).toBe(2);
   });
 
+  it('accepts settlementHub phase', () => {
+    const s = validateSessionState({ version: 1, gamePhase: 'settlementHub', campaignMapIndex: 0 });
+    expect(s?.gamePhase).toBe('settlementHub');
+  });
+
   it('accepts session without checksum', () => {
     const { ok, state } = verifySessionChecksum({ version: 1, gamePhase: 'nodeMap', campaignMapIndex: 0 });
     expect(ok).toBe(true);
