@@ -35,6 +35,31 @@ for (const [key, src] of Object.entries(HALL_ART)) {
   _images[key] = img;
 }
 
+let _dossierRevealAt = 0;
+let _lastDossierFocusId = null;
+
+function dossierRevealAlpha(focusId) {
+  if (!focusId) return 0;
+  if (focusId !== _lastDossierFocusId) {
+    _lastDossierFocusId = focusId;
+    _dossierRevealAt = performance.now();
+  }
+  return Math.min(1, (performance.now() - _dossierRevealAt) / 220);
+}
+
+export function getHallInstructionHint(state = {}) {
+  if (state.focusId) {
+    return { title: 'DOSSIER', line: 'Esc closes panel · click plinth again to dismiss' };
+  }
+  if (state.renameActive) {
+    return { title: 'NAMING', line: 'Type a name · Enter saves · Esc cancels' };
+  }
+  if ((state.defenderCount ?? 0) > 0) {
+    return { title: 'HALL OF HEROES', line: 'Select a hero on a plinth to open their dossier' };
+  }
+  return { title: 'HALL OF HEROES', line: 'Recruit defenders at the Barracks' };
+}
+
 function ready(key) {
   const img = _images[key];
   return Boolean(img?.complete && img.naturalWidth > 0);
@@ -165,6 +190,24 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
   drawInterior(ctx, hall);
 
   const plinthCount = Math.min(layout.maxPlinths, defenders.length);
+  const emptyPlinths = layout.maxPlinths - plinthCount;
+  if (emptyPlinths > 0 && plinthCount < layout.maxPlinths) {
+    const ghostSlots = computeHallPlinthSlots(layout.maxPlinths, hall);
+    for (let gi = plinthCount; gi < ghostSlots.length; gi++) {
+      const g = ghostSlots[gi];
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = 'rgba(140,120,80,0.35)';
+      ctx.lineWidth = 1;
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y + 4, 18 * g.scale, 6 * g.scale, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
   const plinthStart = Math.min(scrollOffset, Math.max(0, defenders.length - plinthCount));
   const plinthDefs = defenders.slice(plinthStart, plinthStart + plinthCount);
   const slots = computeHallPlinthSlots(plinthDefs.length, hall);
@@ -241,12 +284,28 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
   }
 
   if (focus && dossier) {
+    const dossierAlpha = dossierRevealAlpha(focus.defenderId);
+    ctx.save();
+    ctx.globalAlpha = dossierAlpha;
     drawDossierPanel(ctx, dossier, focus, {
       renameState,
       equipFlash,
       slotMetaBuilder,
       btnsOut,
     });
+    ctx.restore();
+    if (renameState?.defenderId === focus.defenderId) {
+      const pulse = 0.55 + Math.sin(performance.now() * 0.008) * 0.35;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,200,80,${0.35 + pulse * 0.4})`;
+      ctx.lineWidth = 1.6;
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.roundRect(dossier.x - 2, dossier.y - 2, dossier.w + 4, dossier.h + 4, 9);
+      ctx.stroke();
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+      ctx.restore();
+    }
   }
 
   drawRosterStrip(ctx, roster, defenders, focus?.defenderId, {
