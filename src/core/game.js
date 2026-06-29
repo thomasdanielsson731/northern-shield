@@ -46,6 +46,7 @@ import {
 import {
   drawHallOfHeroesView,
   isHallOfHeroesViewReady,
+  getHallInstructionHint,
 } from '../ui/hallOfHeroesView.js';
 import {
   drawSettlementHub,
@@ -85,6 +86,7 @@ import {
   SLOT_COUNT, loadSlotsMeta, migrateLegacyToSlots, loadSession, saveSession,
   slotHasSave, deleteSlot, createCampaignInSlot, touchSlotMeta,
 } from '../campaign/saveSlots.js';
+import { registerNsTestHooks } from '../testHooks.js';
 import { resolveSlotLandingPhase } from '../campaign/slotResume.js';
 import { getAvailableEvent } from '../campaign/events.js';
 import {
@@ -2603,6 +2605,10 @@ function handleHubBuildingAction(action) {
       _hubPulseBuilding = null;
       openProgressionBuilding({ tab: 'warband' });
       _showChronicle = true;
+      _chronicleUnread = false;
+      if (_campaignState) {
+        _campaignState.uiHints = { ..._campaignState.uiHints, chronicleUnread: false };
+      }
       break;
     }
     case 'openRuneSmith': {
@@ -5920,6 +5926,11 @@ window.addEventListener('keydown', e => {
     if (_showDefenderBio)    { _showDefenderBio    = null;  return; }
     if (_retirementCeremony) { _retirementCeremony = null;  return; }
     if (_showChronicle)      { _showChronicle = false; _chronicleDefFilter = null; _navActiveId = 'battle'; return; }
+    if (_hallFocusDefenderId && gamePhase === 'betweenBattles'
+        && _warCampTab === 'warband' && isHallOfHeroesViewReady()) {
+      _hallFocusDefenderId = null;
+      return;
+    }
     if (_renameState)        { _renameState  = null;  return; }
     if (_heroMoveMode)  { _heroMoveMode  = null;  return; }
     if (showRunePicker) { showRunePicker = false; runePickerTower = null; _itemRunePickMode = false; return; }
@@ -10170,6 +10181,7 @@ function drawCampaignMetaBar(center) {
     const hubHint = getHubInstructionHint({
       battlesCompleted,
       nextAssault: nextAssault ? { codename: nextAssault.codename } : null,
+      chronicleUnread: _chronicleUnread,
     });
     metaCenter = {
       line1: hubHint.title,
@@ -10177,7 +10189,15 @@ function drawCampaignMetaBar(center) {
       color: UI_COLORS.gold,
     };
   } else if (gamePhase === 'betweenBattles') {
-    if (_progressionBuilding) {
+    if (_progressionBuilding === 'warband' && isHallOfHeroesViewReady()) {
+      const hallHint = getHallInstructionHint({
+        focusId: _hallFocusDefenderId,
+        renameActive: Boolean(_renameState),
+        defenderCount: _roster?.defenders?.length ?? 0,
+      });
+      subtitle = hallHint.line;
+      metaCenter = { line1: hallHint.title, line2: hallHint.line, color: UI_COLORS.gold };
+    } else if (_progressionBuilding) {
       subtitle = getProgressionBuildingTitle(_progressionBuilding);
     } else if (_warCampWelcomeTimer > 0) {
       subtitle = WAR_CAMP_TAB_HINT_LINE;
@@ -10195,6 +10215,7 @@ function drawCampaignMetaBar(center) {
         nextAssault: _nai ? { codename: _nai.codename } : null,
         equipmentCount: _equipmentInventory.length,
         fortressUpgrade: _fu,
+        chronicleUnread: _chronicleUnread,
       });
       subtitle = _wcHint?.line
         ?? (_warCampTabPulse === 'recruit'
@@ -14130,6 +14151,7 @@ function drawSettlementHubScreen() {
     skirmishDiscovered: _hintSeen.skirmishDiscovery,
     nextAssault: nextAssault ? { codename: nextAssault.codename } : null,
     hubPulseBuilding: _hubPulseBuilding,
+    chronicleUnread: _chronicleUnread,
   }, _hubBtns);
 }
 
@@ -18078,4 +18100,23 @@ window.addEventListener('beforeunload', () => {
 });
 initTerrain();
 _slotsMeta = migrateLegacyToSlots();
+registerNsTestHooks({
+  getPhase: () => gamePhase,
+  getActiveSlot: () => _activeSlotIndex,
+  getBattlesCompleted: () => battlesCompleted,
+  getChronicleUnread: () => _chronicleUnread,
+  getHallFocusId: () => _hallFocusDefenderId,
+  getWarCampTab: () => _warCampTab,
+  getProgressionBuilding: () => _progressionBuilding,
+  getRosterCount: () => _roster?.defenders?.length ?? 0,
+  isHallViewReady: () => isHallOfHeroesViewReady(),
+  dispatchKey(key, opts = {}) {
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ...opts,
+    }));
+  },
+});
 gameLoop();
