@@ -19,14 +19,14 @@ export function getDebriefContinuePulse(nowMs = 0) {
 }
 
 export function getDebriefOutcomeColor(isVictory) {
-  return isVictory ? '#40e880' : '#e84040';
+  return isVictory ? '#8a9a58' : '#a93226';
 }
 
-/** Header fill + glow used on debrief panels. */
+/** Header fill — flat parchment ink, no glow. */
 export function getDebriefHeaderColors(isVictory) {
   return isVictory
-    ? { fill: '#f0c840', glow: 'rgba(240,180,20,0.6)', shadowBlur: 14 }
-    : { fill: '#e04040', glow: 'rgba(220,40,40,0.6)', shadowBlur: 10 };
+    ? { fill: '#c9a227', glow: 'transparent', shadowBlur: 0 }
+    : { fill: '#a93226', glow: 'transparent', shadowBlur: 0 };
 }
 
 /** Prose/stats fade in after panel lands. */
@@ -174,8 +174,6 @@ export function drawParchmentOutcomeBanner(ctx, text, x, y, isVictory) {
   ctx.strokeStyle = 'rgba(24,12,2,0.92)';
   ctx.strokeText(text, x, y);
   ctx.fillStyle = colors.fill;
-  ctx.shadowColor = isVictory ? 'rgba(200,140,0,0.45)' : 'rgba(180,30,30,0.35)';
-  ctx.shadowBlur = 6;
   ctx.fillText(text, x, y);
   ctx.restore();
 }

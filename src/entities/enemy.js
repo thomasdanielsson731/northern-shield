@@ -5,7 +5,7 @@ import {
   computeWalkBob,
   resolveFacingAngle,
   drawSpriteSheetFrame,
-  drawUnitFooting,
+  drawSpriteContourShadow,
 } from '../combat/spriteAnim.js';
 import { drawEnemyAttackVfx, drawEnemyWalkDust } from '../combat/characterAttackVfx.js';
 
@@ -312,27 +312,6 @@ export class Enemy {
       return;
     }
 
-    // Drop shadow — stronger ellipse grounds units against the dark terrain
-    ctx.save();
-    ctx.globalAlpha = this.isBoss ? 0.75 : 0.65;
-    ctx.fillStyle   = 'rgba(0,0,0,0.92)';
-    ctx.beginPath();
-    ctx.ellipse(this.x, this.y + this.radius * 0.85, this.radius * (this.isBoss ? 2.0 : 1.4), this.radius * (this.isBoss ? 0.65 : 0.48), 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Type identity ring — subtle colored outline helps distinguish enemy types at small sizes
-    if (!this.isBoss) {
-      ctx.save();
-      ctx.strokeStyle = this.highlightColor;
-      ctx.lineWidth   = 0.8;
-      ctx.globalAlpha = 0.28;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
     // Boss ground aura — pulsing crimson ring that scales with threat
     if (this.isBoss) {
       const bT     = performance.now() * 0.001;
@@ -393,6 +372,19 @@ export class Enemy {
     }
 
     if (!this._drawSprite(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = this.isBoss ? 0.75 : 0.65;
+      ctx.fillStyle = 'rgba(0,0,0,0.92)';
+      ctx.beginPath();
+      ctx.ellipse(
+        this.x, this.y + this.radius * 0.85,
+        this.radius * (this.isBoss ? 2.0 : 1.4),
+        this.radius * (this.isBoss ? 0.65 : 0.48),
+        0, 0, Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.restore();
+
       if (this.type === ENEMY_TYPES.MYLING) {
         this._drawWisp(ctx);
       } else if (this.type === ENEMY_TYPES.JOTUNN) {
@@ -488,8 +480,6 @@ export class Enemy {
           const sr = this.radius + 10;
           const sx = this.x + Math.cos(a) * sr;
           const sy = this.y + Math.sin(a) * sr;
-          ctx.shadowColor = '#ffdd00';
-          ctx.shadowBlur  = 6;
           ctx.fillStyle   = `rgba(255,220,30,${0.65 * alpha})`;
           ctx.beginPath();
           const or = 3, ir = 1.3, pts = 5;
@@ -504,15 +494,13 @@ export class Enemy {
           ctx.shadowBlur = 0;
         }
       } else {
-        // Slow: spec-compliant icy body overlay rgba(100,160,255,0.35) + border ring
-        ctx.fillStyle = `rgba(100,160,255,${Math.min(0.35, alpha * 0.35)})`;
+        // Slow: spec-compliant icy body overlay rgba(82,78,68,0.35) + border ring
+        ctx.fillStyle = `rgba(82,78,68,${Math.min(0.35, alpha * 0.35)})`;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(100,160,255,${Math.min(0.65, alpha * 0.65)})`;
+        ctx.strokeStyle = `rgba(82,78,68,${Math.min(0.65, alpha * 0.65)})`;
         ctx.lineWidth   = 1.5;
-        ctx.shadowColor = 'rgba(100,160,255,0.5)';
-        ctx.shadowBlur  = 5;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
         ctx.stroke();
@@ -527,8 +515,6 @@ export class Enemy {
       const ix = this.x, iy = this.y - this.radius - 9;
       const s  = 4;
       ctx.fillStyle   = 'rgba(255,200,60,0.85)';
-      ctx.shadowColor = '#ffcc00';
-      ctx.shadowBlur  = 5;
       ctx.beginPath();
       ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
       ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
@@ -542,8 +528,6 @@ export class Enemy {
       const ix = this.x + this.radius + 4, iy = this.y - this.radius - 6;
       const s  = 3;
       ctx.fillStyle   = 'rgba(230,150,30,0.80)';
-      ctx.shadowColor = '#e89020';
-      ctx.shadowBlur  = 4;
       ctx.beginPath();
       ctx.moveTo(ix, iy - s); ctx.lineTo(ix + s, iy);
       ctx.lineTo(ix, iy + s); ctx.lineTo(ix - s, iy);
@@ -606,11 +590,22 @@ export class Enemy {
       ]
       : [224, 192, 144];
 
-    if (!dying) {
-      drawUnitFooting(ctx, this.x, this.y + bob.yOff, dws * 0.38, rimRgb.join(','));
-    }
-
     const walkAltRow = (sp.rows >= 2 && col === 1 && Math.floor(localT * 4.6) % 2 === 1) ? 1 : 0;
+
+    if (!dying) {
+      drawSpriteContourShadow(ctx, sp, {
+        col,
+        x: this.x,
+        y: this.y + bob.yOff,
+        aimAngle,
+        dw: dws,
+        lean: bob.lean ?? 0,
+        walkAltRow,
+        offsetY: this.isBoss ? 7 : 5,
+        squashY: this.isBoss ? 0.30 : 0.34,
+        alpha: this.isBoss ? 0.62 : 0.50,
+      });
+    }
 
     ctx.save();
     ctx.translate(this.x, this.y + bob.yOff);
@@ -624,7 +619,7 @@ export class Enemy {
       lean: bob.lean ?? 0,
       rimRgb,
       brighten: 1.38,
-      outline: true,
+      outline: false,
       walkAltRow,
     });
     ctx.restore();
@@ -662,8 +657,6 @@ export class Enemy {
     ctx.fill();
 
     // Tattered robe
-    ctx.shadowColor = 'rgba(80,30,130,0.45)';
-    ctx.shadowBlur  = 10;
     ctx.fillStyle   = '#220e22';
     ctx.beginPath();
     ctx.moveTo(x - r * 0.9,  y + r * 0.75);
@@ -716,8 +709,6 @@ export class Enemy {
     ctx.restore();
 
     // Skull
-    ctx.shadowColor = 'rgba(80,30,140,0.65)';
-    ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#d0c8bc';
     ctx.beginPath();
     ctx.arc(x, y - r * 0.52 + bob * 0.28, r * 0.56, 0, Math.PI * 2);
@@ -749,8 +740,6 @@ export class Enemy {
     ctx.beginPath(); ctx.ellipse(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.18, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
     // Glowing pupils
-    ctx.shadowColor = this.highlightColor;
-    ctx.shadowBlur  = 8;
     ctx.fillStyle   = this.highlightColor;
     ctx.beginPath(); ctx.arc(x - r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + r * 0.24, y - r * 0.62 + bob * 0.28, r * 0.09, 0, Math.PI * 2); ctx.fill();
@@ -766,8 +755,6 @@ export class Enemy {
     const pulse = 0.65 + Math.sin(t * 3.5) * 0.35;
 
     // Outer glow haze — sickly pale green
-    ctx.shadowColor = `rgba(120,180,60,${0.30 * pulse})`;
-    ctx.shadowBlur  = 8;
     ctx.fillStyle   = `rgba(100,160,40,${0.18 * pulse})`;
     ctx.beginPath();
     ctx.arc(x, y, r * 2.8, 0, Math.PI * 2);
@@ -793,8 +780,6 @@ export class Enemy {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(80,180,50,0.90)';
-    ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = this.color;
     ctx.fillRect(-r * 0.82, -r * 0.82, r * 1.64, r * 1.64);
     ctx.shadowBlur  = 0;
@@ -814,8 +799,6 @@ export class Enemy {
       const sr = r * 1.45;
       const alpha = Math.max(0, 0.45 + Math.sin(rot * 4 + i * 1.3) * 0.35);
       ctx.fillStyle   = `rgba(100,220,80,${alpha})`;
-      ctx.shadowColor = '#50cc30';
-      ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr * 0.5, r * 0.14, 0, Math.PI * 2);
       ctx.fill();
@@ -825,8 +808,6 @@ export class Enemy {
     // Flying badge: small upward triangle above body
     ctx.save();
     ctx.fillStyle   = 'rgba(160,210,255,0.65)';
-    ctx.shadowColor = 'rgba(80,160,255,0.5)';
-    ctx.shadowBlur  = 5;
     const fty = y - r * 1.7;
     ctx.beginPath();
     ctx.moveTo(x,      fty - 3.5);
@@ -852,8 +833,6 @@ export class Enemy {
     ctx.fill();
 
     // Dark stone outer shell — cold slate shadow
-    ctx.shadowColor = 'rgba(20,40,70,0.4)';
-    ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#060810';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -913,8 +892,6 @@ export class Enemy {
     ctx.stroke();
 
     // Ice core — cold blue glow
-    ctx.shadowColor = 'rgba(60,140,220,0.95)';
-    ctx.shadowBlur  = 20 * pulse;
     ctx.fillStyle   = this.highlightColor;
     ctx.beginPath();
     ctx.arc(x, y, r * 0.38, 0, Math.PI * 2);
@@ -928,8 +905,6 @@ export class Enemy {
     // Eyes — ice blue
     const eyeY   = y - r * 0.3;
     const eyeOff = r * 0.32;
-    ctx.shadowColor = 'rgba(80,180,255,0.95)';
-    ctx.shadowBlur  = 12;
     ctx.fillStyle   = '#40b0ff';
     ctx.beginPath(); ctx.arc(x - eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(x + eyeOff, eyeY, 2.4, 0, Math.PI * 2); ctx.fill();
@@ -940,8 +915,6 @@ export class Enemy {
 
     // Amber rune crown — 3 horn/spike spires
     ctx.save();
-    ctx.shadowColor = 'rgba(80,180,255,0.90)';
-    ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = 'rgba(80,180,255,0.60)';
     ctx.strokeStyle = 'rgba(160,220,255,0.85)';
     ctx.lineWidth   = 1.1;
@@ -1002,8 +975,6 @@ export class Enemy {
     const bh = r * 0.88;      // half-height (oval)
 
     ctx.save();
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur  = 14 * pulse;
     // Path: upper arc + two bezier scallops for wispy tail
     ctx.beginPath();
     ctx.arc(x, hy, bw, Math.PI, 0);                                          // top dome
@@ -1067,8 +1038,6 @@ export class Enemy {
     // Dream-rune badge — top-right
     ctx.save();
     const bdx = x + bw * 0.80, bdy = y - r * 0.75, bs = 5.5;
-    ctx.shadowColor = '#a060e0';
-    ctx.shadowBlur  = 7;
     ctx.fillStyle   = '#a060e0';
     ctx.beginPath();
     ctx.moveTo(bdx + bs * 0.12,  bdy - bs * 0.52);
@@ -1098,8 +1067,6 @@ export class Enemy {
     ctx.fill();
 
     // Body — low horizontal oval
-    ctx.shadowColor = 'rgba(60,30,0,0.55)';
-    ctx.shadowBlur  = 7;
     ctx.fillStyle   = '#3a2c1c';
     ctx.beginPath();
     ctx.ellipse(x, y - bob * 0.4, r * 1.15, r * 0.72, 0, 0, Math.PI * 2);
@@ -1127,8 +1094,6 @@ export class Enemy {
 
     // Amber eyes — glowing pair
     const eyeFlicker = 0.72 + Math.sin(t * 3.4) * 0.18;
-    ctx.shadowColor = '#ffb020';
-    ctx.shadowBlur  = 3;
     ctx.fillStyle   = `rgba(230,110,20,${eyeFlicker})`;
     ctx.beginPath(); ctx.arc(hx - r * 0.12, hy - r * 0.12, r * 0.18, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(hx - r * 0.38, hy - r * 0.10, r * 0.18, 0, Math.PI * 2); ctx.fill();
@@ -1236,8 +1201,6 @@ export class Enemy {
 
     // Helmet — rounded iron cap with nasal guard
     const hY = y - r * 0.82 + march * 0.15;
-    ctx.shadowColor = 'rgba(40,40,60,0.6)';
-    ctx.shadowBlur  = 5;
     ctx.fillStyle   = '#585468';
     ctx.beginPath();
     ctx.ellipse(x + r * 0.05, hY, r * 0.52, r * 0.44, 0, Math.PI, Math.PI * 2);
@@ -1307,8 +1270,6 @@ export class Enemy {
       ctx.font      = 'bold 7px monospace';
       ctx.fillStyle = 'rgba(255,200,80,0.9)';
       ctx.textAlign = 'center';
-      ctx.shadowColor = 'rgba(220,100,20,0.9)';
-      ctx.shadowBlur  = 6;
       ctx.fillText(this.bossName ?? 'BOSS', this.x, barY - 3);
       ctx.shadowBlur = 0;
       ctx.restore();

@@ -6,7 +6,7 @@
 const PREP_ART = {
   watchTower: '/assets/fortress/fort_watch_tower@80x100.png',
   longhouse: '/assets/fortress/fort_longhouse@140x90.png',
-  treasury: '/assets/fortress/icon_meta_treasury@32.png',
+  treasury: '/assets/settlement/hub_building_treasury@80x72.png',
   westGateIntact: '/assets/fortress/fort_west_gate_intact@120x80.png',
   westGateCracked: '/assets/fortress/fort_west_gate_cracked@120x80.png',
   westGateBreached: '/assets/fortress/fort_west_gate_breached@120x80.png',
@@ -78,17 +78,5 @@ export function drawCampaignGateSprite(ctx, artKey, cx, cy, cellSize, time = 0) 
     h: cellSize * 2.15,
   };
   if (!drawFortressPrepSprite(ctx, key, box)) return false;
-
-  const pulse = 0.45 + Math.sin(time * 2.2) * 0.25;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const lg = ctx.createRadialGradient(cx, cy - cellSize * 0.35, 0, cx, cy - cellSize * 0.35, cellSize * 0.9);
-  lg.addColorStop(0, `rgba(255,190,80,${0.18 + pulse * 0.14})`);
-  lg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = lg;
-  ctx.beginPath();
-  ctx.arc(cx, cy - cellSize * 0.35, cellSize * 0.9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
   return true;
 }

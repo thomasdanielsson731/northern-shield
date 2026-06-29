@@ -1,6 +1,7 @@
 import { getMapDisplayName } from './campaignMaps.js';
 import { loadCampaign, saveCampaign, createNewCampaign } from './save.js';
 import { validateSessionState, verifySessionChecksum, simpleSessionChecksum } from './sessionSave.js';
+import { defaultSessionForOrphanCampaign } from './slotResume.js';
 
 export const SLOT_COUNT = 10;
 export const SLOTS_META_KEY = 'ns-slots-meta-v1';
@@ -137,7 +138,7 @@ export function createCampaignInSlot(slotIndex, storage = localStorage) {
   const campaign = createNewCampaign();
   campaign.createdAt = Date.now();
   saveCampaign(campaign, storage, slotIndex);
-  const session = { version: 1, gamePhase: 'campaignSelect', campaignMapPage: 0 };
+  const session = defaultSessionForOrphanCampaign();
   saveSession(session, slotIndex, storage);
   touchSlotMeta(slotIndex, campaign, session, storage);
   return { campaign, session };

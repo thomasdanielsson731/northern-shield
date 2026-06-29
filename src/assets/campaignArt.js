@@ -13,9 +13,23 @@ const PORTRAIT_BY_TYPE = {
 const ART = {
   warCampBgAge1: '/assets/ui/ui_war_camp_bg_age1@1024x512.png',
   commandMapRegion1: '/assets/ui/ui_command_map_region1@800x600.png',
+  commandMapRegion2: '/assets/ui/ui_command_map_region2@800x600.png',
+  commandMapRegion3: '/assets/ui/ui_command_map_region3@800x600.png',
+  commandMapRegion4: '/assets/ui/ui_command_map_region4@800x600.png',
+  commandMapRegion5: '/assets/ui/ui_command_map_region5@800x600.png',
+  commandMapRegion6: '/assets/ui/ui_command_map_region6@800x600.png',
+  commandMapRegion7: '/assets/ui/ui_command_map_region7@800x600.png',
+  commandMapRegion8: '/assets/ui/ui_command_map_region8@800x600.png',
+  commandMapRegion9: '/assets/ui/ui_command_map_region9@800x600.png',
+  commandMapRegion10: '/assets/ui/ui_command_map_region10@800x600.png',
   ceremonyNaming: '/assets/ui/ui_ceremony_naming@960x540.png',
   ceremonySettlement: '/assets/ui/ui_ceremony_settlement_oath@960x540.png',
   debriefPanel: '/assets/ui/ui_debrief_panel@640x480.png',
+  hallOfHeroesInterior: '/assets/ui/ui_hall_of_heroes_interior@1536x1024.png',
+  hallHeroPlinth: '/assets/ui/ui_hall_hero_plinth@96x72.png',
+  hallRosterSlot: '/assets/ui/ui_hall_roster_slot@56x56.png',
+  hallDossierPanel: '/assets/ui/ui_hall_dossier_panel@280x420.png',
+  hallOfHeroesBg: '/assets/ui/ui_hall_of_heroes_bg@1536x1024.png',
   heroCardFrame: '/assets/ui/ui_hero_card_frame@200x320.png',
   berserkMedallion: '/assets/ui/icon_hero_berserk_medallion@24.png',
   advisorPrep: '/assets/portraits/portrait_advisor_prep@96x112.png',
@@ -62,10 +76,8 @@ export function getPortraitArtKey(towerType) {
 }
 
 /** Draw image cover-fit in rect; returns false if not loaded. */
-export function drawCampaignArtCover(ctx, key, x, y, w, h, alpha = 1) {
-  const img = _images[key];
-  if (!isCampaignArtReady(key)) return false;
-  const srcAspect = img.naturalWidth / img.naturalHeight;
+export function computeCoverFitRect(srcW, srcH, x, y, w, h) {
+  const srcAspect = srcW / srcH;
   const dstAspect = w / h;
   let dw = w;
   let dh = h;
@@ -78,6 +90,13 @@ export function drawCampaignArtCover(ctx, key, x, y, w, h, alpha = 1) {
     dw = h * srcAspect;
     dx = x + (w - dw) / 2;
   }
+  return { dx, dy, dw, dh };
+}
+
+export function drawCampaignArtCover(ctx, key, x, y, w, h, alpha = 1) {
+  const img = _images[key];
+  if (!isCampaignArtReady(key)) return false;
+  const { dx, dy, dw, dh } = computeCoverFitRect(img.naturalWidth, img.naturalHeight, x, y, w, h);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.beginPath();

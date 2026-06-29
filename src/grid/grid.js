@@ -213,7 +213,7 @@ export class Grid {
     // ── Outer corruption aura ─────────────────────────────────────────────────
     {
       const auraGrad = ctx.createRadialGradient(cx, cy, cs * 0.5, cx, cy, cs * 5.5);
-      auraGrad.addColorStop(0,   `rgba(80,20,180,${0.32 + pulse * 0.18})`);
+      auraGrad.addColorStop(0,   `rgba(48,40,34,${0.32 + pulse * 0.18})`);
       auraGrad.addColorStop(0.45,`rgba(40,10,100,${0.14 + pulse * 0.08})`);
       auraGrad.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.fillStyle = auraGrad;
@@ -226,14 +226,12 @@ export class Grid {
       const dw = cs * (this.minimalGoalDecor ? 5.2 : 6.8) * scale;
       const dh = dw * (sp.frameH / sp.frameW);
       ctx.save();
-      ctx.shadowColor = `rgba(140,60,255,${0.70 + pulse * 0.30})`;
-      ctx.shadowBlur  = 30 * pulse;
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - dw / 2, cy - dh / 2, dw, dh);
       ctx.restore();
       // Pulsing purple void at center
       ctx.save();
       ctx.globalAlpha = 0.35 * pulse;
-      ctx.fillStyle   = '#a030ff';
+      ctx.fillStyle   = 'rgba(52,44,38,0.72)';
       ctx.beginPath();
       ctx.arc(cx, cy, cs * 1.1, 0, Math.PI * 2);
       ctx.fill();
@@ -242,9 +240,7 @@ export class Grid {
       // Procedural fallback
       const rot = time * 1.4;
       ctx.save();
-      ctx.shadowColor = 'rgba(140,60,255,0.9)';
-      ctx.shadowBlur  = 18 * pulse;
-      ctx.fillStyle   = `rgba(80,20,180,${0.28 + pulse * 0.22})`;
+      ctx.fillStyle   = `rgba(48,40,34,${0.28 + pulse * 0.22})`;
       ctx.beginPath();
       ctx.arc(cx, cy, cs / 2 - 0.5, 0, Math.PI * 2);
       ctx.fill();
@@ -254,7 +250,7 @@ export class Grid {
       ctx.translate(cx, cy);
       ctx.rotate(rot);
       const outerR = cs / 2 - 1.5;
-      ctx.strokeStyle = `rgba(190,110,255,${0.5 + pulse * 0.4})`;
+      ctx.strokeStyle = `rgba(105,92,78,${0.5 + pulse * 0.4})`;
       ctx.lineWidth   = 0.8;
       ctx.setLineDash([1.5, 2.5]);
       ctx.beginPath();
@@ -263,7 +259,7 @@ export class Grid {
       ctx.setLineDash([]);
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
-        ctx.strokeStyle = `rgba(230,160,255,${0.55 + pulse * 0.35})`;
+        ctx.strokeStyle = `rgba(125,110,92,${0.55 + pulse * 0.35})`;
         ctx.lineWidth   = 0.9;
         ctx.beginPath();
         ctx.moveTo(Math.cos(a) * (outerR - 1.8), Math.sin(a) * (outerR - 1.8));
@@ -274,7 +270,7 @@ export class Grid {
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(-rot * 1.9);
-      ctx.strokeStyle = `rgba(100,190,255,${0.38 + pulse * 0.32})`;
+      ctx.strokeStyle = `rgba(88,82,72,${0.38 + pulse * 0.32})`;
       ctx.lineWidth   = 0.7;
       ctx.setLineDash([1, 3]);
       ctx.beginPath();
@@ -283,18 +279,16 @@ export class Grid {
       ctx.setLineDash([]);
       ctx.restore();
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cs / 2 - 3);
-      grad.addColorStop(0,    `rgba(245,215,255,${0.85 + pulse * 0.15})`);
-      grad.addColorStop(0.35, `rgba(160,80,255,${0.5 * pulse})`);
-      grad.addColorStop(0.75, `rgba(70,25,150,${0.28 * pulse})`);
+      grad.addColorStop(0,    `rgba(155,140,118,${0.85 + pulse * 0.15})`);
+      grad.addColorStop(0.35, `rgba(92,78,68,${0.5 * pulse})`);
+      grad.addColorStop(0.75, `rgba(42,36,30,${0.28 * pulse})`);
       grad.addColorStop(1,    'rgba(15,5,40,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cx, cy, cs / 2 - 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.save();
-      ctx.shadowColor = 'rgba(210,170,255,0.95)';
-      ctx.shadowBlur  = 12 * pulse;
-      ctx.fillStyle   = `rgba(245,225,255,${0.75 + pulse * 0.25})`;
+      ctx.fillStyle   = `rgba(148,132,108,${0.75 + pulse * 0.25})`;
       ctx.beginPath();
       ctx.arc(cx, cy, 1.8 + pulse * 0.9, 0, Math.PI * 2);
       ctx.fill();
@@ -313,7 +307,7 @@ export class Grid {
 
       // Outermost ring — slow, spaced rune glyphs
       ctx.rotate(rot3);
-      ctx.strokeStyle = `rgba(120,50,200,${0.18 + pulse * 0.12})`;
+      ctx.strokeStyle = `rgba(78,68,58,${0.18 + pulse * 0.12})`;
       ctx.lineWidth   = 0.6;
       ctx.setLineDash([1.5, 7]);
       ctx.beginPath(); ctx.arc(0, 0, outerR, 0, Math.PI * 2); ctx.stroke();
@@ -321,14 +315,14 @@ export class Grid {
         const a = (i / 8) * Math.PI * 2;
         ctx.save();
         ctx.translate(Math.cos(a) * outerR, Math.sin(a) * outerR);
-        ctx.fillStyle = `rgba(180,100,255,${0.40 + pulse * 0.25})`;
+        ctx.fillStyle = `rgba(102,88,74,${0.40 + pulse * 0.25})`;
         ctx.beginPath(); ctx.arc(0, 0, 1.0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
       // Second ring — medium
       ctx.rotate(rot1 - rot3);
-      ctx.strokeStyle = `rgba(160,80,255,${0.30 + pulse * 0.22})`;
+      ctx.strokeStyle = `rgba(92,78,68,${0.30 + pulse * 0.22})`;
       ctx.lineWidth   = 0.85;
       ctx.setLineDash([2, 5]);
       ctx.beginPath(); ctx.arc(0, 0, outerR * 0.72, 0, Math.PI * 2); ctx.stroke();
@@ -336,21 +330,21 @@ export class Grid {
         const a = (i / 6) * Math.PI * 2;
         ctx.save();
         ctx.translate(Math.cos(a) * outerR * 0.72, Math.sin(a) * outerR * 0.72);
-        ctx.fillStyle = `rgba(210,150,255,${0.62 + pulse * 0.32})`;
+        ctx.fillStyle = `rgba(118,102,86,${0.62 + pulse * 0.32})`;
         ctx.beginPath(); ctx.arc(0, 0, 1.4, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
       // Third ring — inner
       ctx.rotate(rot2 - rot1);
-      ctx.strokeStyle = `rgba(100,160,255,${0.22 + pulse * 0.16})`;
+      ctx.strokeStyle = `rgba(82,78,68,${0.22 + pulse * 0.16})`;
       ctx.lineWidth   = 0.65;
       ctx.setLineDash([1.5, 4]);
       ctx.beginPath(); ctx.arc(0, 0, outerR * 0.46, 0, Math.PI * 2); ctx.stroke();
 
       // Innermost ring — tight, bright
       ctx.rotate(rot4 - rot2);
-      ctx.strokeStyle = `rgba(200,140,255,${0.35 + pulse * 0.28})`;
+      ctx.strokeStyle = `rgba(108,96,82,${0.35 + pulse * 0.28})`;
       ctx.lineWidth   = 0.7;
       ctx.setLineDash([1, 3]);
       ctx.beginPath(); ctx.arc(0, 0, outerR * 0.26, 0, Math.PI * 2); ctx.stroke();
@@ -366,7 +360,7 @@ export class Grid {
         const ta    = (t / 5) * Math.PI * 2 + time * 0.8;
         const tLen  = cs * (2.0 + Math.sin(time * 3.2 + t * 1.4) * 0.8);
         const tAlpha = (pulse - 0.55) * 0.45;
-        ctx.strokeStyle = `rgba(200,120,255,${tAlpha})`;
+        ctx.strokeStyle = `rgba(98,86,72,${tAlpha})`;
         ctx.lineWidth = 0.65;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
@@ -389,7 +383,7 @@ export class Grid {
       const sr    = 2.5 + si * 2.8 + Math.sin(time * 1.4 + i) * 0.9;
       const baseA = 0.12 + Math.sin(time * 1.6 + i * 0.9) * 0.04;
       const sa    = baseA * (1 - si * 0.55) * (i < 5 ? 1 : 0.7);
-      const col   = i % 3 === 0 ? '#d090ff' : i % 3 === 1 ? '#8860cc' : '#b0a0e8';
+      const col   = i % 3 === 0 ? '#6a5a48' : i % 3 === 1 ? '#4a4038' : '#5a5048';
       ctx.save();
       ctx.globalAlpha = sa;
       ctx.fillStyle   = col;
@@ -455,8 +449,6 @@ export class Grid {
           const winX = bx + cs * 0.3 + wi * (winW + cs * 0.5);
           if (winX + winW < bx + bw - cs * 0.2) {
             ctx.fillRect(winX, winY, winW, winH);
-            ctx.shadowColor = 'rgba(255,160,40,0.55)';
-            ctx.shadowBlur  = 3 * winFlicker;
             ctx.fillRect(winX, winY, winW, winH);
             ctx.shadowBlur  = 0;
           }
@@ -524,7 +516,6 @@ export class Grid {
         const winFlicker2 = 0.50 + Math.sin(time * 5.5 + tx * 0.05) * 0.25;
         ctx.fillStyle = `rgba(255,160,40,${winFlicker2 * 0.62})`;
         ctx.fillRect(tx - 1, ty - th * 0.55, 2, cs * 0.28);
-        ctx.shadowColor = 'rgba(255,140,30,0.55)'; ctx.shadowBlur = 4 * winFlicker2;
         ctx.fillRect(tx - 1, ty - th * 0.55, 2, cs * 0.28);
         ctx.shadowBlur = 0;
       };
@@ -583,8 +574,6 @@ export class Grid {
         const bfFlicker = 0.6 + Math.sin(time * 9.2) * 0.3;
         ctx.fillStyle = `rgba(255,120,20,${bfFlicker * 0.7})`;
         ctx.beginPath(); ctx.arc(cx - cs * 3.8, cy - cs * 1.0 - wt1H - cs * 0.3, cs * 0.45, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowColor = '#ff7010'; ctx.shadowBlur = 6 * bfFlicker;
-        ctx.fill(); ctx.shadowBlur = 0;
       }
 
       // Second watchtower — taller with watchtower upgrade
@@ -622,8 +611,6 @@ export class Grid {
       ctx.save();
       if (hr < 0.66) {
         const dmgAlpha = (1 - hr) * 0.65 * pulse;
-        ctx.shadowColor = `rgba(255,70,0,${dmgAlpha})`;
-        ctx.shadowBlur  = 16 * pulse;
       }
       ctx.drawImage(sp.img, 0, 0, sp.frameW, sp.frameH, cx - dw / 2, cy - dh * 0.6, dw, dh);
       ctx.restore();
@@ -650,8 +637,6 @@ export class Grid {
       const gateAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
       ctx.save();
       const dmgGlow = hr < 0.66 ? (1 - hr) * 0.7 * pulse : 0;
-      ctx.shadowColor = dmgGlow > 0 ? `rgba(255,70,0,${dmgGlow})` : 'rgba(180,130,50,0.25)';
-      ctx.shadowBlur  = dmgGlow > 0 ? 14 * pulse : 5;
       ctx.strokeStyle = `rgb(${wr},${wg},${wb})`;
       ctx.lineWidth   = 9;
       ctx.lineCap     = 'butt';
@@ -670,8 +655,6 @@ export class Grid {
       }
       ctx.strokeStyle = `rgba(${wr},${wg},${wb},0.65)`;
       ctx.lineWidth   = 4.5;
-      ctx.shadowColor = dmgGlow > 0 ? `rgba(255,70,0,${dmgGlow * 0.8})` : 'rgba(0,0,0,0)';
-      ctx.shadowBlur  = dmgGlow > 0 ? 9 * pulse : 0;
       ctx.beginPath();
       ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
       ctx.stroke();
@@ -869,8 +852,6 @@ export class Grid {
 
     ctx.save();
     if (coinTotal > 0) {
-      ctx.shadowColor = 'rgba(255,210,30,0.9)';
-      ctx.shadowBlur  = 6 + gPulse * 4 + hPulseF * 12;
       for (let i = 0; i < coinTotal; i++) {
         const angle = i * 2.399963;  // golden angle spread
         const dist  = Math.sqrt(i / coinTotal) * cs * (1.6 + hPulseF * 0.4);
@@ -893,8 +874,6 @@ export class Grid {
       if (g >= 1000) {
         const vaultAlpha = g >= 5000 ? 0.55 : 0.32 + (g - 1000) / 16000;
         const vaultR = cs * 2.0 + hPulseF * cs * 0.5;
-        ctx.shadowColor = `rgba(255,200,40,${vaultAlpha})`;
-        ctx.shadowBlur  = 12 + gPulse * 8;
         ctx.strokeStyle = `rgba(255,200,40,${vaultAlpha * 0.70})`;
         ctx.lineWidth   = 1.2;
         ctx.setLineDash([3, 5]);
@@ -904,7 +883,7 @@ export class Grid {
         ctx.setLineDash([]);
         ctx.shadowBlur = 0;
         // Scattered gems inside the vault ring
-        const gemColors = ['#60d8f8', '#f06080', '#80f040', '#f0c040'];
+        const gemColors = ['#8a7a58', '#9a6048', '#6a7848', '#f0c040'];
         const gemCount  = g >= 5000 ? 8 : 4;
         for (let gi = 0; gi < gemCount; gi++) {
           const ga  = time * 0.6 + gi * (Math.PI * 2 / gemCount);
@@ -913,8 +892,6 @@ export class Grid {
           const gpy = pileBaseY + Math.sin(ga) * gr * 0.42;
           const gAlpha = 0.45 + Math.sin(time * 4.5 + gi * 1.8) * 0.30;
           ctx.globalAlpha = gAlpha;
-          ctx.shadowColor = gemColors[gi % gemColors.length];
-          ctx.shadowBlur  = 6 + gPulse * 4;
           ctx.fillStyle   = gemColors[gi % gemColors.length];
           ctx.beginPath();
           ctx.arc(gpx, gpy, 2.2, 0, Math.PI * 2);
@@ -935,10 +912,8 @@ export class Grid {
           const spyD = pileBaseY - cs * 0.8 + Math.sin(time * 3.1 + si) * cs * 0.3;
           ctx.save();
           ctx.globalAlpha = sAlpha;
-          ctx.shadowColor = '#ffffa0';
-          ctx.shadowBlur  = 8 * crownPulse;
           // 4-pointed star sparkle
-          ctx.fillStyle = '#fff8c0';
+          ctx.fillStyle = '#c9b070';
           ctx.beginPath();
           for (let p = 0; p < 8; p++) {
             const pa = (p / 8) * Math.PI * 2 - Math.PI / 2;
@@ -967,13 +942,11 @@ export class Grid {
     const runeX = cx - Math.round(cs * 1.1);
     const runeY = cy - Math.round(cs * 0.6);
     ctx.save();
-    ctx.shadowColor = `rgba(120,170,255,${0.65 + runePulse * 0.35})`;
-    ctx.shadowBlur  = 5 + runePulse * 9;
     ctx.fillStyle   = '#3a4455';
     ctx.fillRect(runeX - 3, runeY - 5, 6, 11);
     ctx.fillStyle   = '#505870';
     ctx.fillRect(runeX - 3, runeY - 5, 6, 2);
-    ctx.strokeStyle = `rgba(100,165,255,${0.65 + runePulse * 0.35})`;
+    ctx.strokeStyle = `rgba(120,110,95,${0.65 + runePulse * 0.35})`;
     ctx.lineWidth   = 0.9;
     ctx.beginPath();
     ctx.moveTo(runeX, runeY - 3); ctx.lineTo(runeX, runeY + 3);
@@ -989,8 +962,6 @@ export class Grid {
     const chW    = 14, chH = 9;
     const chGlow = g >= 1000 ? 8 + gPulse * 5 : g >= 500 ? 5 + gPulse * 3 : 3 + gPulse * 2;
     ctx.save();
-    ctx.shadowColor = g >= 500 ? `rgba(255,200,40,${0.55 + gPulse * 0.25})` : 'rgba(200,140,30,0.50)';
-    ctx.shadowBlur  = chGlow;
     // Chest drop shadow (dark outline makes chest pop against gold coins)
     ctx.fillStyle = 'rgba(0,0,0,0.60)';
     ctx.fillRect(chX - chW / 2 + 1, chY - chH / 2 + 2, chW, chH);
@@ -1020,8 +991,6 @@ export class Grid {
       const spA = Math.max(0, 0.25 + Math.sin(time * 6 + i * 1.6) * 0.22);
       ctx.save();
       ctx.globalAlpha = spA;
-      ctx.shadowColor = '#ffd030';
-      ctx.shadowBlur  = 5;
       ctx.fillStyle   = '#ffe050';
       ctx.beginPath();
       ctx.arc(spx, spy, 0.9, 0, Math.PI * 2);
@@ -1047,8 +1016,6 @@ export class Grid {
         ctx.fillStyle = '#8a5820';
         ctx.fillRect(tx - 2.5, ty - 3, 5, 5);
         // Flame glow
-        ctx.shadowColor = `rgba(255,150,40,${flicker * 0.75})`;
-        ctx.shadowBlur  = 8 * flicker;
         // Flame body
         const fGrad = ctx.createRadialGradient(tx, ty - 2, 0, tx, ty - 2, 5);
         fGrad.addColorStop(0,   `rgba(255,240,150,${flicker * 0.95})`);
@@ -1147,8 +1114,6 @@ export class Grid {
     const tx = cx + ((col % 3) - 1) * cs * 0.22;
     const ty = y + cs * 0.2;
     ctx.save();
-    ctx.shadowColor = `rgba(255,140,30,${flicker * 0.65})`;
-    ctx.shadowBlur = 6 * flicker;
     ctx.fillStyle = `rgba(255,170,60,${flicker * 0.85})`;
     ctx.beginPath();
     ctx.ellipse(tx, ty, 1.8 * flicker, 2.8 * flicker, 0, 0, Math.PI * 2);
@@ -1161,8 +1126,13 @@ export class Grid {
     const col = Math.floor(x / cs);
     const row = Math.floor(y / cs);
     const N = (adj & 1) !== 0;
+    const wallKey = `${col}_${row}`;
+    const wEntry = this.wallData?.[wallKey];
+    const hpFrac = wEntry?.maxHp ? (wEntry.hp ?? wEntry.maxHp) / wEntry.maxHp : 1;
+    const isCorner = [3, 6, 9, 12].includes(adj);
+    const variant = hpFrac < 0.45 ? 'damaged' : isCorner ? 'corner' : 'segment';
 
-    if (drawPalisadeTile(ctx, x, y, cs)) {
+    if (drawPalisadeTile(ctx, x, y, cs, variant)) {
       if (!N && adj !== 0) {
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
         ctx.fillRect(x, y, cs, cs * 0.14);
@@ -1339,8 +1309,6 @@ export class Grid {
         ctx.fillStyle = '#7a4a18';
         ctx.fillRect(tx - 2, ty - 3, 4, 4);
         // Flame glow
-        ctx.shadowColor = `rgba(255,140,30,${flicker * 0.70})`;
-        ctx.shadowBlur  = 7 * flicker;
         const fGrad = ctx.createRadialGradient(tx, ty - 2, 0, tx, ty - 2, 4.5 * flicker);
         fGrad.addColorStop(0,   `rgba(255,248,180,${flicker * 0.98})`);
         fGrad.addColorStop(0.4, `rgba(255,130,20,${flicker * 0.72})`);

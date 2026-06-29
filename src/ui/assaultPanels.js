@@ -20,8 +20,6 @@ export function drawPanelHpBar(ctx, x, y, w, h, frac, accent) {
   grad.addColorStop(1, `rgba(${Math.min(255, r + 40)},${Math.min(255, g + 30)},${b},0.95)`);
   ctx.fillStyle = grad;
   if (f > 0.92) {
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 3;
   }
   ctx.beginPath();
   ctx.roundRect(x, y, Math.max(h, w * f), h, h / 2);

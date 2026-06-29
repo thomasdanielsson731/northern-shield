@@ -6,11 +6,14 @@ const VALID_PHASES = new Set([
 /** Sanitize persisted navigation / resume state for a save slot. */
 export function validateSessionState(raw) {
   if (!raw || raw.version !== 1) return null;
-  if (!VALID_PHASES.has(raw.gamePhase)) return null;
+
+  let gamePhase = raw.gamePhase;
+  if (gamePhase === 'warCamp') gamePhase = 'settlementHub';
+  if (!VALID_PHASES.has(gamePhase)) return null;
 
   const s = {
     version: 1,
-    gamePhase: raw.gamePhase,
+    gamePhase,
     campaignMapIndex: clampInt(raw.campaignMapIndex, 0, 99),
     campaignNodeIndex: clampInt(raw.campaignNodeIndex, 0, 29),
     campaignRegionActive: !!raw.campaignRegionActive,

@@ -155,8 +155,6 @@ export class Bullet {
     const tipY  = this.y + Math.sin(angle) * tipLen;
 
     // Shaft
-    ctx.shadowColor = 'rgba(140,180,255,0.7)';
-    ctx.shadowBlur  = 8;
     ctx.strokeStyle = '#7a8ec0';
     ctx.lineWidth   = 2.2;
     ctx.lineCap     = 'round';
@@ -175,8 +173,6 @@ export class Bullet {
 
     // Blade tip
     ctx.fillStyle   = '#ddeeff';
-    ctx.shadowColor = 'rgba(200,220,255,0.9)';
-    ctx.shadowBlur  = 12;
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);
     ctx.lineTo(this.x + Math.cos(perpA) * 2.8, this.y + Math.sin(perpA) * 2.8);
@@ -238,8 +234,6 @@ export class Bullet {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(spin);
-    ctx.shadowColor = 'rgba(180,120,40,0.8)';
-    ctx.shadowBlur  = 10;
     ctx.fillStyle   = '#7a6048';
     ctx.beginPath();
     const sides = 7;
@@ -280,8 +274,6 @@ export class Bullet {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius * 2.6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowColor = '#ff6620';
-    ctx.shadowBlur  = 14;
     ctx.fillStyle   = '#ffcc44';
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -316,8 +308,6 @@ export class Bullet {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(spin);
-    ctx.shadowColor = '#ffdd00';
-    ctx.shadowBlur  = 14;
     ctx.fillStyle   = '#ffe840';
     const outerR = this.radius * 1.3, innerR = this.radius * 0.55;
     ctx.beginPath();
@@ -386,8 +376,6 @@ export class Bullet {
     ctx.fill();
 
     // Metal arrowhead
-    ctx.shadowColor = 'rgba(200,185,150,0.7)';
-    ctx.shadowBlur  = 5;
     ctx.fillStyle   = '#c8c0a8';
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);

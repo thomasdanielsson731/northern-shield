@@ -69,8 +69,6 @@ export function drawWarRoomBarBg(ctx, x, y, w, h, opacity = 1) {
   ctx.save();
   ctx.strokeStyle = UI_COLORS.gold;
   ctx.lineWidth = 1.6;
-  ctx.shadowColor = 'rgba(212,175,55,0.55)';
-  ctx.shadowBlur = 4;
   const corners = [
     [[x, y + cl], [x, y], [x + cl, y]],
     [[x + w, y + cl], [x + w, y], [x + w - cl, y]],

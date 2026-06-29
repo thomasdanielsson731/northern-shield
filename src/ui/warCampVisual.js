@@ -7,7 +7,7 @@ import { UI_COLORS, META_TOP_BAR_COMPACT_H } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 import { getWarCampWelcomeAlpha, WAR_CAMP_TAB_HINT_LINE } from './warCampJuice.js';
-import { drawHeroCardFrame } from '../assets/campaignArt.js';
+import { computeCoverFitRect, drawHeroCardFrame } from '../assets/campaignArt.js';
 
 export const WAR_CAMP_HEADER_H = 0;
 export const WAR_CAMP_CYCLE_H = 40;
@@ -27,7 +27,7 @@ export const WAR_CAMP_THEME = {
   title: '#f2ece0',
   gold: '#c9a227',
   subtitle: 'rgba(185,165,135,0.78)',
-  xpBar: '#3a8fd8',
+  xpBar: '#8a7340',
   xpTrack: 'rgba(30,40,55,0.85)',
 };
 
@@ -43,6 +43,54 @@ const _warCampArt = new Image();
 _warCampArt.src = '/assets/ui/ui_war_camp_bg_age1@1024x512.png';
 const _warCampArtLegacy = new Image();
 _warCampArtLegacy.src = '/assets/ui/war_camp_bg.png';
+
+/** Hall interior crop — heroes + banners, no baked bottom nav / right dossier. */
+const HALL_BG_CROP = { sx: 0.02, sy: 0.10, sw: 0.68, sh: 0.58 };
+const _hallOfHeroesBg = new Image();
+_hallOfHeroesBg.src = '/assets/ui/ui_hall_of_heroes_bg@1536x1024.png';
+
+export function isHallOfHeroesBackdropReady() {
+  return Boolean(_hallOfHeroesBg.complete && _hallOfHeroesBg.naturalWidth > 0);
+}
+
+/** Longhouse interior plate for warband tab — mutes floor emblem, adds vignette. */
+export function drawHallOfHeroesBackdrop(ctx, x, y, w, h) {
+  if (!isHallOfHeroesBackdropReady()) return false;
+  const iw = _hallOfHeroesBg.naturalWidth;
+  const ih = _hallOfHeroesBg.naturalHeight;
+  const c = HALL_BG_CROP;
+  const sx = c.sx * iw;
+  const sy = c.sy * ih;
+  const sw = c.sw * iw;
+  const sh = c.sh * ih;
+  const fit = computeCoverFitRect(sw, sh, x, y, w, h);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 8);
+  ctx.clip();
+  ctx.globalAlpha = 0.94;
+  ctx.drawImage(_hallOfHeroesBg, sx, sy, sw, sh, fit.dx, fit.dy, fit.dw, fit.dh);
+
+  const floorX = x + w * 0.40;
+  const floorY = y + h * 0.70;
+  const floorG = ctx.createRadialGradient(floorX, floorY, 0, floorX, floorY, w * 0.30);
+  floorG.addColorStop(0, 'rgba(10,8,6,0.78)');
+  floorG.addColorStop(0.5, 'rgba(8,6,5,0.38)');
+  floorG.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = floorG;
+  ctx.fillRect(x, y, w, h);
+
+  const vig = ctx.createLinearGradient(x, y, x, y + h);
+  vig.addColorStop(0, 'rgba(6,5,8,0.42)');
+  vig.addColorStop(0.3, 'rgba(0,0,0,0)');
+  vig.addColorStop(0.82, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(4,3,6,0.58)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+  return true;
+}
 
 function _activeWarCampArt() {
   if (_warCampArt.complete && _warCampArt.naturalWidth > 0) return _warCampArt;
@@ -129,8 +177,6 @@ export function drawWarCampHeader(ctx, x, y, w) {
   ctx.textAlign = 'left';
   ctx.font = 'bold 16px monospace';
   ctx.fillStyle = WAR_CAMP_THEME.title;
-  ctx.shadowColor = 'rgba(200,170,80,0.35)';
-  ctx.shadowBlur = 6;
   ctx.fillText('WARCAMP', x + 4, y + 18);
   ctx.shadowBlur = 0;
   ctx.font = '8px monospace';
@@ -407,9 +453,12 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
     drawPortrait = null,
     slotMeta = null,
     btnsOut = null,
+    mutedPortrait = false,
   } = opts;
 
-  const glow = TOWER_DEFS?.[def.type]?.glowRgb ?? '180,150,80';
+  const glow = mutedPortrait
+    ? '130,110,75'
+    : (TOWER_DEFS?.[def.type]?.glowRgb ?? '180,150,80');
   const fill = bond ? 'rgba(32,24,14,0.96)' : 'rgba(12,10,16,0.96)';
   if (!drawHeroCardFrame(ctx, x, y, w, h, 0.92)) {
     drawWarCampPanel(ctx, x, y, w, h, {
@@ -426,7 +475,7 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
   }
 
   // Class tint strip at top (mockup card rim)
-  ctx.fillStyle = `rgba(${glow},0.22)`;
+  ctx.fillStyle = `rgba(${glow},${mutedPortrait ? 0.16 : 0.22})`;
   ctx.fillRect(x + 1, y + 1, w - 2, 3);
 
   const pad = 4;
@@ -441,7 +490,7 @@ export function drawWarCampPortraitCard(ctx, x, y, w, h, def, opts = {}) {
   const pr = Math.min(pw, portraitH) * 0.42;
 
   ctx.fillStyle = 'rgba(4,2,8,0.95)';
-  ctx.strokeStyle = `rgba(${glow},0.35)`;
+  ctx.strokeStyle = `rgba(${glow},${mutedPortrait ? 0.28 : 0.35})`;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.roundRect(px, py, pw, portraitH, 3);
@@ -606,7 +655,6 @@ export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canB
       ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 5); ctx.fill(); ctx.stroke();
       ctx.textAlign = 'center';
       ctx.font = 'bold 7px monospace'; ctx.fillStyle = 'rgba(130,240,90,0.95)';
-      ctx.shadowColor = 'rgba(60,220,50,0.3)'; ctx.shadowBlur = 4;
       ctx.fillText('UPGRADE', btnX + btnW / 2, btnY + 12);
       ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#f0e060';
       ctx.fillText(costLabel, btnX + btnW / 2, btnY + 24);
@@ -629,7 +677,6 @@ export function drawWarCampFortressRow(ctx, x, y, w, def, lvl, maxed, cost, canB
     // MAX badge
     ctx.textAlign = 'right';
     ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#e8c840';
-    ctx.shadowColor = 'rgba(200,150,0,0.3)'; ctx.shadowBlur = 4;
     ctx.fillText('✦ MAX', x + w - 6, y + 19);
     ctx.shadowBlur = 0;
     ctx.font = '6px monospace'; ctx.fillStyle = 'rgba(175,145,65,0.55)';

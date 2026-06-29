@@ -23,6 +23,7 @@ import {
 } from '../ui/settlementJuice.js';
 import { drawCampaignArtCover, drawAssaultNodeIcon } from '../assets/campaignArt.js';
 import { drawFortressPrepSprite } from '../preparation/fortressPrepArt.js';
+import { getCommandMapArtKey, resolveCommandMapNodePositions } from './commandMapLayout.js';
 
 function drawPanel(ctx, x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) {
   ctx.fillStyle = fillStyle;
@@ -42,7 +43,9 @@ export function drawFirstSagaCommandMap(ctx, {
   settlementDone = false,
 }) {
   const cx = mapX + mapW / 2;
-  drawCampaignArtCover(ctx, 'commandMapRegion1', mapX, mapY, mapW, mapH, 0.55);
+  const artKey = getCommandMapArtKey(mapIndex) ?? 'commandMapRegion1';
+  const hasArt = drawCampaignArtCover(ctx, artKey, mapX, mapY, mapW, mapH, 0.72);
+  const layoutPts = resolveCommandMapNodePositions(mapIndex, mapX, mapY, mapW, mapH);
 
   ctx.font = 'bold 10px monospace';
   ctx.fillStyle = 'rgba(160,140,90,0.65)';
@@ -60,7 +63,7 @@ export function drawFirstSagaCommandMap(ctx, {
     const pulse = 0.55 + Math.sin(performance.now() * 0.005) * 0.25;
     ctx.font = '7px monospace';
     ctx.fillStyle = `rgba(240,200,100,${pulse})`;
-    ctx.fillText(`NEXT → ${nextAssault.codename.toUpperCase()} · tap glowing node`, cx, mapY + 36);
+    ctx.fillText(`NEXT → ${nextAssault.codename.toUpperCase()} · tap highlighted node`, cx, mapY + 36);
   }
 
   const roadY = mapY + mapH * 0.55;
@@ -68,12 +71,24 @@ export function drawFirstSagaCommandMap(ctx, {
   const roadX1 = mapX + mapW - 36;
   const step = (roadX1 - roadX0) / (FIRST_SAGA_DISPLAY_NODE_COUNT - 1);
 
-  ctx.strokeStyle = 'rgba(80,100,60,0.35)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(roadX0, roadY);
-  ctx.lineTo(roadX1, roadY);
-  ctx.stroke();
+  if (!layoutPts) {
+    ctx.strokeStyle = 'rgba(80,100,60,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(roadX0, roadY);
+    ctx.lineTo(roadX1, roadY);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = 'rgba(80,100,60,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < layoutPts.length; i++) {
+      const p = layoutPts[i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
 
   const settlementReady = isFirstSagaSettlementReady(progress, mapIndex);
 
@@ -84,7 +99,10 @@ export function drawFirstSagaCommandMap(ctx, {
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-    const nx = roadX0 + i * step;
+    const pt = layoutPts?.[i];
+    const nx = pt?.x ?? (roadX0 + i * step);
+    const ny = pt?.y ?? roadY;
+    const nodeR = pt?.r ? Math.max(11, Math.min(18, pt.r * 0.85)) : (node.kind === 'settlement' ? 16 : 13);
     const cleared = node.kind === 'assault'
       ? run.nodesCleared.includes(node.nodeIndex)
       : settlementDone;
@@ -99,21 +117,22 @@ export function drawFirstSagaCommandMap(ctx, {
       );
     const isSettlementNext = node.kind === 'settlement' && settlementReady && !settlementDone;
 
-    const r = node.kind === 'settlement' ? 16 : 13;
+    const r = nodeR;
     ctx.beginPath();
-    ctx.arc(nx, roadY, r, 0, Math.PI * 2);
+    ctx.arc(nx, ny, r, 0, Math.PI * 2);
+    const artFill = hasArt ? 0.62 : 1;
     if (cleared) {
-      ctx.fillStyle = 'rgba(40,80,40,0.9)';
+      ctx.fillStyle = `rgba(40,80,40,${0.9 * artFill})`;
       ctx.strokeStyle = 'rgba(100,200,100,0.7)';
     } else if (isNext || isSettlementNext) {
       const pulse = 0.5 + Math.sin(performance.now() * 0.006) * 0.3;
-      ctx.fillStyle = `rgba(80,60,20,${0.85 + pulse * 0.1})`;
-      ctx.strokeStyle = `rgba(240,200,80,${0.6 + pulse * 0.4})`;
+      ctx.fillStyle = `rgba(80,60,20,${(0.85 + pulse * 0.1) * artFill})`;
+      ctx.strokeStyle = `rgba(200,170,100,${0.45 + pulse * 0.25})`;
     } else if (unlocked) {
-      ctx.fillStyle = 'rgba(30,28,18,0.92)';
+      ctx.fillStyle = `rgba(30,28,18,${0.92 * artFill})`;
       ctx.strokeStyle = 'rgba(180,150,90,0.5)';
     } else {
-      ctx.fillStyle = 'rgba(18,16,12,0.85)';
+      ctx.fillStyle = `rgba(18,16,12,${0.85 * artFill})`;
       ctx.strokeStyle = 'rgba(60,50,35,0.35)';
     }
     ctx.fill();
@@ -124,17 +143,17 @@ export function drawFirstSagaCommandMap(ctx, {
     ctx.textAlign = 'center';
     ctx.fillStyle = cleared ? '#90e080' : (isNext || isSettlementNext) ? '#f0d060' : '#807060';
     const label = node.kind === 'settlement' ? 'OATH' : `A${node.nodeIndex}`;
-    ctx.fillText(label, nx, roadY + 3);
+    ctx.fillText(label, nx, ny + 3);
 
     ctx.font = '7px monospace';
     ctx.fillStyle = cleared ? 'rgba(120,180,100,0.75)' : 'rgba(160,140,100,0.65)';
-    ctx.fillText(node.codename, nx, roadY + 28);
-    drawAssaultNodeIcon(ctx, i, nx, roadY - 18, 18);
+    ctx.fillText(node.codename, nx, ny + r + 14);
+    drawAssaultNodeIcon(ctx, i, nx, ny - r - 4, 18);
 
-    const hitW = 56;
-    const hitH = 52;
+    const hitW = Math.max(52, r * 4.2);
+    const hitH = Math.max(48, r * 3.8);
     const hx = nx - hitW / 2;
-    const hy = roadY - 26;
+    const hy = ny - hitH / 2;
     if (node.kind === 'assault' && unlocked && !cleared) {
       btnsOut.push({ x: hx, y: hy, w: hitW, h: hitH, action: 'attack', nodeIndex: node.nodeIndex });
     }

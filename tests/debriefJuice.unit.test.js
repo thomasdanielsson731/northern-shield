@@ -19,16 +19,17 @@ describe('debriefJuice', () => {
   });
 
   it('outcome colors', () => {
-    expect(getDebriefOutcomeColor(true)).toBe('#40e880');
-    expect(getDebriefOutcomeColor(false)).toBe('#e84040');
+    expect(getDebriefOutcomeColor(true)).toBe('#8a9a58');
+    expect(getDebriefOutcomeColor(false)).toBe('#a93226');
   });
 
   it('header colors for debrief panels', () => {
     const win = getDebriefHeaderColors(true);
     const loss = getDebriefHeaderColors(false);
-    expect(win.fill).toBe('#f0c840');
-    expect(loss.fill).toBe('#e04040');
-    expect(win.shadowBlur).toBeGreaterThan(loss.shadowBlur);
+    expect(win.fill).toBe('#c9a227');
+    expect(loss.fill).toBe('#a93226');
+    expect(win.shadowBlur).toBe(0);
+    expect(loss.shadowBlur).toBe(0);
   });
 
   it('fades debrief prose in after delay', () => {

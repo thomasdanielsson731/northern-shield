@@ -17,7 +17,7 @@ import {
   computeWalkBob,
   resolveFacingAngle,
   drawSpriteSheetFrame,
-  drawUnitFooting,
+  drawSpriteContourShadow,
 } from '../combat/spriteAnim.js';
 import { drawTowerAttackVfx } from '../combat/characterAttackVfx.js';
 import {
@@ -35,7 +35,17 @@ function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowCol
     ? glowColor.replace(/rgba?\(([^)]+)\).*/, '$1').split(',').map(s => parseFloat(s.trim())).slice(0, 3)
     : null;
 
-  drawUnitFooting(ctx, x, y + bob.yOff, dw * 0.42, rimRgb ? rimRgb.join(',') : '255,200,120', 1.35);
+  drawSpriteContourShadow(ctx, sp, {
+    col: frame,
+    x,
+    y: y + bob.yOff,
+    aimAngle,
+    dw,
+    lean: bob.lean ?? 0,
+    offsetY: 5,
+    squashY: 0.34,
+    alpha: 0.48,
+  });
 
   ctx.save();
   ctx.translate(x, y + bob.yOff);
@@ -49,7 +59,7 @@ function drawSpriteFrame(ctx, spriteKey, frame, x, y, aimAngle, dw = 36, glowCol
     lean: bob.lean ?? 0,
     rimRgb,
     brighten: 1.62,
-    outline: true,
+    outline: false,
   });
   ctx.restore();
   return drew;
@@ -601,7 +611,7 @@ export class Tower {
     else if (this.type === TOWER_TYPES.BLONDIE)    drawSpriteFrame(ctx, 'blondie', heroAnimFrame(this, t), x, y, angle, 64, glow ?? 'rgba(255,110,200,0.9)', this.level, bob);
     else if (this.type === TOWER_TYPES.PILTORN)    drawSpriteFrame(ctx, 'piltorn', heroAnimFrame(this, t), x, y, angle, 62, glow ?? 'rgba(100,140,190,0.8)', this.level, bob);
     else if (this.type === TOWER_TYPES.HYDDA)      drawSpriteFrame(ctx, 'hydda', heroAnimFrame(this, t), x, y, angle, 58, glow ?? 'rgba(50,200,90,0.85)', this.level, bob);
-    else if (this.type === TOWER_TYPES.ISJATTEN)   drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, angle, 72, glow ?? 'rgba(100,190,255,0.9)', this.level, bob);
+    else if (this.type === TOWER_TYPES.ISJATTEN)   drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, angle, 72, glow ?? 'rgba(88,82,72,0.9)', this.level, bob);
     else if (this.type === TOWER_TYPES.DRAKSHIP)   drawSpriteFrame(ctx, 'drakship', heroAnimFrame(this, t), x, y, angle, 70, glow ?? 'rgba(200,100,30,0.85)', this.level, bob);
   }
 
@@ -628,31 +638,35 @@ export class Tower {
       ctx.restore();
     }
 
-    // Ground shadow
-    const fpW = this.footprint.w * 14;
-    const fpH = this.footprint.h * 14;
-    const shadowR = isHero
-      ? Math.max(6, this.radius + 3)
-      : Math.max(fpW, fpH) / 2 + 2;
-    if (shadowR !== this._shadowR) {
-      this._shadowR    = shadowR;
-      const g = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
-      g.addColorStop(0,   'rgba(0,0,0,0.85)');
-      g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
-      g.addColorStop(1,   'rgba(0,0,0,0)');
-      this._shadowGrad = g;
+    // Ground shadow — heroes use sprite silhouette; structures keep soft ellipse
+    if (!isHero) {
+      const fpW = this.footprint.w * 14;
+      const fpH = this.footprint.h * 14;
+      const shadowR = Math.max(fpW, fpH) / 2 + 2;
+      if (shadowR !== this._shadowR) {
+        this._shadowR    = shadowR;
+        const g = ctx.createRadialGradient(this.x, this.y + 4, 0, this.x, this.y + 4, shadowR);
+        g.addColorStop(0,   'rgba(0,0,0,0.85)');
+        g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+        g.addColorStop(1,   'rgba(0,0,0,0)');
+        this._shadowGrad = g;
+      }
+      ctx.save();
+      ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : 0.52;
+      ctx.fillStyle = this._shadowGrad;
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
-    ctx.save();
-    ctx.globalAlpha = this.disabledTimer > 0 ? 0.08 : (isHero ? 0.22 : 0.52);
-    ctx.fillStyle = this._shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(this.x, this.y + 4, shadowR, shadowR * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
 
     // Active synergy indicator — dashed ring around synergy pairs
     if (this._synergy) {
-      const synergyColors = { eagleEye: '#88aaee', siegeFury: '#e87030', winterGrip: '#60c8f0' };
+      const synergyColors = {
+        eagleEye: 'rgba(180,150,110,0.50)',
+        siegeFury: 'rgba(169,80,40,0.50)',
+        winterGrip: 'rgba(140,150,130,0.50)',
+      };
       const sc = synergyColors[this._synergy] ?? '#ffffff';
       ctx.save();
       ctx.strokeStyle = sc + '55';
@@ -714,8 +728,6 @@ export class Tower {
       const flicker = 0.30 + Math.sin(t * 26) * 0.15;
       ctx.save();
       ctx.fillStyle   = `rgba(180,55,18,${flicker * 0.32})`;
-      ctx.shadowColor = 'rgba(120,35,8,0.55)';
-      ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
       ctx.fill();
@@ -733,7 +745,7 @@ export class Tower {
       // EMP label — tells player why the tower is inactive
       ctx.save();
       ctx.font      = 'bold 7px monospace';
-      ctx.fillStyle = `rgba(255,140,80,${0.65 + Math.sin(t * 10) * 0.25})`;
+      ctx.fillStyle = `rgba(180,110,70,${0.65 + Math.sin(t * 10) * 0.25})`;
       ctx.textAlign = 'center';
       const empSec = Math.max(1, Math.ceil(this.disabledTimer / 60));
       ctx.fillText(`EMP ${empSec}s`, this.x, this.y - this.radius - 4);
@@ -746,9 +758,7 @@ export class Tower {
       const lf = this.levelFlash / 55;
       const ringR = this.radius + 4 + (1 - lf) * 14;
       ctx.save();
-      ctx.strokeStyle = `rgba(255,230,80,${lf * 0.9})`;
-      ctx.shadowColor = 'rgba(255,200,40,0.9)';
-      ctx.shadowBlur  = 12;
+      ctx.strokeStyle = `rgba(200,165,90,${lf * 0.9})`;
       ctx.lineWidth   = 2;
       ctx.beginPath(); ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2); ctx.stroke();
       ctx.shadowBlur  = 0;
@@ -757,7 +767,7 @@ export class Tower {
         const a  = (i / 6) * Math.PI * 2 + (1 - lf) * Math.PI;
         const r0 = this.radius + 3;
         const r1 = r0 + (1 - lf) * 18;
-        ctx.strokeStyle = `rgba(255,220,60,${lf * 0.7})`;
+        ctx.strokeStyle = `rgba(190,155,85,${lf * 0.7})`;
         ctx.lineWidth   = 0.8;
         ctx.beginPath();
         ctx.moveTo(this.x + Math.cos(a) * r0, this.y + Math.sin(a) * r0);
@@ -773,9 +783,7 @@ export class Tower {
       const sf   = this.synergyRingTimer / 30;
       const ringR = this.radius + 3 + (1 - sf) * 18;
       ctx.save();
-      ctx.strokeStyle = `rgba(255,210,40,${sf * 0.85})`;
-      ctx.shadowColor = 'rgba(255,180,20,0.9)';
-      ctx.shadowBlur  = 14;
+      ctx.strokeStyle = `rgba(185,150,80,${sf * 0.85})`;
       ctx.lineWidth   = 2.5;
       ctx.beginPath(); ctx.arc(this.x, this.y, ringR, 0, Math.PI * 2); ctx.stroke();
       ctx.shadowBlur  = 0;
@@ -797,18 +805,23 @@ export class Tower {
       const bw = this._badgeW;
       ctx.fillStyle = 'rgba(6,3,14,0.9)';
       ctx.fillRect(this.x - bw / 2, this.y + 6, bw, 8);
-      ctx.fillStyle = this.maxed ? '#ff9040' : '#e8c040';
+      ctx.fillStyle = this.maxed ? '#c87840' : '#e8c040';
       ctx.fillText(badge, this.x, this.y + 13);
       ctx.restore();
     }
 
     // Rune gem — small glowing dot top-right of tower when a rune is equipped
     if (this.rune) {
-      const RUNE_COLORS = { ironEdge: '#e85040', swiftStrike: '#88aaee', frostRune: '#60c8f0', battleHymn: '#c87840', valhalla: '#f0c840' };
+      const RUNE_COLORS = {
+        ironEdge: 'rgba(169,50,38,0.85)',
+        swiftStrike: 'rgba(180,150,110,0.85)',
+        frostRune: 'rgba(140,155,130,0.85)',
+        battleHymn: 'rgba(180,130,70,0.85)',
+        valhalla: 'rgba(212,175,55,0.85)',
+      };
       const rc = RUNE_COLORS[this.rune] ?? '#ffffff';
       const pulse = 0.6 + Math.sin(_now * 0.006 + this.x) * 0.4;
       ctx.save();
-      ctx.shadowColor = rc; ctx.shadowBlur = 5 + pulse * 4;
       ctx.fillStyle = rc; ctx.globalAlpha = 0.75 + pulse * 0.25;
       ctx.beginPath(); ctx.arc(this.x + this.radius - 2, this.y - this.radius + 2, 2.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
@@ -822,9 +835,7 @@ export class Tower {
       // Pulsing gold glow ring beneath tower
       ctx.save();
       ctx.globalAlpha = alpha * (0.30 + pulse * 0.20);
-      ctx.shadowColor = '#ffd040';
-      ctx.shadowBlur  = 14 * pulse;
-      ctx.strokeStyle = `rgba(255,210,40,${0.55 + pulse * 0.30})`;
+      ctx.strokeStyle = `rgba(185,150,80,${0.55 + pulse * 0.30})`;
       ctx.lineWidth   = 2.0 + pulse * 1.2;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius + 5 + pulse * 2, 0, Math.PI * 2);
@@ -835,8 +846,7 @@ export class Tower {
       ctx.globalAlpha = alpha;
       const cx = this.x, cy = this.y - this.radius - 14;
       // Crown base
-      ctx.shadowColor = '#ffd860'; ctx.shadowBlur = 8 * pulse;
-      ctx.fillStyle = '#ffd860';
+      ctx.fillStyle = '#c9a227';
       ctx.beginPath();
       ctx.moveTo(cx - 8, cy + 4);
       ctx.lineTo(cx - 5, cy - 2);
@@ -846,7 +856,7 @@ export class Tower {
       ctx.closePath(); ctx.fill();
       // Gems
       ctx.fillStyle = '#e87050'; ctx.beginPath(); ctx.arc(cx - 5, cy - 1, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#60c8f0'; ctx.beginPath(); ctx.arc(cx + 2, cy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(140,150,130,0.85)'; ctx.beginPath(); ctx.arc(cx + 2, cy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#f0e050'; ctx.beginPath(); ctx.arc(cx + 6, cy + 1, 1.2, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -925,8 +935,6 @@ export class Tower {
     }
 
     // Head
-    ctx.shadowColor = 'rgba(200,60,20,0.5)';
-    ctx.shadowBlur  = 6;
     ctx.fillStyle   = '#c8885a';
     ctx.beginPath();
     ctx.arc(x, y - 9, 5.5, 0, Math.PI * 2);
@@ -989,8 +997,6 @@ export class Tower {
     ctx.save();
     ctx.translate(x + 7, y - 4);
     ctx.rotate(axeSpin);
-    ctx.shadowColor = 'rgba(200,80,20,0.85)';
-    ctx.shadowBlur  = 8;
     // Handle
     ctx.strokeStyle = '#6a3810';
     ctx.lineWidth   = 2;
@@ -1022,8 +1028,6 @@ export class Tower {
       ctx.save();
       ctx.strokeStyle = `rgba(255,120,40,${br * 0.7})`;
       ctx.lineWidth = 3;
-      ctx.shadowColor = 'rgba(255,100,20,0.9)';
-      ctx.shadowBlur = 12 * br;
       ctx.beginPath();
       ctx.arc(x, y, 12 * (1.3 - br * 0.3), 0, Math.PI * 2);
       ctx.stroke();
@@ -1044,8 +1048,6 @@ export class Tower {
     const glow     = 0.7 + Math.sin(t * 2.2) * 0.3;
     const wingFlap = Math.sin(t * 2.8) * 0.1;
     ctx.save();
-    ctx.shadowColor = 'rgba(220,190,100,0.75)';
-    ctx.shadowBlur  = 14 * glow;
     // Left wing
     ctx.fillStyle = '#f0e8d0';
     ctx.beginPath();
@@ -1138,8 +1140,6 @@ export class Tower {
     ctx.closePath();
     ctx.fill();
     // Visor glow eyes — gold
-    ctx.shadowColor = '#c8a030';
-    ctx.shadowBlur  = 8 * glow;
     ctx.fillStyle   = '#f0c040';
     ctx.beginPath();
     ctx.ellipse(x - 1.8, y - 9.5, 1.3, 0.8, -0.15, 0, Math.PI * 2);
@@ -1159,16 +1159,12 @@ export class Tower {
     ctx.strokeStyle = '#8a6030';
     ctx.lineWidth   = 2;
     ctx.lineCap     = 'round';
-    ctx.shadowColor = 'rgba(200,160,60,0.55)';
-    ctx.shadowBlur  = 6 * glow;
     ctx.beginPath();
     ctx.moveTo(x, y - 3);
     ctx.lineTo(spearEndX, spearEndY);
     ctx.stroke();
     // Tip — warm iron
     ctx.fillStyle   = '#e8e0c0';
-    ctx.shadowColor = 'rgba(220,200,140,0.85)';
-    ctx.shadowBlur  = 10 * glow;
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);
     ctx.lineTo(spearEndX + Math.cos(perpA) * 2.5, spearEndY + Math.sin(perpA) * 2.5);
@@ -1247,8 +1243,6 @@ export class Tower {
     ctx.lineCap = 'butt';
 
     // Head
-    ctx.shadowColor = 'rgba(100,150,200,0.4)';
-    ctx.shadowBlur  = 5;
     ctx.fillStyle   = '#c8885a';
     ctx.beginPath();
     ctx.arc(x, y - 9.5, 4.5, 0, Math.PI * 2);
@@ -1272,8 +1266,6 @@ export class Tower {
     ctx.save();
     ctx.translate(x + 3, y - 3);
     ctx.rotate(this.aimAngle);
-    ctx.shadowColor = 'rgba(160,120,50,0.5)';
-    ctx.shadowBlur  = 5 * glow;
     // Bow limb
     ctx.strokeStyle = '#6a3810';
     ctx.lineWidth   = 2;
@@ -1299,8 +1291,6 @@ export class Tower {
     ctx.lineTo(2, 0);
     ctx.stroke();
     // Arrowhead
-    ctx.shadowColor = `rgba(200,185,150,${0.6 * glow})`;
-    ctx.shadowBlur  = 6 * glow;
     ctx.fillStyle   = '#c8c0a8';
     ctx.beginPath();
     ctx.moveTo(12, 0);
@@ -1401,8 +1391,6 @@ export class Tower {
     ctx.beginPath();
     ctx.arc(10, 0, 2.8, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowColor = 'rgba(255,160,40,0.8)';
-    ctx.shadowBlur  = 10 * pulse;
     ctx.fillStyle   = '#e8a030';
     ctx.beginPath();
     ctx.arc(10, 0, 1.5, 0, Math.PI * 2);
@@ -1448,8 +1436,6 @@ export class Tower {
       const a     = spin + (i / 6) * Math.PI * 2;
       const alpha = 0.4 + Math.sin(spin * 3 + i) * 0.3;
       ctx.fillStyle   = `rgba(255,130,200,${Math.max(0, alpha)})`;
-      ctx.shadowColor = this.color;
-      ctx.shadowBlur  = 6;
       ctx.beginPath();
       ctx.arc(x + Math.cos(a) * 8.5, y - 2 + Math.sin(a) * 4, 1.5, 0, Math.PI * 2);
       ctx.fill();
@@ -1497,8 +1483,6 @@ export class Tower {
 
     // Floating heart above head
     const hy = y - 15 - Math.sin(t * 2.5) * 1.5;
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur  = 8 * pulse;
     ctx.fillStyle   = this.color;
     ctx.beginPath();
     ctx.arc(x - 1.8, hy, 3, 0, Math.PI * 2);
@@ -1579,8 +1563,6 @@ export class Tower {
     const bx = x + Math.cos(this.aimAngle) * 3;
     const by = y - 4 + Math.sin(this.aimAngle) * 3;
     ctx.save();
-    ctx.shadowColor = 'rgba(150,100,50,0.55)';
-    ctx.shadowBlur  = 5;
     // Stock
     ctx.strokeStyle = '#4a2e0e';
     ctx.lineWidth   = 2.5;
@@ -1675,8 +1657,6 @@ export class Tower {
     // Green rune cross on hut front — the healing symbol
     const crossCx = x, crossCy = y + 4;
     ctx.save();
-    ctx.shadowColor = `rgba(50,220,90,${0.55 + pulse * 0.45})`;
-    ctx.shadowBlur  = 6 + pulse * 8;
     ctx.strokeStyle = `rgba(60,220,90,${0.75 + pulse * 0.25})`;
     ctx.lineWidth   = 2;
     ctx.lineCap     = 'round';
@@ -1700,8 +1680,6 @@ export class Tower {
       const ff = this.fireFlash / this.maxFireFlash;
       ctx.save();
       ctx.strokeStyle = `rgba(50,220,90,${ff * 0.6})`;
-      ctx.shadowColor = 'rgba(40,200,80,0.8)';
-      ctx.shadowBlur  = 10;
       ctx.lineWidth   = 1.5;
       ctx.beginPath();
       ctx.arc(x, y, (1 - ff) * 18 + 6, 0, Math.PI * 2);
@@ -1720,12 +1698,10 @@ export class Tower {
     ctx.beginPath();
     ctx.ellipse(x, y + 10, 11, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 72, 'rgba(100,190,255,0.9)', this.level, heroWalkBob(this, t))) return;
+    if (drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, heroSpriteFacingAngle(this), 72, 'rgba(88,82,72,0.9)', this.level, heroWalkBob(this, t))) return;
 
     // Giant icy body — large crystalline form
     ctx.save();
-    ctx.shadowColor = `rgba(100,200,255,${0.5 + pulse * 0.5})`;
-    ctx.shadowBlur  = 8 + pulse * 6;
 
     // Legs
     ctx.fillStyle = '#3a6080';
@@ -1785,8 +1761,6 @@ export class Tower {
     }
     // Glowing eyes
     ctx.fillStyle = `rgba(180,240,255,${0.7 + pulse * 0.3})`;
-    ctx.shadowColor = '#a0e8ff';
-    ctx.shadowBlur  = 8 * pulse;
     ctx.beginPath();
     ctx.ellipse(x - 2, y - 9.5, 1.4, 0.9, 0, 0, Math.PI * 2);
     ctx.ellipse(x + 2, y - 9.5, 1.4, 0.9, 0, 0, Math.PI * 2);
@@ -1805,8 +1779,6 @@ export class Tower {
         const sy = y - 2 + Math.sin(a) * or * 0.55;
         ctx.save();
         ctx.globalAlpha = orbAlpha * 0.8;
-        ctx.shadowColor = 'rgba(140,220,255,0.9)';
-        ctx.shadowBlur  = 6;
         ctx.fillStyle   = '#c0ecff';
         ctx.beginPath();
         ctx.moveTo(sx, sy - 3.5);
@@ -1826,8 +1798,6 @@ export class Tower {
       ctx.save();
       ctx.strokeStyle = `rgba(160,230,255,${br * 0.8})`;
       ctx.lineWidth = 1.5;
-      ctx.shadowColor = '#80eeff';
-      ctx.shadowBlur = 8 * br;
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         const r1 = 8, r2 = 8 + (1 - br) * 22;
@@ -1893,8 +1863,6 @@ export class Tower {
     // Dragon head prow
     ctx.save();
     ctx.translate(0, -13);
-    ctx.shadowColor = `rgba(220,80,20,${0.6 + pulse * 0.4})`;
-    ctx.shadowBlur  = 6 + pulse * 4;
     // Neck
     ctx.fillStyle = '#5a3018';
     ctx.fillRect(-2, 0, 4, 5);
@@ -1917,8 +1885,6 @@ export class Tower {
     ctx.fill();
     // Dragon eye
     ctx.fillStyle = '#f0c030';
-    ctx.shadowColor = '#f0c030';
-    ctx.shadowBlur  = 5 * pulse;
     ctx.beginPath();
     ctx.ellipse(1.5, -4, 1.5, 1, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -2036,8 +2002,6 @@ export class Tower {
     ctx.strokeStyle = '#6a4020';
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
-    ctx.shadowColor = 'rgba(140,90,30,0.5)';
-    ctx.shadowBlur = 4;
     ctx.beginPath();
     ctx.moveTo(0, 3); ctx.lineTo(0, -14);
     ctx.stroke();
@@ -2064,8 +2028,6 @@ export class Tower {
     ctx.moveTo(-11, -7); ctx.lineTo(0, stretchY); ctx.lineTo(11, -7);
     ctx.stroke();
     // Bolt on track
-    ctx.shadowColor = `rgba(220,190,80,${0.5 + glow * 0.5})`;
-    ctx.shadowBlur = 5 * glow;
     ctx.fillStyle = '#c8b070';
     ctx.fillRect(-0.8, -14, 1.6, 7);
     ctx.fillStyle = '#e0d4a0';
@@ -2108,8 +2070,6 @@ export class Tower {
     ctx.fill();
     // Carved glowing runes
     ctx.save();
-    ctx.shadowBlur = 8 + pulse * 10;
-    ctx.shadowColor = `rgba(100,80,220,${0.6 + pulse * 0.4})`;
     ctx.strokeStyle = `rgba(140,110,255,${0.65 + pulse * 0.35})`;
     ctx.lineWidth = 0.9;
     ctx.lineCap = 'round';
@@ -2197,8 +2157,6 @@ export class Tower {
     ctx.stroke();
     // Crossed spears (unit symbol on gable)
     ctx.save();
-    ctx.shadowColor = `rgba(200,170,80,${0.45 * pulse})`;
-    ctx.shadowBlur = 4 * pulse;
     ctx.strokeStyle = '#c8a030';
     ctx.lineWidth = 1.2;
     ctx.lineCap = 'round';

@@ -15,9 +15,7 @@ export function drawTowerAttackVfx(ctx, tower, t) {
 
   switch (tower.type) {
     case 'berserk':
-      ctx.shadowColor = 'rgba(255,90,20,0.9)';
-      ctx.shadowBlur = 18 * alpha;
-      ctx.strokeStyle = `rgba(255,120,40,${alpha * 0.95})`;
+      ctx.strokeStyle = `rgba(180,110,60,${alpha * 0.85})`;
       ctx.lineWidth = 5 * alpha;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -36,7 +34,7 @@ export function drawTowerAttackVfx(ctx, tower, t) {
       ctx.beginPath();
       ctx.arc(ax, ay, tower.radius + 6 + (1 - alpha) * 10, ang - 0.5, ang + 0.5);
       ctx.stroke();
-      ctx.fillStyle = `rgba(255,240,180,${alpha * 0.25})`;
+      ctx.fillStyle = `rgba(200,180,140,${alpha * 0.22})`;
       ctx.beginPath();
       ctx.moveTo(ax + Math.cos(ang) * 12, ay + Math.sin(ang) * 12);
       ctx.lineTo(ax + Math.cos(ang + 0.4) * 22, ay + Math.sin(ang + 0.4) * 22);
@@ -46,7 +44,7 @@ export function drawTowerAttackVfx(ctx, tower, t) {
       break;
 
     case 'military':
-      ctx.strokeStyle = `rgba(140,190,255,${alpha * 0.9})`;
+      ctx.strokeStyle = `rgba(140,130,115,${alpha * 0.85})`;
       ctx.lineWidth = 1.5 * alpha;
       const tipX = ax + Math.cos(ang) * 28;
       const tipY = ay + Math.sin(ang) * 28;
@@ -54,14 +52,14 @@ export function drawTowerAttackVfx(ctx, tower, t) {
       ctx.moveTo(ax, ay);
       ctx.lineTo(tipX, tipY);
       ctx.stroke();
-      ctx.fillStyle = `rgba(200,230,255,${alpha * 0.7})`;
+      ctx.fillStyle = `rgba(170,165,150,${alpha * 0.55})`;
       ctx.beginPath();
       ctx.arc(tipX, tipY, 3 * alpha, 0, Math.PI * 2);
       ctx.fill();
       break;
 
     case 'hydda':
-      ctx.strokeStyle = `rgba(80,220,120,${alpha * 0.75})`;
+      ctx.strokeStyle = `rgba(100,130,105,${alpha * 0.70})`;
       ctx.lineWidth = 2 * alpha;
       for (let i = 0; i < 3; i++) {
         const a = ang + (i - 1) * 0.35;
@@ -72,9 +70,7 @@ export function drawTowerAttackVfx(ctx, tower, t) {
       break;
 
     case 'blondie':
-      ctx.fillStyle = `rgba(255,120,220,${alpha * 0.55})`;
-      ctx.shadowColor = 'rgba(255,80,200,0.8)';
-      ctx.shadowBlur = 12 * alpha;
+      ctx.fillStyle = `rgba(160,120,110,${alpha * 0.45})`;
       for (let i = 0; i < 5; i++) {
         const a = ang + (i / 5) * Math.PI * 0.6 - 0.3;
         const r = 8 + i * 3;
@@ -85,11 +81,11 @@ export function drawTowerAttackVfx(ctx, tower, t) {
       break;
 
     case 'isjatten':
-      ctx.fillStyle = `rgba(120,200,255,${alpha * 0.35})`;
+      ctx.fillStyle = `rgba(120,135,145,${alpha * 0.30})`;
       ctx.beginPath();
       ctx.arc(ax, ay, 14 + (1 - alpha) * 16, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(200,240,255,${alpha * 0.8})`;
+      ctx.strokeStyle = `rgba(160,170,175,${alpha * 0.70})`;
       ctx.lineWidth = 2 * alpha;
       ctx.stroke();
       break;
@@ -104,8 +100,6 @@ export function drawTowerAttackVfx(ctx, tower, t) {
 
     default:
       ctx.strokeStyle = `rgba(255,255,200,${alpha * 0.85})`;
-      ctx.shadowColor = tower.color ?? '#fff';
-      ctx.shadowBlur = 14 * alpha;
       ctx.lineWidth = 2.5 * alpha;
       ctx.beginPath();
       ctx.arc(ax, ay, tower.radius + 2 + (tower.maxFireFlash - tower.fireFlash) * 1.5, 0, Math.PI * 2);
@@ -137,14 +131,14 @@ export function drawEnemyAttackVfx(ctx, enemy, t) {
       break;
 
     case 'warg':
-      ctx.fillStyle = `rgba(255,160,60,${alpha * 0.4 * pulse})`;
+      ctx.fillStyle = `rgba(160,120,80,${alpha * 0.35 * pulse})`;
       ctx.beginPath();
       ctx.ellipse(ax + 6, ay, 10 * alpha, 4 * alpha, 0, 0, Math.PI * 2);
       ctx.fill();
       break;
 
     case 'draugr':
-      ctx.fillStyle = `rgba(140,120,200,${alpha * 0.45})`;
+      ctx.fillStyle = `rgba(110,100,120,${alpha * 0.40})`;
       ctx.beginPath();
       ctx.arc(ax, ay - 4, 8 * alpha, 0, Math.PI * 2);
       ctx.fill();

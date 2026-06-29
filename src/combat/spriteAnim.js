@@ -64,17 +64,7 @@ export function resolveFacingAngle(velX, velY, fallbackDx, fallbackDy) {
   return Math.atan2(dy, dx);
 }
 
-/**
- * Draw one sprite frame with direction + walk bob.
- * @returns {boolean} false if sprite not loaded
- */
-export function drawSpriteSheetFrame(
-  ctx,
-  sp,
-  { col, row, x, y, aimAngle, dw, flipForLeft = true, lean = 0, rimRgb = null, brighten = 1, outline = true, walkAltRow = 0 },
-) {
-  if (!sp?.img?.complete || sp.img.naturalWidth === 0) return false;
-
+function resolveSpritePose(sp, { col, aimAngle, dw, flipForLeft = true, walkAltRow = 0 }) {
   const scale = typeof sp._scale === 'number' ? sp._scale : 1;
   const dwS = Math.round(dw * scale);
   const dhS = Math.round(dwS * sp.frameH / sp.frameW);
@@ -85,76 +75,118 @@ export function drawSpriteSheetFrame(
     const facingLeft = flipForLeft && Math.cos(aimAngle) < -0.05;
     const isLocomotion = col === ANIM.IDLE || col === ANIM.WALK_B;
     if (facingLeft && isLocomotion) {
-      // Mirror right-facing walk/idle — left-row walk art often has reversed stride.
       sheetRow = 0;
       mirror = true;
     } else if (facingLeft) {
       sheetRow = 2;
-      mirror = false;
-    } else {
-      sheetRow = 0;
-      mirror = false;
     }
   } else if (sp.rows >= 2 && walkAltRow > 0) {
     sheetRow = walkAltRow;
     mirror = flipForLeft && Math.cos(aimAngle) < 0;
   } else {
-    sheetRow = 0;
     mirror = flipForLeft && Math.cos(aimAngle) < 0;
   }
-  const anchorY = -dhS * 0.88;
-  const anchorX = -dwS / 2;
+  return {
+    sheetRow,
+    mirror,
+    dwS,
+    dhS,
+    anchorX: -dwS / 2,
+    anchorY: -dhS,
+    srcX: col * sp.frameW,
+    srcY: sheetRow * sp.frameH,
+  };
+}
 
+function blitSpritePose(ctx, sp, pose, {
+  x, y, lean = 0, alpha = 1, filter = 'none', scaleY = 1, ox = 0, oy = 0,
+}) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (filter !== 'none') ctx.filter = filter;
+  ctx.translate(x + ox, y + oy);
+  if (pose.mirror) ctx.scale(-1, 1);
+  if (lean) ctx.rotate(lean);
+  if (scaleY !== 1) ctx.scale(1, scaleY);
+  ctx.drawImage(
+    sp.img,
+    pose.srcX,
+    pose.srcY,
+    sp.frameW,
+    sp.frameH,
+    pose.anchorX,
+    pose.anchorY,
+    pose.dwS,
+    pose.dhS,
+  );
+  ctx.restore();
+}
+
+/**
+ * Ground shadow that follows the sprite silhouette (squashed under the feet).
+ * @returns {boolean} false if sprite not loaded
+ */
+export function drawSpriteContourShadow(
+  ctx,
+  sp,
+  {
+    col, x, y, aimAngle, dw, flipForLeft = true, lean = 0, walkAltRow = 0,
+    offsetY = 5, squashY = 0.34, alpha = 0.52, blurPx = 1.2,
+  },
+) {
+  if (!sp?.img?.complete || sp.img.naturalWidth === 0) return false;
+  const pose = resolveSpritePose(sp, { col, aimAngle, dw, flipForLeft, walkAltRow });
+  const filter = blurPx > 0 ? `brightness(0) blur(${blurPx}px)` : 'brightness(0)';
+  blitSpritePose(ctx, sp, pose, {
+    x,
+    y: y + offsetY,
+    lean,
+    alpha,
+    filter,
+    scaleY: squashY,
+  });
+  return true;
+}
+
+/**
+ * Draw one sprite frame with direction + walk bob.
+ * @returns {boolean} false if sprite not loaded
+ */
+export function drawSpriteSheetFrame(
+  ctx,
+  sp,
+  { col, row, x, y, aimAngle, dw, flipForLeft = true, lean = 0, rimRgb = null, brighten = 1, outline = false, walkAltRow = 0 },
+) {
+  if (!sp?.img?.complete || sp.img.naturalWidth === 0) return false;
+
+  const pose = resolveSpritePose(sp, { col, aimAngle, dw, flipForLeft, walkAltRow });
   const filter = brighten > 1.001 ? `brightness(${brighten}) contrast(1.08) saturate(1.12)` : 'none';
 
-  const blitFrame = (alpha, filt, ox = 0, oy = 0) => {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    if (filt !== 'none') ctx.filter = filt;
-    ctx.translate(x + ox, y + oy);
-    if (mirror) ctx.scale(-1, 1);
-    if (lean) ctx.rotate(lean);
-    ctx.drawImage(
-      sp.img,
-      col * sp.frameW,
-      sheetRow * sp.frameH,
-      sp.frameW,
-      sp.frameH,
-      anchorX,
-      anchorY,
-      dwS,
-      dhS,
-    );
-    ctx.restore();
-  };
-
   if (outline) {
-    const stroke = Math.max(1, Math.round(dwS * 0.04));
+    const stroke = Math.max(1, Math.round(pose.dwS * 0.04));
     for (const [ox, oy] of [
       [-stroke, 0], [stroke, 0], [0, -stroke], [0, stroke],
       [-stroke, -stroke], [stroke, stroke], [-stroke, stroke], [stroke, -stroke],
     ]) {
-      blitFrame(0.72, 'brightness(0) contrast(1.4)', ox, oy);
+      blitSpritePose(ctx, sp, pose, {
+        x, y, lean, alpha: 0.72, filter: 'brightness(0) contrast(1.4)', ox, oy,
+      });
     }
   }
 
-  blitFrame(1, filter);
+  blitSpritePose(ctx, sp, pose, { x, y, lean, alpha: 1, filter });
   return true;
 }
 
-/** Ground pool + dark backing so dark API sprites stay readable on fen terrain. */
+/** Soft ground read — units already cast their own ellipse shadow in entity draw(). */
 export function drawUnitFooting(ctx, x, y, radius, rgb = '220,180,120', strength = 1) {
   const s = strength;
   const g = ctx.createRadialGradient(x, y + radius * 0.15, 0, x, y + radius * 0.15, radius * 1.35);
-  g.addColorStop(0, `rgba(${rgb},${0.28 * s})`);
-  g.addColorStop(0.55, `rgba(${rgb},${0.10 * s})`);
+  g.addColorStop(0, `rgba(${rgb},${0.18 * s})`);
+  g.addColorStop(0.55, `rgba(${rgb},${0.06 * s})`);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(x, y + radius * 0.55, radius * 1.1, radius * 0.38, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = `rgba(0,0,0,${0.42 / s})`;
-  ctx.beginPath();
-  ctx.ellipse(x + 1, y + radius * 0.62, radius * 0.95, radius * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
 }

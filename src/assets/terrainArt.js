@@ -8,6 +8,9 @@ const TILE_SRC = {
   groundB: '/assets/terrain/tile_ashfen_ground_02@28.png',
   path: '/assets/terrain/tile_ashfen_path_01@28.png',
   palisade: '/assets/terrain/tile_palisade_segment@28.png',
+  palisadeCorner: '/assets/terrain/tile_palisade_corner@28.png',
+  palisadeDamaged: '/assets/terrain/tile_palisade_damaged@28.png',
+  palisadeGateCap: '/assets/terrain/tile_palisade_gate_cap@28.png',
   spawnMist: '/assets/fx/fx_spawn_fen_mist@56.png',
   fenTrees: '/assets/terrain/prop_fen_trees_backdrop@128x256.png',
 };
@@ -34,9 +37,17 @@ export function isPalisadeTileReady() {
 }
 
 /** Draw promoted palisade segment tile; returns false if art not loaded. */
-export function drawPalisadeTile(ctx, x, y, size) {
-  const img = _images.palisade;
-  if (!ready('palisade')) return false;
+export function drawPalisadeTile(ctx, x, y, size, variant = 'segment') {
+  const key = variant === 'corner' ? 'palisadeCorner'
+    : variant === 'damaged' ? 'palisadeDamaged'
+      : variant === 'gateCap' ? 'palisadeGateCap'
+        : 'palisade';
+  const img = _images[key] ?? _images.palisade;
+  if (!ready(key) && variant !== 'segment') {
+    if (!ready('palisade')) return false;
+    return drawPalisadeTile(ctx, x, y, size, 'segment');
+  }
+  if (!ready(key)) return false;
   ctx.drawImage(img, x, y, size, size);
   return true;
 }

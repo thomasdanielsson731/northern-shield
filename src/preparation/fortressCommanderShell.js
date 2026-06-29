@@ -49,8 +49,8 @@ const HOTSPOT_LAYOUT = {
   [PREP_HOTSPOTS.WATCH_TOWER]: { fx: 0.48, fy: 0.22, fw: 0.14, fh: 0.16 },
   [PREP_HOTSPOTS.WEST_GATE]:   { fx: 0.38, fy: 0.38, fw: 0.22, fh: 0.20 },
   [PREP_HOTSPOTS.WALL_SCAR]:   { fx: 0.34, fy: 0.36, fw: 0.30, fh: 0.08 },
-  [PREP_HOTSPOTS.LONGHOUSE]:   { fx: 0.18, fy: 0.62, fw: 0.22, fh: 0.18 },
-  [PREP_HOTSPOTS.TREASURY]:    { fx: 0.52, fy: 0.64, fw: 0.12, fh: 0.12 },
+  [PREP_HOTSPOTS.LONGHOUSE]:   { fx: 0.08, fy: 0.64, fw: 0.20, fh: 0.18 },
+  [PREP_HOTSPOTS.TREASURY]:    { fx: 0.72, fy: 0.64, fw: 0.18, fh: 0.16 },
 };
 
 export function createPrepShellState() {
@@ -858,7 +858,7 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
     `${roster?.defenders?.length ?? 0} defender${(roster?.defenders?.length ?? 0) === 1 ? '' : 's'}`,
   );
   drawHotspotLabel(
-    ctx, trBox, 'TINY TREASURY',
+    ctx, trBox, 'TREASURY',
     treasuryUnlocked ? 'Gold reserve chest' : 'Unlocks after A0',
     { muted: !treasuryUnlocked },
   );
