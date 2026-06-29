@@ -17,6 +17,7 @@ import {
   createEmptyCampaignProgress,
 } from './campaignMaps.js';
 import { validateSessionState } from './sessionSave.js';
+import { runLoopClarityChecks } from './loopClarityHarness.js';
 import {
   isFirstSagaSliceLockedRegion,
   isFirstSagaRecruitUnlocked,
@@ -163,7 +164,7 @@ export function runFirstSagaPlaytestHarness() {
   checks.push(check('naming.validate', 'A0', 'Hero name min 2 chars', validateHeroName('Ulfr') && !validateHeroName('a')));
   applyHeroNaming(campAfterA0, rosterUnnamed, 'h1', 'Gunnar');
   checks.push(check('naming.apply', 'A0', 'Hero naming sets heroNamed', campAfterA0.firstSaga.heroNamed === true));
-  checks.push(check('spawn.a1.w2-size', 'A1', 'Wave 2 has five enemies (3+2)', (buildFirstSagaSpawnQueue(1, { waveInNode: 2 }) ?? []).length === 5));
+  checks.push(check('spawn.a1.w2-size', 'A1', 'Wave 2 has four enemies (2+2)', (buildFirstSagaSpawnQueue(1, { waveInNode: 2 }) ?? []).length === 4));
 
   // --- Prep / horn ---
   checks.push(check('prep.horn-block', 'A0', 'Horn blocked without gate assignment', !!getHornBlockReason({
@@ -207,8 +208,12 @@ export function runFirstSagaPlaytestHarness() {
   checks.push(check('finale.name-validate', 'Finale', 'Settlement name min 2 chars', validateSettlementName('ab') && !validateSettlementName('a')));
 
   // --- Session phases ---
-  for (const phase of ['fortressPrep', 'settlementCeremony', 'heroNamingCeremony', 'debrief', 'nodeMap', 'betweenBattles']) {
+  for (const phase of ['fortressPrep', 'settlementCeremony', 'heroNamingCeremony', 'debrief', 'nodeMap', 'betweenBattles', 'settlementHub']) {
     checks.push(check(`session.phase.${phase}`, 'Post-slice', `Session accepts phase ${phase}`, validateSessionState({ version: 1, gamePhase: phase }) != null));
+  }
+
+  for (const lc of runLoopClarityChecks()) {
+    checks.push(check(lc.id, lc.section, lc.label, lc.status === 'pass', lc.detail));
   }
 
   // --- Balance heuristics ---
@@ -222,7 +227,7 @@ export function runFirstSagaPlaytestHarness() {
       `totalHp=${Math.round(est.totalHp)} shots≈${est.shotsNeeded} lives=${est.lives}`,
     ));
   }
-  checks.push(check('balance.a1.heal', 'A1', 'Between-wave heal on A1', getFirstSagaBetweenWaveHealFraction(1) === 0.4));
+  checks.push(check('balance.a1.heal', 'A1', 'Between-wave heal on A1', getFirstSagaBetweenWaveHealFraction(1) === 0.45));
   checks.push(check('balance.a1.break', 'A1', 'Longer wave break on A1', getFirstSagaWaveBreakFrames(1) >= 120));
 
   // --- Manual-only (documented for agent report) ---
