@@ -8,6 +8,8 @@ import {
   getFirstSagaStartingLives,
   getFirstSagaWaveBreakFrames,
   getFirstSagaBetweenWaveHealFraction,
+  getFirstSagaGateHpBonus,
+  getFirstSagaMeleeDamageScale,
   getFirstSagaFrontLayout,
   FIRST_SAGA_A4_NODE,
   isFirstSagaSettlementReady,
@@ -90,9 +92,15 @@ describe('firstSaga', () => {
     expect(getFirstSagaStartingLives(0)).toBe(5);
     expect(getFirstSagaWaveBands(0).hp).toBeLessThan(0.75);
 
-    const a2total = buildFirstSagaSpawnQueue(2, { waveInNode: 1 }).length
-      + buildFirstSagaSpawnQueue(2, { waveInNode: 2 }).length;
-    expect(a2total).toBe(12);
+    const a2w1 = buildFirstSagaSpawnQueue(2, { waveInNode: 1 }) ?? [];
+    const a2w2 = buildFirstSagaSpawnQueue(2, { waveInNode: 2 }) ?? [];
+    expect(a2w1.length + a2w2.length).toBe(9);
+    expect(a2w1[0]?.type).toBe('raider');
+    expect(getFirstSagaStartingLives(2)).toBe(8);
+    expect(getFirstSagaBetweenWaveHealFraction(2)).toBe(0.50);
+    expect(getFirstSagaWaveBreakFrames(2)).toBeGreaterThanOrEqual(150);
+    expect(getFirstSagaGateHpBonus(2)).toBe(50);
+    expect(getFirstSagaMeleeDamageScale(2)).toBeLessThan(0.7);
 
     const bossWave = buildFirstSagaSpawnQueue(4, { waveInNode: 3, isBoss: true });
     expect(bossWave.some(e => e.__nodeBoss)).toBe(true);
@@ -103,10 +111,15 @@ describe('firstSaga', () => {
     expect(viaMaps).toHaveLength(6);
 
     const a1w1 = buildFirstSagaSpawnQueue(1, { waveInNode: 1 });
-    expect(a1w1[0].speedScale).toBeLessThanOrEqual(0.75);
+    expect(a1w1).toHaveLength(6);
+    expect(a1w1[0].type).toBe('warg');
+    expect(a1w1[0].speedScale).toBeLessThanOrEqual(0.55);
+    expect(a1w1[0].hpScale).toBeLessThanOrEqual(0.75);
+    const a1w2 = buildFirstSagaSpawnQueue(1, { waveInNode: 2 }) ?? [];
+    expect(a1w2).toHaveLength(4);
     expect(getFirstSagaStartingLives(1)).toBe(7);
     expect(getFirstSagaWaveBreakFrames(1)).toBeGreaterThan(60);
-    expect(getFirstSagaBetweenWaveHealFraction(1)).toBe(0.40);
+    expect(getFirstSagaBetweenWaveHealFraction(1)).toBe(0.45);
     expect(getFirstSagaWaveBands(1).speed).toBeLessThan(0.8);
   });
 });

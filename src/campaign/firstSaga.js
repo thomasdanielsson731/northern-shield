@@ -64,16 +64,17 @@ export function buildFirstSagaSpawnQueue(nodeIndex, waveSpec) {
     return sagaPack(SAGA_RAIDER, 6, 0.42);
   }
   if (nodeIndex === 1) {
-    // Wargs are fast — keep ~2-hit HP but slash speed; wave 2 is lighter after wave-1 attrition.
-    if (w === 1) return sagaPack(SAGA_WOLF, 6, 0.80, 0.70);
+    // Wargs rush warband — slash speed/HP so one Berserker survives two-wave teach after A0.
+    if (w === 1) return sagaPack(SAGA_WOLF, 6, 0.72, 0.50);
     if (w === 2) return [
-      ...sagaPack(SAGA_WOLF, 3, 0.74, 0.66),
-      ...sagaPack(SAGA_RAIDER, 2, 0.58, 1),
+      ...sagaPack(SAGA_WOLF, 2, 0.66, 0.48),
+      ...sagaPack(SAGA_RAIDER, 2, 0.55, 1),
     ];
   }
   if (nodeIndex === 2) {
-    if (w === 1) return sagaPack(SAGA_DRAUGR, 6, 0.86);
-    if (w === 2) return sagaPack(SAGA_DRAUGR, 6, 0.94);
+    // Gate-teach: fewer bodies, slower approach — one Berserker must hold the PORT.
+    if (w === 1) return sagaPack(SAGA_RAIDER, 4, 0.55, 0.82);
+    if (w === 2) return sagaPack(SAGA_RAIDER, 5, 0.60, 0.85);
   }
   if (nodeIndex === 3) {
     if (w === 1) return sagaPack(SAGA_DRAUGR, 7, 0.88);
@@ -112,23 +113,23 @@ export function getFirstSagaWaveBands(nodeIndex, waveInNode = 1) {
 /** Slower spawns on early assaults so a lone hero can barely keep up. */
 export function getFirstSagaSpawnGap(nodeIndex, waveInNode = 1) {
   if (nodeIndex === 0) return 24;
-  if (nodeIndex === 1) return waveInNode >= 2 ? 28 : 22;
-  if (nodeIndex === 2) return 16;
+  if (nodeIndex === 1) return waveInNode >= 2 ? 32 : 26;
+  if (nodeIndex === 2) return waveInNode >= 2 ? 36 : 30;
   return 14;
 }
 
 /** Breather between waves inside one assault (game ticks @ 30/s). */
 export function getFirstSagaWaveBreakFrames(nodeIndex) {
   if (nodeIndex === 1) return 150;
-  if (nodeIndex <= 2) return 90;
+  if (nodeIndex === 2) return 150;
   return 60;
 }
 
 /** Between-wave hero refill on early saga assaults (wave-1 attrition teach). */
 export function getFirstSagaBetweenWaveHealFraction(nodeIndex) {
   if (nodeIndex === 0) return 0;
-  if (nodeIndex === 1) return 0.40;
-  if (nodeIndex === 2) return 0.25;
+  if (nodeIndex === 1) return 0.45;
+  if (nodeIndex === 2) return 0.50;
   return 0;
 }
 
@@ -136,9 +137,22 @@ export function getFirstSagaBetweenWaveHealFraction(nodeIndex) {
 export function getFirstSagaStartingLives(nodeIndex) {
   if (nodeIndex === 0) return 5;
   if (nodeIndex === 1) return 7;
-  if (nodeIndex === 2) return 6;
+  if (nodeIndex === 2) return 8;
   if (nodeIndex === 3) return 7;
   return 8;
+}
+
+/** Extra gate HP at assault start — A2 teach survives first raider pile-up. */
+export function getFirstSagaGateHpBonus(nodeIndex) {
+  if (nodeIndex === 2) return 50;
+  return 0;
+}
+
+/** Melee damage multiplier on fortress targets during saga assaults. */
+export function getFirstSagaMeleeDamageScale(nodeIndex) {
+  if (nodeIndex === 2) return 0.62;
+  if (nodeIndex === 1) return 0.85;
+  return 1;
 }
 
 export function buildFirstSagaWavePlan(nodeIndex) {

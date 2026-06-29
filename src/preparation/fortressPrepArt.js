@@ -55,3 +55,40 @@ export function getWestGateArtKey(prepMeta) {
   if (prepMeta?.westGateScarred && !prepMeta?.westGateRepaired) return 'westGateCracked';
   return 'westGateIntact';
 }
+
+/** Live gate HP + prep scar state for campaign assault battle render. */
+export function getBattleWestGateArtKey(wallEntry, prepMeta) {
+  if (wallEntry) {
+    const max = wallEntry.maxHp ?? wallEntry.hp ?? 120;
+    const hp = wallEntry.hp ?? max;
+    if (hp <= 0) return 'westGateBreached';
+    if (hp < max * 0.45) return 'westGateCracked';
+  }
+  return getWestGateArtKey(prepMeta);
+}
+
+/** West gate sprite on PORT cell — wider than one grid cell, faces the lane. */
+export function drawCampaignGateSprite(ctx, artKey, cx, cy, cellSize, time = 0) {
+  const key = artKey ?? 'westGateIntact';
+  if (!isFortressPrepArtReady(key)) return false;
+  const box = {
+    x: cx - cellSize * 1.85,
+    y: cy - cellSize * 1.05,
+    w: cellSize * 3.7,
+    h: cellSize * 2.15,
+  };
+  if (!drawFortressPrepSprite(ctx, key, box)) return false;
+
+  const pulse = 0.45 + Math.sin(time * 2.2) * 0.25;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const lg = ctx.createRadialGradient(cx, cy - cellSize * 0.35, 0, cx, cy - cellSize * 0.35, cellSize * 0.9);
+  lg.addColorStop(0, `rgba(255,190,80,${0.18 + pulse * 0.14})`);
+  lg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.arc(cx, cy - cellSize * 0.35, cellSize * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  return true;
+}

@@ -79,9 +79,9 @@ describe('campaignMaps', () => {
     const w1 = buildCampaignNodeSpawnQueue(plan.waves[0], 0, 1);
     const w2 = buildCampaignNodeSpawnQueue(plan.waves[1], 0, 1);
     expect(w1).toHaveLength(6);
-    expect(w1.every(e => e.type === 'warg' && e.hpScale >= 0.75 && e.speedScale <= 0.75)).toBe(true);
-    expect(w2).toHaveLength(5);
-    expect(w2.filter(e => e.type === 'warg')).toHaveLength(3);
+    expect(w1.every(e => e.type === 'warg' && e.hpScale >= 0.65 && e.speedScale <= 0.55)).toBe(true);
+    expect(w2).toHaveLength(4);
+    expect(w2.filter(e => e.type === 'warg')).toHaveLength(2);
     expect(w2.filter(e => e.type === 'raider')).toHaveLength(2);
   });
 

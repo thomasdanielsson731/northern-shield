@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors, getDebriefContentAlpha, getDebriefScrollSafeArea, getDebriefPanelDrawRect, formatDebriefAssaultHeader, buildDebriefContextLines } from '../src/ui/debriefJuice.js';
+import { getMvpPulseScale, getMvpPulseAlpha, getDebriefRouteOpacity, getDebriefContinuePulse, getDebriefOutcomeColor, getDebriefHeaderColors, getDebriefContentAlpha, getDebriefScrollSafeArea, getDebriefPanelDrawRect, formatDebriefAssaultHeader, buildDebriefContextLines, planDebriefBodyLayout, debriefLineFits } from '../src/ui/debriefJuice.js';
 
 describe('debriefJuice', () => {
   it('pulses MVP label', () => {
@@ -38,10 +38,12 @@ describe('debriefJuice', () => {
 
   it('insets debrief text inside parchment safe area', () => {
     const safe = getDebriefScrollSafeArea(100, 50, 480, 340);
-    expect(safe.left).toBeGreaterThan(180);
-    expect(safe.right).toBeLessThan(500);
-    expect(safe.top).toBeGreaterThan(115);
-    expect(safe.width).toBeLessThanOrEqual(230);
+    expect(safe.left).toBeGreaterThan(200);
+    expect(safe.right).toBeLessThan(480);
+    expect(safe.top).toBeGreaterThan(110);
+    expect(safe.bottom).toBeLessThan(360);
+    expect(safe.width).toBeLessThanOrEqual(210);
+    expect(safe.bottom - safe.top).toBeGreaterThan(120);
   });
 
   it('matches cover-fit draw rect for debrief panel', () => {
@@ -71,6 +73,31 @@ describe('debriefJuice', () => {
       goldStolen: 40,
     });
     expect(defeat).toContain('Ramparts breached — treasury exposed');
-    expect(defeat).toContain('Treasury raided: −40g');
+    expect(defeat.some(l => l.includes('Treasury'))).toBe(false);
+
+    const wiped = buildDebriefContextLines({
+      isVictory: false,
+      nodeIndex: 2,
+      defeatReason: 'field_wiped',
+    });
+    expect(wiped).toHaveLength(1);
+    expect(wiped[0]).toContain('retry restores full HP');
+  });
+
+  it('plans debrief body to fit parchment height', () => {
+    const safe = getDebriefScrollSafeArea(100, 50, 480, 340);
+    const startY = safe.top + 70;
+    const plan = planDebriefBodyLayout(safe, startY, {
+      proseLineCount: 6,
+      hasMvp: true,
+      contextLineCount: 3,
+      hasBossLoot: false,
+      fortressRowCount: 3,
+      isVictory: false,
+    });
+    expect(plan.proseMax).toBeLessThanOrEqual(2);
+    expect(plan.contextMax).toBeLessThanOrEqual(3);
+    expect(debriefLineFits(safe.bottom - 5, 11, safe)).toBe(true);
+    expect(debriefLineFits(safe.bottom, 11, safe)).toBe(false);
   });
 });

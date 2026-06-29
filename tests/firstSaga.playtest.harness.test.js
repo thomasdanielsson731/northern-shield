@@ -26,8 +26,9 @@ describe('firstSaga playtest harness', () => {
     expect(mid.cleared).toEqual([0, 1, 2]);
   });
 
-  it('A0 and A1 pass balance heuristic for lone Berserker', () => {
+  it('A0–A2 pass balance heuristic for lone Berserker', () => {
     expect(estimateAssaultBalance(0).clearable).toBe(true);
     expect(estimateAssaultBalance(1).clearable).toBe(true);
+    expect(estimateAssaultBalance(2).clearable).toBe(true);
   });
 });

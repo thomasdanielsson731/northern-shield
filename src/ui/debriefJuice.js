@@ -49,7 +49,64 @@ export function getDebriefPanelDrawRect(x, y, w, h) {
 }
 
 /** Flat parchment interior — fractions measured on the scroll art, not the outer frame. */
-const PARCHMENT_INSETS = { top: 0.26, bottom: 0.28, left: 0.27, right: 0.27 };
+const PARCHMENT_INSETS = { top: 0.235, bottom: 0.355, left: 0.29, right: 0.29 };
+
+export function getDebriefParchmentHeight(safe) {
+  return Math.max(0, safe.bottom - safe.top);
+}
+
+/** Clip ink to the flat parchment band so nothing spills onto the scroll curls. */
+export function clipDebriefParchment(ctx, safe) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(safe.left, safe.top, safe.width, getDebriefParchmentHeight(safe));
+  ctx.clip();
+}
+
+/** Baseline y fits inside parchment (alphabetic baseline + descenders). */
+export function debriefLineFits(y, lineStep, safe, descent = 3) {
+  return y + descent <= safe.bottom;
+}
+
+/**
+ * Trim prose / context / fortress rows so body copy stays on the scroll.
+ * Reserves space for stats, optional MVP, and boss loot callout.
+ */
+export function planDebriefBodyLayout(safe, startY, {
+  proseLineCount = 0,
+  hasMvp = false,
+  contextLineCount = 0,
+  hasBossLoot = false,
+  fortressRowCount = 0,
+  isVictory = true,
+}) {
+  const maxY = safe.bottom - 4;
+  let proseMax = Math.min(proseLineCount, isVictory ? 3 : 2);
+  let ctxMax = contextLineCount;
+  let fortMax = fortressRowCount;
+
+  const measure = (p, c, f) => {
+    let y = startY;
+    y += p * 12 + 5;
+    y += 11;
+    if (hasMvp) y += 11;
+    if (hasBossLoot) y += 22;
+    y += c * 11;
+    if (f > 0) y += 13 + f * 11;
+    return y;
+  };
+
+  while (measure(proseMax, ctxMax, fortMax) > maxY && fortMax > 0) fortMax--;
+  while (measure(proseMax, ctxMax, fortMax) > maxY && ctxMax > 1) ctxMax--;
+  while (measure(proseMax, ctxMax, fortMax) > maxY && proseMax > 1) proseMax--;
+  while (measure(proseMax, ctxMax, fortMax) > maxY && ctxMax > 0) ctxMax--;
+
+  return {
+    proseMax: Math.max(0, Math.min(proseMax, proseLineCount)),
+    contextMax: ctxMax,
+    fortressMax: fortMax,
+  };
+}
 
 export function getDebriefScrollSafeArea(panX, slideY, panW, panH) {
   const draw = getDebriefPanelDrawRect(panX, slideY, panW, panH);
@@ -75,40 +132,31 @@ export function formatDebriefAssaultHeader(assault) {
   return `${assault.codename.toUpperCase()}  ·  ${assault.tierLabel}  ·  ${front} FRONT`;
 }
 
-/** Subtle light wash so ink reads on mottled parchment texture. */
-export function drawParchmentTextWash(ctx, safe) {
-  const h = safe.bottom - safe.top;
-  if (h <= 0) return;
-  const g = ctx.createLinearGradient(safe.left, safe.top, safe.left, safe.bottom);
-  g.addColorStop(0, 'rgba(255,248,228,0.36)');
-  g.addColorStop(0.55, 'rgba(255,248,228,0.24)');
-  g.addColorStop(1, 'rgba(255,248,228,0.14)');
-  ctx.fillStyle = g;
-  ctx.fillRect(safe.left, safe.top, safe.width, h);
-}
-
 /**
- * Ink text on parchment — cream halo + dark fill for contrast on tan texture.
+ * Ink on parchment — thin dark outline for legibility, no flat wash behind text.
  */
 export function drawParchmentInk(ctx, text, x, y, opts = {}) {
   const {
     font = 'bold 9px monospace',
     fill = '#1a0e04',
-    halo = 'rgba(255,248,228,0.82)',
-    haloWidth = 3,
+    outline = 'rgba(28,14,2,0.38)',
+    outlineWidth = 1.15,
     align = 'center',
     alpha = 1,
+    noOutline = false,
   } = opts;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.font = font;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
-  ctx.lineJoin = 'round';
-  ctx.miterLimit = 2;
-  ctx.lineWidth = haloWidth;
-  ctx.strokeStyle = halo;
-  ctx.strokeText(text, x, y);
+  if (!noOutline && outlineWidth > 0) {
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.lineWidth = outlineWidth;
+    ctx.strokeStyle = outline;
+    ctx.strokeText(text, x, y);
+  }
   ctx.fillStyle = fill;
   ctx.fillText(text, x, y);
   ctx.restore();
@@ -148,16 +196,12 @@ export function buildDebriefContextLines({
     lines.push(`${casualties} fallen — rally at next assault`);
   }
   if (!isVictory && defeatReason === 'field_wiped') {
-    lines.push('The line broke — all defenders fell');
-    lines.push('Retry restores full HP at deploy slots');
+    lines.push('The line broke — retry restores full HP at deploy slots');
   } else if (casualties > 0 && !isVictory) {
     lines.push(`${casualties} fallen — full HP restored on retry`);
   }
   if (!isVictory && defeatReason === 'ramparts') {
     lines.push('Ramparts breached — treasury exposed');
-  }
-  if (!isVictory && goldStolen > 0) {
-    lines.push(`Treasury raided: −${goldStolen}g`);
   }
   return lines;
 }

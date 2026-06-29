@@ -1,5 +1,7 @@
 import { SPRITES } from '../assets.js';
 import { getSpriteScale, getCombatSpriteScale } from '../config.js';
+import { drawPalisadeTile } from '../assets/terrainArt.js';
+import { getBattleWestGateArtKey, drawCampaignGateSprite } from '../preparation/fortressPrepArt.js';
 
 function _drawVikingShield(ctx, sx, sy, r, isBlue) {
   // Wooden rim
@@ -52,6 +54,7 @@ export class Grid {
     this.rows = rows;
     this.cellSize = cellSize;
     this.cells = Array.from({ length: rows }, () => new Array(cols).fill(CELL.EMPTY));
+    this.useCampaignPalisade = false;
     this.healthRatio     = 1;  // set by game.js each frame: lives / STARTING_LIVES
     this.gold            = 0;  // set by game.js each frame: current gold
     this.hoardPulse      = 0;  // set by game.js each frame: coin-landing bounce
@@ -59,6 +62,10 @@ export class Grid {
     this.bannerWaveBoost = 0;  // set by game.js on wave clear, decays each drawn frame
     /** When true, goal cell skips decorative buildings (campaign assault clarity). */
     this.minimalGoalDecor = false;
+    /** Ash Fen spawn mist instead of purple portal (First Saga assault). */
+    this.useAshfenSpawn = false;
+    this.campaignPrepMeta = null;
+    this.wallData = null;
   }
 
   setFortressUpgrades(upgrades) {
@@ -129,7 +136,8 @@ export class Grid {
     return null;
   }
 
-  draw(ctx, time = 0, gridAlpha = 0.22) {
+  draw(ctx, time = 0, gridAlpha = 0.22, options = {}) {
+    const skipFortifications = options.skipFortifications === true;
     if (gridAlpha > 0) {
       ctx.strokeStyle = `rgba(80,60,30,${gridAlpha})`;
       ctx.lineWidth = 0.6;
@@ -154,8 +162,11 @@ export class Grid {
         const y = row * this.cellSize;
         const cs = this.cellSize;
 
+        if (type === CELL.WALL || type === CELL.GATE) {
+          if (skipFortifications) continue;
+        }
         if (type === CELL.WALL) {
-          const adj = this._wallAdjacency(col, row);
+          const adj = this._wallRenderAdjacency(col, row);
           this._drawWallBlock(ctx, x, y, cs, adj);
         } else if (type === CELL.GATE) {
           this._drawGate(ctx, x, y, cs, time);
@@ -180,6 +191,20 @@ export class Grid {
   _drawSpawn(ctx, x, y, cs, time) {
     const cx = x + cs / 2;
     const cy = y + cs / 2;
+
+    if (this.useAshfenSpawn) {
+      ctx.fillStyle = '#14100c';
+      ctx.fillRect(x, y, cs, cs);
+      const edge = ctx.createRadialGradient(cx, cy, cs * 0.2, cx, cy, cs * 2.8);
+      edge.addColorStop(0, 'rgba(40,32,24,0.0)');
+      edge.addColorStop(1, 'rgba(8,6,4,0.35)');
+      ctx.fillStyle = edge;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cs * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
     const pulse = 0.5 + Math.sin(time * 2.5) * 0.5;
 
     ctx.fillStyle = '#06030c';
@@ -1040,8 +1065,17 @@ export class Grid {
   }
 
   _drawGate(ctx, x, y, cs, time) {
+    const col = Math.floor(x / cs);
+    const row = Math.floor(y / cs);
     const cx = x + cs / 2;
     const cy = y + cs / 2;
+
+    if (this.useCampaignPalisade) {
+      const wEntry = this.wallData?.[`${col}_${row}`];
+      const artKey = getBattleWestGateArtKey(wEntry, this.campaignPrepMeta);
+      if (drawCampaignGateSprite(ctx, artKey, cx, cy, cs, time)) return;
+    }
+
     const pulse = 0.45 + Math.sin(time * 2.2) * 0.25;
     ctx.save();
     ctx.fillStyle = '#120a04';
@@ -1079,7 +1113,112 @@ export class Grid {
          | (w(col - 1, row) ? 8 : 0);  // W
   }
 
+  /** Wall art adjacency — only stone/gate segments, not hero pads (avoids frame bleed). */
+  _wallRenderAdjacency(col, row) {
+    const w = (c, r) => {
+      const t = this.getCell(c, r);
+      return t === CELL.WALL || t === CELL.GATE;
+    };
+    return (w(col, row - 1) ? 1 : 0)
+         | (w(col + 1, row) ? 2 : 0)
+         | (w(col, row + 1) ? 4 : 0)
+         | (w(col - 1, row) ? 8 : 0);
+  }
+
+  /** Draw one wall or gate cell (for y-sorted field pass). */
+  drawFortificationAt(ctx, col, row, time = 0) {
+    const type = this.getCell(col, row);
+    if (type !== CELL.WALL && type !== CELL.GATE) return;
+    const cs = this.cellSize;
+    const x = col * cs;
+    const y = row * cs;
+    if (type === CELL.WALL) {
+      this._drawWallBlock(ctx, x, y, cs, this._wallRenderAdjacency(col, row));
+    } else {
+      this._drawGate(ctx, x, y, cs, time);
+    }
+  }
+
+  _drawPalisadeTorch(ctx, x, y, cs, col, row, N) {
+    if (N || (col + row) % 5 !== 0) return;
+    const time2 = performance.now() * 0.001;
+    const flicker = 0.55 + Math.sin(time2 * 9 + col) * 0.3;
+    const cx = x + cs / 2;
+    const tx = cx + ((col % 3) - 1) * cs * 0.22;
+    const ty = y + cs * 0.2;
+    ctx.save();
+    ctx.shadowColor = `rgba(255,140,30,${flicker * 0.65})`;
+    ctx.shadowBlur = 6 * flicker;
+    ctx.fillStyle = `rgba(255,170,60,${flicker * 0.85})`;
+    ctx.beginPath();
+    ctx.ellipse(tx, ty, 1.8 * flicker, 2.8 * flicker, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  _drawPalisadeWallBlock(ctx, x, y, cs, adj = 0) {
+    const col = Math.floor(x / cs);
+    const row = Math.floor(y / cs);
+    const N = (adj & 1) !== 0;
+
+    if (drawPalisadeTile(ctx, x, y, cs)) {
+      if (!N && adj !== 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(x, y, cs, cs * 0.14);
+      }
+      this._drawPalisadeTorch(ctx, x, y, cs, col, row, N);
+      return;
+    }
+
+    const cx = x + cs / 2;
+
+    ctx.fillStyle = '#1a1008';
+    ctx.fillRect(x, y, cs, cs);
+
+    const earth = ctx.createLinearGradient(x, y + cs, x, y);
+    earth.addColorStop(0, 'rgba(40,28,14,0.55)');
+    earth.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = earth;
+    ctx.fillRect(x, y + cs - 3, cs, 3);
+
+    const logCount = adj === 0 ? 3 : 4;
+    const logW = Math.max(2.2, cs * 0.22);
+    const gap = (cs - logCount * logW) / (logCount + 1);
+    for (let i = 0; i < logCount; i++) {
+      const lx = x + gap + i * (logW + gap);
+      const hJitter = ((col * 17 + row * 31 + i * 13) % 5) - 2;
+      const logH = cs - 2 + hJitter;
+      const tone = 70 + ((col + row + i) % 4) * 12;
+      ctx.fillStyle = `rgb(${tone + 18},${Math.floor(tone * 0.55)},${Math.floor(tone * 0.22)})`;
+      ctx.fillRect(lx, y + cs - logH, logW, logH);
+      ctx.fillStyle = 'rgba(255,200,120,0.12)';
+      ctx.fillRect(lx, y + cs - logH, logW * 0.35, logH);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(lx + logW - 0.6, y + cs - logH, 0.6, logH);
+    }
+
+    if (!N && adj !== 0) {
+      ctx.fillStyle = '#3a2410';
+      for (const mx of [x + 2, x + cs - 4]) {
+        ctx.fillRect(mx, y, 2, Math.max(2, cs * 0.16));
+      }
+    }
+
+    if ((col + row) % 5 === 0 && !N) {
+      this._drawPalisadeTorch(ctx, x, y, cs, col, row, N);
+    }
+
+    ctx.strokeStyle = 'rgba(20,10,4,0.35)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
+  }
+
   _drawWallBlock(ctx, x, y, cs, adj = 0) {
+    if (this.useCampaignPalisade) {
+      this._drawPalisadeWallBlock(ctx, x, y, cs, adj);
+      return;
+    }
     const N  = (adj & 1) !== 0;
     const E  = (adj & 2) !== 0;
     const S  = (adj & 4) !== 0;
@@ -1089,11 +1228,6 @@ export class Grid {
 
     // Alternating shield color (blue/red) by grid position
     const isBlue = (((x / cs) | 0) + ((y / cs) | 0)) % 2 === 0;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, cs, cs);
-    ctx.clip();
 
     ctx.fillStyle = '#1a0e04';
     ctx.fillRect(x, y, cs, cs);
@@ -1159,8 +1293,6 @@ export class Grid {
         }
       }
     }
-
-    ctx.restore();
 
     ctx.save();
     ctx.strokeStyle = 'rgba(30,15,5,0.4)';

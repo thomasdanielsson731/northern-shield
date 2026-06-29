@@ -3,14 +3,18 @@
  * Charcoal panels, gold trim, section art crops, cycle footer, defender cards.
  */
 
-import { UI_COLORS } from './uiTheme.js';
+import { UI_COLORS, META_TOP_BAR_COMPACT_H } from './uiTheme.js';
 import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 import { getWarCampWelcomeAlpha, WAR_CAMP_TAB_HINT_LINE } from './warCampJuice.js';
 import { drawHeroCardFrame } from '../assets/campaignArt.js';
 
 export const WAR_CAMP_HEADER_H = 0;
-export const WAR_CAMP_CYCLE_H = 52;
+export const WAR_CAMP_CYCLE_H = 40;
+/** Cycle strip below meta bar — inside top frame band. */
+export const WAR_CAMP_FRAME_CYCLE_H = 34;
+/** Reserved height above bottom frame for primary CTA row. */
+export const WAR_CAMP_BOTTOM_BAR_H = 52;
 export const WAR_CAMP_BANNER_H = 48;
 export const WAR_CAMP_GRID_COLS = 5;
 export const WAR_CAMP_CARD_GAP = 5;
@@ -143,43 +147,115 @@ const CYCLE_STEPS = [
   { icon: '🌲', label: 'GROW' },
 ];
 
-/** Footer cycle diagram from mockup. */
-export function drawWarCampCycle(ctx, x, y, w, activeTab = 'warband') {
-  const tabToStep = { recruit: 0, fortress: 1, warband: 4 };
-  const active = tabToStep[activeTab] ?? 2;
-  ctx.save();
-  drawWarCampPanel(ctx, x, y, w, WAR_CAMP_CYCLE_H, { fill: 'rgba(14,12,18,0.92)', radius: 6 });
+const TAB_TO_CYCLE_STEP = { recruit: 0, fortress: 1, warband: 4 };
+
+/** Y where War Camp panels start (below meta bar + cycle strip). */
+export function getWarCampContentTop(frameThick = 16) {
+  return frameThick + META_TOP_BAR_COMPACT_H + WAR_CAMP_FRAME_CYCLE_H + 4;
+}
+
+function drawCycleSteps(ctx, x, y, w, h, activeTab, opts = {}) {
+  const { labelX = x + 10, stepStartX = x + 72, fontSize = 6.5 } = opts;
+  const active = TAB_TO_CYCLE_STEP[activeTab] ?? 2;
   ctx.textAlign = 'left';
   ctx.font = 'bold 7px monospace';
   ctx.fillStyle = 'rgba(140,120,80,0.55)';
-  ctx.fillText('THE CYCLE', x + 10, y + 12);
+  ctx.fillText('THE CYCLE', labelX, y + 11);
 
-  const stepW = Math.min(72, (w - 120) / CYCLE_STEPS.length);
-  let sx = x + 78;
-  const cy = y + 30;
+  const stepW = Math.max(34, (w - (stepStartX - x) - 12) / CYCLE_STEPS.length);
+  let sx = stepStartX;
+  const cy = y + Math.round(h * 0.62);
   for (let i = 0; i < CYCLE_STEPS.length; i++) {
     const step = CYCLE_STEPS[i];
     const isActive = i === active;
-    ctx.font = isActive ? 'bold 7px monospace' : '7px monospace';
+    ctx.font = isActive ? `bold ${fontSize}px monospace` : `${fontSize}px monospace`;
     ctx.fillStyle = isActive ? WAR_CAMP_THEME.gold : 'rgba(140,130,110,0.55)';
     ctx.textAlign = 'center';
-    ctx.fillText(step.icon, sx + stepW / 2, cy - 2);
-    ctx.fillText(step.label, sx + stepW / 2, cy + 10);
+    ctx.fillText(step.icon, sx + stepW / 2, cy - 8);
+    ctx.fillText(step.label, sx + stepW / 2, cy + 2);
     if (i < CYCLE_STEPS.length - 1) {
       ctx.strokeStyle = 'rgba(100,90,70,0.35)';
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(sx + stepW + 2, cy + 2);
-      ctx.lineTo(sx + stepW + 10, cy + 2);
+      ctx.moveTo(sx + stepW + 2, cy - 2);
+      ctx.lineTo(sx + stepW + 7, cy - 2);
       ctx.stroke();
     }
-    sx += stepW + 12;
+    sx += stepW + 7;
   }
+}
 
-  ctx.textAlign = 'right';
-  ctx.font = '6px monospace';
-  ctx.fillStyle = 'rgba(120,100,70,0.45)';
-  ctx.fillText('We do not seek glory. We build it.', x + w - 10, y + WAR_CAMP_CYCLE_H - 8);
+/** THE CYCLE in top frame band — below Northern Shield meta bar. */
+export function drawWarCampFrameCycle(ctx, baseW, frameThick, activeTab = 'warband') {
+  const y = frameThick + META_TOP_BAR_COMPACT_H;
+  const x = frameThick;
+  const w = baseW - frameThick * 2;
+  const h = WAR_CAMP_FRAME_CYCLE_H;
+  ctx.save();
+  ctx.fillStyle = 'rgba(6,5,10,0.94)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(150,120,70,0.28)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h - 0.5);
+  ctx.lineTo(x + w, y + h - 0.5);
+  ctx.stroke();
+  drawCycleSteps(ctx, x, y, w, h, activeTab);
   ctx.restore();
+}
+
+/** Footer cycle diagram — legacy panel embed (skirmish / tests). */
+export function drawWarCampCycle(ctx, x, y, w, activeTab = 'warband') {
+  ctx.save();
+  drawWarCampPanel(ctx, x, y, w, WAR_CAMP_CYCLE_H, { fill: 'rgba(14,12,18,0.92)', radius: 6 });
+  drawCycleSteps(ctx, x, y, w, WAR_CAMP_CYCLE_H, activeTab);
+  ctx.restore();
+}
+
+/** Tab guidance card — separates "what this screen is for" from hero cards. */
+export function drawWarCampGuidanceCard(ctx, x, y, w, guidance, btnsOut = null) {
+  if (!guidance) return 0;
+  const h = 36;
+  const fills = {
+    primary: 'rgba(24,32,16,0.95)',
+    action: 'rgba(28,20,36,0.95)',
+    optional: 'rgba(18,22,32,0.92)',
+    info: 'rgba(14,12,18,0.9)',
+  };
+  const borders = {
+    primary: 0.85,
+    action: 0.8,
+    optional: 0.55,
+    info: 0.45,
+  };
+  const kind = guidance.kind ?? 'info';
+  drawWarCampPanel(ctx, x, y, w, h, {
+    fill: fills[kind] ?? fills.info,
+    borderAlpha: borders[kind] ?? 0.5,
+    radius: 6,
+  });
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillStyle = kind === 'primary' ? WAR_CAMP_THEME.gold : 'rgba(160,140,100,0.55)';
+  ctx.fillText(guidance.title ?? 'GUIDE', x + 10, y + 12);
+  ctx.font = kind === 'primary' ? 'bold 7.5px monospace' : '7px monospace';
+  ctx.fillStyle = kind === 'primary' ? 'rgba(232,215,181,0.9)' : 'rgba(180,165,135,0.78)';
+  const line = guidance.line ?? '';
+  const maxW = w - 20;
+  ctx.fillText(line.length > 52 ? `${line.slice(0, 51)}…` : line, x + 10, y + 26);
+  if (guidance.tab && btnsOut) {
+    const tabW = 56;
+    const tabH = 16;
+    const tabX = x + w - tabW - 8;
+    const tabY = y + 10;
+    drawWarCampPanel(ctx, tabX, tabY, tabW, tabH, { fill: 'rgba(32,24,12,0.95)', radius: 3, borderAlpha: 0.7 });
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 6px monospace';
+    ctx.fillStyle = WAR_CAMP_THEME.gold;
+    ctx.fillText('OPEN →', tabX + tabW / 2, tabY + 11);
+    btnsOut.push({ x: tabX, y: tabY, w: tabW, h: tabH, action: 'switchTab', tab: guidance.tab });
+  }
+  return h + 8;
 }
 
 /** Ambient backdrop — dark gradient + subtle hearth glow only (no full mockup bleed). */

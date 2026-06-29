@@ -586,6 +586,25 @@ export class Tower {
     return 0;
   }
 
+  /** Redraw hero sprite only — used when overlapping fortress walls (depth pass). */
+  drawCombatSpriteOnly(ctx, t) {
+    if (!isHeroTowerType(this.type)) return;
+    const bob = heroWalkBob(this, t);
+    const x = this.x;
+    const y = this.y;
+    const angle = heroSpriteFacingAngle(this);
+    const glow = this.glowRgb ? `rgba(${this.glowRgb},0.95)` : null;
+    if      (this.type === TOWER_TYPES.BERSERK)    drawSpriteFrame(ctx, 'berserker', heroAnimFrame(this, t), x, y, angle, 58, glow ?? 'rgba(255,120,40,0.95)', this.level, bob);
+    else if (this.type === TOWER_TYPES.VALKYRIE)   drawSpriteFrame(ctx, 'valkyrie', heroAnimFrame(this, t), x, y, angle, 72, glow ?? 'rgba(220,180,60,0.9)', this.level, bob);
+    else if (this.type === TOWER_TYPES.MILITARY)   drawSpriteFrame(ctx, 'archer', heroAnimFrame(this, t), x, y, angle, 62, glow ?? 'rgba(90,140,190,0.75)', this.level, bob);
+    else if (this.type === TOWER_TYPES.CATAPULT)   drawSpriteFrame(ctx, 'catapult', heroAnimFrame(this, t), x, y, angle, 68, glow ?? 'rgba(200,130,30,0.85)', this.level, bob);
+    else if (this.type === TOWER_TYPES.BLONDIE)    drawSpriteFrame(ctx, 'blondie', heroAnimFrame(this, t), x, y, angle, 64, glow ?? 'rgba(255,110,200,0.9)', this.level, bob);
+    else if (this.type === TOWER_TYPES.PILTORN)    drawSpriteFrame(ctx, 'piltorn', heroAnimFrame(this, t), x, y, angle, 62, glow ?? 'rgba(100,140,190,0.8)', this.level, bob);
+    else if (this.type === TOWER_TYPES.HYDDA)      drawSpriteFrame(ctx, 'hydda', heroAnimFrame(this, t), x, y, angle, 58, glow ?? 'rgba(50,200,90,0.85)', this.level, bob);
+    else if (this.type === TOWER_TYPES.ISJATTEN)   drawSpriteFrame(ctx, 'isjatten', heroAnimFrame(this, t), x, y, angle, 72, glow ?? 'rgba(100,190,255,0.9)', this.level, bob);
+    else if (this.type === TOWER_TYPES.DRAKSHIP)   drawSpriteFrame(ctx, 'drakship', heroAnimFrame(this, t), x, y, angle, 70, glow ?? 'rgba(200,100,30,0.85)', this.level, bob);
+  }
+
   draw(ctx) {
     const _now = performance.now();
     const t    = _now * 0.001;

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   createPrepShellState,
   getHornBlockReason,
+  getPrepObjectives,
+  getPrepInstructionHint,
   applyPanelAction,
   applyFirstSagaAssaultRewards,
   defaultPrepFieldMeta,
@@ -114,5 +116,47 @@ describe('fortressCommanderShell', () => {
     expect(content.lines[0]).toMatch(/splintered/i);
     const actions = getPrepPanelActions(PREP_HOTSPOTS.WALL_SCAR, ctx);
     expect(actions.some(a => a.id === 'repair_gate')).toBe(true);
+  });
+
+  it('prep objectives progress from gate assign through horn', () => {
+    const assault = { codename: 'Wolf Smoke', tierLabel: 'A1' };
+    const base = {
+      pendingAssaultNode: 0,
+      assaultNodeIndex: 0,
+      assault,
+      prepMeta: defaultPrepFieldMeta(),
+      postAssignments: {},
+      roster: { defenders: [{ defenderId: 'd1', name: 'Erik', type: 'berserk' }] },
+    };
+
+    let steps = getPrepObjectives(base);
+    expect(steps.find(s => s.id === 'assign_gate')?.active).toBe(true);
+    expect(getPrepInstructionHint(base)?.title).toBe('ASSIGN GATE');
+
+    const assigned = {
+      ...base,
+      postAssignments: { west_gate: { defenderId: 'd1' } },
+    };
+    steps = getPrepObjectives(assigned);
+    expect(steps.find(s => s.id === 'assign_gate')?.done).toBe(true);
+    expect(steps.find(s => s.id === 'sound_horn')?.active).toBe(true);
+    expect(getPrepInstructionHint(assigned)?.title).toBe('SOUND HORN');
+
+    const noAssault = { ...base, pendingAssaultNode: null, assaultNodeIndex: null, assault: null };
+    expect(getPrepInstructionHint(noAssault)?.title).toBe('COMMAND MAP');
+  });
+
+  it('prep objectives require wall repair on A3 teach', () => {
+    const ctx = {
+      pendingAssaultNode: FIRST_SAGA_A3_NODE,
+      assaultNodeIndex: FIRST_SAGA_A3_NODE,
+      assault: { codename: 'Splinter Raid' },
+      prepMeta: { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      postAssignments: { west_gate: { defenderId: 'd1' } },
+      roster: { defenders: [{ defenderId: 'd1', name: 'Erik', type: 'berserk' }] },
+    };
+    const steps = getPrepObjectives(ctx);
+    expect(steps.find(s => s.id === 'repair_gate')?.active).toBe(true);
+    expect(getPrepInstructionHint(ctx)?.title).toBe('MEND THE GATE');
   });
 });
