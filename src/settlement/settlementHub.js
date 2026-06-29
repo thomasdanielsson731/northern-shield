@@ -136,9 +136,16 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
     ctx.font = 'bold 8px monospace';
     ctx.fillStyle = locked ? 'rgba(120,110,90,0.55)' : UI_COLORS.gold;
   }
+  if (avail.unread && !locked) {
+    const dotPulse = 0.75 + 0.25 * Math.sin(performance.now() / 300);
+    ctx.fillStyle = `rgba(240,180,60,${dotPulse.toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(box.x + box.w - 5, box.y + 5, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (avail.banner && !locked) {
     ctx.font = 'bold 5.5px monospace';
-    ctx.fillStyle = 'rgba(200,170,100,0.75)';
+    ctx.fillStyle = avail.unread ? 'rgba(240,200,120,0.85)' : 'rgba(200,170,100,0.75)';
     const bannerY = building.id === 'command' ? labelY + 22 : labelY + 11;
     ctx.fillText(avail.banner, box.x + box.w / 2, bannerY);
   }
@@ -209,6 +216,9 @@ export function drawSettlementHub(ctx, layout, hubState, btnsOut = []) {
 
 export function getHubInstructionHint(hubState) {
   const next = hubState?.nextAssault;
+  if (hubState?.chronicleUnread) {
+    return { title: 'NEW SAGA ENTRY', line: 'Chronicle stone has an unread battle record' };
+  }
   if (hubState?.battlesCompleted === 0) {
     return { title: 'FIRST STEP', line: 'War Horn → pick First Night → prepare the gate' };
   }
