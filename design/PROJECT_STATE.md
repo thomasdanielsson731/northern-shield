@@ -75,7 +75,7 @@ Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice boa
 - **Debrief parchment** — layout synced to scroll art, ink/wash legibility, defeat context lines
 - **First Saga onboarding** — west road copy, fortress prep deploy hint, Settlement → RECRUIT tab
 - **Polish Board iter 53–72** — Hall dossier fade/Esc, settlement chronicle unread, `__NS_TEST_HOOKS__`, polish audit expansion
-- **424** unit tests passing
+- **432** unit tests passing
 
 ## Current implementation focus
 
