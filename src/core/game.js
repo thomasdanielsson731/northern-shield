@@ -2785,6 +2785,7 @@ function handleHubBuildingAction(action) {
       _chronicleUnread = false;
       if (_campaignState) {
         _campaignState.uiHints = { ..._campaignState.uiHints, chronicleUnread: false };
+        try { persistCampaign(); } catch {}
       }
       break;
     }
@@ -11642,12 +11643,19 @@ function drawBattleMinimapOverlay() {
   });
 
   const aliveEnemies = enemies.filter(e => e.alive && !e.reached).length;
-  if (aliveEnemies > 0) {
+  const deployedHeroes = towers.filter(t => t.defenderId).length;
+  if (aliveEnemies > 0 || deployedHeroes > 0) {
     ctx.save();
     ctx.font = 'bold 6px monospace';
     ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(232,100,80,0.82)';
-    ctx.fillText(`${aliveEnemies}`, mm.x + mm.w - 6, mm.y + mm.h - 4);
+    if (aliveEnemies > 0) {
+      ctx.fillStyle = 'rgba(232,100,80,0.82)';
+      ctx.fillText(`${aliveEnemies} foes`, mm.x + mm.w - 6, mm.y + mm.h - 4);
+    }
+    if (deployedHeroes > 0) {
+      ctx.fillStyle = 'rgba(100,180,240,0.75)';
+      ctx.fillText(`${deployedHeroes} ⚔`, mm.x + mm.w - 6, mm.y + mm.h - (aliveEnemies > 0 ? 12 : 4));
+    }
     ctx.restore();
   }
 }
