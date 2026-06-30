@@ -315,18 +315,19 @@ function drawHallScrollChrome(ctx, hall, scrollOffset, total, btnsOut) {
   const maxVisible = HALL_MAX_STATUES;
   const maxScroll = Math.max(0, total - maxVisible);
   if (maxScroll <= 0) return;
-  const arrowY = hall.y + hall.h * 0.42;
-  ctx.font = 'bold 14px monospace';
+  const arrowY = hall.y + 16;
+  const btnH = 22;
+  ctx.font = 'bold 12px monospace';
   ctx.textAlign = 'center';
   if (scrollOffset > 0) {
     ctx.fillStyle = 'rgba(200,170,90,0.72)';
-    ctx.fillText('◀', hall.x + 14, arrowY);
-    btnsOut.push({ x: hall.x + 2, y: arrowY - 14, w: 24, h: 28, action: 'scrollRoster', dir: -1 });
+    ctx.fillText('◀', hall.x + 12, arrowY + 8);
+    btnsOut.push({ x: hall.x + 2, y: arrowY - 2, w: 22, h: btnH, action: 'scrollRoster', dir: -1 });
   }
   if (scrollOffset < maxScroll) {
     ctx.fillStyle = 'rgba(200,170,90,0.72)';
-    ctx.fillText('▶', hall.x + hall.w - 14, arrowY);
-    btnsOut.push({ x: hall.x + hall.w - 26, y: arrowY - 14, w: 24, h: 28, action: 'scrollRoster', dir: 1 });
+    ctx.fillText('▶', hall.x + hall.w - 12, arrowY + 8);
+    btnsOut.push({ x: hall.x + hall.w - 24, y: arrowY - 2, w: 22, h: btnH, action: 'scrollRoster', dir: 1 });
   }
   ctx.textAlign = 'left';
 }
@@ -420,7 +421,14 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
       ctx.font = 'bold 6.5px monospace';
       ctx.fillStyle = isRenaming ? '#ffd878' : (hasName ? UI_COLORS.parchment : 'rgba(130,120,100,0.5)');
       ctx.fillText(String(displayName).slice(0, 11), slot.x, footY + 9);
+      ctx.textAlign = 'left';
+    }
+  }
 
+  if (drawOverlays) {
+    for (const { def, slot } of statueEntries) {
+      const statueH = statueDisplayHeight(hall, slot.scale, focus?.defenderId === def.defenderId, plinthDefs.length);
+      const footY = slot.y;
       const hitW = Math.max(52, statueH * 0.22);
       const hitH = statueH + 18;
       btnsOut.push({
@@ -431,11 +439,8 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
         action: 'focusDefender',
         defenderId: def.defenderId,
       });
-      ctx.textAlign = 'left';
     }
-  }
 
-  if (drawOverlays) {
     if (!focus && defenders.length > 0) {
       ctx.textAlign = 'center';
       ctx.font = '7px monospace';

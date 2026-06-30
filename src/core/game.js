@@ -833,6 +833,7 @@ let _firstNightDramaShown = false;       // First Saga A0 — mist emergence bea
 let _assaultWave1SpawnDrama = false;     // Wave 1 first-spawn slow-mo on saga assaults
 let _spawnMistDramaTimer = 0;            // Brief fen mist boost after wave-1 emergence
 let _assaultDisplaySpawnPx = null;       // Last border spawn used (multi-portal assault)
+let _assaultSpawnPortalIdx = 0;        // 0 = primary gate, 1+ = extra portals
 let _enemyIntroQueue    = [];            // queued { label, hint } banners waiting to display
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
 let _renameHintUntil    = 0;             // performance.now() deadline for first rename hint
@@ -1342,6 +1343,7 @@ function restartCombatState() {
   _assaultWave1SpawnDrama = false;
   _spawnMistDramaTimer = 0;
   _assaultDisplaySpawnPx = null;
+  _assaultSpawnPortalIdx = 0;
   _enemyIntroQueue   = [];
   _starsEarnedThisBattle = 0;
   _defKillMilestones = new Set();
@@ -2547,6 +2549,7 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   _assaultWave1SpawnDrama = false;
   _spawnMistDramaTimer = 0;
   _assaultDisplaySpawnPx = null;
+  _assaultSpawnPortalIdx = 0;
   _navActiveId       = 'battle';
   showRuneMenu       = false;
   _nodeWavePlan      = buildNodeWavePlan(mapIndex, nodeIndex);
@@ -2681,9 +2684,20 @@ function enterSettlementHub() {
   gameOver = false;
   victory = false;
   _returnToNodeMapAfterDebrief = false;
+  const hadVictory = _battleResult === 'victory';
   _battleResult = null;
   const progress = ensureCampaignProgress();
   _pendingNextAssaultNode = getNextAvailableAssault(progress, _campaignMapIndex, null)?.nodeIndex ?? null;
+  if (hadVictory && _roster) {
+    const barracksLevel = _campaignState?.fortressUpgrades?.barracks ?? 0;
+    const cap = getBarracksDisplayCap({
+      firstSagaMap: isFirstSagaMap(_campaignMapIndex),
+      barracksLevel,
+    });
+    if (_roster.defenders.length < cap && canRecruitInCampaignWarCamp().ok) {
+      _hubPulseBuilding = 'recruit';
+    }
+  }
   gridZoom = 1.0;
   gridPanX = 0;
   gridPanY = 0;
@@ -5502,8 +5516,12 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   let _spawnCol = SPAWN.col, _spawnRow = SPAWN.row, _spawnPath = currentPath;
   if (_activeExtras.length > 0) {
     const _all = [{ col: SPAWN.col, row: SPAWN.row, path: currentPath }, ..._activeExtras];
-    const _pick = _all[Math.floor(Math.random() * _all.length)];
+    const _pickIdx = Math.floor(Math.random() * _all.length);
+    const _pick = _all[_pickIdx];
     _spawnCol = _pick.col; _spawnRow = _pick.row; _spawnPath = _pick.path;
+    _assaultSpawnPortalIdx = _pickIdx;
+  } else {
+    _assaultSpawnPortalIdx = 0;
   }
 
   let path;
@@ -5524,7 +5542,12 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
   if (type === ENEMY_TYPES.JOTUNN) {
     screenShake     = Math.max(screenShake, 10);
     portalFlash      = 14;
-    portalFlashColor = 'blue';  // regular Jötunn — cold blue, not the boss red
+    portalFlashColor = 'blue';
+  } else if (portalFlash <= 0) {
+    portalFlash = 6;
+    portalFlashColor = _assaultSpawnPortalIdx === 0 ? 'blue'
+      : _assaultSpawnPortalIdx === 1 ? 'purple'
+        : 'gold';
   }
   const newEnemy = new Enemy(path, type, hpScale);
   if (useAssaultScrollWorld()) {
@@ -6927,6 +6950,12 @@ canvas.addEventListener('mousedown', e => {
               ? Math.max(0, (_roster?.defenders.length ?? 0) - HALL_MAX_STATUES)
               : Number.MAX_SAFE_INTEGER;
             _rosterScrollOffset = Math.max(0, Math.min(maxScroll, _rosterScrollOffset + btn.dir));
+            if (_hallFocusDefenderId && shouldShowHallOfHeroesView(_warCampTab, _progressionBuilding)) {
+              const idx = _roster?.defenders.findIndex(d => d.defenderId === _hallFocusDefenderId) ?? -1;
+              if (idx < _rosterScrollOffset || idx >= _rosterScrollOffset + HALL_MAX_STATUES) {
+                _hallFocusDefenderId = null;
+              }
+            }
           } else if (btn.action === 'focusDefender') {
             _hallFocusDefenderId = _hallFocusDefenderId === btn.defenderId ? null : btn.defenderId;
           } else if (btn.action === 'focusFortressNode') {
