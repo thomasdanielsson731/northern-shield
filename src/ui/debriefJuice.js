@@ -185,8 +185,12 @@ export function buildDebriefContextLines({
   casualties = 0,
   defeatReason = null,
   goldStolen = 0,
+  openRecruitSlot = false,
 }) {
   const lines = [];
+  if (isVictory && openRecruitSlot) {
+    lines.push('Barracks has an open slot — recruit at settlement');
+  }
   if (isVictory && nodeIndex === 2) {
     lines.push('The gate cracked. Salvage crews gathered timber.');
   }

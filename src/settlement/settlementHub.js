@@ -227,6 +227,9 @@ export function getHubInstructionHint(hubState) {
   if (hubState?.chronicleUnread) {
     return { title: 'NEW SAGA ENTRY', line: 'Chronicle stone has an unread battle record' };
   }
+  if (hubState?.rosterCap > 0 && (hubState?.rosterCount ?? 0) < hubState.rosterCap) {
+    return { title: 'OPEN ROSTER SLOT', line: 'Barracks can recruit another defender' };
+  }
   if (hubState?.battlesCompleted === 0) {
     return { title: 'FIRST STEP', line: 'Assaults emblem → pick First Night → prepare the gate' };
   }

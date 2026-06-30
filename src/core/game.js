@@ -7064,6 +7064,7 @@ canvas.addEventListener('mousedown', e => {
             _rosterScrollOffset = 0;
             if (btn.tab !== 'warband') _hallFocusDefenderId = null;
             if (btn.tab !== 'fortress') _treasuryFocusKey = null;
+            if (btn.tab !== 'recruit') _recruitType = null;
             if (_warCampTabPulse === btn.tab) {
               _warCampTabPulse = null;
               if (btn.tab === 'recruit') {
@@ -13846,6 +13847,14 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
     casualties: _lastAssaultCasualtyCount,
     defeatReason: _lastDefeatReason,
     goldStolen: !isVictory ? goldStolen : 0,
+    openRecruitSlot: isVictory && (() => {
+      const barracksLevel = _campaignState?.fortressUpgrades?.barracks ?? 0;
+      const cap = getBarracksDisplayCap({
+        firstSagaMap: isFirstSagaMap(_campaignMapIndex ?? 0),
+        barracksLevel,
+      });
+      return (_roster?.defenders?.length ?? 0) < cap && canRecruitInCampaignWarCamp().ok;
+    })(),
   });
   const mvpTower = pickBattleMvp();
   const hasBossLoot = Boolean(_lastBossLootItemId);
