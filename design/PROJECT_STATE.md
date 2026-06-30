@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Sprint 3: scar repair, anchor renderer, horn camera)  
+**Last updated:** 2026-06-22 (Sprint 7: Proposal A complete — prep/assault unify + W15–W16 art)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -16,7 +16,7 @@
 | **Current Target** | The First Saga (vertical slice) |
 | **Current Version** | `0.3.0-saga-rc` |
 | **Current Phase** | Production (Vertical Slice RC) |
-| **Current Sprint** | Sprint 6 — Immersive progression UI + assault polish |
+| **Current Sprint** | Sprint 7 — Fortress prep/assault unify (Proposal A) + art W15–W16 |
 
 **Design authority:** [north_star.md](north_star.md) · [the_first_saga.md](the_first_saga.md) · [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md)
 
@@ -64,27 +64,29 @@ Status: **RC candidate** — code complete; manual fresh-save playtest recommend
 
 ## Current sprint
 
-**Sprint 6 — Immersive UI + assault readability**
+**Sprint 7 — Fortress prep & assault (Proposal A)**
 
-Objective: Settlement building interiors (Barracks), assault playfield scale/spawn/terrain, hub fortress polish.
+Objective: One canonical `FortressLayout` for prep and assault; scroll prep default; posts-only campaign; production art W14–W16.
+
+Status: **Phases A–E shipped** (`8715139`); local HUD/zoom fixes uncommitted.
 
 ## Recently completed work
 
-- **Sprint 3 prep/assault** — Gate scar repair flow; anchor-based `fortressRenderer`; siege props on posts; horn camera pan; wallworks palisade tint
-- **Proposal A — Fortress prep/assault** — Scroll battlefield prep default; `FortressLayout` bake on horn; campaign posts-only; MAP schematic toggle; `prepSiegePicker` + `prepHeroPicker`; assault glass dock SIEGE section; rampart tier label; debrief post-name prose (`design/FORTRESS_PREP_ASSAULT_GRAPHICS.md`)
-- **Immersive Barracks** — `barracksView.js`; Hall statues recruit row; roster panel; level card; `ui_barracks_interior@1536x1024.png`
-- **Hall statues** — frame crop; no gold plinth rectangles
-- **Settlement fortress hub** — ~40% smaller structures; no rings/shadows; full titles; upgrade affordance pulse
-- **Command map chrome** — meta bar region/NEXT; top-left briefing glass chip
-- **Assault combat** — border spawn (`getAssaultBorderSpawnPx`); structures-only fortress @ 1.72×; full-world `assault_battlefield_bg@2048x1320.png`; wilderness scatter; HUD/terrain/unit fixes
-- **Polish Board iter 53–72** — Hall dossier, chronicle unread, `__NS_TEST_HOOKS__`
-- **531** unit tests passing
+- **Proposal A Phases A–E** — `fortressLayout` bake on horn; scroll prep; posts-only campaign; `drawFortressLayout`; scar repair; horn camera; SIEGE HUD; breach VFX; debrief post prose (`design/FORTRESS_PREP_ASSAULT_GRAPHICS.md`)
+- **Art W15–W16** — `siege_ballista_battle`, `siege_catapult_battle`, `tile_palisade_stone_segment`, fen scatter props, `fort_repair_scaffold`
+- **Playtest polish (local)** — prep zoom + ballista panel; assault zoom 0.78; HUD values `bold 8px`; `getLiveSiegeHudRows`; Vite `drawRightPanel` syntax fix
+- **Workspace remote** — `northern-shield-workspace` outer repo
+- **Sprint 3 prep/assault** — Gate scar repair; anchor `fortressRenderer`; siege props; horn camera; wallworks palisade tint
+- **Immersive Barracks** — `barracksView.js`; Hall statues recruit row; `ui_barracks_interior@1536x1024.png`
+- **Assault combat** — border spawn; structures via `drawFortressLayout`; `assault_battlefield_bg@2048x1320.png`; wilderness scatter
+- **536** unit tests passing
 
 ## Current implementation focus
 
-1. Human playtest: assault border spawn + fortress scale on shared terrain
-2. Commit/push immersive UI batch (inner repo)
-3. Polish backlog: structure PNGs (#33)
+1. Commit local HUD/zoom/playtest fixes (inner repo)
+2. Human playtest: prep → horn → assault HUD values + ballista on field
+3. Age II structure silhouettes (Phase D remainder)
+4. Acceptance criteria §11 playtest checklist in graphics doc
 
 ---
 
@@ -119,8 +121,12 @@ Checklist for **The First Saga** scope. ✅ = playable in campaign flow · 🟡 
 | Fortress upgrade tree (slice subset) | 🟡 meta exists; slice ceremony not wired |
 | Skirmish mode | ✅ (CUT from onboarding; separate entry) |
 | Rune shop / stars in campaign | ✅ CUT — disabled in assault |
-| Siege structures in slice | ✅ CUT |
-| Structure PNG sprites | 🟡 procedural + prep sprites; assault uses composited structures |
+| Siege structures in slice | ✅ ballista via posts + field (campaign) |
+| Fortress prep scroll world | ✅ default; MAP schematic toggle |
+| FortressLayout assault draw | ✅ `drawFortressLayout` |
+| Gate breach VFX | ✅ `gateBreachFx.js` |
+| W15 siege battle sprites | ✅ `assets/fortress/siege/` |
+| Structure PNG sprites | 🟡 core W1 + W15; Age II pending |
 | Immersive Barracks recruit | ✅ |
 | Immersive Hall / Treasury | ✅ |
 | Assault border spawn | ✅ |
@@ -236,7 +242,9 @@ Chronological log — **do not remove** historical entries.
 | 23 | Assault fortress = structures only on shared terrain (no ground plate) | Accepted | `drawAssaultFortressStructures`; plate retired |
 | 24 | Assault terrain cover-fills padded world canvas | Accepted | `assault_battlefield_bg@2048x1320.png` |
 | 25 | Settlement hub structures scaled to skyline (~40% display base) | Accepted | `FORTRESS_STRUCTURE_DISPLAY_BASE = 0.30` |
-| 26 | Command map briefing in glass chip; region/NEXT in meta bar | Accepted | `firstSagaUI.js`, `warCampVisual.js` |
+| 27 | Proposal A: scroll prep, posts-only, `FortressLayout` bake, MAP toggle | Accepted | `FORTRESS_PREP_ASSAULT_GRAPHICS.md` |
+| 28 | Assault zoom 0.78 for readable fortress (was 0.54) | Accepted | `assaultField.js`; playtest 2026-06-22 |
+| 29 | Campaign siege: ballista `minArmory: 0`; field placement HUD via `getLiveSiegeHudRows` | Accepted | `prepSiegePicker.js`, `game.js` |
 
 ---
 
@@ -244,34 +252,29 @@ Chronological log — **do not remove** historical entries.
 
 ## Objective
 
-Ship immersive progression screens and assault readability fixes; validate in playtest.
+Close Proposal A playtest gaps; commit polish batch; optional Age II art.
 
 ## Definition of Done
 
-- [x] Barracks immersive view wired
-- [x] Assault border spawn + structures-only fortress
-- [x] Battlefield background full-world cover
-- [x] `npm test` green (**513**)
-- [ ] Human playtest assault spawn rim + barracks recruit flow
-- [ ] Inner-repo commit for this batch
+- [x] Phases A–E per `FORTRESS_PREP_ASSAULT_GRAPHICS.md`
+- [x] W15–W16 art promoted + wired
+- [x] `npm test` green (**536**)
+- [ ] HUD values readable on Windows (local fix — commit)
+- [ ] Human playtest fresh Saga I assault
+- [ ] Inner-repo commit for HUD/zoom batch
 
 ## Success Criteria
 
-Player reads enemies from forest edge; fortress feels sized to terrain; Barracks matches Hall/Treasury immersion pattern.
-
-## Blocked By
-
-- None (code complete)
-
-## Next Review Board
-
-**Player Experience** — GRID · SAGA · FENRIR · SIGHT · SKALD
+Player sees prep assignments on assault start; HUD answers "what did I decide before the horn?"; ballista readable in prep and battle.
 
 ## Next Recommended Work
 
-1. Playtest + commit immersive UI batch
-2. Structure PNG sprites (#33) if art sprint resumes
-3. Regenerate assault battlefield if edge seams visible
+1. Commit uncommitted inner fixes (`game.js`, `assaultField.js`, `terrainArt.js`)
+2. Age II silhouettes (`BATCH_PROMPTS` — TBD wave)
+3. Playtest acceptance §11 in graphics doc
+4. Horn defender march anim (optional juice)
+
+**Claude handoff:** [agents/handoffs/2026-06-22-claude-fortress-battle-brief.md](../../agents/handoffs/2026-06-22-claude-fortress-battle-brief.md)
 
 ---
 
@@ -282,12 +285,13 @@ Player reads enemies from forest edge; fortress feels sized to terrain; Barracks
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **531** / 531 | 2026-06-22 |
-| Test files | 85 | 2026-06-22 |
+| Tests passing | **536** / 536 | 2026-06-22 |
+| Test files | 86 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
-| Active design decisions | 26 | 2026-06-22 |
-| Last board session | [Immersive UI + assault polish](../../agents/boards/sessions/2026-06-22-immersive-ui-assault-polish.md) | 2026-06-22 |
+| Active design decisions | 29 | 2026-06-22 |
+| Last board session | [Fortress prep/assault complete](../../agents/boards/sessions/2026-06-22-fortress-prep-assault-complete.md) | 2026-06-22 |
+| Inner game HEAD | `8715139` (+ local uncommitted HUD/zoom) | 2026-06-22 |
 
 ---
 
@@ -297,11 +301,12 @@ Player reads enemies from forest edge; fortress feels sized to terrain; Barracks
 
 - **Game:** Northern Shield — Fortress Commander RPG (Vanilla JS + Canvas, Vite, inner repo `tower-defense/`).
 - **Target:** Ship **The First Saga** only — 1 hero → 2, west gate + watch tower, A0–A4 + Settlement ceremony.
-- **Done:** Vertical slice RC + immersive Barracks/Hall/Treasury + assault border spawn.
-- **Not done:** Human playtest sign-off on latest assault UI; structure PNG sprites (#33).
-- **Immersive views:** `hallOfHeroesView.js`, `treasuryView.js`, `barracksView.js` — base draw early-return, overlays after frame.
-- **Assault:** `useAssaultScrollWorld()` → padded world, border spawn, `drawAssaultFortressStructures`, `assault_battlefield_bg`.
-- **Tests:** `npm test` from `tower-defense/` (**513**). Campaign edits: `npm run test:saga` first.
+- **Done:** Proposal A prep/assault unify (Phases A–E); W15–W16 art; 536 tests.
+- **Not done:** Age II silhouettes; commit local HUD/zoom fixes; acceptance §11 playtest sign-off.
+- **Assault:** `drawFortressLayout`, `ASSAULT_FIELD_ZOOM=0.78`, `siegeArt.js`, `gateBreachFx.js`, border spawn.
+- **Prep:** scroll world default, `prepSiegePicker` (ballista `minArmory: 0`), scar repair, horn camera.
+- **Tests:** `npm test` from `tower-defense/` (**536**). Campaign edits: `npm run test:saga` first.
+- **Claude handoff:** `agents/handoffs/2026-06-22-claude-fortress-battle-brief.md`
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.
 

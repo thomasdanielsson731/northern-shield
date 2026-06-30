@@ -9994,6 +9994,25 @@ function drawCombatFortressOverlay(px, py, pw, ph) {
   ctx.restore();
 }
 
+/** Siege on field (grid-placed during assault) for HUD when posts are empty. */
+function getLiveSiegeHudRows() {
+  const rows = getSiegePostRows(_postAssignments);
+  if (rows.length > 0) return rows;
+  const seen = new Set();
+  for (const t of towers) {
+    if (isHeroTowerType(t.type) || t.type === 'gate') continue;
+    if (seen.has(t.type)) continue;
+    seen.add(t.type);
+    rows.push({
+      postId: 'field',
+      postLabel: 'Field',
+      structureType: t.type,
+      level: t.level ?? 1,
+    });
+  }
+  return rows;
+}
+
 function drawRightPanel() {
   const px = combatRightPanelX();
   const pw = combatRightPanelW();
@@ -10108,21 +10127,23 @@ function drawRightPanel() {
 
   // Data row: label left (muted) + value right (bold, ellipsized to fit)
   function _fitPanelValue(text, maxW) {
-    ctx.font = 'bold 7.5px monospace';
-    let t = String(text);
+    ctx.font = 'bold 8px monospace';
+    let t = String(text ?? '—');
     if (ctx.measureText(t).width <= maxW) return t;
     while (t.length > 2 && ctx.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);
     return `${t}…`;
   }
+
+  const _valColor = (c) => c ?? UI_COLORS.parchment;
 
   function _row(label, value, valColor) {
     ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(180,155,105,0.60)';
     ctx.fillText(label, dLX, ly + ROW - 2);
     const labelW = ctx.measureText(label).width;
-    const maxValW = Math.max(24, dVX - dLX - labelW - 8);
-    ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
-    ctx.fillStyle = valColor ?? 'rgba(225,205,165,0.88)';
+    const maxValW = Math.max(28, dVX - dLX - labelW - 8);
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'right';
+    ctx.fillStyle = _valColor(valColor);
     ctx.fillText(_fitPanelValue(value, maxValW), dVX, ly + ROW - 2);
     ctx.shadowBlur = 0; ctx.textAlign = 'left';
     ly += ROW;
@@ -10148,6 +10169,7 @@ function drawRightPanel() {
     ctx.fillStyle = 'rgba(0,0,0,0.50)';
     ctx.beginPath(); ctx.roundRect(bX, ly, bW, 4, 2); ctx.fill();
     if (frac > 0.001) {
+      ctx.fillStyle = color ?? UI_COLORS.fortress;
       ctx.beginPath(); ctx.roundRect(bX, ly, Math.max(3, bW * Math.min(1, frac)), 4, 2); ctx.fill();
       ctx.shadowBlur = 0;
     }
@@ -10223,7 +10245,7 @@ function drawRightPanel() {
       ctx.fillStyle = 'rgba(232,215,181,0.55)';
       ctx.fillText('Ramparts:', dLX, ly + ROW - 2);
       drawRampartHearts(dLX + 52, ly + ROW - 2, lives, STARTING_LIVES, effC);
-      ctx.font = 'bold 7.5px monospace'; ctx.textAlign = 'right';
+      ctx.font = 'bold 8px monospace'; ctx.textAlign = 'right';
       ctx.fillStyle = effC;
       ctx.fillText(`${lives}/${STARTING_LIVES}`, dVX, ly + ROW - 2);
       ctx.textAlign = 'left';
@@ -10237,14 +10259,14 @@ function drawRightPanel() {
       }
       if (isCampaignAssaultBattle()) {
         const _wwTier = getRampartTierLabel(_campaignState?.fortressUpgrades?.wallworks ?? 0);
-        _row('Rampart tier:', _wwTier, UI_COLORS.fortress);
+        _row('Wall tier:', _wwTier, UI_COLORS.parchment);
       }
       ly += GAP;
     }
 
     // ── SIEGE (campaign posts) ───────────────────────────────────────────────
     if (isCampaignAssaultBattle()) {
-      const _siegeRows = getSiegePostRows(_postAssignments);
+      const _siegeRows = getLiveSiegeHudRows();
       if (_siegeRows.length > 0) {
         _hdr(UI_COLORS.gold, '▣', 'SIEGE', `${_siegeRows.length} mounted`, UI_COLORS.gold);
         for (const row of _siegeRows.slice(0, 3)) {
@@ -10263,7 +10285,7 @@ function drawRightPanel() {
       const hColor = hG >= 1000 ? UI_COLORS.gold : hG >= 100 ? '#c89828' : '#786040';
       const _stageBadge = ['', '⬥ I', '⬥ II', '⬥ III', '⬥ VAULT', '⬛ DRAGON'][hoard.level] ?? '';
       _hdr(UI_COLORS.gold, '◆', 'TREASURY', `${Math.floor(gold)}g${_stageBadge ? ` ${_stageBadge}` : ''}`, hColor);
-      _row('Battle gold:', `◆ ${Math.floor(gold)}g`, hColor);
+      _row('Battle gold:', `${Math.floor(gold)}g`, hColor);
       if (goldReserve > 0) _row('Reserve:', `◈ ${goldReserve}g`, 'rgba(232,215,181,0.65)');
       const hFrac = hG >= 5000 ? 1.0 : hG >= 1000 ? 0.80 : hG >= 500 ? 0.60 : hG >= 100 ? 0.35 : Math.min(0.20, hG / 100);
       _bar(hFrac, hColor);
@@ -10387,7 +10409,7 @@ function drawRightPanel() {
       _row(`Walls (${_wLvlStr}):`, _wallRightTxt, _wallRightC);
     }
     if (isCampaignAssaultBattle()) {
-      _row('Rampart tier:', getRampartTierLabel(_campaignState?.fortressUpgrades?.wallworks ?? 0), '#90a8c8');
+      _row('Wall tier:', getRampartTierLabel(_campaignState?.fortressUpgrades?.wallworks ?? 0), '#90a8c8');
     }
 
     // Selected gate info (pendingSell on a gate)
@@ -10456,7 +10478,7 @@ function drawRightPanel() {
 
   // ── 3b. SIEGE (campaign assault posts) ─────────────────────────────────────
   if (isCampaignAssaultBattle()) {
-    const _siegeRows = getSiegePostRows(_postAssignments);
+    const _siegeRows = getLiveSiegeHudRows();
     if (_siegeRows.length > 0) {
       _hdr('#c89828', '▣', 'SIEGE', `${_siegeRows.length} mounted`, '#e8c060');
       for (const row of _siegeRows.slice(0, 3)) {

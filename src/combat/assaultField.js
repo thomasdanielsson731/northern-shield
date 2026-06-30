@@ -3,7 +3,7 @@
  * World is larger than the viewport so the player can pan around the fortress.
  */
 
-export const ASSAULT_FIELD_ZOOM = 0.54;
+export const ASSAULT_FIELD_ZOOM = 0.78;
 /** Prep uses a tighter, readable view — same world, higher magnification. */
 export const PREP_FIELD_ZOOM = 0.98;
 export const PREP_INITIAL_GRID_ZOOM = 1.48;

@@ -27,7 +27,7 @@ export function isSiegePostUnlocked(postId, fortressUpgrades = {}) {
 }
 
 export function getSiegeStructureLabel(structureType) {
-  return TOWER_DEFS[structureType]?.label ?? structureType;
+  return TOWER_DEFS[structureType]?.label ?? structureType ?? 'Siege';
 }
 
 export function getSiegeAdvisorContent(postId, ctx) {

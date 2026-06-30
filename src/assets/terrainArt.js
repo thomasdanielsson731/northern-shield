@@ -343,14 +343,17 @@ function scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, ce
     const tw = th * 0.42;
     const variant = rng();
     let treeImg = null;
-    if (variant < 0.35 && ready('fenTreePine')) treeImg = _images.fenTreePine;
-    else if (variant < 0.55 && ready('fenTreeBirch')) treeImg = _images.fenTreeBirch;
+    if (variant < 0.22 && ready('fenTreePine')) treeImg = _images.fenTreePine;
+    else if (variant < 0.38 && ready('fenTreeBirch')) treeImg = _images.fenTreeBirch;
     else if (ready('fenTrees')) treeImg = _images.fenTrees;
 
     if (treeImg) {
       tc.save();
-      tc.globalAlpha = 0.55 + rng() * 0.35;
-      tc.drawImage(treeImg, wx - tw / 2, wy - th, tw, th);
+      tc.globalAlpha = 0.38 + rng() * 0.28;
+      const aspect = treeImg.naturalWidth / Math.max(1, treeImg.naturalHeight);
+      const drawH = th;
+      const drawW = drawH * aspect;
+      tc.drawImage(treeImg, wx - drawW / 2, wy - drawH, drawW, drawH);
       tc.restore();
     } else {
       tc.fillStyle = `rgba(${18 + rng() * 12},${28 + rng() * 14},${18 + rng() * 10},0.75)`;

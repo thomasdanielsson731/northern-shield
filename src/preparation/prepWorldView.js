@@ -210,7 +210,7 @@ export function drawPrepPostOverlays(ctx, {
     ctx.font = 'bold 7px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f0e0b0';
-    ctx.fillText(getSiegeStructureLabel(a.structureType).toUpperCase(), sx, sy + boxR + 10);
+    ctx.fillText(getSiegeStructureLabel(a.structureType).toUpperCase(), sx, sy - boxR - 5);
   }
 
   ctx.restore();

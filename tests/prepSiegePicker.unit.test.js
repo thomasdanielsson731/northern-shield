@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isSiegePostUnlocked,
   getSiegePanelActions,
+  getSiegeStructureLabel,
   SIEGE_PLATFORM_OPTIONS,
 } from '../src/preparation/prepSiegePicker.js';
 import { buildDeployedPostLines } from '../src/campaign/debriefReport.js';
@@ -22,6 +23,11 @@ describe('prepSiegePicker', () => {
     expect(actions).toHaveLength(1);
     expect(actions[0].id).toBe('assign_siege');
     expect(actions[0].structureType).toBe(SIEGE_PLATFORM_OPTIONS.ballista_platform.structureType);
+  });
+
+  it('getSiegeStructureLabel resolves structure types', () => {
+    expect(getSiegeStructureLabel('ballista')).toBe('Ballista');
+    expect(getSiegeStructureLabel('military')).toBe('Archer');
   });
 });
 

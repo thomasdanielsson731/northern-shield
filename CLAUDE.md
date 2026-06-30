@@ -71,7 +71,8 @@ src/
     hallHeroStatues.js — shared statue draw for Hall + Barracks
     structurePortrait.js — drawProceduralStructureIcon() — procedural icons for build dock
   combat/
-    assaultField.js    — ASSAULT_FIELD_ZOOM, world padding, border spawn helpers
+    assaultField.js    — ASSAULT_FIELD_ZOOM (0.78), world padding, border spawn helpers
+    gateBreachFx.js    — gate breach splinter sheet animation
     assaultTargeting.js — hasLivingFortressGates(), buildAssaultTargetPriority(); gate-priority for pathless enemies
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); slot-aware keys via saveSlots
@@ -90,9 +91,11 @@ src/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
     fortressLayout.js  — FortressLayout bake (posts → towers); getPostLabelForDefender(); canonical prep/assault layout
     fortressRenderer.js — drawFortressLayout() shared by prep scroll world + assault
+    prepScarRepair.js  — west gate scar + repair costs between assaults
     defensivePosts.js  — post cells, assignDefender, buildTowerPlacements, validateAssignments
   assets/
     fortressManifest.js — structure art keys, rampart tier labels (single registry)
+    siegeArt.js        — W15 battle-scale siege props (ballista/catapult)
   preparation/
     fortressPrepArt.js — prep sprites, drawAssaultFortressStructures (legacy courtyard draw)
     fortressCommanderShell.js — prep panel, horn, schematic overlay (MAP toggle)
@@ -103,6 +106,7 @@ src/
                          generateBattleReport(), generateBondName(), wrapText()
 assets/
   towers/              — sprite PNGs for all 9 tower types
+  fortress/siege/      — siege_ballista_battle@96x96.png, siege_catapult_battle@96x96.png (W15)
   enemies/             — sprite PNGs: draugr, myling, jotunn, mara
   ui/                  — portal_spawn_gate, goal_trelleborg_fort, frame tiles (corner, horiz, vert)
   terrain/             — ground_tile.png, path_tile.png (both 1254×1254)
@@ -159,7 +163,7 @@ Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL=
 
 **Campaign combat:** `pathless: true` on campaign presets — no `drawPath()`, no BFS on placement. Heroes place anywhere; structures/gates only in fortress zone (Chebyshev ≤10 from `GOAL`). Enemies use direct targeting (`pickEnemyTarget`, `targetPriority` in `ENEMY_DEFS`). Breach steals gold via `getEnemyGoldSteal()`.
 
-**Scrollable assault world** (`useAssaultScrollWorld()`): padded canvas (`assaultField.js` — +18 cols / +12 rows per side). Enemies spawn on **world border** via `getAssaultBorderSpawnPx()`, not grid col 0. Fortress drawn as **structures only** (`drawAssaultFortressStructures` in `fortressPrepArt.js`) on shared terrain — no circular ground plate. Terrain: `assault_battlefield_bg@2048x1320.png` cover-fills world; `scatterAssaultWilderness` adds trees/stones/water in padding. Zoom `ASSAULT_FIELD_ZOOM = 0.54`; unit scale `ASSAULT_UNIT_SCALE = 0.84`. Minimap + fen mist use border spawn pixel.
+**Scrollable assault world** (`useAssaultScrollWorld()`): padded canvas (`assaultField.js` — +18 cols / +12 rows per side). Enemies spawn on **world border** via `getAssaultBorderSpawnPx()`. Fortress drawn via **`drawFortressLayout()`** (`fortressRenderer.js`) from baked posts — legacy `drawAssaultFortressStructures` for skirmish only. Terrain: `assault_battlefield_bg@2048x1320.png`; fen scatter (pine/birch/rocks W16). Zoom **`ASSAULT_FIELD_ZOOM = 0.78`**; prep zoom `PREP_FIELD_ZOOM = 0.98`. Gate breach: `gateBreachFx.js`. Campaign HUD siege: `getLiveSiegeHudRows()`.
 
 **Immersive War Camp buildings** (`betweenBattles`): Hall (`hallOfHeroesView.js`), Treasury (`treasuryView.js`), Barracks (`barracksView.js`) — draw base in `drawBetweenBattles`, return early; overlays after `drawFrames()`. Meta bar carries screen title (`BARRACKS · RECRUIT`, etc.).
 
