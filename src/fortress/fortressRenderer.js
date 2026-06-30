@@ -66,6 +66,12 @@ function drawGateAtCell(ctx, cell, cellSize, scale, { wallData, prepMeta, frontI
   }
 }
 
+const COURTYARD_LABELS = {
+  longhouse:   'LONGHOUSE',
+  watch_tower: 'WATCH TOWER',
+  treasury:    'TREASURY',
+};
+
 function drawCourtyardStructure(ctx, kind, cell, cellSize, scale, watchtowerLevel = 0) {
   const footprints = {
     longhouse: { w: 5.2, h: 2.4 },
@@ -83,6 +89,19 @@ function drawCourtyardStructure(ctx, kind, cell, cellSize, scale, watchtowerLeve
     ctx.fillStyle = 'rgba(40,28,16,0.55)';
     ctx.fillRect(box.x, box.y, box.w, box.h);
   }
+  return box;
+}
+
+function drawBuildingLabel(ctx, label, box, cellSize) {
+  ctx.save();
+  ctx.font = `bold ${Math.round(cellSize * 0.52)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.shadowColor = 'rgba(0,0,0,0.85)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = 'rgba(240,220,160,0.95)';
+  ctx.fillText(label, box.cx, box.y - cellSize * 0.25);
+  ctx.restore();
 }
 
 function drawSiegeProp(ctx, anchor, cellSize, scale) {
@@ -169,6 +188,14 @@ export function drawFortressLayout(ctx, {
       spawnCol,
       wallworksLevel: wallworks,
     });
+  } else if (mode === 'assault') {
+    ctx.globalAlpha = 0.94;
+    drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time, {
+      spawnCol,
+      wallworksLevel: wallworks,
+      wallData,
+    });
+    ctx.globalAlpha = 1;
   }
 
   for (const anchor of anchors) {
@@ -177,11 +204,14 @@ export function drawFortressLayout(ctx, {
         wallData, prepMeta, frontId, goal, ringR, time, mode,
       });
     } else if (anchor.kind === 'longhouse') {
-      drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);
+      const box = drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);
+      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.longhouse, box, cellSize);
     } else if (anchor.kind === 'watch_tower') {
-      drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
+      const box = drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
+      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.watch_tower, box, cellSize);
     } else if (anchor.kind === 'treasury') {
-      drawCourtyardStructure(ctx, 'treasury', anchor.cell, cellSize, structureScale);
+      const box = drawCourtyardStructure(ctx, 'treasury', anchor.cell, cellSize, structureScale);
+      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.treasury, box, cellSize);
     } else if (anchor.kind === 'siege') {
       drawSiegeProp(ctx, anchor, cellSize, structureScale);
     }

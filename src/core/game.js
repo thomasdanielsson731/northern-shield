@@ -5626,11 +5626,8 @@ function centerAssaultCameraOnFortress() {
   const cy = ROWS * CELL_SIZE * 0.5;
   const goalLX = GOAL.col * CELL_SIZE + CELL_SIZE / 2;
   const goalLY = GOAL.row * CELL_SIZE + CELL_SIZE / 2;
-  const spawn = getAssaultSpawnPixel();
-  const focusX = goalLX * 0.62 + spawn.x * 0.38;
-  const focusY = goalLY * 0.72 + spawn.y * 0.28;
-  gridPanX = playfieldWidth() / 2 - cx - (focusX - cx) * s;
-  gridPanY = playfieldHeight() / 2 - cy - (focusY - cy) * s;
+  gridPanX = playfieldWidth() / 2 - cx - (goalLX - cx) * s;
+  gridPanY = playfieldHeight() / 2 - cy - (goalLY - cy) * s;
   clampGridPan();
 }
 
