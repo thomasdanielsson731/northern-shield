@@ -220,12 +220,18 @@ function drawBarracksLevelCard(ctx, hall, barracksLevel, goldReserve, btnsOut) {
   const cardY = hall.y + pad;
   const nextDesc = maxed ? 'Fully upgraded' : (def.levelDesc?.[barracksLevel] ?? def.desc);
   const reduction = def.bonuses[barracksLevel]?.recruitCostReduction ?? 0;
-
-  const cardH = drawObjectiveGuidanceChip(ctx, cardX, cardY, cardW, 'BARRACKS LEVEL', [
+  const unlocked = getBarracksUnlockedSlots(barracksLevel);
+  const nextUnlocked = maxed ? unlocked : getBarracksUnlockedSlots(barracksLevel + 1);
+  const lines = [
     `Level ${barracksLevel} / ${def.maxLevel}`,
     nextDesc,
-    reduction > 0 ? `Recruit cost −${reduction}g` : 'Upgrade to unlock roster slots',
-  ]);
+    reduction > 0 ? `Recruit cost −${reduction}g` : `${unlocked} roster slots unlocked`,
+  ];
+  if (!maxed && nextUnlocked > unlocked) {
+    lines.push(`Lv.${barracksLevel + 1} → ${nextUnlocked} slots`);
+  }
+
+  const cardH = drawObjectiveGuidanceChip(ctx, cardX, cardY, cardW, 'BARRACKS LEVEL', lines);
 
   if (!maxed) {
     const btnY = cardY + cardH + 4;
