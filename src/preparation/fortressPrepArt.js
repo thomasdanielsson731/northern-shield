@@ -14,6 +14,7 @@ const PREP_ART = {
   westGateBreached: '/assets/fortress/fort_west_gate_breached@120x80.png',
   westGateStoneCeremony: '/assets/fortress/fort_west_gate_stone_ceremony@120x80.png',
   wallScar: '/assets/fortress/fort_wall_scar@56x56.png',
+  repairScaffold: '/assets/fortress/fort_repair_scaffold@56x72.png',
   schematicPlate: '/assets/fortress/fort_prep_coordinate_schematic@1254x1254.png',
   assaultPlateClean: '/assets/fortress/fort_assault_plate_clean@1254x1254.png',
   horn: '/assets/ui/ui_horn_prep@48.png',

@@ -6,7 +6,8 @@ import {
   getDefenderPostId,
   getSiegePostRows,
 } from '../src/fortress/fortressLayout.js';
-import { getRampartTierLabel } from '../src/assets/fortressManifest.js';
+import { getRampartTierLabel, SIEGE_BATTLE_ART_FILES, FEN_SCATTER_ART_FILES, PALISADE_TILE_FILES } from '../src/assets/fortressManifest.js';
+import { resolveSiegeBattleArtKey } from '../src/assets/siegeArt.js';
 import { hitTestPrepWorldPost } from '../src/preparation/prepWorldView.js';
 
 const GOAL = { col: 24, row: 15 };
@@ -47,6 +48,20 @@ describe('fortressManifest', () => {
   it('getRampartTierLabel tracks wallworks level', () => {
     expect(getRampartTierLabel(0)).toBe('Palisade');
     expect(getRampartTierLabel(2)).toBe('Stone base');
+  });
+
+  it('registers siege and terrain art filenames', () => {
+    expect(SIEGE_BATTLE_ART_FILES.ballista).toContain('siege_ballista');
+    expect(FEN_SCATTER_ART_FILES.pine).toContain('prop_fen_tree');
+    expect(PALISADE_TILE_FILES.stone).toContain('stone_segment');
+  });
+});
+
+describe('siegeArt', () => {
+  it('resolveSiegeBattleArtKey maps military to ballista', () => {
+    expect(resolveSiegeBattleArtKey('military')).toBe('ballista');
+    expect(resolveSiegeBattleArtKey('catapult')).toBe('catapult');
+    expect(resolveSiegeBattleArtKey('gate')).toBeNull();
   });
 });
 

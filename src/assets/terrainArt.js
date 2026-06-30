@@ -13,6 +13,10 @@ const TILE_SRC = {
   palisadeCorner: '/assets/terrain/tile_palisade_corner@28.png',
   palisadeDamaged: '/assets/terrain/tile_palisade_damaged@28.png',
   palisadeGateCap: '/assets/terrain/tile_palisade_gate_cap@28.png',
+  palisadeStone: '/assets/terrain/tile_palisade_stone_segment@28.png',
+  fenTreePine: '/assets/terrain/prop_fen_tree_pine@96x192.png',
+  fenTreeBirch: '/assets/terrain/prop_fen_birch@96x192.png',
+  fenRock: '/assets/terrain/prop_fen_rock_cluster@64x48.png',
   spawnMist: '/assets/fx/fx_spawn_fen_mist@56.png',
   fenTrees: '/assets/terrain/prop_fen_trees_backdrop@128x256.png',
   assaultWheelBg: '/assets/terrain/assault_battlefield_bg@2048x1320.png',
@@ -44,7 +48,8 @@ export function drawPalisadeTile(ctx, x, y, size, variant = 'segment') {
   const key = variant === 'corner' ? 'palisadeCorner'
     : variant === 'damaged' ? 'palisadeDamaged'
       : variant === 'gateCap' ? 'palisadeGateCap'
-        : 'palisade';
+        : variant === 'stone' ? 'palisadeStone'
+          : 'palisade';
   const img = _images[key] ?? _images.palisade;
   if (!ready(key) && variant !== 'segment') {
     if (!ready('palisade')) return false;
@@ -53,6 +58,23 @@ export function drawPalisadeTile(ctx, x, y, size, variant = 'segment') {
   if (!ready(key)) return false;
   ctx.drawImage(img, x, y, size, size);
   return true;
+}
+
+/** Average HP ratio of non-gate wall segments (0–1). */
+function wallRingDamageRatio(wallData) {
+  if (!wallData) return 0;
+  let sum = 0;
+  let count = 0;
+  for (const w of Object.values(wallData)) {
+    if (w?.isGate || w?.temporary) continue;
+    const max = w.maxHp ?? w.hp ?? 100;
+    const hp = w.hp ?? max;
+    if (max <= 0) continue;
+    sum += hp / max;
+    count++;
+  }
+  if (!count) return 0;
+  return 1 - sum / count;
 }
 
 /** Chebyshev distance from fortress goal cell — keeps courtyard readable. */
@@ -293,8 +315,6 @@ function scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, ce
   const goalX = padX + goal.col * cellSize + cellSize / 2;
   const goalY = padY + goal.row * cellSize + cellSize / 2;
 
-  const treeImg = ready('fenTrees') ? _images.fenTrees : null;
-
   const inCourtyard = (wx, wy) => {
     const lx = wx - padX;
     const ly = wy - padY;
@@ -306,8 +326,27 @@ function scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, ce
     let wy = rng() * worldH;
     if (wx > padX && wx < padX + gridW && wy > padY && wy < padY + gridH) continue;
     if (inCourtyard(wx, wy)) continue;
+
+    const pick = rng();
+    if (pick < 0.14 && ready('fenRock')) {
+      const rock = _images.fenRock;
+      const rw = cellSize * (0.9 + rng() * 0.6);
+      const rh = rw * (rock.naturalHeight / rock.naturalWidth);
+      tc.save();
+      tc.globalAlpha = 0.7 + rng() * 0.25;
+      tc.drawImage(rock, wx - rw / 2, wy - rh * 0.85, rw, rh);
+      tc.restore();
+      continue;
+    }
+
     const th = cellSize * (2.4 + rng() * 2.8);
     const tw = th * 0.42;
+    const variant = rng();
+    let treeImg = null;
+    if (variant < 0.35 && ready('fenTreePine')) treeImg = _images.fenTreePine;
+    else if (variant < 0.55 && ready('fenTreeBirch')) treeImg = _images.fenTreeBirch;
+    else if (ready('fenTrees')) treeImg = _images.fenTrees;
+
     if (treeImg) {
       tc.save();
       tc.globalAlpha = 0.55 + rng() * 0.35;
@@ -577,6 +616,7 @@ export function drawCampaignAssaultColorGrade(ctx, cols, rows, cellSize, goal, r
 export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   spawnCol = null,
   wallworksLevel = 0,
+  wallData = null,
 } = {}) {
   if (!goal) return;
   const gx = goal.col * cellSize + cellSize / 2;
@@ -585,6 +625,8 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const inner = outer - cellSize * 0.55;
   const gateAngle = spawnCol != null && spawnCol < goal.col ? Math.PI : 0;
   const gateSpread = 0.48;
+  const useTiles = isPalisadeTileReady();
+  const damageRatio = wallRingDamageRatio(wallData);
 
   ctx.save();
 
@@ -603,6 +645,7 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const woodA = ['#5c3a18', '#6a4820', '#7a7a72', '#8a8a82'][tier];
   const woodB = ['#3a2410', '#4a3018', '#5a5a54', '#6a6a64'][tier];
   const flicker = 0.55 + Math.sin(time * 8.2) * 0.32;
+  const tileVariant = tier >= 2 && ready('palisadeStone') ? 'stone' : 'segment';
 
   for (let i = 0; i < stakeCount; i++) {
     const a = (i / stakeCount) * Math.PI * 2;
@@ -614,11 +657,19 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
     const sx = gx + Math.cos(a) * outer;
     const sy = gy + Math.sin(a) * outer * 0.9 + cellSize * 0.08;
     const h = cellSize * (0.88 + (i % 3) * 0.10);
+    const damaged = damageRatio > 0.28 && (i % 4 === 0 || damageRatio > 0.55);
+
+    if (useTiles) {
+      const ts = cellSize * 0.30;
+      const variant = damaged && ready('palisadeDamaged') ? 'damaged' : tileVariant;
+      drawPalisadeTile(ctx, sx - ts / 2, sy - h, ts, variant);
+      continue;
+    }
 
     ctx.save();
     ctx.translate(sx, sy);
     ctx.rotate(a + Math.PI / 2 + Math.sin(a * 2 + time * 0.15) * 0.06);
-    ctx.fillStyle = i % 2 ? woodA : woodB;
+    ctx.fillStyle = damaged ? '#4a3020' : (i % 2 ? woodA : woodB);
     ctx.fillRect(-cellSize * 0.11, -h, cellSize * 0.22, h);
     ctx.fillStyle = 'rgba(255,200,120,0.28)';
     ctx.fillRect(-cellSize * 0.07, -h * 0.88, cellSize * 0.06, h * 0.72);

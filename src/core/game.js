@@ -276,6 +276,7 @@ import {
 import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { bakeAshfenTerrain, bakeAssaultWorldTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGradeBg, drawCampaignPalisadeRing, drawPathlessAssaultLane } from '../assets/terrainArt.js';
+import { drawGateBreachSplinters } from '../combat/gateBreachFx.js';
 import {
   ASSAULT_FIELD_ZOOM,
   PREP_FIELD_ZOOM,
@@ -2439,6 +2440,25 @@ function drawGateBreachBanner() {
   ctx.fillStyle = 'rgba(232,215,181,0.75)';
   ctx.fillText('Remaining ports ignored · defend warband & treasury', cx, cy + 12);
   ctx.restore();
+}
+
+function getPrimaryGateWorldPx() {
+  const cs = CELL_SIZE;
+  const gx = GOAL.col * cs + cs / 2;
+  const gy = GOAL.row * cs + cs / 2;
+  const outer = FORTRESS_RING_R * cs + cs * 0.42;
+  const gateAngle = (SPAWN?.col ?? 0) < GOAL.col ? Math.PI : 0;
+  return {
+    x: gx + Math.cos(gateAngle) * outer * 0.92,
+    y: gy + Math.sin(gateAngle) * outer * 0.82 + cs * 0.08,
+  };
+}
+
+function drawGateBreachWorldFx(time) {
+  if (_gateBreachBannerTimer <= 0) return;
+  const gate = getPrimaryGateWorldPx();
+  const intensity = Math.min(1, _gateBreachBannerTimer / 90);
+  drawGateBreachSplinters(ctx, gate.x, gate.y, CELL_SIZE, time, { intensity });
 }
 
 function drawHeroCombatHpBar(tower) {
@@ -18115,7 +18135,9 @@ function draw() {
     drawCampaignPalisadeRing(ctx, GOAL, FORTRESS_RING_R, CELL_SIZE, time, {
       spawnCol: SPAWN?.col,
       wallworksLevel: _campaignState?.fortressUpgrades?.wallworks ?? 0,
+      wallData,
     });
+    drawGateBreachWorldFx(time);
   }
 
   // Wall level tints — per-level color overlay to make upgrade investment visible

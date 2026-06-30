@@ -14,7 +14,7 @@ import {
   ASSAULT_FORTRESS_STRUCTURE_SCALE,
 } from '../preparation/fortressPrepArt.js';
 import { PREP_FORTRESS_STRUCTURE_SCALE } from '../combat/assaultField.js';
-import { drawStructureArtIcon } from '../assets/structureArt.js';
+import { drawSiegeBattleProp } from '../assets/siegeArt.js';
 import { drawCampaignPalisadeRing } from '../assets/terrainArt.js';
 
 function cellBox(cell, cellSize, scale, footprint = { w: 1, h: 1 }) {
@@ -87,12 +87,12 @@ function drawCourtyardStructure(ctx, kind, cell, cellSize, scale, watchtowerLeve
 
 function drawSiegeProp(ctx, anchor, cellSize, scale) {
   const box = cellBox(anchor.cell, cellSize, scale * 0.95, { w: 1.6, h: 1.6 });
-  const drew = drawStructureArtIcon(
+  const drew = drawSiegeBattleProp(
     ctx,
     anchor.structureType,
     box.cx,
-    box.cy - box.h * 0.08,
-    Math.min(box.w, box.h),
+    box.cy,
+    Math.min(box.w, box.h) * 1.15,
     true,
   );
   if (!drew) {
@@ -115,6 +115,14 @@ function drawWallScarMarker(ctx, goal, ringR, cellSize, frontId, scale, time) {
   ctx.strokeStyle = `rgba(232,160,60,${pulse})`;
   ctx.lineWidth = 2;
   ctx.strokeRect(box.x, box.y, box.w, box.h);
+}
+
+function drawRepairScaffoldMarker(ctx, goal, ringR, cellSize, frontId, scale) {
+  const gatePost = getPrimaryGateForFront(frontId);
+  const cell = resolvePostCell(gatePost, goal, ringR);
+  const south = { col: cell.col, row: cell.row + 1 };
+  const box = cellBox(south, cellSize, scale, { w: 1.5, h: 2.0 });
+  drawFortressPrepSprite(ctx, 'repairScaffold', box);
 }
 
 /**
@@ -181,6 +189,7 @@ export function drawFortressLayout(ctx, {
 
   if (mode === 'prep' && needsGateRepair(prepMeta)) {
     drawWallScarMarker(ctx, goal, ringR, cellSize, frontId, scale, time);
+    drawRepairScaffoldMarker(ctx, goal, ringR, cellSize, frontId, scale);
   }
 
   ctx.restore();
