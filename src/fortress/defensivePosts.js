@@ -13,6 +13,7 @@ export const MAX_SIEGE_POSTS_FILLED = 4;
 export const HERO_POST_IDS = [
   'west_gate', 'east_gate', 'north_gate', 'south_gate',
   'north_wall', 'south_wall', 'watch_tower', 'inner_keep',
+  'nw_tower', 'sw_tower', 'se_tower',
 ];
 
 export const SIEGE_POST_IDS = [
@@ -33,6 +34,9 @@ export const POST_DEFS = {
   ballista_platform:  { label: 'Ballista Platform', kind: 'siege', structureDefault: 'military' },
   catapult_platform:  { label: 'Catapult Platform', kind: 'siege', structureDefault: 'catapult' },
   gate_fixture:       { label: 'Port / Gate',     kind: 'siege', structureDefault: 'gate' },
+  nw_tower:           { label: 'NW Tower',         kind: 'hero',  roleHint: 'scout' },
+  sw_tower:           { label: 'SW Tower',         kind: 'hero',  roleHint: 'scout' },
+  se_tower:           { label: 'SE Tower',         kind: 'hero',  roleHint: 'scout' },
 };
 
 const FRONT_TO_GATE = {
@@ -62,6 +66,9 @@ export function resolvePostCell(postId, goal, ringR = FORTRESS_RING_R_DEFAULT) {
     case 'ballista_platform': return { col: gc - ringR, row: gr - 2 };
     case 'catapult_platform': return { col: gc + ringR, row: gr + 2 };
     case 'gate_fixture':      return { col: gc - ringR, row: gr };
+    case 'nw_tower':          return { col: gc - ringR, row: gr - ringR };
+    case 'sw_tower':          return { col: gc - ringR, row: gr + ringR };
+    case 'se_tower':          return { col: gc + ringR, row: gr + ringR };
     default:                  return { col: gc, row: gr };
   }
 }

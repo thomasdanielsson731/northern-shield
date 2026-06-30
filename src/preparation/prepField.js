@@ -8,11 +8,14 @@ import {
   getPrimaryGateForFront,
 } from '../fortress/defensivePosts.js';
 
-/** Hero posts shown on the prep battlefield (not every gate on slice maps). */
+/** Hero posts shown on the prep battlefield — full ring: all 4 gates + 4 corner towers + inner keep. */
 export function getPrepVisibleHeroPosts(frontId = 'west', { showAllPosts = false } = {}) {
   if (showAllPosts) return [...HERO_POST_IDS];
-  const primary = getPrimaryGateForFront(frontId);
-  return [primary, 'watch_tower', 'inner_keep'];
+  return [
+    'west_gate', 'east_gate', 'north_gate', 'south_gate',
+    'nw_tower', 'watch_tower', 'sw_tower', 'se_tower',
+    'inner_keep',
+  ];
 }
 
 /** Siege platforms always listed in prep UI; visibility on map follows unlock. */

@@ -10,7 +10,7 @@ export const PREP_INITIAL_GRID_ZOOM = 1.48;
 export const PREP_FORTRESS_STRUCTURE_SCALE = 2.35;
 export const ASSAULT_WORLD_PAD_COLS = 18;
 export const ASSAULT_WORLD_PAD_ROWS = 12;
-export const ASSAULT_UNIT_SCALE = 0.84;
+export const ASSAULT_UNIT_SCALE = 1.0;
 
 export function assaultWorldPadPx(cellSize) {
   return {
