@@ -126,7 +126,7 @@ tests/
   gameImports.smoke.test.js
 ```
 
-**513 tests** — run `npm test` from repo root.
+**515 tests** — run `npm test` from repo root.
 
 ### Key facts about game.js
 
