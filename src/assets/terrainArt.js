@@ -620,25 +620,33 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   spawnCol = null,
   wallworksLevel = 0,
   wallData = null,
+  mode = 'prep',
 } = {}) {
   if (!goal) return;
   const gx = goal.col * cellSize + cellSize / 2;
   const gy = goal.row * cellSize + cellSize / 2;
   const outer = ringR * cellSize + cellSize * 0.42;
   const inner = outer - cellSize * 0.55;
-  const gateAngle = spawnCol != null && spawnCol < goal.col ? Math.PI : 0;
+  const isAssault = mode === 'assault';
+  const primaryGateAngle = spawnCol != null && spawnCol < goal.col ? Math.PI : 0;
+  // In assault, show all 4 gate openings; in prep, only the primary front
+  const gateAngles = isAssault
+    ? [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]
+    : [primaryGateAngle];
   const gateSpread = 0.48;
   const useTiles = isPalisadeTileReady();
   const damageRatio = wallRingDamageRatio(wallData);
 
   ctx.save();
 
-  ctx.fillStyle = 'rgba(34,24,12,0.42)';
+  // Courtyard ground — more opaque in assault so terrain doesn't bleed through
+  ctx.fillStyle = isAssault ? 'rgba(28,18,8,0.72)' : 'rgba(34,24,12,0.42)';
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, inner * 0.92, inner * 0.82, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(18,10,4,0.38)';
+  // Wall band shadow
+  ctx.fillStyle = isAssault ? 'rgba(14,8,2,0.68)' : 'rgba(18,10,4,0.38)';
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, outer + cellSize * 0.12, outer * 0.92 + cellSize * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -649,13 +657,17 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const woodB = ['#3a2410', '#4a3018', '#5a5a54', '#6a6a64'][tier];
   const flicker = 0.55 + Math.sin(time * 8.2) * 0.32;
   const tileVariant = tier >= 2 && ready('palisadeStone') ? 'stone' : 'segment';
+  const stakeW = isAssault ? cellSize * 0.30 : cellSize * 0.22;
 
   for (let i = 0; i < stakeCount; i++) {
     const a = (i / stakeCount) * Math.PI * 2;
-    let da = a - gateAngle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    if (Math.abs(da) < gateSpread) continue;
+    const inGap = gateAngles.some(ga => {
+      let da = a - ga;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      return Math.abs(da) < gateSpread;
+    });
+    if (inGap) continue;
 
     const sx = gx + Math.cos(a) * outer;
     const sy = gy + Math.sin(a) * outer * 0.9 + cellSize * 0.08;
@@ -673,9 +685,9 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
     ctx.translate(sx, sy);
     ctx.rotate(a + Math.PI / 2 + Math.sin(a * 2 + time * 0.15) * 0.06);
     ctx.fillStyle = damaged ? '#4a3020' : (i % 2 ? woodA : woodB);
-    ctx.fillRect(-cellSize * 0.11, -h, cellSize * 0.22, h);
+    ctx.fillRect(-stakeW / 2, -h, stakeW, h);
     ctx.fillStyle = 'rgba(255,200,120,0.28)';
-    ctx.fillRect(-cellSize * 0.07, -h * 0.88, cellSize * 0.06, h * 0.72);
+    ctx.fillRect(-stakeW * 0.35, -h * 0.88, stakeW * 0.28, h * 0.72);
     ctx.restore();
   }
 
@@ -691,16 +703,19 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   ctx.ellipse(gx, gy + cellSize * 0.08, inner, inner * 0.9, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  const gateX = gx + Math.cos(gateAngle) * outer * 0.92;
-  const gateY = gy + Math.sin(gateAngle) * outer * 0.82 + cellSize * 0.08;
-  const gateGlow = `rgba(255,190,90,${0.22 + flicker * 0.18})`;
-  const gatePool = ctx.createRadialGradient(gateX, gateY, 0, gateX, gateY, cellSize * 1.2);
-  gatePool.addColorStop(0, gateGlow);
-  gatePool.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gatePool;
-  ctx.beginPath();
-  ctx.arc(gateX, gateY, cellSize * 1.2, 0, Math.PI * 2);
-  ctx.fill();
+  // Torch glow at each gate opening
+  for (const ga of gateAngles) {
+    const gateX = gx + Math.cos(ga) * outer * 0.92;
+    const gateY = gy + Math.sin(ga) * outer * 0.82 + cellSize * 0.08;
+    const gateGlow = `rgba(255,190,90,${0.22 + flicker * 0.18})`;
+    const gatePool = ctx.createRadialGradient(gateX, gateY, 0, gateX, gateY, cellSize * 1.2);
+    gatePool.addColorStop(0, gateGlow);
+    gatePool.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gatePool;
+    ctx.beginPath();
+    ctx.arc(gateX, gateY, cellSize * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }

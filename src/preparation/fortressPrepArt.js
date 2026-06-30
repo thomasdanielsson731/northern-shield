@@ -92,7 +92,7 @@ export function drawCampaignGateSprite(ctx, artKey, cx, cy, cellSize, time = 0) 
   return true;
 }
 
-export const ASSAULT_FORTRESS_STRUCTURE_SCALE = 1.72;
+export const ASSAULT_FORTRESS_STRUCTURE_SCALE = 1.3;
 
 /**
  * Assault combat fortress — buildings, gate, towers only (no terrain plate / courtyard ground).

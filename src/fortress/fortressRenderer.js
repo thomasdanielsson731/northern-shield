@@ -192,6 +192,7 @@ export function drawFortressLayout(ctx, {
     drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time, {
       spawnCol,
       wallworksLevel: wallworks,
+      mode: 'prep',
     });
   } else if (mode === 'assault') {
     ctx.globalAlpha = 0.94;
@@ -199,6 +200,7 @@ export function drawFortressLayout(ctx, {
       spawnCol,
       wallworksLevel: wallworks,
       wallData,
+      mode: 'assault',
     });
     ctx.globalAlpha = 1;
   }
@@ -212,10 +214,14 @@ export function drawFortressLayout(ctx, {
       const box = drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);
       if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.longhouse, box, cellSize, { below: true });
     } else if (anchor.kind === 'watch_tower') {
-      const box = drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
-      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.watch_tower, box, cellSize);
+      // Watch tower anchor is outside the palisade ring in assault — skip it there
+      if (mode !== 'assault') {
+        const box = drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
+      }
     } else if (anchor.kind === 'treasury') {
-      const box = drawCourtyardStructure(ctx, 'treasury', anchor.cell, cellSize, structureScale);
+      // Treasury is only 1 row from longhouse — place it 3 rows above center in assault to avoid overlap
+      const cell = mode === 'assault' ? { col: goal.col, row: goal.row - 3 } : anchor.cell;
+      const box = drawCourtyardStructure(ctx, 'treasury', cell, cellSize, structureScale);
     } else if (anchor.kind === 'siege') {
       drawSiegeProp(ctx, anchor, cellSize, structureScale);
     }
