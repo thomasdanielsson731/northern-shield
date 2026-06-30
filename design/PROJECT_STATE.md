@@ -76,7 +76,7 @@ Objective: Settlement building interiors (Barracks), assault playfield scale/spa
 - **Command map chrome** — meta bar region/NEXT; top-left briefing glass chip
 - **Assault combat** — border spawn (`getAssaultBorderSpawnPx`); structures-only fortress @ 1.72×; full-world `assault_battlefield_bg@2048x1320.png`; wilderness scatter; HUD/terrain/unit fixes
 - **Polish Board iter 53–72** — Hall dossier, chronicle unread, `__NS_TEST_HOOKS__`
-- **508** unit tests passing
+- **513** unit tests passing
 
 ## Current implementation focus
 
@@ -249,7 +249,7 @@ Ship immersive progression screens and assault readability fixes; validate in pl
 - [x] Barracks immersive view wired
 - [x] Assault border spawn + structures-only fortress
 - [x] Battlefield background full-world cover
-- [x] `npm test` green (**508**)
+- [x] `npm test` green (**513**)
 - [ ] Human playtest assault spawn rim + barracks recruit flow
 - [ ] Inner-repo commit for this batch
 
@@ -280,7 +280,7 @@ Player reads enemies from forest edge; fortress feels sized to terrain; Barracks
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **508** / 508 | 2026-06-22 |
+| Tests passing | **513** / 513 | 2026-06-22 |
 | Test files | 81 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
@@ -299,7 +299,7 @@ Player reads enemies from forest edge; fortress feels sized to terrain; Barracks
 - **Not done:** Human playtest sign-off on latest assault UI; structure PNG sprites (#33).
 - **Immersive views:** `hallOfHeroesView.js`, `treasuryView.js`, `barracksView.js` — base draw early-return, overlays after frame.
 - **Assault:** `useAssaultScrollWorld()` → padded world, border spawn, `drawAssaultFortressStructures`, `assault_battlefield_bg`.
-- **Tests:** `npm test` from `tower-defense/` (**508**). Campaign edits: `npm run test:saga` first.
+- **Tests:** `npm test` from `tower-defense/` (**513**). Campaign edits: `npm run test:saga` first.
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.
 
