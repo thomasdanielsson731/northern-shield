@@ -2722,12 +2722,18 @@ function handleHubBuildingAction(action) {
   const hubState = {
     campaignState: _campaignState,
     chronicleCount: _campaignState?.chronicle?.battles?.length ?? 0,
+    chronicleUnread: _chronicleUnread,
     battlesCompleted,
     simplifiedSaga: isSimplifiedWarCamp(_campaignMapIndex ?? 0),
     mapIndex: _campaignMapIndex ?? 0,
     hubPulseBuilding: _hubPulseBuilding,
     stars,
     skirmishDiscovered: _hintSeen.skirmishDiscovery,
+    rosterCount: _roster?.defenders?.length ?? 0,
+    rosterCap: getBarracksDisplayCap({
+      firstSagaMap: isFirstSagaMap(_campaignMapIndex ?? 0),
+      barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
+    }),
   };
   switch (action) {
     case 'openCommandMap':
@@ -6869,6 +6875,9 @@ canvas.addEventListener('mousedown', e => {
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { persistCampaign(); } catch {}
             sfxDismiss();
+            if (!canRecruitInCampaignWarCamp().ok) _recruitType = null;
+            const maxScroll = Math.max(0, (_roster?.defenders?.length ?? 0) - HALL_MAX_STATUES);
+            _rosterScrollOffset = Math.min(_rosterScrollOffset, maxScroll);
           } else if (btn.action === 'retireWithHonor') {
             const _retDef = _roster.find(btn.defenderId);
             if (_retDef) {
@@ -6933,6 +6942,7 @@ canvas.addEventListener('mousedown', e => {
             _roster.dismiss(btn.defenderId);
             _retirementCeremony = null;
             _pendingDismiss = null;
+            if (_hallFocusDefenderId === btn.defenderId) _hallFocusDefenderId = null;
             _campaignState.defenders = _roster.toJSON();
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { persistCampaign(); } catch {}
@@ -10686,6 +10696,13 @@ function drawCampaignMetaBar(center) {
     }
   } else if (gamePhase === 'debrief') {
     subtitle = 'AFTER ACTION';
+    metaCenter = {
+      line1: _battleResult === 'victory' ? 'VICTORY REPORT' : 'DEFEAT REPORT',
+      line2: _returnToNodeMapAfterDebrief
+        ? 'Review the parchment — choose your next step'
+        : 'Click to return to settlement',
+      color: UI_COLORS.gold,
+    };
   } else if (gamePhase === 'mapSelect') {
     subtitle = 'SKIRMISH MODE';
   } else if (gamePhase === 'campaignSelect') {
@@ -11405,8 +11422,15 @@ function drawAssaultWarbandOverlay(topInset = 0) {
   ctx.font = '6px monospace'; ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(232,215,181,0.55)';
   ctx.fillText(`${heroes.length}/${MAX_FIELD_HEROES}`, dVX, ly + 8);
+  const wounded = heroes.filter(t => getHeroHpFrac(t) < 0.95).length;
+  if (wounded > 0) {
+    ctx.font = '6px monospace';
+    ctx.fillStyle = 'rgba(220,140,80,0.75)';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${wounded} wounded`, sX, ly + 20);
+  }
   ctx.textAlign = 'left';
-  ly += 12;
+  ly += wounded > 0 ? 22 : 12;
   ctx.font = '6.5px monospace'; ctx.fillStyle = 'rgba(160,140,100,0.50)';
   ctx.fillText('DEPLOYED', sX, ly + 6);
   ly += 8;
@@ -14766,6 +14790,8 @@ function drawBetweenBattlesHallImmersive(W, H, contentTop, contentBot, btSec, ph
   if (_hallFocusDefenderId && !_roster.defenders.some(d => d.defenderId === _hallFocusDefenderId)) {
     _hallFocusDefenderId = null;
   }
+  const _hallMaxScroll = Math.max(0, (_roster?.defenders?.length ?? 0) - HALL_MAX_STATUES);
+  if (_rosterScrollOffset > _hallMaxScroll) _rosterScrollOffset = _hallMaxScroll;
 
   const _wcProgress = ensureCampaignProgress();
   const _nextNode = _pendingNextAssaultNode ?? getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex;
