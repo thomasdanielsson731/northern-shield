@@ -7137,8 +7137,9 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'openChronicle') {
             _showChronicle = true;
             _chronicleUnread = false;
-            if (_campaignState?.uiHints) {
-              _campaignState.uiHints = { ..._campaignState.uiHints, chronicleUnread: false };
+            if (_campaignState) {
+              _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), chronicleUnread: false };
+              try { persistCampaign(); } catch {}
             }
           }
           return;
@@ -10686,12 +10687,16 @@ function drawCampaignMetaBar(center) {
           barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
         }),
       });
-      subtitle = _wcHint?.line
-        ?? (_warCampTabPulse === 'recruit'
+      if (_wcHint) {
+        metaCenter = { line1: _wcHint.title, line2: _wcHint.line, color: UI_COLORS.gold };
+        subtitle = 'WAR CAMP';
+      } else {
+        subtitle = _warCampTabPulse === 'recruit'
           ? 'Hire defenders — RECRUIT tab'
           : _warCampTabPulse === 'fortress'
             ? 'Upgrade buildings — FORTRESS tab'
-            : 'Where heroes are made and legends are forged.');
+            : 'Where heroes are made and legends are forged.';
+      }
     } else {
       subtitle = 'Between battles';
     }
@@ -10709,7 +10714,7 @@ function drawCampaignMetaBar(center) {
   } else if (gamePhase === 'campaignSelect') {
     subtitle = '100 REGIONS';
   }
-  const _center = (gamePhase === 'campaignSelect' || gamePhase === 'betweenBattles') ? null : metaCenter;
+  const _center = gamePhase === 'campaignSelect' ? null : metaCenter;
   const chips = _metaBarChips();
   drawMetaTopBar(ctx, BASE_W, FRAME_THICK, { subtitle, center: _center, chips });
   if (gamePhase === 'betweenBattles' && isCampaignWarCamp() && !_progressionBuilding) {
