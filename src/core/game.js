@@ -6742,7 +6742,8 @@ canvas.addEventListener('mousedown', e => {
         return; // click on card backdrop = no-op
       }
 
-      for (const btn of _betweenBtns) {
+      for (let bi = _betweenBtns.length - 1; bi >= 0; bi--) {
+        const btn = _betweenBtns[bi];
         if (mouseX >= btn.x && mouseX <= btn.x + btn.w &&
             mouseY >= btn.y && mouseY <= btn.y + btn.h) {
           if (!['pendingDismiss', 'confirmDismiss'].includes(btn.action)) _pendingDismiss = null;
@@ -6958,6 +6959,8 @@ canvas.addEventListener('mousedown', e => {
             }
           } else if (btn.action === 'focusDefender') {
             _hallFocusDefenderId = _hallFocusDefenderId === btn.defenderId ? null : btn.defenderId;
+          } else if (btn.action === 'dismissDossier') {
+            _hallFocusDefenderId = null;
           } else if (btn.action === 'focusFortressNode') {
             _treasuryFocusKey = _treasuryFocusKey === btn.key ? null : btn.key;
           } else if (btn.action === 'cycleEquip') {
@@ -10624,6 +10627,11 @@ function drawCampaignMetaBar(center) {
         recruitCost: _effectiveRecruitCost,
         recruitAllowed: gate.ok,
         recruitBlockReason: gate.reason,
+        rosterCount: _roster?.defenders?.length ?? 0,
+        rosterCap: getBarracksDisplayCap({
+          firstSagaMap: isCampaignWarCamp() && isFirstSagaMap(_campaignMapIndex),
+          barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
+        }),
       });
       subtitle = 'BARRACKS';
       metaCenter = {
@@ -11197,6 +11205,10 @@ function drawTopBar() {
       ctx.font = '7px monospace';
       ctx.fillStyle = 'rgba(220,160,60,0.78)';
       ctx.fillText(`⚠ ${_warns[0]}`, midX, cy - 14);
+      if (_warns.length > 1) {
+        ctx.fillStyle = 'rgba(200,140,50,0.65)';
+        ctx.fillText(`⚠ ${_warns[1]}`, midX, cy - 5);
+      }
     } else {
       const _nextIdx = _nodeWaveIndex + 1;
       const _nextW = _nodeWavePlan.waves[_nextIdx];
@@ -14706,6 +14718,11 @@ function drawSettlementHubScreen() {
     nextAssault: nextAssault ? { codename: nextAssault.codename } : null,
     hubPulseBuilding: _hubPulseBuilding,
     chronicleUnread: _chronicleUnread,
+    rosterCount: _roster?.defenders?.length ?? 0,
+    rosterCap: getBarracksDisplayCap({
+      firstSagaMap: isFirstSagaMap(_campaignMapIndex ?? 0),
+      barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
+    }),
   }, _hubBtns);
 }
 

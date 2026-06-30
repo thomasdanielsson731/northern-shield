@@ -21,6 +21,8 @@ export function getHubBuildingMilestone(id, state = {}) {
     hubPulseBuilding = null,
     stars = 0,
     skirmishDiscovered = false,
+    rosterCount = 0,
+    rosterCap = 0,
   } = state;
 
   if (id === hubPulseBuilding) {
@@ -80,6 +82,9 @@ export function getHubBuildingMilestone(id, state = {}) {
     }
     if (hubPulseBuilding === 'recruit') {
       return { available: true, pulse: true, banner: 'RECRUIT OPEN' };
+    }
+    if (rosterCap > 0 && rosterCount < rosterCap) {
+      return { available: true, banner: 'OPEN SLOT' };
     }
     return { available: true };
   }

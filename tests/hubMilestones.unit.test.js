@@ -46,4 +46,14 @@ describe('hubMilestones', () => {
     expect(m.unread).toBe(true);
     expect(m.banner).toBe('NEW ENTRY');
   });
+
+  it('recruit shows OPEN SLOT when roster has room', () => {
+    const m = getHubBuildingMilestone('recruit', {
+      simplifiedSaga: false,
+      campaignState: { settlementComplete: true },
+      rosterCount: 2,
+      rosterCap: 6,
+    });
+    expect(m.banner).toBe('OPEN SLOT');
+  });
 });
