@@ -7,7 +7,7 @@ import { POST_DEFS, SIEGE_POST_IDS } from '../fortress/defensivePosts.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 
 export const SIEGE_PLATFORM_OPTIONS = Object.freeze({
-  ballista_platform: { structureType: 'ballista', minArmory: 1 },
+  ballista_platform: { structureType: 'ballista', minArmory: 0 },
   catapult_platform: { structureType: 'catapult', minArmory: 2 },
 });
 
@@ -101,4 +101,52 @@ export function getSiegePanelActions(postId, ctx) {
     label: `Clear ${sLabel}`,
     postId,
   }];
+}
+
+/** Always-visible siege buttons for the prep sidebar. */
+export function getPrepSiegeSidebarActions(ctx) {
+  const { postAssignments, fortressUpgrades = {} } = ctx;
+  const actions = [];
+
+  for (const postId of ['ballista_platform', 'catapult_platform']) {
+    const opt = getSiegeOptionForPost(postId);
+    if (!opt) continue;
+    const title = POST_DEFS[postId]?.label ?? postId;
+    const sLabel = getSiegeStructureLabel(opt.structureType);
+    const assigned = postAssignments?.[postId];
+    const unlocked = isSiegePostUnlocked(postId, fortressUpgrades);
+
+    if (!unlocked) {
+      actions.push({
+        id: 'siege_locked',
+        label: `🔒 ${title} — Armory Lv ${opt.minArmory}`,
+        disabled: true,
+      });
+      continue;
+    }
+
+    if (!assigned?.structureType) {
+      actions.push({
+        id: 'assign_siege',
+        postId,
+        structureType: opt.structureType,
+        level: 1,
+        label: `▣ Mount ${sLabel}`,
+        siegeHighlight: true,
+      });
+    } else {
+      actions.push({
+        id: 'focus_siege',
+        postId,
+        label: `✓ ${sLabel} on ${title.split(' ')[0]}`,
+      });
+      actions.push({
+        id: 'clear_siege',
+        postId,
+        label: `Clear ${sLabel}`,
+      });
+    }
+  }
+
+  return actions;
 }

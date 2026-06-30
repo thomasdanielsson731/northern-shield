@@ -7,7 +7,7 @@
 import { UI_COLORS } from '../ui/uiTheme.js';
 import { validateAssignments } from '../fortress/defensivePosts.js';
 import { getHeroAdvisorContent, getHeroPanelActions, isHeroPostId } from './prepHeroPicker.js';
-import { getSiegeAdvisorContent, getSiegePanelActions, isSiegePostId } from './prepSiegePicker.js';
+import { getSiegeAdvisorContent, getSiegePanelActions, isSiegePostId, getPrepSiegeSidebarActions } from './prepSiegePicker.js';
 import {
   canAffordGateRepair,
   getGateRepairBlockReason,
@@ -810,6 +810,7 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
   let ly = iy + pad + 8;
   const content = advisorLines(state.selectedHotspot, panelCtx);
   const actions = panelActions(state.selectedHotspot, panelCtx);
+  const siegeActions = getPrepSiegeSidebarActions(panelCtx).filter(a => !a.disabled);
 
   const bottomPad = 10;
   const hornH = 38;
@@ -861,6 +862,31 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
     ctx.fillText(act.label, contentX + 8, ly + 18);
     state.panelBtns.push({ ...act, x: contentX, y: ly, w: btnW, h: btnH });
     ly += btnH + 6;
+  }
+
+  if (siegeActions.length > 0 && ly + 14 < maxActionBottom) {
+    ctx.font = 'bold 7px monospace';
+    ctx.fillStyle = 'rgba(200,160,80,0.75)';
+    ctx.fillText('SIEGE (optional)', contentX, ly + 8);
+    ly += 14;
+    for (const act of siegeActions) {
+      if (ly + btnH > maxActionBottom) break;
+      const highlight = act.siegeHighlight || act.id === 'assign_siege';
+      ctx.fillStyle = highlight ? 'rgba(36,28,12,0.95)' : 'rgba(20,32,48,0.95)';
+      ctx.strokeStyle = highlight ? 'rgba(220,170,80,0.65)' : 'rgba(120,160,200,0.5)';
+      ctx.lineWidth = highlight ? 1.5 : 1;
+      ctx.beginPath();
+      ctx.roundRect(contentX, ly, btnW, btnH, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = highlight ? '#f0d080' : '#c8dce8';
+      ctx.fillText(act.label, contentX + 8, ly + 18);
+      if (!act.disabled) {
+        state.panelBtns.push({ ...act, x: contentX, y: ly, w: btnW, h: btnH });
+      }
+      ly += btnH + 6;
+    }
   }
 
   const hornBlock = getHornBlockReason(panelCtx);

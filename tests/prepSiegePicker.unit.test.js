@@ -9,8 +9,9 @@ import { getSiegePostRows } from '../src/fortress/fortressLayout.js';
 
 describe('prepSiegePicker', () => {
   it('gates ballista on armory level 1', () => {
-    expect(isSiegePostUnlocked('ballista_platform', { armory: 0 })).toBe(false);
-    expect(isSiegePostUnlocked('ballista_platform', { armory: 1 })).toBe(true);
+    expect(isSiegePostUnlocked('ballista_platform', { armory: 0 })).toBe(true);
+    expect(isSiegePostUnlocked('catapult_platform', { armory: 0 })).toBe(false);
+    expect(isSiegePostUnlocked('catapult_platform', { armory: 2 })).toBe(true);
   });
 
   it('offers mount action when unlocked and empty', () => {

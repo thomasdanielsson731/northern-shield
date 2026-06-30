@@ -216,6 +216,7 @@ import {
   drawPrepPostOverlays,
   drawPrepWorldChrome,
   hitTestPrepWorldPost,
+  drawPrepFortressFocusGrade,
 } from '../preparation/prepWorldView.js';
 import {
   createHornCameraState,
@@ -277,6 +278,8 @@ import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { bakeAshfenTerrain, bakeAssaultWorldTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGradeBg, drawCampaignPalisadeRing, drawPathlessAssaultLane } from '../assets/terrainArt.js';
 import {
   ASSAULT_FIELD_ZOOM,
+  PREP_FIELD_ZOOM,
+  PREP_INITIAL_GRID_ZOOM,
   ASSAULT_UNIT_SCALE,
   assaultWorldSize,
   clampAssaultGridPan,
@@ -1897,6 +1900,7 @@ function playfieldHeight() {
 /** Scale grid for assault — smaller units, larger scrollable world (not zoom-to-fill). */
 function playfieldScale() {
   if (!assaultPlayfieldWide()) return 1;
+  if (isFortressPrepPhase()) return PREP_FIELD_ZOOM;
   if (useAssaultScrollWorld()) return ASSAULT_FIELD_ZOOM;
   const scaleX = playfieldWidth() / (COLS * CELL_SIZE);
   const scaleY = playfieldHeight() / (ROWS * CELL_SIZE);
@@ -3162,7 +3166,8 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   _hornLaunchPending = false;
   _hornCamera = createHornCameraState();
   gamePhase = 'fortressPrep';
-  centerAssaultCameraOnFortress();
+  gridZoom = PREP_INITIAL_GRID_ZOOM;
+  centerPrepCameraOnFortress();
 
   waveNumber = 0;
   waveState  = 'countdown';
@@ -3329,6 +3334,10 @@ function processPrepShellClick(action) {
     persistCampaignFieldLayout();
     return;
   }
+  if (action.id === 'focus_siege' && action.postId && _prepShell) {
+    _prepShell.selectedHotspot = action.postId;
+    return;
+  }
   if (action.id === 'repair_gate') {
     const result = repairWestGateMeta(_prepFieldMeta ?? loadPrepFieldMeta(null), goldReserve);
     if (result.failed) {
@@ -3435,14 +3444,21 @@ function drawFortressCommanderPrepScreen() {
     selectedPostId: selectedPost,
     now: performance.now(),
     fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
+    prepMeta: _prepFieldMeta,
   });
 
   ctx.restore();
 
+  const fortSx = gridScreenX(GOAL.col * CELL_SIZE + CELL_SIZE / 2);
+  const fortSy = gridScreenY(GOAL.row * CELL_SIZE + CELL_SIZE / 2);
+  drawPrepFortressFocusGrade(ctx, pf, fortSx, fortSy, Math.min(pf.w, pf.h) * 0.42);
+
+  const ballistaFree = !(_postAssignments?.ballista_platform?.structureType);
   drawPrepWorldChrome(ctx, pf, {
     showSchematicHint: battlesCompleted === 0,
     assaultCodename: assault?.codename ?? null,
     schematicOverlay: _prepSchematicOverlay,
+    siegeHint: ballistaFree,
   });
 
   ctx.restore();
@@ -5581,6 +5597,10 @@ function clampGridPan() {
 
 function centerAssaultCameraOnFortress() {
   if (!useAssaultScrollWorld()) return;
+  if (isFortressPrepPhase()) {
+    centerPrepCameraOnFortress();
+    return;
+  }
   const s = effectiveGridZoom();
   const cx = COLS * CELL_SIZE * 0.5;
   const cy = ROWS * CELL_SIZE * 0.5;
@@ -5591,6 +5611,22 @@ function centerAssaultCameraOnFortress() {
   const focusY = goalLY * 0.72 + spawn.y * 0.28;
   gridPanX = playfieldWidth() / 2 - cx - (focusX - cx) * s;
   gridPanY = playfieldHeight() / 2 - cy - (focusY - cy) * s;
+  clampGridPan();
+}
+
+function centerPrepCameraOnFortress() {
+  if (!assaultPlayfieldWide()) return;
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  const gatePost = getPrimaryGateForFront(assault?.frontId ?? 'west');
+  const gateCell = resolvePostCell(gatePost, GOAL, FORTRESS_RING_R);
+  const s = effectiveGridZoom();
+  const gridCx = COLS * CELL_SIZE * 0.5;
+  const gridCy = ROWS * CELL_SIZE * 0.5;
+  const focusX = gateCell.col * CELL_SIZE + CELL_SIZE / 2;
+  const focusY = gateCell.row * CELL_SIZE + CELL_SIZE / 2;
+  gridPanX = playfieldWidth() * 0.42 - gridCx - (focusX - gridCx) * s;
+  gridPanY = playfieldHeight() * 0.52 - gridCy - (focusY - gridCy) * s;
   clampGridPan();
 }
 
