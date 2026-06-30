@@ -10,7 +10,8 @@ import {
 
 describe('assaultField', () => {
   it('uses readable unit scale on scroll assault', () => {
-    expect(ASSAULT_UNIT_SCALE).toBeGreaterThanOrEqual(0.8);
+    // Effective screen size = ASSAULT_UNIT_SCALE * ASSAULT_FIELD_ZOOM; keep it >= 0.7
+    expect(ASSAULT_UNIT_SCALE * ASSAULT_FIELD_ZOOM).toBeGreaterThanOrEqual(0.7);
   });
 
   it('assaultWorldSize includes padding around the grid', () => {

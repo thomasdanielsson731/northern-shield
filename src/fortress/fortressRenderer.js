@@ -92,15 +92,20 @@ function drawCourtyardStructure(ctx, kind, cell, cellSize, scale, watchtowerLeve
   return box;
 }
 
-function drawBuildingLabel(ctx, label, box, cellSize) {
+function drawBuildingLabel(ctx, label, box, cellSize, { below = false } = {}) {
   ctx.save();
   ctx.font = `bold ${Math.round(cellSize * 0.52)}px monospace`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
   ctx.shadowColor = 'rgba(0,0,0,0.85)';
   ctx.shadowBlur = 4;
   ctx.fillStyle = 'rgba(240,220,160,0.95)';
-  ctx.fillText(label, box.cx, box.y - cellSize * 0.25);
+  if (below) {
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, box.cx, box.y + box.h + cellSize * 0.3);
+  } else {
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, box.cx, box.y - cellSize * 0.3);
+  }
   ctx.restore();
 }
 
@@ -205,13 +210,12 @@ export function drawFortressLayout(ctx, {
       });
     } else if (anchor.kind === 'longhouse') {
       const box = drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);
-      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.longhouse, box, cellSize);
+      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.longhouse, box, cellSize, { below: true });
     } else if (anchor.kind === 'watch_tower') {
       const box = drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
       if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.watch_tower, box, cellSize);
     } else if (anchor.kind === 'treasury') {
       const box = drawCourtyardStructure(ctx, 'treasury', anchor.cell, cellSize, structureScale);
-      if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.treasury, box, cellSize);
     } else if (anchor.kind === 'siege') {
       drawSiegeProp(ctx, anchor, cellSize, structureScale);
     }
