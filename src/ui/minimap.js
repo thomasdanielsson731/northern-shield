@@ -18,6 +18,10 @@ function drawPanel(ctx, x, y, w, h) {
   ctx.fillStyle = 'rgba(200,170,110,0.65)';
   ctx.textAlign = 'left';
   ctx.fillText('MAP', x + 6, y + 9);
+  ctx.font = '5px monospace';
+  ctx.fillStyle = 'rgba(160,140,90,0.42)';
+  ctx.textAlign = 'right';
+  ctx.fillText('tap', x + w - 6, y + 9);
   ctx.restore();
 }
 

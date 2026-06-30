@@ -80,6 +80,8 @@ export function getCommandMapMetaHeader(progress, mapIndex, run, campaignState) 
     if (info?.codename) {
       line2 = `NEXT → ${info.codename.toUpperCase()} · tap a node`;
     }
+  } else {
+    line2 = 'REGION SECURED · review warband or choose another region';
   }
   return { line1, line2 };
 }

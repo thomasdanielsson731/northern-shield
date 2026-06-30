@@ -75,8 +75,12 @@ export function drawCombatFieldHpBar(ctx, cx, by, frac, accent, opts = {}) {
 }
 
 export function getHeroHpFrac(tower) {
-  if (tower.combatMaxHp == null || tower.combatMaxHp <= 0) return 1;
-  return Math.max(0, (tower.combatHp ?? 0) / tower.combatMaxHp);
+  if (tower.combatMaxHp != null && tower.combatMaxHp > 0) {
+    return Math.max(0, (tower.combatHp ?? 0) / tower.combatMaxHp);
+  }
+  const max = tower.maxHp ?? tower.hp ?? 0;
+  if (max > 0) return Math.max(0, (tower.hp ?? max) / max);
+  return 1;
 }
 
 export function getStructureHpFrac(tower, getStructureCombatHp) {

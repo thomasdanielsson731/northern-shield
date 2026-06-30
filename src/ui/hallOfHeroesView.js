@@ -449,6 +449,8 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
     if (focus && dossier) {
       const dossierAlpha = dossierRevealAlpha(focus.defenderId);
       ctx.save();
+      ctx.fillStyle = `rgba(4,2,8,${0.42 * dossierAlpha})`;
+      ctx.fillRect(hall.x, hall.y, hall.w, hall.h);
       ctx.globalAlpha = dossierAlpha;
       drawDossierPanel(ctx, dossier, focus, {
         renameState,

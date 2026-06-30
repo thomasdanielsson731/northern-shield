@@ -13,6 +13,7 @@ describe('assaultPanels', () => {
 
   it('computes hero HP fraction', () => {
     expect(getHeroHpFrac({ combatHp: 50, combatMaxHp: 100 })).toBe(0.5);
+    expect(getHeroHpFrac({ combatMaxHp: 0, hp: 30, maxHp: 100 })).toBe(0.3);
     expect(getHeroHpFrac({ combatMaxHp: 0 })).toBe(1);
     expect(getHeroHpFrac({ combatHp: -5, combatMaxHp: 100 })).toBe(0);
   });

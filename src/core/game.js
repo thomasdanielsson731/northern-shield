@@ -832,6 +832,7 @@ let _enemyIntroBanner   = null;          // { type, timer, label, hint } for fir
 let _firstNightDramaShown = false;       // First Saga A0 — mist emergence beat
 let _assaultWave1SpawnDrama = false;     // Wave 1 first-spawn slow-mo on saga assaults
 let _spawnMistDramaTimer = 0;            // Brief fen mist boost after wave-1 emergence
+let _assaultDisplaySpawnPx = null;       // Last border spawn used (multi-portal assault)
 let _enemyIntroQueue    = [];            // queued { label, hint } banners waiting to display
 let _betweenFadeIn      = 0;             // countdown for betweenBattles screen fade-in (30 frames)
 let _renameHintUntil    = 0;             // performance.now() deadline for first rename hint
@@ -1340,6 +1341,7 @@ function restartCombatState() {
   _firstNightDramaShown = false;
   _assaultWave1SpawnDrama = false;
   _spawnMistDramaTimer = 0;
+  _assaultDisplaySpawnPx = null;
   _enemyIntroQueue   = [];
   _starsEarnedThisBattle = 0;
   _defKillMilestones = new Set();
@@ -1775,6 +1777,11 @@ function getAssaultSpawnPixel(spawnCol = SPAWN.col, spawnRow = SPAWN.row) {
     _assaultWorldPadX,
     _assaultWorldPadY,
   );
+}
+
+/** Minimap / mist — tracks last picked portal in multi-spawn assaults. */
+function getAssaultDisplaySpawnPixel() {
+  return _assaultDisplaySpawnPx ?? getAssaultSpawnPixel();
 }
 
 function getAssaultEnemyPath(spawnCol = SPAWN.col, spawnRow = SPAWN.row) {
@@ -2539,6 +2546,7 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   _firstNightDramaShown = false;
   _assaultWave1SpawnDrama = false;
   _spawnMistDramaTimer = 0;
+  _assaultDisplaySpawnPx = null;
   _navActiveId       = 'battle';
   showRuneMenu       = false;
   _nodeWavePlan      = buildNodeWavePlan(mapIndex, nodeIndex);
@@ -5519,6 +5527,9 @@ function spawnEnemy(type = ENEMY_TYPES.DRAUGR, hpScale = 1) {
     portalFlashColor = 'blue';  // regular Jötunn — cold blue, not the boss red
   }
   const newEnemy = new Enemy(path, type, hpScale);
+  if (useAssaultScrollWorld()) {
+    _assaultDisplaySpawnPx = getAssaultSpawnPixel(_spawnCol, _spawnRow);
+  }
   newEnemy.baseSpeed *= waveSpeedScale;
   newEnemy.speed     *= waveSpeedScale;
   if (type === ENEMY_TYPES.JOTUNN && !newEnemy.isBoss) {
@@ -5618,7 +5629,7 @@ function spawnBoss(waveNum) {
   _bossEntryVignette = 50;
   sfxBossEntry();
 
-  const borderSpawn = getAssaultSpawnPixel();
+  const borderSpawn = getAssaultDisplaySpawnPixel();
   const _spawnPx = borderSpawn.x;
   const _spawnPy = borderSpawn.y;
   for (let ri = 0; ri < 4; ri++) {
@@ -11524,7 +11535,7 @@ function drawBattleMinimapOverlay() {
   const viewGridLeft = cx + (-gridPanX - playfieldShiftX() - cx) / s;
   const viewGridTop  = cy + (-gridPanY - playfieldShiftY() - cy) / s;
 
-  const borderSpawn = getAssaultSpawnPixel();
+  const borderSpawn = getAssaultDisplaySpawnPixel();
 
   drawBattleMinimap(ctx, {
     x: mm.x,
@@ -17668,7 +17679,7 @@ function draw() {
   grid.draw(ctx, time, _gridAlpha, { skipFortifications: true });
 
   if (grid.useAshfenSpawn) {
-    const borderSpawn = getAssaultSpawnPixel();
+    const borderSpawn = getAssaultDisplaySpawnPixel();
     drawAnimatedSpawnFenMist(ctx, SPAWN, CELL_SIZE, time, {
       drama: _spawnMistDramaTimer > 0,
       px: useAssaultScrollWorld() ? borderSpawn.x : undefined,
