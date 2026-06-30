@@ -505,6 +505,13 @@ export function getBarracksChromeGuidance(state = {}) {
   if (!state.recruitAllowed) {
     return { title: 'BARRACKS', subtitle: state.recruitBlockReason ?? 'Recruitment locked' };
   }
+  const cap = state.rosterCap;
+  if (cap != null && (state.rosterCount ?? 0) >= cap) {
+    return {
+      title: 'ROSTER FULL',
+      subtitle: cap < 10 ? 'Upgrade Barracks to unlock more slots' : 'Dismiss or retire a defender first',
+    };
+  }
   if (state.selectedType) {
     const label = TOWER_DEFS[state.selectedType]?.label ?? state.selectedType;
     return { title: 'RECRUIT', subtitle: `Selected: ${label} · ${state.recruitCost}g` };

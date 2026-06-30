@@ -11569,6 +11569,13 @@ function drawLeftDock() {
   if (isCampaignAssaultBattle()) {
     if (useAssaultFieldDock()) {
       drawAssaultWarbandOverlay();
+    } else if (canModifyWarbandDeployment()) {
+      const px = FRAME_THICK;
+      const py = GRID_TOP;
+      const pw = LEFT_DOCK_W;
+      const ph = leftDockPanelHeight();
+      drawFantasyPanel(px, py, pw, ph, 'rgba(10,6,22,0.98)');
+      drawFieldLayoutBench(px, py, pw, ph);
     }
     return;
   }
@@ -14872,6 +14879,11 @@ function drawBetweenBattlesBarracksImmersive(W, H, contentTop, contentBot, btSec
     recruitCost: _effectiveRecruitCost,
     recruitAllowed: _recruitGate.ok,
     recruitBlockReason: _recruitGate.reason,
+    rosterCount: _roster.defenders.length,
+    rosterCap: getBarracksDisplayCap({
+      firstSagaMap: isCampaignWarCamp() && isFirstSagaMap(_campaignMapIndex),
+      barracksLevel,
+    }),
   });
 
   if (phase === 'base') {
@@ -18015,7 +18027,11 @@ function draw() {
 
   // Portal flash on enemy spawn (drawn before enemies so they appear on top)
   if (portalFlash > 0) {
-    const { x: spx, y: spy } = grid.cellCenter(SPAWN.col, SPAWN.row);
+    const spawnPt = useAssaultScrollWorld()
+      ? getAssaultDisplaySpawnPixel()
+      : grid.cellCenter(SPAWN.col, SPAWN.row);
+    const spx = spawnPt.x;
+    const spy = spawnPt.y;
     const maxFrames = portalFlashColor === 'red' ? 32 : portalFlashColor === 'gold' ? 20 : 14;
     const fa = (portalFlash / maxFrames) * 0.75;
     const [fr, fg, fb] = portalFlashColor === 'red'    ? [255, 40,  20]
