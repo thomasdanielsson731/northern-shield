@@ -102,6 +102,13 @@ export function getWarCampInstructionHint(state) {
   if (state.chronicleUnread) {
     return { title: 'CHRONICLE', line: 'Unread saga entry — open Chronicle', urgent: true };
   }
+  if (state.rosterCap > 0 && (state.rosterCount ?? 0) < state.rosterCap && state.isVictory) {
+    return {
+      title: 'OPEN SLOT',
+      line: `${state.rosterCount}/${state.rosterCap} warband — recruit before next assault`,
+      urgent: true,
+    };
+  }
   const active = getWarCampObjectives(state).find(s => s.active && !s.done);
   if (!active) {
     if (state.isVictory) {

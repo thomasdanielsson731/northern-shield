@@ -6804,11 +6804,16 @@ canvas.addEventListener('mousedown', e => {
           } else if (btn.action === 'upgradeFieldStructure') {
             upgradeFieldTowerAtWarCamp({ col: btn.col, row: btn.row });
           } else if (btn.action === 'selectRecruitType') {
+            const _rg = canRecruitInCampaignWarCamp();
+            if (!_rg.ok) {
+              _uiToast = { text: _rg.reason, timer: 140, color: UI_COLORS.gold };
+            } else {
             const _sg = TOWER_STAR_GATES[btn.recruitType];
             if (_sg != null && stars < _sg) {
               _uiToast = { text: `Requires ${_sg} ★ to recruit`, timer: 140, color: UI_COLORS.gold };
             } else {
               _recruitType = _recruitType === btn.recruitType ? null : btn.recruitType;
+            }
             }
           } else if (btn.action === 'pendingDismiss') {
             _pendingDismiss = _pendingDismiss === btn.defenderId ? null : btn.defenderId;
@@ -6859,6 +6864,7 @@ canvas.addEventListener('mousedown', e => {
             }
             _roster.dismiss(btn.defenderId);
             _pendingDismiss = null;
+            if (_hallFocusDefenderId === btn.defenderId) _hallFocusDefenderId = null;
             _campaignState.defenders = _roster.toJSON();
             _campaignState.equipmentInventory = _equipmentInventory.slice();
             try { persistCampaign(); } catch {}
@@ -6961,6 +6967,8 @@ canvas.addEventListener('mousedown', e => {
             _hallFocusDefenderId = _hallFocusDefenderId === btn.defenderId ? null : btn.defenderId;
           } else if (btn.action === 'dismissDossier') {
             _hallFocusDefenderId = null;
+          } else if (btn.action === 'dismissFortressDossier') {
+            _treasuryFocusKey = null;
           } else if (btn.action === 'focusFortressNode') {
             _treasuryFocusKey = _treasuryFocusKey === btn.key ? null : btn.key;
           } else if (btn.action === 'cycleEquip') {
@@ -10661,6 +10669,11 @@ function drawCampaignMetaBar(center) {
         chronicleUnread: _chronicleUnread,
         isVictory: _battleResult === 'victory',
         isDefeat: _battleResult === 'defeat',
+        rosterCount: _roster?.defenders?.length ?? 0,
+        rosterCap: getBarracksDisplayCap({
+          firstSagaMap: isCampaignWarCamp() && isFirstSagaMap(_campaignMapIndex),
+          barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
+        }),
       });
       subtitle = _wcHint?.line
         ?? (_warCampTabPulse === 'recruit'
@@ -11603,6 +11616,16 @@ function drawBattleMinimapOverlay() {
       x: e.x, y: e.y, alive: e.alive, reached: e.reached, isBoss: e.isBoss,
     })),
   });
+
+  const aliveEnemies = enemies.filter(e => e.alive && !e.reached).length;
+  if (aliveEnemies > 0) {
+    ctx.save();
+    ctx.font = 'bold 6px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(232,100,80,0.82)';
+    ctx.fillText(`${aliveEnemies}`, mm.x + mm.w - 6, mm.y + mm.h - 4);
+    ctx.restore();
+  }
 }
 
 // ── Left dock — skirmish warband/structures; field prep uses opaque bench dock ───
@@ -14839,12 +14862,11 @@ function drawBetweenBattlesHallImmersive(W, H, contentTop, contentBot, btSec, ph
 
 /** Treasury — backdrop+buildings (base) or dossier+chrome (overlays, after frame). */
 function drawBetweenBattlesTreasuryImmersive(W, H, contentTop, contentBot, btSec, phase = 'base') {
-  const useBottomSlot = Boolean(_fromSettlementHub || _progressionBuilding);
-  const treasuryRect = computeTreasuryImmersiveRect(FRAME_THICK, contentTop, contentBot, W, useBottomSlot);
-
   if (_treasuryFocusKey && !FORTRESS_DEFS[_treasuryFocusKey]) {
     _treasuryFocusKey = null;
   }
+  const useBottomSlot = Boolean(_fromSettlementHub || _progressionBuilding);
+  const treasuryRect = computeTreasuryImmersiveRect(FRAME_THICK, contentTop, contentBot, W, useBottomSlot);
 
   const upgrades = _campaignState?.fortressUpgrades ?? {};
   const _fu = goldReserve > 0

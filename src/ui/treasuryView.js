@@ -425,7 +425,13 @@ export function drawTreasuryView(ctx, rect, opts = {}) {
       const cost = maxed ? 0 : def.cost[lvl];
       const canBuy = !maxed && goldReserve >= cost;
       const dossierAlpha = dossierRevealAlpha(focus);
+      btnsOut.push({
+        x: hall.x, y: hall.y, w: hall.w, h: hall.h,
+        action: 'dismissFortressDossier',
+      });
       ctx.save();
+      ctx.fillStyle = `rgba(4,2,8,${0.42 * dossierAlpha})`;
+      ctx.fillRect(hall.x, hall.y, hall.w, hall.h);
       ctx.globalAlpha = dossierAlpha;
       drawBuildingDossier(ctx, dossier, focus, def, lvl, maxed, cost, canBuy, goldReserve, btnsOut);
       ctx.restore();
