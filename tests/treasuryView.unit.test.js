@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  canAffordFortressUpgrade,
   computeTreasuryImmersiveRect,
   computeTreasuryBuildingSlots,
   drawTreasuryView,
@@ -36,6 +37,13 @@ describe('treasuryView', () => {
     const wall = TREASURY_BUILDING_NORM[3];
     expect(wall.nx).toBeLessThan(watch.nx);
     expect(wall.ny).toBeGreaterThan(watch.ny);
+  });
+
+  it('canAffordFortressUpgrade respects level cap and gold reserve', () => {
+    const def = { maxLevel: 3, cost: [40, 90, 170] };
+    expect(canAffordFortressUpgrade(def, 0, 39)).toBe(false);
+    expect(canAffordFortressUpgrade(def, 0, 40)).toBe(true);
+    expect(canAffordFortressUpgrade(def, 3, 500)).toBe(false);
   });
 
   it('computeTreasuryBuildingSlots maps hub-aligned coordinates', () => {
@@ -88,8 +96,9 @@ describe('treasuryView', () => {
   });
 
   it('shouldShowHallOfHeroesView respects progression building over tab', () => {
-    expect(shouldShowHallOfHeroesView('fortress', 'warband')).toBe(false);
+    expect(shouldShowHallOfHeroesView('fortress', 'warband')).toBe(true);
     expect(shouldShowHallOfHeroesView('warband', 'fortress')).toBe(false);
+    expect(shouldShowHallOfHeroesView('warband', null)).toBe(true);
   });
 
   it('drawTreasuryView supports base and overlay phases', () => {

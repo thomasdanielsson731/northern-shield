@@ -677,15 +677,12 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   ctx.rect(pf.x, pf.y, pf.w, pf.h);
   ctx.clip();
 
-  const bgGrad = ctx.createLinearGradient(pf.x, pf.y, pf.x, pf.y + pf.h);
-  bgGrad.addColorStop(0, '#1a2838');
-  bgGrad.addColorStop(1, '#0e1418');
   const hasPlate = drawFortressPrepBackground(ctx, pf);
   if (!hasPlate) {
+    const bgGrad = ctx.createLinearGradient(pf.x, pf.y, pf.x, pf.y + pf.h);
+    bgGrad.addColorStop(0, '#1a2838');
+    bgGrad.addColorStop(1, '#0e1418');
     ctx.fillStyle = bgGrad;
-    ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
-  } else {
-    ctx.fillStyle = 'rgba(8,12,18,0.18)';
     ctx.fillRect(pf.x, pf.y, pf.w, pf.h);
   }
 
@@ -713,19 +710,23 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const gateBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WEST_GATE), pf, cam);
 
   const lhBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.LONGHOUSE), pf, cam);
-  drawLonghouseGraphic(ctx, lhBox);
-  ctx.fillStyle = 'rgba(255,160,60,0.3)';
-  ctx.beginPath();
-  ctx.arc(lhBox.x + lhBox.w * 0.5, lhBox.y - 4, 6 + Math.sin(now * 0.003) * 2, 0, Math.PI * 2);
-  ctx.fill();
+  if (!hasPlate) drawLonghouseGraphic(ctx, lhBox);
+  if (!hasPlate) {
+    ctx.fillStyle = 'rgba(255,160,60,0.3)';
+    ctx.beginPath();
+    ctx.arc(lhBox.x + lhBox.w * 0.5, lhBox.y - 4, 6 + Math.sin(now * 0.003) * 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const trBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.TREASURY), pf, cam);
-  drawTreasuryGraphic(ctx, trBox, !treasuryUnlocked);
+  if (!hasPlate) drawTreasuryGraphic(ctx, trBox, !treasuryUnlocked);
 
   const towerBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WATCH_TOWER), pf, cam);
-  drawWatchTowerGraphic(ctx, towerBox);
+  if (!hasPlate) drawWatchTowerGraphic(ctx, towerBox);
 
-  drawWestGateGraphic(ctx, gateBox, prepMeta, state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE);
+  if (!hasPlate) {
+    drawWestGateGraphic(ctx, gateBox, prepMeta, state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE);
+  }
 
   const gateHero = postAssignments?.west_gate?.defenderId;
   const towerHero = postAssignments?.watch_tower?.defenderId;
@@ -741,17 +742,15 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   const gateNeedsHero = !gateHero;
   if (gateNeedsHero) drawPrepPulse(ctx, gateBox, now);
 
-  drawWestApproach(ctx, pf, gateBox, now);
-  drawCompassRose(ctx, pf);
+  if (!hasPlate) drawWestApproach(ctx, pf, gateBox, now);
+  if (!hasPlate) drawCompassRose(ctx, pf);
 
   drawHotspotLabel(
     ctx, gateBox, 'WEST GATE',
-    scarActive
-      ? 'Splintered palisade — repair'
-      : gateNeedsHero
-        ? 'Palisade gate — assign hero'
-        : (gateDef?.name || gateDef?.type || 'Posted'),
-    { urgent: gateNeedsHero || scarActive },
+    gateNeedsHero
+      ? 'Palisade gate — assign hero'
+      : (gateDef?.name || gateDef?.type || 'Posted'),
+    { urgent: gateNeedsHero },
   );
   drawHotspotLabel(
     ctx, towerBox, 'WATCH TOWER',

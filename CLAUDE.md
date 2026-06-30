@@ -64,7 +64,15 @@ src/
   ui/
     uiTheme.js         — UI_COLORS palette, War Room top bar chrome, stat chips
     assaultPanels.js   — deployed field card HP bars, status labels
+    hallOfHeroesView.js — immersive Hall (statues, dossier, glass chips)
+    treasuryView.js    — immersive Treasury / settlement fortress hub
+    barracksView.js    — immersive Barracks recruit (Hall statues, roster, level card)
+    warCampVisual.js   — glass chips, objective guidance, immersive chrome
+    hallHeroStatues.js — shared statue draw for Hall + Barracks
     structurePortrait.js — drawProceduralStructureIcon() — procedural icons for build dock
+  combat/
+    assaultField.js    — ASSAULT_FIELD_ZOOM, world padding, border spawn helpers
+    assaultTargeting.js — hasLivingFortressGates(), buildAssaultTargetPriority(); gate-priority for pathless enemies
   campaign/
     save.js            — saveCampaign(), loadCampaign(), migrateLegacySaves(); slot-aware keys via saveSlots
     saveSlots.js       — 10 slots, ns-slots-meta-v1, migrateLegacyToSlots(), deleteSlot(), slot meta summaries
@@ -78,10 +86,10 @@ src/
     campaignDeploy.js  — isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults(); prep-only placement rules
     onboarding.js      — ONBOARDING steps enum, getOnboardingHint(), advanceOnboarding(), resolveOnboardingHint()
     saveValidate.js    — validateCampaignState(), verifySaveChecksum(), simpleSaveChecksum()
-  combat/
-    assaultTargeting.js — hasLivingFortressGates(), buildAssaultTargetPriority(); gate-priority for pathless enemies
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
+  preparation/
+    fortressPrepArt.js — prep sprites, drawAssaultFortressStructures (structures-only assault fortress)
   chronicle/
     chronicle.js       — All Chronicle + Defender Legacy exports: TRAIT_DEFS, SCAR_DEFS, VETERAN_RANKS, BOND_NAMES, TITLE_DEFS,
                          getRank(), getRandomTrait(), checkScars(), checkTitles(), generateBio(), generateEpitaph(),
@@ -118,7 +126,7 @@ tests/
   gameImports.smoke.test.js
 ```
 
-**194 tests** — run `npx vitest run` from repo root.
+**508 tests** — run `npm test` from repo root.
 
 ### Key facts about game.js
 
@@ -144,12 +152,26 @@ Key constants: `COLS=48, ROWS=30, CELL_SIZE=14`, `SPAWN={col:0, row:15}`, `GOAL=
 
 **Campaign combat:** `pathless: true` on campaign presets — no `drawPath()`, no BFS on placement. Heroes place anywhere; structures/gates only in fortress zone (Chebyshev ≤10 from `GOAL`). Enemies use direct targeting (`pickEnemyTarget`, `targetPriority` in `ENEMY_DEFS`). Breach steals gold via `getEnemyGoldSteal()`.
 
+**Scrollable assault world** (`useAssaultScrollWorld()`): padded canvas (`assaultField.js` — +18 cols / +12 rows per side). Enemies spawn on **world border** via `getAssaultBorderSpawnPx()`, not grid col 0. Fortress drawn as **structures only** (`drawAssaultFortressStructures` in `fortressPrepArt.js`) on shared terrain — no circular ground plate. Terrain: `assault_battlefield_bg@2048x1320.png` cover-fills world; `scatterAssaultWilderness` adds trees/stones/water in padding. Zoom `ASSAULT_FIELD_ZOOM = 0.54`; unit scale `ASSAULT_UNIT_SCALE = 0.84`. Minimap + fen mist use border spawn pixel.
+
+**Immersive War Camp buildings** (`betweenBattles`): Hall (`hallOfHeroesView.js`), Treasury (`treasuryView.js`), Barracks (`barracksView.js`) — draw base in `drawBetweenBattles`, return early; overlays after `drawFrames()`. Meta bar carries screen title (`BARRACKS · RECRUIT`, etc.).
+
 **Skirmish combat:** BFS path validation on every tower/wall placement. Path drawn. Multi-portal maps (`multiPortal:true`) reserve extra `CELL.SPAWN` cells; all portal paths validated on placement.
 
 **Multi-portal (campaign + skirmish):** `campaignPortalCount` scales 1→4 by map tier (maps 0–14: 1, 15–39: 2, 40–69: 3, 70+: 4). Extra portals activate on early waves in campaign mode.
 
 ### Render order (each frame)
 
+**Campaign assault (scroll world):**
+1. `drawCampaignAssaultPlayfieldBackdrop` — light vignette only (terrain visible)
+2. Terrain canvas blit at `-padX, -padY`
+3. `drawFortressComplex` → `drawAssaultFortressStructures` when grid hidden
+4. `grid.draw()` — palisade walls; grid lines alpha 0 when `hideAssaultBattleGrid()`
+5. `drawAnimatedSpawnFenMist` at border spawn pixel
+6. Towers → enemies → particles → HUD panels
+7. `drawFrames()` then immersive overlays if applicable
+
+**Default (skirmish / deploy):**
 1. Terrain canvas blit (baked offscreen once at init)
 2. `grid.draw()` — cells, spawn portal, goal/hoard
 3. `drawPath()` — **skirmish only** (`isPathlessMode()` returns early)

@@ -174,10 +174,10 @@ describe('hall of heroes art alignment', () => {
 describe('fortress prep art alignment', () => {
   const playfield = { x: 40, y: 80, w: 700, h: 380 };
 
-  it('prep hotspots with ground structures anchor feet', () => {
-    expect(isPrepHotspotGroundAnchored('west_gate')).toBe(true);
-    expect(isPrepHotspotGroundAnchored('longhouse')).toBe(true);
-    expect(isPrepHotspotGroundAnchored('treasury')).toBe(true);
+  it('prep hotspots sit on schematic structure coords', () => {
+    expect(PREP_HOTSPOT_LAYOUT.treasury.fx).toBeCloseTo(0.45, 1);
+    expect(PREP_HOTSPOT_LAYOUT.west_gate.fx).toBe(0);
+    expect(PREP_HOTSPOT_LAYOUT.watch_tower.fy).toBeLessThan(PREP_HOTSPOT_LAYOUT.west_gate.fy);
   });
 
   it('resolved prep rects stay inside backdrop dest', () => {
@@ -192,12 +192,14 @@ describe('fortress prep art alignment', () => {
     }
   });
 
-  it('west gate foot maps to lower schematic band', () => {
+  it('west gate foot maps to mid-left schematic band', () => {
     const fit = getPrepBackdropRect(playfield);
     const gate = PREP_HOTSPOT_LAYOUT.west_gate;
     const foot = normRectFootPoint(gate);
     const p = mapContentNormToScreen(fit, foot.nx, foot.ny);
-    expect(p.y).toBeGreaterThan(fit.dy + fit.dh * 0.65);
+    expect(p.x).toBeLessThan(fit.dx + fit.dw * 0.12);
+    expect(p.y).toBeGreaterThan(fit.dy + fit.dh * 0.42);
+    expect(p.y).toBeLessThan(fit.dy + fit.dh * 0.58);
   });
 });
 

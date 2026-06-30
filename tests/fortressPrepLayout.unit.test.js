@@ -32,7 +32,7 @@ describe('fortressPrepLayout', () => {
 
   it('hotspotRect returns cx/cy for camera focus', () => {
     const r = hotspotRect(pf, 'west_gate');
-    expect(r?.cx).toBeGreaterThan(pf.x);
+    expect(r?.cx).toBeGreaterThanOrEqual(pf.x);
     expect(r?.cy).toBeGreaterThan(pf.y);
   });
 

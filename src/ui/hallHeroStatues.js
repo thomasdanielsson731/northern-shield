@@ -16,8 +16,9 @@ const STATUE_SRC = {
   drakship: '/assets/ui/ui_hall_statue_drakship@128x192.png',
 };
 
-const STATUE_W = 128;
-const STATUE_H = 192;
+/** Cropped art size — decorative frame border stripped from source PNGs. */
+const STATUE_W = 106;
+const STATUE_H = 174;
 
 const _images = {};
 for (const [type, src] of Object.entries(STATUE_SRC)) {

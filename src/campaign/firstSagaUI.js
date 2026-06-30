@@ -7,6 +7,7 @@ import {
   FIRST_SAGA_SETTLEMENT,
   FIRST_SAGA_DISPLAY_NODE_COUNT,
   FIRST_SAGA_A4_NODE,
+  isFirstSagaMap,
   isFirstSagaSettlementReady,
   isFirstSagaSettlementComplete,
   getFirstSagaRecruitTypes,
@@ -15,7 +16,14 @@ import {
   SETTLEMENT_STAGES,
   SETTLEMENT_STAGE_COUNT,
 } from './settlementCeremony.js';
-import { isAssaultUnlocked } from './campaignFronts.js';
+import {
+  getAssaultInfo,
+  getNextAvailableAssault,
+  isAssaultUnlocked,
+} from './campaignFronts.js';
+import {
+  getCampaignMapMeta,
+} from './campaignMaps.js';
 import {
   getStoneFlashAlpha,
   getSettlementStepGlow,
@@ -35,6 +43,71 @@ function drawPanel(ctx, x, y, w, h, fillStyle, borderAlpha = 0.7, radius = 8) {
   ctx.stroke();
 }
 
+export function getFirstSagaNextAssault(progress, mapIndex, run) {
+  return FIRST_SAGA_ASSAULTS.find((a) =>
+    isAssaultUnlocked(progress, mapIndex, a.nodeIndex)
+    && !run.nodesCleared.includes(a.nodeIndex)
+    && !FIRST_SAGA_ASSAULTS.some((b) =>
+      b.nodeIndex < a.nodeIndex && !run.nodesCleared.includes(b.nodeIndex),
+    ),
+  ) ?? null;
+}
+
+/** Meta-bar header lines for the command map top frame. */
+export function getCommandMapMetaHeader(progress, mapIndex, run, campaignState) {
+  if (isFirstSagaMap(mapIndex)) {
+    const next = getFirstSagaNextAssault(progress, mapIndex, run);
+    let line2 = '';
+    if (next) {
+      line2 = `NEXT → ${next.codename.toUpperCase()} · tap highlighted node`;
+    } else if (
+      isFirstSagaSettlementReady(progress, mapIndex)
+      && !isFirstSagaSettlementComplete(campaignState)
+    ) {
+      line2 = 'NEXT → SETTLEMENT OATH · tap highlighted node';
+    } else if (run.nodesCleared.length >= FIRST_SAGA_ASSAULTS.length) {
+      line2 = 'ALL ASSAULTS CLEARED · review warband or settlement';
+    }
+    return { line1: 'REGION 1 — ASH FEN · WEST ROAD', line2 };
+  }
+
+  const meta = getCampaignMapMeta(mapIndex);
+  const nextA = getNextAvailableAssault(progress, mapIndex);
+  const line1 = `REGION ${mapIndex + 1} — ${(meta?.name ?? 'REGION').toUpperCase()}`;
+  let line2 = '';
+  if (nextA) {
+    const info = getAssaultInfo(mapIndex, nextA.nodeIndex);
+    if (info?.codename) {
+      line2 = `NEXT → ${info.codename.toUpperCase()} · tap a node`;
+    }
+  }
+  return { line1, line2 };
+}
+
+/** Briefing body lines for the top-left command-map guidance chip. */
+export function getCommandMapBriefingLines(meta, {
+  nodeCount,
+  portalCount,
+  deployHint,
+  structRec,
+  wbAnalysis,
+  warnings = [],
+  tutorialNext = false,
+}) {
+  const lines = [
+    `${nodeCount} assaults · ${portalCount} portal(s) · Boss: ${meta?.boss?.name ?? '???'}`,
+    `Deploy ~${deployHint} heroes · ~${structRec} structures · Tank ${wbAnalysis.counts.tank} · Support ${wbAnalysis.counts.support} · DPS ${wbAnalysis.counts.st_dps + wbAnalysis.counts.aoe_dps}`,
+  ];
+  if (warnings.length > 0) {
+    for (let i = 0; i < Math.min(2, warnings.length); i++) {
+      lines.push(`⚠ ${warnings[i]}`);
+    }
+  } else if (tutorialNext) {
+    lines.push('Tutorial — hold the gate with 2–3 heroes');
+  }
+  return lines;
+}
+
 /** Linear west-road command map (6 nodes). Mutates btnsOut. */
 export function drawFirstSagaCommandMap(ctx, {
   mapX, mapY, mapW, mapH,
@@ -46,25 +119,6 @@ export function drawFirstSagaCommandMap(ctx, {
   const artKey = getCommandMapArtKey(mapIndex) ?? 'commandMapRegion1';
   const hasArt = drawCampaignArtCover(ctx, artKey, mapX, mapY, mapW, mapH, 0.72);
   const layoutPts = resolveCommandMapNodePositions(mapIndex, mapX, mapY, mapW, mapH);
-
-  ctx.font = 'bold 10px monospace';
-  ctx.fillStyle = 'rgba(160,140,90,0.65)';
-  ctx.textAlign = 'center';
-  ctx.fillText('REGION 1 — ASH FEN · WEST ROAD', cx, mapY + 22);
-
-  const nextAssault = FIRST_SAGA_ASSAULTS.find(a =>
-    isAssaultUnlocked(progress, mapIndex, a.nodeIndex)
-    && !run.nodesCleared.includes(a.nodeIndex)
-    && !FIRST_SAGA_ASSAULTS.some(b =>
-      b.nodeIndex < a.nodeIndex && !run.nodesCleared.includes(b.nodeIndex),
-    ),
-  );
-  if (nextAssault) {
-    const pulse = 0.55 + Math.sin(performance.now() * 0.005) * 0.25;
-    ctx.font = '7px monospace';
-    ctx.fillStyle = `rgba(240,200,100,${pulse})`;
-    ctx.fillText(`NEXT → ${nextAssault.codename.toUpperCase()} · tap highlighted node`, cx, mapY + 36);
-  }
 
   const roadY = mapY + mapH * 0.55;
   const roadX0 = mapX + 36;

@@ -1,24 +1,19 @@
 /**
- * Fortress prep schematic — hotspot anchors on fort_prep_schematic_age1@640x360.
- * fx/fy/fw/fh in art-normalized space; fy+fh ≈ ground contact on the plate.
+ * Fortress prep schematic — hotspot anchors on fort_prep_coordinate_schematic@1254x1254.
+ * Coordinates: center (0,0) treasury, ±12 gates, diagonal towers at (±9, ±9).
  */
 
 import { computeContentCoverFit, mapContentNormRect, isGroundAnchored } from '../assets/artAlignment.js';
+import { PREP_COORD_HOTSPOTS } from './fortressCoordSystem.js';
 
-export const PREP_ART_W = 640;
-export const PREP_ART_H = 360;
+export const PREP_ART_W = 1254;
+export const PREP_ART_H = 1254;
 
-export const PREP_LAYOUT_INSET_TOP = 6;
-export const PREP_LAYOUT_INSET_BOTTOM = 6;
+export const PREP_LAYOUT_INSET_TOP = 4;
+export const PREP_LAYOUT_INSET_BOTTOM = 4;
 
-/** Tuned to painted pads on fort_prep_schematic_age1 — west gate in palisade opening. */
-export const PREP_HOTSPOT_LAYOUT = {
-  watch_tower: { fx: 0.39, fy: 0.20, fw: 0.12, fh: 0.24 },
-  west_gate:   { fx: 0.08, fy: 0.56, fw: 0.16, fh: 0.24 },
-  wall_scar:   { fx: 0.05, fy: 0.48, fw: 0.22, fh: 0.12 },
-  longhouse:   { fx: 0.05, fy: 0.70, fw: 0.18, fh: 0.18 },
-  treasury:    { fx: 0.73, fy: 0.70, fw: 0.16, fh: 0.16 },
-};
+/** Tuned to coordinate schematic — see fortressCoordSystem.js */
+export const PREP_HOTSPOT_LAYOUT = { ...PREP_COORD_HOTSPOTS };
 
 export function getPrepArtPlayfield(playfield) {
   const { x, y, w, h } = playfield;

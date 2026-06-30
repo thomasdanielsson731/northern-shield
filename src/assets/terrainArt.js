@@ -3,6 +3,8 @@
  * @see design/art/BATCH_PROMPTS.md Wave 4
  */
 
+import { getAssaultBorderSpawnPx } from '../combat/assaultField.js';
+
 const TILE_SRC = {
   groundA: '/assets/terrain/tile_ashfen_ground_01@28.png',
   groundB: '/assets/terrain/tile_ashfen_ground_02@28.png',
@@ -13,6 +15,7 @@ const TILE_SRC = {
   palisadeGateCap: '/assets/terrain/tile_palisade_gate_cap@28.png',
   spawnMist: '/assets/fx/fx_spawn_fen_mist@56.png',
   fenTrees: '/assets/terrain/prop_fen_trees_backdrop@128x256.png',
+  assaultWheelBg: '/assets/terrain/assault_battlefield_bg@2048x1320.png',
 };
 
 const _images = {};
@@ -254,6 +257,165 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
   return true;
 }
 
+/** Procedural stone wheel paths — fallback when assault bg art is loading. */
+function paintProceduralWheelPaths(tc, cx, cy, cellSize, worldW, worldH) {
+  const outerR = cellSize * 9.5;
+  const innerR = cellSize * 4.8;
+  const hubR   = cellSize * 1.6;
+
+  tc.strokeStyle = 'rgba(72,58,38,0.72)';
+  tc.lineWidth = cellSize * 0.85;
+  tc.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    tc.beginPath();
+    tc.moveTo(cx + Math.cos(a) * hubR, cy + Math.sin(a) * hubR);
+    tc.lineTo(cx + Math.cos(a) * outerR * 1.15, cy + Math.sin(a) * outerR * 1.15);
+    tc.stroke();
+  }
+  for (const r of [hubR, innerR, outerR]) {
+    tc.beginPath();
+    tc.arc(cx, cy, r, 0, Math.PI * 2);
+    tc.stroke();
+  }
+
+  const vg = tc.createRadialGradient(cx, cy, outerR * 0.4, cx, cy, Math.max(worldW, worldH) * 0.55);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.42)');
+  tc.fillStyle = vg;
+  tc.fillRect(0, 0, worldW, worldH);
+}
+
+/** Scatter trees, stones, and water pools in the wilderness padding. */
+function scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, cellSize, goal, rng) {
+  const gridW = cols * cellSize;
+  const gridH = rows * cellSize;
+  const goalX = padX + goal.col * cellSize + cellSize / 2;
+  const goalY = padY + goal.row * cellSize + cellSize / 2;
+
+  const treeImg = ready('fenTrees') ? _images.fenTrees : null;
+
+  const inCourtyard = (wx, wy) => {
+    const lx = wx - padX;
+    const ly = wy - padY;
+    return Math.max(Math.abs(lx / cellSize - goal.col), Math.abs(ly / cellSize - goal.row)) <= 7;
+  };
+
+  for (let i = 0; i < 48; i++) {
+    let wx = rng() * worldW;
+    let wy = rng() * worldH;
+    if (wx > padX && wx < padX + gridW && wy > padY && wy < padY + gridH) continue;
+    if (inCourtyard(wx, wy)) continue;
+    const th = cellSize * (2.4 + rng() * 2.8);
+    const tw = th * 0.42;
+    if (treeImg) {
+      tc.save();
+      tc.globalAlpha = 0.55 + rng() * 0.35;
+      tc.drawImage(treeImg, wx - tw / 2, wy - th, tw, th);
+      tc.restore();
+    } else {
+      tc.fillStyle = `rgba(${18 + rng() * 12},${28 + rng() * 14},${18 + rng() * 10},0.75)`;
+      tc.beginPath();
+      tc.ellipse(wx, wy - th * 0.35, tw * 0.35, th * 0.55, 0, 0, Math.PI * 2);
+      tc.fill();
+      tc.fillStyle = '#1a1008';
+      tc.fillRect(wx - tw * 0.06, wy - th * 0.15, tw * 0.12, th * 0.2);
+    }
+  }
+
+  for (let i = 0; i < 22; i++) {
+    const wx = rng() * worldW;
+    const wy = rng() * worldH;
+    if (inCourtyard(wx, wy)) continue;
+    const r = cellSize * (0.35 + rng() * 0.85);
+    tc.fillStyle = `rgba(${48 + rng() * 28},${44 + rng() * 20},${38 + rng() * 18},0.82)`;
+    tc.beginPath();
+    tc.ellipse(wx, wy, r, r * 0.72, rng() * Math.PI, 0, Math.PI * 2);
+    tc.fill();
+    tc.strokeStyle = 'rgba(20,16,12,0.35)';
+    tc.lineWidth = 1;
+    tc.stroke();
+  }
+
+  const waterSpots = [
+    { x: padX * 0.42, y: padY + gridH * 0.72, rx: padX * 0.55, ry: padY * 0.38 },
+    { x: padX + gridW + padX * 0.58, y: padY * 0.35, rx: padX * 0.48, ry: padY * 0.42 },
+    { x: goalX + gridW * 0.18, y: padY + gridH + padY * 0.45, rx: gridW * 0.22, ry: padY * 0.35 },
+  ];
+  for (const pool of waterSpots) {
+    const wg = tc.createRadialGradient(pool.x, pool.y, 0, pool.x, pool.y, Math.max(pool.rx, pool.ry));
+    wg.addColorStop(0, 'rgba(70,110,120,0.42)');
+    wg.addColorStop(0.55, 'rgba(40,70,82,0.28)');
+    wg.addColorStop(1, 'rgba(0,0,0,0)');
+    tc.fillStyle = wg;
+    tc.beginPath();
+    tc.ellipse(pool.x, pool.y, pool.rx, pool.ry, 0, 0, Math.PI * 2);
+    tc.fill();
+  }
+}
+
+/**
+ * Large scrollable assault backdrop — fen forest art covering the full padded world.
+ * No buildings; grid terrain (paths, courtyard) is painted at the pad offset only.
+ */
+export function bakeAssaultWorldTerrain(tc, cols, rows, cellSize, worldW, worldH, padX, padY, spawn, goal, rng) {
+  const gx = padX + (goal?.col ?? Math.floor(cols / 2)) * cellSize + cellSize / 2;
+  const gy = padY + (goal?.row ?? Math.floor(rows / 2)) * cellSize + cellSize / 2;
+
+  const hasWheel = ready('assaultWheelBg');
+  tc.fillStyle = '#0e1410';
+  tc.fillRect(0, 0, worldW, worldH);
+
+  if (hasWheel) {
+    const img = _images.assaultWheelBg;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+    const scale = Math.max(worldW / iw, worldH / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const dx = (worldW - dw) / 2;
+    const dy = (worldH - dh) / 2;
+    tc.drawImage(img, 0, 0, iw, ih, dx, dy, dw, dh);
+  } else {
+    paintProceduralWheelPaths(tc, gx, gy, cellSize, worldW, worldH);
+    tc.save();
+    tc.globalAlpha = 0.88;
+    tc.translate(padX, padY);
+    if (isAshfenTerrainReady()) {
+      bakeAshfenTerrain(tc, cols, rows, cellSize, cols * cellSize, rows * cellSize, rng, spawn, goal, {
+        pathless: true,
+      });
+    }
+    tc.restore();
+  }
+
+  scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, cellSize, goal ?? { col: Math.floor(cols / 2), row: Math.floor(rows / 2) }, rng);
+
+  if (spawn && goal) {
+    const border = getAssaultBorderSpawnPx(spawn, goal, cols, rows, cellSize, padX, padY);
+    const mist = tc.createRadialGradient(
+      border.x, border.y, cellSize * 0.4,
+      border.x, border.y, cellSize * 6.5,
+    );
+    mist.addColorStop(0, 'rgba(120,150,160,0.20)');
+    mist.addColorStop(0.45, 'rgba(70,95,105,0.12)');
+    mist.addColorStop(1, 'rgba(0,0,0,0)');
+    tc.fillStyle = mist;
+    tc.beginPath();
+    tc.arc(border.x, border.y, cellSize * 6.5, 0, Math.PI * 2);
+    tc.fill();
+  }
+
+  const edge = tc.createRadialGradient(gx, gy, cellSize * 5, gx, gy, Math.max(worldW, worldH) * 0.62);
+  edge.addColorStop(0, 'rgba(0,0,0,0)');
+  edge.addColorStop(0.72, 'rgba(0,0,0,0)');
+  edge.addColorStop(1, 'rgba(0,0,0,0.32)');
+  tc.fillStyle = edge;
+  tc.fillRect(0, 0, worldW, worldH);
+
+  return true;
+}
+
 /** Animated dirt lane for pathless campaign assault — shimmer + worn center rut. */
 export function drawPathlessAssaultLane(ctx, spawn, goal, cols, rows, cellSize, time = 0) {
   if (!spawn || !goal) return;
@@ -304,10 +466,10 @@ export function drawPathlessAssaultLane(ctx, spawn, goal, cols, rows, cellSize, 
 }
 
 /** Animated fen mist at spawn edge — replaces static bake + purple portal on saga assaults. */
-export function drawAnimatedSpawnFenMist(ctx, spawn, cellSize, time = 0, { drama = false } = {}) {
-  if (!spawn) return;
-  const cx = spawn.col * cellSize + cellSize / 2;
-  const cy = spawn.row * cellSize + cellSize / 2;
+export function drawAnimatedSpawnFenMist(ctx, spawn, cellSize, time = 0, { drama = false, px: overrideX, py: overrideY } = {}) {
+  if (!spawn && overrideX == null) return;
+  const cx = overrideX ?? (spawn.col * cellSize + cellSize / 2);
+  const cy = overrideY ?? (spawn.row * cellSize + cellSize / 2);
   const pulse = 0.72 + Math.sin(time * 0.85) * 0.28;
   const driftX = Math.sin(time * 0.42) * cellSize * 0.22;
   const driftY = Math.sin(time * 0.55 + 1.2) * cellSize * 0.1;
@@ -486,7 +648,17 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
 }
 
 /** Wide playfield atmosphere — 3-layer parallax fen backdrop in letterbox margins. */
-export function drawCampaignAssaultPlayfieldBackdrop(ctx, x, y, w, h, time = 0) {
+export function drawCampaignAssaultPlayfieldBackdrop(ctx, x, y, w, h, time = 0, { scrollAssault = false } = {}) {
+  if (scrollAssault) {
+    const mistPulse = 0.62 + Math.sin(time * 0.65) * 0.22;
+    const vg = ctx.createRadialGradient(x + w / 2, y + h * 0.42, w * 0.06, x + w / 2, y + h * 0.42, w * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(0,0,0,${0.18 + mistPulse * 0.06})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(x, y, w, h);
+    return;
+  }
+
   const drift0 = Math.sin(time * 0.10) * 3;
   const drift1 = Math.sin(time * 0.20) * 7;
   const drift2 = Math.sin(time * 0.34) * 11;

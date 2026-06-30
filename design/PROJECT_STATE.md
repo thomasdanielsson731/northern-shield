@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-29 (Polish Board iter 53–72 — hall dossier UX, settlement chronicle unread, `__NS_TEST_HOOKS__`)  
+**Last updated:** 2026-06-22 (Immersive Barracks, assault border spawn, structures-only fortress, battlefield bg)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -16,7 +16,7 @@
 | **Current Target** | The First Saga (vertical slice) |
 | **Current Version** | `0.3.0-saga-rc` |
 | **Current Phase** | Production (Vertical Slice RC) |
-| **Current Sprint** | Sprint 6 — Polish (naming ceremony) |
+| **Current Sprint** | Sprint 6 — Immersive progression UI + assault polish |
 
 **Design authority:** [north_star.md](north_star.md) · [the_first_saga.md](the_first_saga.md) · [DESIGN_BIBLE_FROZEN.md](DESIGN_BIBLE_FROZEN.md)
 
@@ -64,22 +64,25 @@ Status: **RC candidate** — code complete; manual fresh-save playtest recommend
 
 ## Current sprint
 
-**Sprint 5 — Vertical Slice RC** (playtest + board sign-off)
+**Sprint 6 — Immersive UI + assault readability**
 
-Objective: Fresh-save manual validation + convene 11-reviewer Vertical Slice board.
+Objective: Settlement building interiors (Barracks), assault playfield scale/spawn/terrain, hub fortress polish.
 
 ## Recently completed work
 
-- **Wave 8–9 API art** — hero left-facing frames, enemy walk_b, promoted sprite sheets
-- **Combat animation** — `spriteAnim.js`, hero `moveAngle` facing, `characterAttackVfx` wired
-- **Debrief parchment** — layout synced to scroll art, ink/wash legibility, defeat context lines
-- **First Saga onboarding** — west road copy, fortress prep deploy hint, Settlement → RECRUIT tab
-- **Polish Board iter 53–72** — Hall dossier fade/Esc, settlement chronicle unread, `__NS_TEST_HOOKS__`, polish audit expansion
-- **432** unit tests passing
+- **Immersive Barracks** — `barracksView.js`; Hall statues recruit row; roster panel; level card; `ui_barracks_interior@1536x1024.png`
+- **Hall statues** — frame crop; no gold plinth rectangles
+- **Settlement fortress hub** — ~40% smaller structures; no rings/shadows; full titles; upgrade affordance pulse
+- **Command map chrome** — meta bar region/NEXT; top-left briefing glass chip
+- **Assault combat** — border spawn (`getAssaultBorderSpawnPx`); structures-only fortress @ 1.72×; full-world `assault_battlefield_bg@2048x1320.png`; wilderness scatter; HUD/terrain/unit fixes
+- **Polish Board iter 53–72** — Hall dossier, chronicle unread, `__NS_TEST_HOOKS__`
+- **508** unit tests passing
 
 ## Current implementation focus
 
-1. Polish backlog: structure PNGs (#33)
+1. Human playtest: assault border spawn + fortress scale on shared terrain
+2. Commit/push immersive UI batch (inner repo)
+3. Polish backlog: structure PNGs (#33)
 
 ---
 
@@ -115,7 +118,11 @@ Checklist for **The First Saga** scope. ✅ = playable in campaign flow · 🟡 
 | Skirmish mode | ✅ (CUT from onboarding; separate entry) |
 | Rune shop / stars in campaign | ✅ CUT — disabled in assault |
 | Siege structures in slice | ✅ CUT |
-| Structure PNG sprites | 🟡 procedural placeholders |
+| Structure PNG sprites | 🟡 procedural + prep sprites; assault uses composited structures |
+| Immersive Barracks recruit | ✅ |
+| Immersive Hall / Treasury | ✅ |
+| Assault border spawn | ✅ |
+| Assault full-world terrain | ✅ |
 
 ---
 
@@ -135,7 +142,7 @@ slotSelect → campaignSelect → nodeMap (Command Map)
 | Layer | Responsibility | Key modules |
 |-------|----------------|-------------|
 | **Campaign** | Regions, map runs, assault nodes, chronicle | `src/campaign/` |
-| **War Camp** | Roster, heal, recruit, meta buildings | `game.js` `betweenBattles` |
+| **War Camp** | Roster, heal, recruit, meta buildings | `game.js` `betweenBattles`; immersive views in `src/ui/*View.js` |
 | **Fortress Prep** | Post assign, advisor, horn launch | `fortressPrep`, `fortressCommanderShell.js` |
 | **Posts** | Assignment → tower placements | `src/fortress/defensivePosts.js` |
 | **Combat** | Wave sim on grid (simulation-only in campaign) | `game.js` `playing` |
@@ -221,6 +228,13 @@ Chronological log — **do not remove** historical entries.
 | 16 | Gate scar + wood bundle on A2 win debrief | Accepted | Scar teach moment; not on prep entry |
 | 17 | Promotion titles tied to post assignment | Accepted | Gate Captain etc.; `postTitles.js` |
 | 19 | Settlement ceremony as `settlementCeremony` game phase | Accepted | Post-A4 finale; recruit #2 unlock |
+| 20 | Immersive building interiors (Hall, Treasury, Barracks) two-pass render | Accepted | Base before frame; overlays after `drawFrames()` |
+| 21 | Barracks recruit uses Hall hero statues, not chip grid | Accepted | `barracksView.js` + `hallHeroStatues.js` |
+| 22 | Assault enemies spawn on padded **world border**, not grid edge | Accepted | `getAssaultBorderSpawnPx` |
+| 23 | Assault fortress = structures only on shared terrain (no ground plate) | Accepted | `drawAssaultFortressStructures`; plate retired |
+| 24 | Assault terrain cover-fills padded world canvas | Accepted | `assault_battlefield_bg@2048x1320.png` |
+| 25 | Settlement hub structures scaled to skyline (~40% display base) | Accepted | `FORTRESS_STRUCTURE_DISPLAY_BASE = 0.30` |
+| 26 | Command map briefing in glass chip; region/NEXT in meta bar | Accepted | `firstSagaUI.js`, `warCampVisual.js` |
 
 ---
 
@@ -228,34 +242,34 @@ Chronological log — **do not remove** historical entries.
 
 ## Objective
 
-Validate The First Saga with a fresh save and convene Vertical Slice review board.
+Ship immersive progression screens and assault readability fixes; validate in playtest.
 
 ## Definition of Done
 
-- [x] Sprint 4 committed (inner `5b17238`)
-- [x] Sprint 5 balance + prep schematic (`9839ee7`)
-- [x] Sprint 5 balance pass 2 + damage feedback (pending commit)
-- [x] `npm test` green (235+ incl. saga harness)
-- [x] Vertical Slice board Session 19 — 🟡 RC approved
-- [x] Session 20 — balance/readability follow-up
-- [x] Fresh-save manual playtest logged (human) — [Sprint 5 log](../../agents/boards/sessions/2026-06-22-sprint-5-playtest-log.md)
-- [x] Post-A0 naming ceremony (`heroNamingCeremony.js`)
+- [x] Barracks immersive view wired
+- [x] Assault border spawn + structures-only fortress
+- [x] Battlefield background full-world cover
+- [x] `npm test` green (**508**)
+- [ ] Human playtest assault spawn rim + barracks recruit flow
+- [ ] Inner-repo commit for this batch
 
 ## Success Criteria
 
-Human playtest confirms A0→Settlement→recruit #2 without screen-law violations.
+Player reads enemies from forest edge; fortress feels sized to terrain; Barracks matches Hall/Treasury immersion pattern.
 
 ## Blocked By
 
-- Human playtest incomplete (A0 done? A1 re-test after balance pass 2)
+- None (code complete)
 
 ## Next Review Board
 
-**Vertical Slice RC** — BJORN · SKJOLD · RUNE · BASTION · GARDR · EINHERI · WITNESS · GRID · SKALD · VAULT · DROTT
+**Player Experience** — GRID · SAGA · FENRIR · SIGHT · SKALD
 
 ## Next Recommended Work
 
-1. Polish backlog: structure PNGs (#33)
+1. Playtest + commit immersive UI batch
+2. Structure PNG sprites (#33) if art sprint resumes
+3. Regenerate assault battlefield if edge seams visible
 
 ---
 
@@ -266,15 +280,12 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **240** / 240 | 2026-06-22 |
-| Test files | 31 | 2026-06-22 |
+| Tests passing | **508** / 508 | 2026-06-22 |
+| Test files | 81 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
-| Inner repo commits ahead of `origin/main` | 12 | 2026-06-22 |
-| Implemented slice features (checklist) | 22 ✅ · 2 🟡 · 0 ⬜ | 2026-06-22 |
-| Technical debt items tracked | 4 | 2026-06-22 |
-| Active design decisions | 19 | 2026-06-22 |
-| Last board session | [Session 20 — Balance pass 2](../../agents/boards/sessions/2026-06-22-vertical-slice-board-20.md) | 2026-06-22 |
+| Active design decisions | 26 | 2026-06-22 |
+| Last board session | [Immersive UI + assault polish](../../agents/boards/sessions/2026-06-22-immersive-ui-assault-polish.md) | 2026-06-22 |
 
 ---
 
@@ -284,15 +295,11 @@ Human playtest confirms A0→Settlement→recruit #2 without screen-law violatio
 
 - **Game:** Northern Shield — Fortress Commander RPG (Vanilla JS + Canvas, Vite, inner repo `tower-defense/`).
 - **Target:** Ship **The First Saga** only — 1 hero → 2, west gate + watch tower, A0–A4 + Settlement ceremony.
-- **Done:** `v0.3.0-saga-rc` tagged — First Saga playable A0→Settlement.
-- **Not done:** Structure PNG sprites (#33).
-- **Phase flow:** War Camp (`betweenBattles`) → Prep (`fortressPrep`) → Combat (`playing`) → Debrief → routes back.
-- **Posts:** `defensivePosts.js` — player assigns heroes to posts; `buildTowerPlacements` feeds combat grid silently.
-- **CUT in slice:** runes, stars, siege, 4 fronts, skirmish onboarding, food, Region 2+.
-- **Screen laws:** one question per screen; no grid in War Camp; no shop in battle; no recruit in prep.
-- **Key files:** `game.js` (phases), `fortressCommanderShell.js`, `debriefReport.js`, `postTitles.js`.
-- **Tests:** `npm test` from `tower-defense/` (235 incl. `tests/firstSaga.playtest.harness.test.js`). Campaign edits: `npm run test:saga` first.
-- **Commits:** Phase 5–6 may be uncommitted — check `git status` before assuming shipped.
+- **Done:** Vertical slice RC + immersive Barracks/Hall/Treasury + assault border spawn.
+- **Not done:** Human playtest sign-off on latest assault UI; structure PNG sprites (#33).
+- **Immersive views:** `hallOfHeroesView.js`, `treasuryView.js`, `barracksView.js` — base draw early-return, overlays after frame.
+- **Assault:** `useAssaultScrollWorld()` → padded world, border spawn, `drawAssaultFortressStructures`, `assault_battlefield_bg`.
+- **Tests:** `npm test` from `tower-defense/` (**508**). Campaign edits: `npm run test:saga` first.
 - **Before coding:** read `north_star.md` + `the_first_saga.md` + this file.
 - **After sprint:** update this file — version, sprint, metrics, goals, decisions.
 

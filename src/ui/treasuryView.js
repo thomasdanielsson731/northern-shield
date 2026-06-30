@@ -10,7 +10,7 @@ import {
   drawHallImmersiveChrome,
   isHallOfHeroesViewReady,
 } from './hallOfHeroesView.js';
-import { drawSettlementHubBackdrop, drawHubBuildingGroundShadow } from '../settlement/settlementHubArt.js';
+import { drawSettlementHubBackdrop } from '../settlement/settlementHubArt.js';
 import { drawWarCampGlassChip, WAR_CAMP_THEME } from './warCampVisual.js';
 import { drawTreasuryBuildingSprite } from './treasuryViewArt.js';
 
@@ -30,13 +30,14 @@ export function shouldShowFortressUpgradeView(warCampTab, progressionBuilding) {
 
 export function shouldShowHallOfHeroesView(warCampTab, progressionBuilding) {
   if (progressionBuilding === 'fortress' || progressionBuilding === 'recruit') return false;
-  if (progressionBuilding === 'warband' || progressionBuilding === 'runeSmith') {
-    return isHallOfHeroesViewReady();
-  }
-  return warCampTab === 'warband' && isHallOfHeroesViewReady();
+  if (progressionBuilding === 'warband' || progressionBuilding === 'runeSmith') return true;
+  return warCampTab === 'warband';
 }
 
 export const TREASURY_NODE_KEYS = ['barracks', 'armory', 'watchtower', 'wallworks', 'treasury'];
+
+/** Hill structure sprite height as fraction of hall.h (0.30 ≈ 40% smaller than prior 0.50). */
+export const FORTRESS_STRUCTURE_DISPLAY_BASE = 0.30;
 
 /**
  * Structure pads on the settlement hill — aligned to hub building footprints.
@@ -102,7 +103,18 @@ export function computeTreasuryBuildingSlots(hall) {
   }));
 }
 
-function structureLayout(hall, slot, selected, def) {
+/** True when gold reserve covers the next level cost for this structure. */
+export function canAffordFortressUpgrade(def, lvl, goldReserve) {
+  if (lvl >= def.maxLevel) return false;
+  return goldReserve >= (def.cost[lvl] ?? Infinity);
+}
+
+function measureChipWidth(ctx, title, minW) {
+  ctx.font = 'bold 7px monospace';
+  return Math.max(minW, Math.ceil(ctx.measureText(title).width) + 18);
+}
+
+function structureLayout(ctx, hall, slot, selected, def) {
   const buildingH = buildingDisplayHeight(hall, slot.scale, selected);
   const footY = slot.y;
   const spriteW = buildingH * 0.72;
@@ -112,50 +124,82 @@ function structureLayout(hall, slot, selected, def) {
     w: spriteW,
     h: buildingH,
   };
-  const chipH = 24;
-  const shortName = def.label.length > 11 ? `${def.label.slice(0, 10)}…` : def.label;
-  const chipW = Math.max(58, Math.min(88, shortName.length * 6.2 + 22));
+  const title = def.label.toUpperCase();
+  const chipH = 20;
+  const chipW = measureChipWidth(ctx, title, spriteW + 6);
   const chipX = slot.x - chipW / 2;
-  const chipY = footY - buildingH - chipH + 8;
-  const padRx = Math.max(spriteW * 0.52, 28);
-  const hitW = Math.max(chipW + 10, padRx * 2 + 8);
-  const hitH = buildingH + chipH + 6;
+  const chipY = spriteBox.y - chipH - 4;
+  const lvlX = spriteBox.x;
+  const lvlY = footY + 9;
+  const frameX = Math.min(chipX, spriteBox.x) - 4;
+  const frameY = chipY - 2;
+  const frameW = Math.max(chipX + chipW, spriteBox.x + spriteBox.w) - frameX + 4;
+  const frameH = footY - frameY + 2;
+  const hitW = Math.max(chipW + 10, spriteW + 14);
+  const hitH = (lvlY + 6) - chipY;
   const hitY = chipY - 2;
-  return { buildingH, footY, spriteW, spriteBox, chipH, chipW, chipX, chipY, padRx, hitW, hitH, hitY };
+  return {
+    buildingH, footY, spriteW, spriteBox, chipH, chipW, chipX, chipY,
+    lvlX, lvlY, frameX, frameY, frameW, frameH, hitW, hitH, hitY, title,
+  };
 }
 
-function drawStructureClickAffordance(ctx, slot, layout, def, lvl, maxed, selected) {
-  const { footY, spriteBox, chipH, chipW, chipX, chipY, padRx, buildingH } = layout;
-  const cx = slot.x;
+function drawStructureClickAffordance(ctx, slot, layout, def, lvl, maxed, selected, { goldReserve = 0 } = {}) {
+  const {
+    chipH, chipW, chipX, chipY,
+    lvlX, lvlY, frameX, frameY, frameW, frameH, title,
+  } = layout;
+  const canUpgrade = canAffordFortressUpgrade(def, lvl, goldReserve);
+  const now = performance.now();
 
   ctx.save();
-  ctx.fillStyle = selected ? 'rgba(200,160,50,0.14)' : 'rgba(0,0,0,0.22)';
-  ctx.strokeStyle = selected ? 'rgba(240,200,90,0.70)' : 'rgba(180,150,90,0.42)';
-  ctx.lineWidth = selected ? 2 : 1.2;
+  if (canUpgrade) {
+    const pulse = 0.45 + Math.sin(now * 0.006) * 0.35;
+    ctx.strokeStyle = `rgba(80,220,90,${0.55 + pulse * 0.35})`;
+    ctx.lineWidth = 2;
+  } else {
+    ctx.strokeStyle = selected ? 'rgba(240,200,90,0.70)' : 'rgba(160,140,90,0.32)';
+    ctx.lineWidth = selected ? 2 : 1;
+  }
   ctx.beginPath();
-  ctx.ellipse(cx, footY + 1, padRx, Math.max(6, buildingH * 0.05), 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.roundRect(frameX, frameY, frameW, frameH, 6);
   ctx.stroke();
-
-  ctx.strokeStyle = selected ? 'rgba(240,200,90,0.55)' : 'rgba(160,140,90,0.28)';
-  ctx.lineWidth = 1;
-  if (ctx.setLineDash) ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.roundRect(spriteBox.x - 4, spriteBox.y - 2, spriteBox.w + 8, spriteBox.h + chipH + 6, 6);
-  ctx.stroke();
-  if (ctx.setLineDash) ctx.setLineDash([]);
   ctx.restore();
 
-  const lvlLabel = maxed ? 'MAX' : `L${lvl}`;
-  const shortName = def.label.length > 9 ? `${def.label.slice(0, 8)}…` : def.label;
   drawWarCampGlassChip(ctx, chipX, chipY, chipW, chipH, {
-    title: shortName.toUpperCase(),
-    subtitle: lvlLabel,
+    title,
+    borderAlpha: canUpgrade ? 0.72 : 0.42,
   });
+
+  if (canUpgrade) {
+    const pulse = 0.55 + Math.sin(now * 0.007) * 0.45;
+    ctx.save();
+    ctx.fillStyle = `rgba(60,230,80,${pulse})`;
+    ctx.beginPath();
+    ctx.arc(chipX + chipW - 7, chipY + 7, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180,255,190,0.85)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = 'bold 6px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(8,20,8,0.95)';
+    ctx.fillText('↑', chipX + chipW - 7, chipY + 9);
+    ctx.restore();
+  }
+
+  const lvlLabel = maxed ? 'MAX' : `L${lvl}`;
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 6.5px monospace';
+  ctx.fillStyle = canUpgrade
+    ? 'rgba(130,240,90,0.95)'
+    : maxed ? 'rgba(240,200,80,0.88)' : 'rgba(200,185,155,0.88)';
+  ctx.fillText(lvlLabel, lvlX, lvlY);
+  ctx.textAlign = 'left';
 }
 
 function buildingDisplayHeight(hall, scale, selected) {
-  return hall.h * 0.50 * scale * (selected ? 1.05 : 1);
+  return hall.h * FORTRESS_STRUCTURE_DISPLAY_BASE * scale * (selected ? 1.05 : 1);
 }
 
 function drawBuildingFallback(ctx, slot, def, buildingH) {
@@ -201,16 +245,19 @@ function drawBuildingDossier(ctx, rect, nodeKey, def, lvl, maxed, cost, canBuy, 
   let ly = rect.y + pad + 6;
 
   ctx.textAlign = 'center';
-  ctx.font = 'bold 11px monospace';
+  const titleSize = rect.w < 200 ? 9 : 11;
+  ctx.font = `bold ${titleSize}px monospace`;
   ctx.fillStyle = UI_COLORS.gold;
-  ctx.fillText(`${def.icon} ${def.label.toUpperCase()}`, cx, ly);
-  ly += 13;
+  const title = `${def.icon} ${def.label.toUpperCase()}`;
+  ctx.fillText(title.length > 22 ? `${title.slice(0, 21)}…` : title, cx, ly);
+  ly += titleSize + 2;
 
-  ctx.font = '7px monospace';
+  ctx.font = `${rect.w < 200 ? 6 : 7}px monospace`;
   ctx.fillStyle = WAR_CAMP_THEME.subtitle;
-  const desc = def.desc.length > 42 ? `${def.desc.slice(0, 41)}…` : def.desc;
+  const maxDesc = rect.w < 200 ? 34 : 42;
+  const desc = def.desc.length > maxDesc ? `${def.desc.slice(0, maxDesc - 1)}…` : def.desc;
   ctx.fillText(desc, cx, ly);
-  ly += 14;
+  ly += rect.w < 200 ? 12 : 14;
 
   const heroH = Math.min(108, Math.floor(rect.h * 0.30));
   const spriteBox = {
@@ -335,10 +382,9 @@ export function drawTreasuryView(ctx, rect, opts = {}) {
     for (const slot of slots) {
       const def = FORTRESS_DEFS[slot.key];
       const selected = focus === slot.key;
-      const layout = structureLayout(hall, slot, selected, def);
+      const layout = structureLayout(ctx, hall, slot, selected, def);
       const { spriteBox, buildingH } = layout;
 
-      drawHubBuildingGroundShadow(ctx, spriteBox, { alpha: 0.75 });
       if (!drawTreasuryBuildingSprite(ctx, slot.key, spriteBox, { selected })) {
         drawBuildingFallback(ctx, slot, def, buildingH);
       }
@@ -349,11 +395,11 @@ export function drawTreasuryView(ctx, rect, opts = {}) {
     if (!focus) {
       for (const slot of slots) {
         const def = FORTRESS_DEFS[slot.key];
-        const layout = structureLayout(hall, slot, false, def);
+        const layout = structureLayout(ctx, hall, slot, false, def);
         const { hitW, hitH, hitY } = layout;
         const lvl = upgrades[slot.key] ?? 0;
         const maxed = lvl >= def.maxLevel;
-        drawStructureClickAffordance(ctx, slot, layout, def, lvl, maxed, false);
+        drawStructureClickAffordance(ctx, slot, layout, def, lvl, maxed, false, { goldReserve });
 
         btnsOut.push({
           x: slot.x - hitW / 2,

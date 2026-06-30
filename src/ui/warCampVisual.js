@@ -217,6 +217,31 @@ export function drawWarCampGlassChip(ctx, x, y, w, h, opts = {}) {
   ctx.restore();
 }
 
+/** Hall / command-map guidance card — title + one or more body lines. Returns chip height. */
+export function drawObjectiveGuidanceChip(ctx, x, y, w, title, lines = []) {
+  const body = lines.filter(Boolean);
+  const h = body.length <= 1 ? 40 : Math.min(72, 24 + body.length * 11);
+  drawWarCampGlassChip(ctx, x, y, w, h, {
+    title: title ?? 'WHAT TO DO NOW',
+    subtitle: body[0] ?? '',
+    borderAlpha: 0.48,
+  });
+  if (body.length <= 1) return h;
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.font = '6px monospace';
+  let ly = y + 38;
+  for (let i = 1; i < body.length; i++) {
+    const line = body[i];
+    ctx.fillStyle = line.startsWith('⚠') ? 'rgba(220,160,60,0.85)' : 'rgba(200,185,155,0.82)';
+    const text = line.length > 64 ? `${line.slice(0, 63)}…` : line;
+    ctx.fillText(text, x + 10, ly);
+    ly += 11;
+  }
+  ctx.restore();
+  return h;
+}
+
 /** Bottom-right glass chip — immersive settlement buildings (Hall, Chronicle, etc.). */
 export function drawImmersiveBackToTownChip(ctx, rect, btnsOut) {
   const chipPad = 10;
