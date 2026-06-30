@@ -13,6 +13,8 @@ import {
   pickHallStatueSlotIndices,
   clampHallFloorNorm,
   getHallFloorScreenRect,
+  getHallFloorPlacementBounds,
+  getHallFloorCenter,
 } from '../src/ui/hallOfHeroesView.js';
 import { mockCtx } from './canvasMock.js';
 
@@ -31,22 +33,29 @@ describe('hallOfHeroesView', () => {
     expect(computeHallPlinthSlots(HALL_MAX_STATUES, hall)).toHaveLength(HALL_MAX_STATUES);
   });
 
-  it('statue anchors stay inside painted floor band', () => {
-    const b = HALL_FLOOR_BOUNDS;
+  it('statue anchors stay inside inset floor band with margin', () => {
+    const b = getHallFloorPlacementBounds();
+    const outer = HALL_FLOOR_BOUNDS;
+    const floorW = b.maxX - b.minX;
     for (const p of HALL_PLINTH_NORM) {
       expect(p.nx).toBeGreaterThanOrEqual(b.minX);
       expect(p.nx).toBeLessThanOrEqual(b.maxX);
       expect(p.ny).toBeGreaterThanOrEqual(b.minY);
       expect(p.ny).toBeLessThanOrEqual(b.maxY);
+      expect(p.nx).toBeGreaterThan(outer.minX);
+      expect(p.nx).toBeLessThan(outer.maxX);
       expect(p.z).toBeDefined();
     }
+    const leftmost = Math.min(...HALL_PLINTH_NORM.map(p => p.nx));
+    expect(leftmost).toBeGreaterThan(b.minX + floorW * 0.18);
     expect(HALL_PLINTH_NORM).toHaveLength(HALL_MAX_STATUES);
   });
 
   it('clampHallFloorNorm keeps outliers on the planks', () => {
-    const c = clampHallFloorNorm(0.05, 0.90);
-    expect(c.nx).toBe(HALL_FLOOR_BOUNDS.minX);
-    expect(c.ny).toBe(HALL_FLOOR_BOUNDS.maxY);
+    const b = getHallFloorPlacementBounds();
+    const c = clampHallFloorNorm(0.05, 0.99);
+    expect(c.nx).toBe(b.minX);
+    expect(c.ny).toBe(b.maxY);
   });
 
   it('getHallFloorScreenRect maps floor bounds inside hall', () => {
@@ -58,8 +67,18 @@ describe('hallOfHeroesView', () => {
     expect(floor.y + floor.h).toBeLessThanOrEqual(hall.y + hall.h + 2);
   });
 
-  it('pickHallStatueSlotIndices spreads few defenders across hall', () => {
-    expect(pickHallStatueSlotIndices(3)).toEqual([0, 5, 9]);
+  it('pickHallStatueSlotIndices starts from floor center then spreads outward', () => {
+    const center = getHallFloorCenter();
+    let bestIdx = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < HALL_PLINTH_NORM.length; i++) {
+      const p = HALL_PLINTH_NORM[i];
+      const d = (p.nx - center.nx) ** 2 + (p.ny - center.ny) ** 2;
+      if (d < bestD) { bestD = d; bestIdx = i; }
+    }
+    expect(pickHallStatueSlotIndices(1)).toEqual([bestIdx]);
+    expect(pickHallStatueSlotIndices(3)).toHaveLength(3);
+    expect(pickHallStatueSlotIndices(3)).toContain(bestIdx);
     expect(pickHallStatueSlotIndices(10)).toHaveLength(10);
   });
 

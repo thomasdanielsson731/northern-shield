@@ -3,7 +3,6 @@
  * @see design/the_first_saga.md §14–16 · IMPLEMENTATION_ROADMAP Phase 5
  */
 
-import { loadPrepFieldMeta } from '../preparation/fortressCommanderShell.js';
 import { getPrimaryGateForFront, resolvePostCell } from '../fortress/defensivePosts.js';
 
 const SAGA_VICTORY_PROSE = {
@@ -49,7 +48,7 @@ export function getSagaDebriefTitle(nodeIndex) {
   return SAGA_TITLES[nodeIndex] ?? 'After the assault';
 }
 
-/** West-front gate integrity from live wall data + persisted scar meta. */
+/** West-front gate integrity from live wall data at assault end. */
 export function buildFortressDamageReport(wallData, fieldState, options = {}) {
   const {
     frontId = 'west',
@@ -59,7 +58,6 @@ export function buildFortressDamageReport(wallData, fieldState, options = {}) {
     breachFlag = false,
   } = options;
 
-  const prepMeta = loadPrepFieldMeta(fieldState);
   const gatePost = getPrimaryGateForFront(frontId);
   const gateCell = resolvePostCell(gatePost, goal, ringR);
   const gateKey = `${gateCell.col}_${gateCell.row}`;
@@ -86,8 +84,6 @@ export function buildFortressDamageReport(wallData, fieldState, options = {}) {
     ? Math.round((gateHp / gateMax) * 100)
     : null;
 
-  const scarred = prepMeta.westGateScarred && !prepMeta.westGateRepaired;
-  const patched = prepMeta.westGateRepaired;
   const breached = breachFlag || lives <= 0 || gateHpPct === 0;
 
   const lines = [];
@@ -102,27 +98,19 @@ export function buildFortressDamageReport(wallData, fieldState, options = {}) {
     });
   }
 
-  if (scarred) {
-    lines.push({ label: 'SCAR', value: 'Splintered palisade — repair before horn', tone: 'scar' });
-  } else if (patched) {
-    lines.push({ label: 'SCAR', value: 'Patch like a veteran\'s mark', tone: 'mended' });
-  } else if (!breached && gateHpPct != null && gateHpPct >= 90) {
+  if (!breached && gateHpPct != null && gateHpPct >= 90) {
     lines.push({ label: 'WALL', value: 'Unbroken this assault', tone: 'hold' });
+  } else if (!breached && gateHpPct != null && gateHpPct < 90) {
+    lines.push({ label: 'WALL', value: 'Masonry will mend before the next horn', tone: 'mended' });
   }
 
   if (breached) {
     lines.push({ label: 'BREACH', value: 'The threshold was crossed', tone: 'critical' });
   }
 
-  if (prepMeta.wood > 0) {
-    lines.push({ label: 'TIMBER', value: `▣ ${prepMeta.wood} salvage ready`, tone: 'resource' });
-  }
-
   return {
     facing,
     gateHpPct,
-    scarred,
-    patched,
     breached,
     lines,
     summary: lines.map(l => `${l.label}: ${l.value}`).join(' · '),

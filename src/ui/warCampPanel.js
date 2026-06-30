@@ -100,23 +100,36 @@ function markActiveWarCampSteps(steps) {
 /** Top meta-bar / banner copy for War Camp. */
 export function getWarCampInstructionHint(state) {
   if (state.chronicleUnread) {
-    return { title: 'CHRONICLE', line: 'Unread saga entry — open Chronicle', urgent: false };
+    return { title: 'CHRONICLE', line: 'Unread saga entry — open Chronicle', urgent: true };
   }
   const active = getWarCampObjectives(state).find(s => s.active && !s.done);
-  if (!active) return null;
+  if (!active) {
+    if (state.isVictory) {
+      return {
+        title: 'WAR CAMP',
+        line: 'The hall is yours — review the warband, then prepare the next assault',
+      };
+    }
+    if (state.isDefeat) {
+      return { title: 'WAR CAMP', line: 'Regroup — mend scars and try again' };
+    }
+    return null;
+  }
 
   const titles = {
     recruit: 'RECRUIT',
     fortress: 'FORTRESS',
     map: 'COMMAND MAP',
     equip: 'GEAR UP',
-    prep: 'NEXT STEP',
+    prep: state.isVictory ? 'WAR CAMP' : 'NEXT STEP',
     assign: 'FORTRESS PREP',
   };
 
   return {
     title: titles[active.id] ?? 'WAR CAMP',
-    line: active.label,
+    line: state.isVictory && active.id === 'prep'
+      ? 'Victory — review the warband, then prepare the next assault'
+      : active.label,
     urgent: active.id === 'recruit',
   };
 }
@@ -399,11 +412,29 @@ export function drawCampaignWarCampBriefing(ctx, panel, state, btnsOut) {
     const chronicleY = contentBottom;
     const chronicleBtnW = innerW;
     const cbX = x + pad;
-    drawWarCampPanel(ctx, cbX, chronicleY, chronicleBtnW, chronicleBtnH, { radius: 4, borderAlpha: 0.55 });
+    const unread = Boolean(state.chronicleUnread);
+    if (unread) {
+      const pulse = 0.55 + Math.sin(performance.now() * 0.006) * 0.35;
+      ctx.save();
+      ctx.strokeStyle = `rgba(240,180,60,${0.28 + pulse * 0.45})`;
+      ctx.lineWidth = 1.4 + pulse * 0.6;
+      ctx.beginPath();
+      ctx.roundRect(cbX - 1, chronicleY - 1, chronicleBtnW + 2, chronicleBtnH + 2, 5);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawWarCampPanel(ctx, cbX, chronicleY, chronicleBtnW, chronicleBtnH, {
+      radius: 4,
+      borderAlpha: unread ? 0.82 : 0.55,
+    });
     ctx.textAlign = 'center';
     ctx.font = '8px monospace';
-    ctx.fillStyle = 'rgba(180,140,220,0.85)';
-    ctx.fillText(`📜 Chronicle (${state.chronicleCount})`, cx, chronicleY + 15);
+    ctx.fillStyle = unread ? 'rgba(240,200,120,0.95)' : 'rgba(180,140,220,0.85)';
+    ctx.fillText(
+      unread ? `📜 Chronicle — NEW ENTRY (${state.chronicleCount})` : `📜 Chronicle (${state.chronicleCount})`,
+      cx,
+      chronicleY + 15,
+    );
     btnsOut.push({ x: cbX, y: chronicleY, w: chronicleBtnW, h: chronicleBtnH, action: 'openChronicle' });
     chronicleBtn = { x: cbX, y: chronicleY, w: chronicleBtnW, h: chronicleBtnH };
   }
@@ -431,21 +462,6 @@ export function getWarCampTabHint(pulseTarget) {
 /** War Camp status lines from prep meta + optional fortress upgrade hint. */
 export function buildWarCampStatusLines(prepMeta, { fortressUpgrade = null } = {}) {
   const lines = [];
-  if (prepMeta?.westGateScarred && !prepMeta?.westGateRepaired) {
-    const woodHint = (prepMeta.wood ?? 0) >= 10 ? ' — repair in prep' : '';
-    lines.push({
-      text: `⚠ West gate scarred${woodHint}`,
-      color: 'rgba(220,140,60,0.88)',
-    });
-  } else if (prepMeta?.westGateRepaired) {
-    lines.push({ text: '✓ West gate patched', color: 'rgba(140,180,120,0.72)' });
-  }
-  if ((prepMeta?.wood ?? 0) > 0) {
-    lines.push({
-      text: `▣ ${prepMeta.wood} salvage wood`,
-      color: 'rgba(160,130,90,0.78)',
-    });
-  }
   if (fortressUpgrade) {
     lines.push({
       text: `Fortress: ${fortressUpgrade.label} → L${fortressUpgrade.nextLevel} (${fortressUpgrade.cost}g)`,

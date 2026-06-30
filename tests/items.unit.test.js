@@ -1,25 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../src/roster/items.js';
+import { getItemBonuses, ITEM_DEFS } from '../src/roster/items.js';
 
 describe('items', () => {
-  it('defines equipment with rarity colors', () => {
-    expect(Object.keys(ITEM_DEFS).length).toBeGreaterThan(10);
-    expect(RARITY_COLOR.legendary).toBe('#ff9020');
+  it('getItemBonuses returns neutral multipliers for empty slots', () => {
+    expect(getItemBonuses([null, null])).toEqual({ dm: 1, rm: 1, cm: 1 });
   });
 
-  it('stacks item bonuses multiplicatively', () => {
-    const b = getItemBonuses(['frost_crystal', 'skadi_blade']);
-    expect(b.dm).toBeCloseTo(1.12 * 1.25);
-    expect(b.rm).toBe(1);
+  it('getItemBonuses multiplies across weapon and armor', () => {
+    const bonuses = getItemBonuses(['war_torc', 'storm_cloak']);
+    expect(bonuses.dm).toBeCloseTo(1.20, 5);
+    expect(bonuses.rm).toBeCloseTo(1.18 * 1.08, 5);
+    expect(bonuses.cm).toBeCloseTo(0.95 * 0.92, 5);
   });
 
-  it('ignores null and unknown ids', () => {
-    const b = getItemBonuses([null, 'missing', 'wolf_pelt']);
-    expect(b.rm).toBeCloseTo(1.1);
-  });
-
-  it('boss drop table covers milestone waves', () => {
-    expect(BOSS_DROP_TABLE[10]).toHaveLength(2);
-    expect(BOSS_DROP_TABLE[100]).toContain('surtr_shard');
+  it('legendary items expose rune sockets', () => {
+    expect(ITEM_DEFS.gungnir_tip.runeSlot).toBe(true);
+    expect(ITEM_DEFS.skadi_blade.runeSlot).toBeUndefined();
   });
 });

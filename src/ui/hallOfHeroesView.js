@@ -8,7 +8,7 @@ import { CAREER_XP } from '../roster/defender.js';
 import { TOWER_DEFS } from '../entities/tower.js';
 import { computeContentCoverFit, mapContentNormToScreen } from '../assets/artAlignment.js';
 import { getWarCampObjectives } from './warCampPanel.js';
-import { drawWarCampGlassChip, WAR_CAMP_THEME } from './warCampVisual.js';
+import { drawWarCampGlassChip, WAR_CAMP_THEME, drawImmersiveBackToTownChip } from './warCampVisual.js';
 import { drawHallHeroStatue, isHallHeroStatueReady } from './hallHeroStatues.js';
 
 const HALL_ART_W = 1536;
@@ -24,33 +24,71 @@ export const HALL_ART_CONTENT = {
 
 export const HALL_FRAME_INSET_BOTTOM = 12;
 
-/** Walkable wooden floor inside the hall plate (content-normalized 0–1). */
+/** Walkable wooden floor on the interior plate (content-normalized 0–1). */
 export const HALL_FLOOR_BOUNDS = {
-  minX: 0.20,
-  maxX: 0.80,
-  minY: 0.62,
-  maxY: 0.75,
+  minX: 0.14,
+  maxX: 0.86,
+  minY: 0.52,
+  maxY: 0.94,
 };
+
+/** Inset from floor edges — keeps statue feet off benches and plank ends. */
+export const HALL_FLOOR_MARGIN = { x: 0.12, y: 0.08 };
+
+/** Horizontal span of statue rows as fraction of placement band (centered). */
+const HALL_STATUE_CLUSTER_SPAN = 0.56;
 
 /** Max heroes shown as floor statues without scrolling. */
 export const HALL_MAX_STATUES = 10;
 
+/** Usable floor band after margin — all statue feet land here. */
+export function getHallFloorPlacementBounds() {
+  const b = HALL_FLOOR_BOUNDS;
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  return {
+    minX: b.minX + HALL_FLOOR_MARGIN.x * w,
+    maxX: b.maxX - HALL_FLOOR_MARGIN.x * w,
+    minY: b.minY + HALL_FLOOR_MARGIN.y * h,
+    maxY: b.maxY - HALL_FLOOR_MARGIN.y * h,
+  };
+}
+
+export function getHallFloorCenter() {
+  const p = getHallFloorPlacementBounds();
+  return { nx: (p.minX + p.maxX) / 2, ny: (p.minY + p.maxY) / 2 };
+}
+
+/** Two rows × five columns — tight cluster centered on the walkable floor. */
+function buildHallPlinthNorm() {
+  const place = getHallFloorPlacementBounds();
+  const cols = 5;
+  const rowDepths = [0.34, 0.68];
+  const centerX = (place.minX + place.maxX) / 2;
+  const clusterW = (place.maxX - place.minX) * HALL_STATUE_CLUSTER_SPAN;
+  const anchors = [];
+  for (let r = 0; r < rowDepths.length; r++) {
+    const ny = place.minY + rowDepths[r] * (place.maxY - place.minY);
+    const rowTaper = 0.05 * (1 - rowDepths[r]);
+    const rowSpan = clusterW * (1 - rowTaper);
+    const rowMinX = centerX - rowSpan / 2;
+    const rowMaxX = centerX + rowSpan / 2;
+    const z = r;
+    for (let c = 0; c < cols; c++) {
+      const t = cols === 1 ? 0.5 : c / (cols - 1);
+      const nx = rowMinX + t * (rowMaxX - rowMinX);
+      const scale = 0.62 + r * 0.10 + (c === 2 ? 0.06 : Math.abs(c - 2) === 1 ? 0.03 : 0);
+      anchors.push({ nx, ny, scale, z });
+    }
+  }
+  return anchors;
+}
+
 /**
- * Statue foot anchors — kept inside HALL_FLOOR_BOUNDS (open floor, not benches/pillars).
+ * Statue foot anchors — generated inside inset floor bounds.
  * z: 0 = back row, 1 = front row.
  */
-export const HALL_PLINTH_NORM = [
-  { nx: 0.22, ny: 0.64, scale: 0.64, z: 0 },
-  { nx: 0.34, ny: 0.63, scale: 0.66, z: 0 },
-  { nx: 0.46, ny: 0.62, scale: 0.68, z: 0 },
-  { nx: 0.58, ny: 0.63, scale: 0.66, z: 0 },
-  { nx: 0.70, ny: 0.64, scale: 0.64, z: 0 },
-  { nx: 0.26, ny: 0.71, scale: 0.74, z: 1 },
-  { nx: 0.38, ny: 0.72, scale: 0.78, z: 1 },
-  { nx: 0.50, ny: 0.71, scale: 0.80, z: 1 },
-  { nx: 0.62, ny: 0.72, scale: 0.78, z: 1 },
-  { nx: 0.74, ny: 0.71, scale: 0.74, z: 1 },
-];
+export const HALL_PLINTH_NORM = buildHallPlinthNorm();
 
 const HALL_ART = {
   interior: '/assets/ui/ui_hall_of_heroes_interior_noplinths@1536x1024.png',
@@ -159,16 +197,7 @@ export function drawHallImmersiveChrome(ctx, rect, layout, chrome, btnsOut = [])
   }
 
   if (chrome?.showBackToTown) {
-    const bw = 124;
-    const bh = 34;
-    const bx = rect.x + rect.w - bw - chipPad;
-    const by = rect.y + rect.h - bh - chipPad;
-    drawWarCampGlassChip(ctx, bx, by, bw, bh, {
-      title: '← BACK TO TOWN',
-      subtitle: 'Return to settlement',
-      action: 'returnToSettlement',
-      btnsOut,
-    });
+    drawImmersiveBackToTownChip(ctx, rect, btnsOut);
   }
 }
 
@@ -190,36 +219,43 @@ export function getHallObjectiveGuidance(state = {}) {
   return { title: 'HALL OF HEROES', subtitle: 'Recruit defenders at the Barracks' };
 }
 
-/** Spread N defenders across the fixed anchor set (even spacing). */
+/** Pick N slots starting from floor center, then nearest outward. */
 export function pickHallStatueSlotIndices(count, total = HALL_PLINTH_NORM.length) {
   const n = Math.max(1, Math.min(count, total));
   if (n >= total) return Array.from({ length: total }, (_, i) => i);
-  if (n === 1) return [Math.floor(total / 2)];
-  const indices = [];
-  for (let i = 0; i < n; i++) {
-    indices.push(Math.round((i * (total - 1)) / (n - 1)));
-  }
-  return indices;
+
+  const center = getHallFloorCenter();
+  const ranked = Array.from({ length: total }, (_, i) => {
+    const p = HALL_PLINTH_NORM[i];
+    const dx = p.nx - center.nx;
+    const dy = p.ny - center.ny;
+    return { i, d: dx * dx + dy * dy };
+  }).sort((a, b) => a.d - b.d || a.i - b.i);
+
+  return ranked.slice(0, n).map((r) => r.i).sort((a, b) => a - b);
 }
 
-/** Clamp anchor into the painted walkable floor band. */
+/** Clamp anchor into the inset walkable floor band. */
 export function clampHallFloorNorm(nx, ny) {
-  const b = HALL_FLOOR_BOUNDS;
+  const b = getHallFloorPlacementBounds();
   return {
     nx: Math.max(b.minX, Math.min(b.maxX, nx)),
     ny: Math.max(b.minY, Math.min(b.maxY, ny)),
   };
 }
 
-/** Screen rect for the hall floor — used to clip statue overlays. */
+/** Clip rect for statue draws — floor width, full body height above the foot band. */
 export function getHallFloorScreenRect(hall) {
   const tl = hallArtToScreen(hall, HALL_FLOOR_BOUNDS.minX, HALL_FLOOR_BOUNDS.minY);
   const br = hallArtToScreen(hall, HALL_FLOOR_BOUNDS.maxX, HALL_FLOOR_BOUNDS.maxY);
+  const floorH = Math.max(8, br.y - tl.y);
+  const bodyRise = hall.h * 0.42;
+  const bottomPad = 14;
   return {
     x: tl.x,
-    y: tl.y,
+    y: tl.y - bodyRise,
     w: Math.max(8, br.x - tl.x),
-    h: Math.max(8, br.y - tl.y),
+    h: floorH + bodyRise + bottomPad,
   };
 }
 
@@ -344,12 +380,6 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
   if (drawBase) {
     drawHallInteriorBackdrop(ctx, hall);
 
-    const floorRect = getHallFloorScreenRect(hall);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(floorRect.x, floorRect.y, floorRect.w, floorRect.h);
-    ctx.clip();
-
     for (const { def, slot } of statueEntries) {
       const selected = focus?.defenderId === def.defenderId;
       const footY = slot.y;
@@ -377,7 +407,7 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
       } else if (drawPortrait) {
         const pr = statueH * 0.14;
         const portraitY = footY - statueH * 0.5;
-        drawPortrait(ctx, slot.x, portraitY, def.type, pr, { muted: true });
+        drawPortrait(ctx, slot.x, portraitY, def.type, pr, { muted: true, noFrame: true });
       }
 
       const hasName = Boolean(def.name?.trim());
@@ -403,8 +433,6 @@ export function drawHallOfHeroesView(ctx, rect, opts = {}) {
       });
       ctx.textAlign = 'left';
     }
-
-    ctx.restore();
   }
 
   if (drawOverlays) {
@@ -490,20 +518,11 @@ function drawDossierPanel(ctx, rect, def, opts) {
   const heroH = Math.min(108, Math.floor(rect.h * 0.28));
   const heroY = ly + heroH * 0.52;
   const useStatue = isHallHeroStatueReady(def.type);
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  ctx.roundRect(rect.x + pad, ly, rect.w - pad * 2, heroH, 5);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(120,100,70,0.35)';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
   if (useStatue) {
     drawHallHeroStatue(ctx, cx, ly + heroH - 6, def.type, heroH - 10, { muted: false, selected: true });
   } else if (drawPortrait) {
-    drawPortrait(ctx, cx, heroY, def.type, heroH * 0.22, { muted: false });
+    drawPortrait(ctx, cx, heroY, def.type, heroH * 0.22, { muted: false, noFrame: true });
   }
-  ctx.restore();
   ly += heroH + 8;
 
   const kills = def.careerKills ?? 0;

@@ -10,7 +10,7 @@ import {
   drawHallImmersiveChrome,
   isHallOfHeroesViewReady,
 } from './hallOfHeroesView.js';
-import { drawSettlementHubBackdrop } from '../settlement/settlementHubArt.js';
+import { drawSettlementHubBackdrop, drawHubBuildingGroundShadow } from '../settlement/settlementHubArt.js';
 import { drawWarCampGlassChip, WAR_CAMP_THEME } from './warCampVisual.js';
 import { drawTreasuryBuildingSprite } from './treasuryViewArt.js';
 
@@ -39,15 +39,15 @@ export function shouldShowHallOfHeroesView(warCampTab, progressionBuilding) {
 export const TREASURY_NODE_KEYS = ['barracks', 'armory', 'watchtower', 'wallworks', 'treasury'];
 
 /**
- * Structure pads on the settlement hill — coords are 0–1 inside the view rect.
- * Wide spread across the hill crest; outer structures slightly smaller (back row).
+ * Structure pads on the settlement hill — aligned to hub building footprints.
+ * nx/ny = foot contact in view-local 0–1 (same hill as settlement hub).
  */
 export const TREASURY_BUILDING_NORM = [
-  { nx: 0.07, ny: 0.56, scale: 0.84, z: 0 }, // barracks — far left
-  { nx: 0.24, ny: 0.60, scale: 0.92, z: 1 }, // armory
-  { nx: 0.50, ny: 0.55, scale: 0.98, z: 1 }, // watchtower — center crest
-  { nx: 0.76, ny: 0.60, scale: 0.92, z: 1 }, // wallworks
-  { nx: 0.93, ny: 0.56, scale: 0.84, z: 0 }, // treasury — far right
+  { nx: 0.63, ny: 0.70, scale: 0.90, z: 2 }, // barracks — recruit yard
+  { nx: 0.77, ny: 0.58, scale: 0.86, z: 2 }, // armory — rune smith hut (nudged right)
+  { nx: 0.30, ny: 0.52, scale: 1.02, z: 0 }, // watchtower — hall crest
+  { nx: 0.26, ny: 0.66, scale: 0.80, z: 1 }, // wallworks — below watchtower, slightly left
+  { nx: 0.50, ny: 0.80, scale: 0.88, z: 1 }, // treasury — lower path (former wallworks pad)
 ];
 
 const _dossierImg = new Image();
@@ -338,6 +338,7 @@ export function drawTreasuryView(ctx, rect, opts = {}) {
       const layout = structureLayout(hall, slot, selected, def);
       const { spriteBox, buildingH } = layout;
 
+      drawHubBuildingGroundShadow(ctx, spriteBox, { alpha: 0.75 });
       if (!drawTreasuryBuildingSprite(ctx, slot.key, spriteBox, { selected })) {
         drawBuildingFallback(ctx, slot, def, buildingH);
       }

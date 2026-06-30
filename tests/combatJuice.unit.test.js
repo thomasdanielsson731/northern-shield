@@ -14,6 +14,10 @@ import {
   triggerHeroAttackLunge,
   getHeroLungeOffset,
   tickHeroAttackLunge,
+  triggerHeroHitRecoil,
+  getHeroHitRecoilOffset,
+  getHeroCombatMotionOffset,
+  tickHeroHitRecoil,
 } from '../src/combat/combatJuice.js';
 
 describe('combatJuice', () => {
@@ -64,6 +68,16 @@ describe('combatJuice', () => {
     for (let i = 0; i < 4; i++) tickHeroAttackLunge(tower);
     const late = getHeroLungeOffset(tower);
     expect(Math.abs(mid.x)).toBeGreaterThan(Math.abs(late.x));
+  });
+
+  it('hero hit recoil pushes away from attacker', () => {
+    const tower = { x: 100, y: 100 };
+    triggerHeroHitRecoil(tower, 130, 100);
+    for (let i = 0; i < 4; i++) tickHeroHitRecoil(tower);
+    const mid = getHeroHitRecoilOffset(tower);
+    expect(mid.x).toBeLessThan(0);
+    const combined = getHeroCombatMotionOffset(tower);
+    expect(combined.x).toBeLessThan(0);
   });
 
   it('death flair returns per-type particles', () => {

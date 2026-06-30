@@ -113,49 +113,77 @@ export function drawTowerAttackVfx(ctx, tower, t) {
 export function drawEnemyAttackVfx(ctx, enemy, t) {
   const timer = enemy.attackAnimTimer ?? 0;
   if (timer <= 0) return;
-  const alpha = timer / (enemy.attackAnimMax ?? 14);
+  const max = enemy.attackAnimMax ?? 14;
+  const alpha = timer / max;
   const ax = enemy.x;
   const ay = enemy.y;
+  const tx = enemy.meleeTargetX ?? ax + 10;
+  const ty = enemy.meleeTargetY ?? ay;
+  const ang = enemy.attackAimAngle ?? Math.atan2(ty - ay, tx - ax);
+  const reach = enemy.radius * (enemy.isBoss ? 2.8 : 2.3);
+  const swing = 0.55 + (1 - alpha) * 0.45;
 
   ctx.save();
   const pulse = 0.7 + Math.sin(t * 20) * 0.3;
 
+  const drawMeleeSlash = (color, width, spark = false) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(
+      ax + Math.cos(ang - 1.1 * swing) * reach * 0.25,
+      ay + Math.sin(ang - 1.1 * swing) * reach * 0.25,
+    );
+    ctx.quadraticCurveTo(
+      ax + Math.cos(ang) * reach * 0.72,
+      ay + Math.sin(ang) * reach * 0.72,
+      ax + Math.cos(ang + 0.65 * swing) * reach,
+      ay + Math.sin(ang + 0.65 * swing) * reach,
+    );
+    ctx.stroke();
+    if (spark && alpha > 0.3) {
+      const sx = ax + Math.cos(ang) * reach * 0.78;
+      const sy = ay + Math.sin(ang) * reach * 0.78;
+      drawHitSparkArt(ctx, sx, sy, 10 + alpha * 12, alpha);
+    }
+  };
+
   switch (enemy.type) {
     case 'raider':
-      ctx.strokeStyle = `rgba(200,160,100,${alpha * 0.9})`;
-      ctx.lineWidth = 2.5 * alpha;
-      ctx.beginPath();
-      ctx.moveTo(ax - 8, ay - 4);
-      ctx.lineTo(ax + 10, ay + 2);
-      ctx.stroke();
+      drawMeleeSlash(`rgba(220,170,100,${alpha * 0.95})`, 3 * alpha, true);
       break;
 
     case 'warg':
-      ctx.fillStyle = `rgba(160,120,80,${alpha * 0.35 * pulse})`;
+      ctx.fillStyle = `rgba(160,120,80,${alpha * 0.40 * pulse})`;
       ctx.beginPath();
-      ctx.ellipse(ax + 6, ay, 10 * alpha, 4 * alpha, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        ax + Math.cos(ang) * reach * 0.55,
+        ay + Math.sin(ang) * reach * 0.55,
+        12 * alpha, 5 * alpha, ang, 0, Math.PI * 2,
+      );
       ctx.fill();
+      drawMeleeSlash(`rgba(200,150,90,${alpha * 0.75})`, 2 * alpha, true);
       break;
 
     case 'draugr':
-      ctx.fillStyle = `rgba(110,100,120,${alpha * 0.40})`;
+      ctx.fillStyle = `rgba(110,100,120,${alpha * 0.45})`;
       ctx.beginPath();
-      ctx.arc(ax, ay - 4, 8 * alpha, 0, Math.PI * 2);
+      ctx.arc(ax + Math.cos(ang) * reach * 0.5, ay + Math.sin(ang) * reach * 0.5, 9 * alpha, 0, Math.PI * 2);
       ctx.fill();
+      drawMeleeSlash(`rgba(180,160,200,${alpha * 0.70})`, 2.2 * alpha, true);
       break;
 
     default:
       if (enemy.isBoss) {
-        ctx.strokeStyle = `rgba(220,60,40,${alpha * 0.85})`;
-        ctx.lineWidth = 3 * alpha;
+        drawMeleeSlash(`rgba(255,90,60,${alpha * 0.90})`, 4 * alpha, true);
+        ctx.strokeStyle = `rgba(220,60,40,${alpha * 0.55})`;
+        ctx.lineWidth = 2 * alpha;
         ctx.beginPath();
-        ctx.arc(ax, ay, enemy.radius * 1.8, 0, Math.PI * 2);
+        ctx.arc(ax, ay, enemy.radius * 1.9, 0, Math.PI * 2);
         ctx.stroke();
       } else {
-        ctx.fillStyle = `rgba(255,200,120,${alpha * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(ax + 4, ay - 2, 4 * alpha, 0, Math.PI * 2);
-        ctx.fill();
+        drawMeleeSlash(`rgba(255,200,120,${alpha * 0.88})`, 2.5 * alpha, true);
       }
   }
 

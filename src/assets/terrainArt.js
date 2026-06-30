@@ -68,22 +68,131 @@ function paintCourtyardFloor(tc, goal, ringR, cellSize, groundA, groundB) {
   const oy = minR * cellSize;
   const pw = (maxC - minC + 1) * cellSize;
   const ph = (maxR - minR + 1) * cellSize;
+  const cx = ox + pw / 2;
+  const cy = oy + ph / 2;
+
+  tc.save();
+  tc.beginPath();
+  tc.ellipse(cx, cy + cellSize * 0.06, pw * 0.46, ph * 0.42, 0, 0, Math.PI * 2);
+  tc.clip();
 
   tc.drawImage(groundA, 0, 0, groundA.naturalWidth, groundA.naturalHeight, ox, oy, pw, ph);
-  tc.save();
   tc.globalAlpha = 0.28;
   tc.drawImage(groundB, ox + cellSize * 0.35, oy + cellSize * 0.25, pw - cellSize * 0.5, ph - cellSize * 0.45);
-  tc.restore();
+  tc.globalAlpha = 1;
 
-  const warm = tc.createRadialGradient(ox + pw / 2, oy + ph / 2, cellSize, ox + pw / 2, oy + ph / 2, pw * 0.55);
-  warm.addColorStop(0, 'rgba(255,200,140,0.10)');
+  const warm = tc.createRadialGradient(cx, cy, cellSize, cx, cy, pw * 0.5);
+  warm.addColorStop(0, 'rgba(255,200,140,0.14)');
+  warm.addColorStop(0.55, 'rgba(120,80,40,0.08)');
   warm.addColorStop(1, 'rgba(0,0,0,0)');
   tc.fillStyle = warm;
   tc.fillRect(ox, oy, pw, ph);
 
-  tc.strokeStyle = 'rgba(40,28,14,0.12)';
+  tc.strokeStyle = 'rgba(40,28,14,0.18)';
+  tc.lineWidth = 1.2;
+  tc.beginPath();
+  tc.ellipse(cx, cy + cellSize * 0.06, pw * 0.44, ph * 0.40, 0, 0, Math.PI * 2);
+  tc.stroke();
+  tc.restore();
+}
+
+/** Fen atmosphere — tree silhouettes, spawn mist, cool sky wash. */
+function paintAshfenPlayfieldAtmosphere(tc, width, height, cellSize, spawn, goal) {
+  if (spawn) {
+    const cx = spawn.col * cellSize + cellSize / 2;
+    const cy = spawn.row * cellSize + cellSize / 2;
+    const mist = tc.createRadialGradient(cx, cy, cellSize * 0.2, cx, cy, cellSize * 5.5);
+    mist.addColorStop(0, 'rgba(120,150,160,0.16)');
+    mist.addColorStop(0.45, 'rgba(70,95,105,0.10)');
+    mist.addColorStop(1, 'rgba(0,0,0,0)');
+    tc.fillStyle = mist;
+    tc.beginPath();
+    tc.arc(cx, cy, cellSize * 5.5, 0, Math.PI * 2);
+    tc.fill();
+  }
+
+  if (ready('fenTrees')) {
+    const trees = _images.fenTrees;
+    const th = height * 0.44;
+    tc.save();
+    tc.globalAlpha = 0.36;
+    tc.drawImage(trees, -width * 0.04, height - th, width * 0.38, th);
+    tc.globalAlpha = 0.24;
+    tc.drawImage(trees, width * 0.66, height - th * 0.92, width * 0.36, th * 0.92);
+    tc.restore();
+  }
+
+  const sky = tc.createLinearGradient(0, 0, 0, height * 0.42);
+  sky.addColorStop(0, 'rgba(14,20,26,0.42)');
+  sky.addColorStop(0.55, 'rgba(18,24,20,0.12)');
+  sky.addColorStop(1, 'rgba(0,0,0,0)');
+  tc.fillStyle = sky;
+  tc.fillRect(0, 0, width, height);
+
+  if (goal) {
+    const gx = goal.col * cellSize + cellSize / 2;
+    const gy = goal.row * cellSize + cellSize / 2;
+    const warm = tc.createRadialGradient(gx, gy, cellSize, gx, gy, cellSize * 7);
+    warm.addColorStop(0, 'rgba(255,180,90,0.06)');
+    warm.addColorStop(1, 'rgba(0,0,0,0)');
+    tc.fillStyle = warm;
+    tc.fillRect(0, 0, width, height);
+  }
+}
+
+/** Single worn dirt lane — avoids tiling vertical path sprites into parallel stripes. */
+function paintBakedPathlessLane(tc, spawn, goal, cols, rows, cellSize, width) {
+  if (!spawn || !goal) return;
+  const pathRow = spawn.row;
+  const x0 = Math.max(0, spawn.col * cellSize);
+  const x1 = Math.min(width, (goal.col + 1) * cellSize);
+  const laneW = x1 - x0;
+  if (laneW <= 0) return;
+
+  const cy = pathRow * cellSize + cellSize / 2;
+  const laneH = cellSize * 2.35;
+
+  const body = tc.createLinearGradient(x0, cy - laneH / 2, x0, cy + laneH / 2);
+  body.addColorStop(0, 'rgba(18,12,6,0.55)');
+  body.addColorStop(0.14, 'rgba(68,50,28,0.94)');
+  body.addColorStop(0.5, 'rgba(98,76,44,0.96)');
+  body.addColorStop(0.86, 'rgba(68,50,28,0.94)');
+  body.addColorStop(1, 'rgba(18,12,6,0.55)');
+  tc.fillStyle = body;
+  tc.fillRect(x0, cy - laneH / 2, laneW, laneH);
+
+  const rut = tc.createLinearGradient(x0, cy, x1, cy);
+  rut.addColorStop(0, 'rgba(30,20,10,0)');
+  rut.addColorStop(0.08, 'rgba(48,32,16,0.72)');
+  rut.addColorStop(0.5, 'rgba(36,24,12,0.82)');
+  rut.addColorStop(0.92, 'rgba(48,32,16,0.72)');
+  rut.addColorStop(1, 'rgba(30,20,10,0)');
+  tc.fillStyle = rut;
+  tc.fillRect(x0 + cellSize * 0.25, cy - cellSize * 0.20, laneW - cellSize * 0.5, cellSize * 0.40);
+
+  tc.strokeStyle = 'rgba(24,16,8,0.35)';
   tc.lineWidth = 1;
-  tc.strokeRect(ox + 0.5, oy + 0.5, pw - 1, ph - 1);
+  tc.beginPath();
+  tc.moveTo(x0 + cellSize * 0.2, cy - laneH * 0.38);
+  tc.lineTo(x1 - cellSize * 0.2, cy - laneH * 0.38);
+  tc.moveTo(x0 + cellSize * 0.2, cy + laneH * 0.38);
+  tc.lineTo(x1 - cellSize * 0.2, cy + laneH * 0.38);
+  tc.stroke();
+
+  const count = Math.max(8, Math.floor(laneW / (cellSize * 1.4)));
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const px = x0 + laneW * t;
+    const seed = px * 0.17 + pathRow * 0.31;
+    const py = cy + Math.sin(seed * 9.1) * cellSize * 0.18;
+    const rw = cellSize * (0.10 + Math.abs(Math.sin(seed * 4.2)) * 0.08);
+    const rh = cellSize * 0.05;
+    const tone = 72 + Math.sin(seed * 6.7) * 14;
+    tc.fillStyle = `rgba(${tone},${Math.round(tone * 0.78)},${Math.round(tone * 0.52)},0.35)`;
+    tc.beginPath();
+    tc.ellipse(px, py, rw, rh, 0, 0, Math.PI * 2);
+    tc.fill();
+  }
 }
 
 /** Paint Ash Fen tile ground into terrain canvas. Returns false if tiles not loaded. */
@@ -111,7 +220,7 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
       const variant = (col + row * 3) % 2;
       const tile = variant ? groundB : groundA;
       tc.globalAlpha = 0.92;
-      tc.drawImage(tile, x, y, cellSize, cellSize);
+      tc.drawImage(tile, x - 0.5, y - 0.5, cellSize + 1, cellSize + 1);
       tc.globalAlpha = 1;
 
       if (((col * 7 + row * 13) % 5) === 0) {
@@ -128,37 +237,10 @@ export function bakeAshfenTerrain(tc, cols, rows, cellSize, width, height, rng, 
   if (goal) paintCourtyardFloor(tc, goal, padRing, cellSize, groundA, groundB);
 
   if (pathless && spawn && goal) {
-    const laneY = pathRow * cellSize + cellSize / 2;
-    const x0 = Math.max(0, spawn.col * cellSize);
-    const x1 = Math.min(width, (goalCol + 1) * cellSize);
-    const laneH = cellSize * 2.8;
-
-    if (ready('path')) {
-      for (let dr = -1; dr <= 1; dr++) {
-        const row = pathRow + dr;
-        if (row < 0 || row >= rows) continue;
-        const y = row * cellSize;
-        for (let col = spawn.col; col <= goalCol; col++) {
-          const x = col * cellSize;
-          tc.globalAlpha = dr === 0 ? 0.92 : 0.58;
-          tc.drawImage(pathTile, x, y, cellSize, cellSize);
-        }
-      }
-      tc.globalAlpha = 1;
-    } else {
-      const lg = tc.createLinearGradient(x0, laneY, x1, laneY);
-      lg.addColorStop(0, 'rgba(60,46,26,0.0)');
-      lg.addColorStop(0.06, 'rgba(92,70,36,0.80)');
-      lg.addColorStop(0.94, 'rgba(92,70,36,0.80)');
-      lg.addColorStop(1, 'rgba(60,46,26,0.0)');
-      tc.fillStyle = lg;
-      tc.fillRect(x0, laneY - laneH / 2, x1 - x0, laneH);
-    }
-
-    tc.fillStyle = 'rgba(16,10,4,0.22)';
-    tc.fillRect(x0, laneY - laneH / 2, x1 - x0, 2);
-    tc.fillRect(x0, laneY + laneH / 2 - 2, x1 - x0, 2);
+    paintBakedPathlessLane(tc, spawn, goal, cols, rows, cellSize, width);
   }
+
+  paintAshfenPlayfieldAtmosphere(tc, width, height, cellSize, spawn, goal);
 
   const vg = tc.createRadialGradient(
     goalCol * cellSize, goalRow * cellSize, cellSize * 2,
@@ -182,18 +264,28 @@ export function drawPathlessAssaultLane(ctx, spawn, goal, cols, rows, cellSize, 
   if (laneW <= 0) return;
 
   const cy = pathRow * cellSize + cellSize / 2;
-  const laneH = cellSize * 2.6;
+  const laneH = cellSize * 2.35;
 
   ctx.save();
-  const shimmer = 0.10 + Math.sin(time * 1.35) * 0.06;
-  ctx.globalCompositeOperation = 'overlay';
-  ctx.fillStyle = `rgba(200,160,100,${shimmer})`;
-  ctx.fillRect(x0 + cellSize * 0.5, cy - laneH * 0.22, laneW - cellSize, laneH * 0.44);
+  const edgePulse = 0.08 + Math.sin(time * 0.8) * 0.04;
+  ctx.strokeStyle = `rgba(24,16,8,${0.22 + edgePulse})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x0 + cellSize * 0.15, cy - laneH * 0.42);
+  ctx.lineTo(x1 - cellSize * 0.15, cy - laneH * 0.42);
+  ctx.moveTo(x0 + cellSize * 0.15, cy + laneH * 0.42);
+  ctx.lineTo(x1 - cellSize * 0.15, cy + laneH * 0.42);
+  ctx.stroke();
 
-  const rutPulse = 0.14 + Math.sin(time * 0.9 + spawn.col * 0.2) * 0.05;
+  const shimmer = 0.08 + Math.sin(time * 1.35) * 0.05;
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.fillStyle = `rgba(210,170,110,${shimmer})`;
+  ctx.fillRect(x0 + cellSize * 0.4, cy - laneH * 0.18, laneW - cellSize * 0.8, laneH * 0.36);
+
+  const rutPulse = 0.10 + Math.sin(time * 0.9 + spawn.col * 0.2) * 0.04;
   ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = `rgba(80,55,28,${rutPulse})`;
-  ctx.fillRect(x0 + cellSize, cy - cellSize * 0.18, laneW - cellSize * 2, cellSize * 0.36);
+  ctx.fillStyle = `rgba(70,48,24,${rutPulse})`;
+  ctx.fillRect(x0 + cellSize * 0.8, cy - cellSize * 0.14, laneW - cellSize * 1.6, cellSize * 0.28);
   ctx.restore();
 
   // Foot-traffic dust motes drifting along the lane
@@ -327,15 +419,21 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const outer = ringR * cellSize + cellSize * 0.42;
   const inner = outer - cellSize * 0.55;
   const gateAngle = spawnCol != null && spawnCol < goal.col ? Math.PI : 0;
-  const gateSpread = 0.42;
+  const gateSpread = 0.48;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(18,10,4,0.35)';
+
+  ctx.fillStyle = 'rgba(34,24,12,0.42)';
+  ctx.beginPath();
+  ctx.ellipse(gx, gy + cellSize * 0.08, inner * 0.92, inner * 0.82, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(18,10,4,0.38)';
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, outer + cellSize * 0.12, outer * 0.92 + cellSize * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const stakeCount = Math.max(28, Math.round(ringR * 14));
+  const stakeCount = Math.max(32, Math.round(ringR * 16));
   const woodA = '#5c3a18';
   const woodB = '#3a2410';
   const flicker = 0.55 + Math.sin(time * 8.2) * 0.32;
@@ -349,38 +447,39 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
 
     const sx = gx + Math.cos(a) * outer;
     const sy = gy + Math.sin(a) * outer * 0.9 + cellSize * 0.08;
-    const h = cellSize * (0.72 + (i % 3) * 0.08);
-    const lean = Math.sin(a * 2 + time * 0.15) * 0.06;
+    const h = cellSize * (0.88 + (i % 3) * 0.10);
 
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.rotate(a + Math.PI / 2 + lean);
+    ctx.rotate(a + Math.PI / 2 + Math.sin(a * 2 + time * 0.15) * 0.06);
     ctx.fillStyle = i % 2 ? woodA : woodB;
-    ctx.fillRect(-cellSize * 0.1, -h, cellSize * 0.2, h);
-    ctx.fillStyle = 'rgba(255,200,120,0.25)';
-    ctx.fillRect(-cellSize * 0.06, -h * 0.85, cellSize * 0.05, h * 0.7);
+    ctx.fillRect(-cellSize * 0.11, -h, cellSize * 0.22, h);
+    ctx.fillStyle = 'rgba(255,200,120,0.28)';
+    ctx.fillRect(-cellSize * 0.07, -h * 0.88, cellSize * 0.06, h * 0.72);
     ctx.restore();
   }
 
-  ctx.strokeStyle = 'rgba(30,18,8,0.55)';
-  ctx.lineWidth = cellSize * 0.14;
+  ctx.strokeStyle = 'rgba(30,18,8,0.68)';
+  ctx.lineWidth = cellSize * 0.16;
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, outer, outer * 0.9, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(80,55,28,0.45)';
-  ctx.lineWidth = cellSize * 0.08;
+  ctx.strokeStyle = 'rgba(90,62,32,0.52)';
+  ctx.lineWidth = cellSize * 0.09;
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, inner, inner * 0.9, 0, 0, Math.PI * 2);
   ctx.stroke();
 
   const gateX = gx + Math.cos(gateAngle) * outer * 0.92;
   const gateY = gy + Math.sin(gateAngle) * outer * 0.82 + cellSize * 0.08;
-  ctx.fillStyle = '#2a1810';
-  ctx.fillRect(gateX - cellSize * 0.55, gateY - cellSize * 0.35, cellSize * 1.1, cellSize * 0.7);
-  ctx.fillStyle = `rgba(255,190,90,${0.35 + flicker * 0.25})`;
+  const gateGlow = `rgba(255,190,90,${0.22 + flicker * 0.18})`;
+  const gatePool = ctx.createRadialGradient(gateX, gateY, 0, gateX, gateY, cellSize * 1.2);
+  gatePool.addColorStop(0, gateGlow);
+  gatePool.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gatePool;
   ctx.beginPath();
-  ctx.arc(gateX, gateY - cellSize * 0.12, cellSize * 0.14, 0, Math.PI * 2);
+  ctx.arc(gateX, gateY, cellSize * 1.2, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();

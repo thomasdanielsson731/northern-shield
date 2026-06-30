@@ -10,6 +10,7 @@ import {
   drawWarCampPortraitCard,
   drawWarCampFortressRow,
   drawWarCampTabWelcomeHint,
+  drawImmersiveBackToTownChip,
   computeWarCampCardGrid,
   warCampCardOrigin,
   getCareerXpProgress,
@@ -82,5 +83,14 @@ describe('warCampVisual', () => {
     expect(() => drawWarCampFortressRow(ctx, 10, 200, 280, {
       icon: '⬡', label: 'Barracks', maxLevel: 3, levelDesc: ['+1 slot'],
     }, 1, false, 50, true, [], 'barracks')).not.toThrow();
+  });
+
+  it('drawImmersiveBackToTownChip registers returnToSettlement', () => {
+    const ctx = mockCtx();
+    const btns = [];
+    drawImmersiveBackToTownChip(ctx, { x: 0, y: 0, w: 400, h: 300 }, btns);
+    expect(btns).toHaveLength(1);
+    expect(btns[0].action).toBe('returnToSettlement');
+    expect(btns[0].w).toBe(124);
   });
 });

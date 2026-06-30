@@ -5,6 +5,7 @@ import {
   tickBtParticle,
   createBtParticlePool,
   getVictoryHeaderStyle,
+  getBetweenBattlesSkipHintAlpha,
   BETWEEN_FADE_FRAMES,
 } from '../src/ui/betweenBattlesJuice.js';
 
@@ -37,5 +38,11 @@ describe('betweenBattlesJuice', () => {
     expect(v.color).toBe('#40e880');
     expect(v.blur).not.toBe(v2.blur);
     expect(getVictoryHeaderStyle(false).color).toBe('#e84040');
+  });
+
+  it('skip hint visible during early fade frames', () => {
+    expect(getBetweenBattlesSkipHintAlpha(0)).toBe(0);
+    expect(getBetweenBattlesSkipHintAlpha(22)).toBeGreaterThan(0.4);
+    expect(getBetweenBattlesSkipHintAlpha(BETWEEN_FADE_FRAMES)).toBe(0);
   });
 });

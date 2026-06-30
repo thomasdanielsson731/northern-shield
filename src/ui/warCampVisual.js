@@ -217,6 +217,21 @@ export function drawWarCampGlassChip(ctx, x, y, w, h, opts = {}) {
   ctx.restore();
 }
 
+/** Bottom-right glass chip — immersive settlement buildings (Hall, Chronicle, etc.). */
+export function drawImmersiveBackToTownChip(ctx, rect, btnsOut) {
+  const chipPad = 10;
+  const bw = 124;
+  const bh = 34;
+  const bx = rect.x + rect.w - bw - chipPad;
+  const by = rect.y + rect.h - bh - chipPad;
+  drawWarCampGlassChip(ctx, bx, by, bw, bh, {
+    title: '← BACK TO TOWN',
+    subtitle: 'Return to settlement',
+    action: 'returnToSettlement',
+    btnsOut,
+  });
+}
+
 /** Full-width WARCAMP header + tagline — title lives in meta bar; kept for tests/skirmish reuse. */
 export function drawWarCampHeader(ctx, x, y, w) {
   ctx.save();

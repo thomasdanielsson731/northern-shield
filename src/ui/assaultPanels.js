@@ -41,20 +41,28 @@ export function combatFieldHpAccent(frac) {
 
 /**
  * Slim rounded combat HP bar — shared by pathless heroes and enemies.
- * @param {{ dimAtFull?: boolean, forceShow?: boolean }} opts
+ * @param {{ dimAtFull?: boolean, forceShow?: boolean, barW?: number }} opts
  */
 export function drawCombatFieldHpBar(ctx, cx, by, frac, accent, opts = {}) {
   const f = Math.max(0, Math.min(1, frac));
-  const barW = COMBAT_FIELD_HP_W;
+  const barW = opts.barW ?? COMBAT_FIELD_HP_W;
   const barH = combatFieldHpBarHeight(f);
   const bx = cx - barW / 2;
   const col = accent ?? combatFieldHpAccent(f);
   const showFill = f < 1.0 || opts.forceShow;
   const dimTray = opts.dimAtFull && !showFill;
+  const fillFrac = showFill ? f : 0;
 
   ctx.save();
   if (dimTray) ctx.globalAlpha = 0.32;
-  drawPanelHpBar(ctx, bx, by, barW, barH, showFill ? f : 0, col);
+  drawPanelHpBar(ctx, bx, by, barW, barH, fillFrac, col);
+  if (opts.forceShow && f >= 0.999) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.42)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, barW, barH, barH / 2);
+    ctx.stroke();
+  }
   ctx.restore();
 
   if (f < 0.25 && f > 0) {

@@ -28,16 +28,15 @@ describe('debriefReport', () => {
     expect(getSagaDebriefProse(1, true, { chronicleProse: 'Custom entry.' })).toBe('Custom entry.');
   });
 
-  it('builds west gate damage report with scar', () => {
+  it('builds west gate damage report from wall HP', () => {
     const report = buildFortressDamageReport(
       { '19_15': { isGate: true, hp: 40, maxHp: 100 } },
-      { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      {},
       { goal: { col: 24, row: 15 }, ringR: 5, frontId: 'west' },
     );
     expect(report.gateHpPct).toBe(40);
-    expect(report.scarred).toBe(true);
-    expect(report.lines.some(l => l.label === 'SCAR')).toBe(true);
-    expect(report.lines.some(l => l.label === 'TIMBER')).toBe(true);
+    expect(report.lines.some(l => l.label === 'WEST GATE')).toBe(true);
+    expect(report.lines.some(l => l.tone === 'mended')).toBe(true);
   });
 
   it('formats compact debrief stats', () => {
@@ -68,13 +67,13 @@ describe('debriefReport', () => {
     expect(s).not.toContain('MVP');
   });
 
-  it('damage report covers patched gate and breach', () => {
-    const patched = buildFortressDamageReport(
+  it('damage report covers restored wall and breach', () => {
+    const restored = buildFortressDamageReport(
       { '19_15': { isGate: true, hp: 95, maxHp: 100 } },
-      { westGateScarred: true, westGateRepaired: true, wood: 0 },
+      {},
       { goal: { col: 24, row: 15 }, lives: 20 },
     );
-    expect(patched.lines.some(l => l.tone === 'mended')).toBe(true);
+    expect(restored.lines.some(l => l.tone === 'hold')).toBe(true);
 
     const breached = buildFortressDamageReport(
       {},

@@ -4,82 +4,67 @@ import {
   getHornBlockReason,
   getPrepObjectives,
   getPrepInstructionHint,
-  applyPanelAction,
   applyFirstSagaAssaultRewards,
   defaultPrepFieldMeta,
+  loadPrepFieldMeta,
+  normalizePrepFieldMeta,
   syncPrepMetaForAssault,
-  getPrepAutoHotspot,
-  getPrepRepairTeachHint,
   getPrepAdvisorContent,
   getPrepPanelActions,
-  A2_DEBRIEF_WOOD_BUNDLE,
-  FIRST_SAGA_A2_NODE,
-  FIRST_SAGA_A3_NODE,
-  GATE_REPAIR_WOOD_COST,
   PREP_HOTSPOTS,
   hotspotRect,
 } from '../src/preparation/fortressCommanderShell.js';
+import { FIRST_SAGA_A3_NODE } from '../src/campaign/firstSaga.js';
 
 describe('fortressCommanderShell', () => {
   it('blocks horn without assault or assignment', () => {
     expect(getHornBlockReason({
       pendingAssaultNode: null,
       postAssignments: {},
-      prepMeta: defaultPrepFieldMeta(),
-      assaultNodeIndex: 0,
     })).toMatch(/command map/i);
 
     expect(getHornBlockReason({
       pendingAssaultNode: 0,
       postAssignments: {},
-      prepMeta: defaultPrepFieldMeta(),
-      assaultNodeIndex: 0,
     })).toMatch(/Assign/i);
   });
 
-  it('allows horn with assignment', () => {
-    expect(getHornBlockReason({
-      pendingAssaultNode: 0,
-      postAssignments: { west_gate: { defenderId: 'g1' } },
-      prepMeta: defaultPrepFieldMeta(),
-      assaultNodeIndex: 0,
-    })).toBeNull();
-  });
-
-  it('blocks horn when scar unrepaired on A3+', () => {
-    const meta = { wood: 15, westGateScarred: true, westGateRepaired: false };
+  it('allows horn with assignment even when legacy scar meta exists', () => {
     expect(getHornBlockReason({
       pendingAssaultNode: 3,
       postAssignments: { west_gate: { defenderId: 'g1' } },
-      prepMeta: meta,
-      assaultNodeIndex: 3,
-    })).toMatch(/Repair/i);
+    })).toBeNull();
   });
 
-  it('repairs gate spending wood', () => {
-    const meta = { wood: 15, westGateScarred: true, westGateRepaired: false };
-    const { meta: next, repairAnim } = applyPanelAction({ id: 'repair_gate' }, meta);
-    expect(next.wood).toBe(15 - GATE_REPAIR_WOOD_COST);
-    expect(next.westGateRepaired).toBe(true);
-    expect(repairAnim).toBeGreaterThan(0);
+  it('clears legacy scar meta after assault victory', () => {
+    const field = applyFirstSagaAssaultRewards({
+      gold: 0,
+      towers: [],
+      walls: {},
+      westGateScarred: true,
+      wood: 15,
+    });
+    expect(field.westGateScarred).toBe(false);
+    expect(field.westGateRepaired).toBe(true);
+    expect(field.wood).toBe(0);
   });
 
-  it('applies A2 debrief scar and timber to field state', () => {
-    const field = applyFirstSagaAssaultRewards({ gold: 0, towers: [], walls: {} }, FIRST_SAGA_A2_NODE);
-    expect(field.westGateScarred).toBe(true);
-    expect(field.wood).toBe(A2_DEBRIEF_WOOD_BUNDLE);
-  });
-
-  it('does not scar gate before A3 prep', () => {
-    const m = syncPrepMetaForAssault(defaultPrepFieldMeta(), 2, 2);
+  it('normalizes prep meta to a fully restored fortress', () => {
+    const m = syncPrepMetaForAssault({
+      wood: 15,
+      westGateScarred: true,
+      westGateRepaired: false,
+    });
     expect(m.westGateScarred).toBe(false);
+    expect(m.westGateRepaired).toBe(true);
     expect(m.wood).toBe(0);
-  });
 
-  it('bootstraps legacy saves entering A3 prep', () => {
-    const m = syncPrepMetaForAssault(defaultPrepFieldMeta(), 3, 3);
-    expect(m.westGateScarred).toBe(true);
-    expect(m.wood).toBe(A2_DEBRIEF_WOOD_BUNDLE);
+    const loaded = loadPrepFieldMeta({
+      westGateScarred: true,
+      westGateRepaired: false,
+      wood: 20,
+    });
+    expect(loaded).toEqual(normalizePrepFieldMeta({}));
   });
 
   it('defines five hotspot layouts', () => {
@@ -94,18 +79,9 @@ describe('fortressCommanderShell', () => {
     expect(s.selectedHotspot).toBeNull();
   });
 
-  it('auto-focuses wall scar on A3 teach', () => {
-    const meta = { wood: 15, westGateScarred: true, westGateRepaired: false };
-    expect(getPrepAutoHotspot(meta, { mapIndex: 0, nodeIndex: FIRST_SAGA_A3_NODE, isFirstSaga: true }))
-      .toBe(PREP_HOTSPOTS.WALL_SCAR);
-    expect(getPrepRepairTeachHint(meta)).toMatch(/Repair/i);
-    expect(getPrepRepairTeachHint({ westGateScarred: true, westGateRepaired: false, wood: 2 }))
-      .toMatch(/timber/i);
-  });
-
-  it('advisor content and panel actions for wall scar', () => {
+  it('advisor content for west wall describes intact palisade', () => {
     const ctx = {
-      prepMeta: { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      prepMeta: defaultPrepFieldMeta(),
       postAssignments: { west_gate: { defenderId: 'd1' } },
       roster: { defenders: [{ defenderId: 'd1', name: 'Erik', type: 'berserk' }] },
       goldReserve: 0,
@@ -113,9 +89,8 @@ describe('fortressCommanderShell', () => {
     };
     const content = getPrepAdvisorContent(PREP_HOTSPOTS.WALL_SCAR, ctx);
     expect(content.title).toBe('West Wall');
-    expect(content.lines[0]).toMatch(/splintered/i);
-    const actions = getPrepPanelActions(PREP_HOTSPOTS.WALL_SCAR, ctx);
-    expect(actions.some(a => a.id === 'repair_gate')).toBe(true);
+    expect(content.lines[0]).toMatch(/stands/i);
+    expect(getPrepPanelActions(PREP_HOTSPOTS.WALL_SCAR, ctx)).toEqual([]);
   });
 
   it('prep objectives progress from gate assign through horn', () => {
@@ -146,17 +121,17 @@ describe('fortressCommanderShell', () => {
     expect(getPrepInstructionHint(noAssault)?.title).toBe('COMMAND MAP');
   });
 
-  it('prep objectives require wall repair on A3 teach', () => {
+  it('prep objectives skip repair on A3 teach', () => {
     const ctx = {
       pendingAssaultNode: FIRST_SAGA_A3_NODE,
       assaultNodeIndex: FIRST_SAGA_A3_NODE,
       assault: { codename: 'Splinter Raid' },
-      prepMeta: { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      prepMeta: defaultPrepFieldMeta(),
       postAssignments: { west_gate: { defenderId: 'd1' } },
       roster: { defenders: [{ defenderId: 'd1', name: 'Erik', type: 'berserk' }] },
     };
     const steps = getPrepObjectives(ctx);
-    expect(steps.find(s => s.id === 'repair_gate')?.active).toBe(true);
-    expect(getPrepInstructionHint(ctx)?.title).toBe('MEND THE GATE');
+    expect(steps.find(s => s.id === 'repair_gate')).toBeUndefined();
+    expect(getPrepInstructionHint(ctx)?.title).toBe('SOUND HORN');
   });
 });

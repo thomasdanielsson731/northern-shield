@@ -23,12 +23,13 @@ describe('settlementHubLayout', () => {
     expect(HUB_BUILDING_LAYOUT.recruit.fy).toBeLessThan(HUB_BUILDING_LAYOUT.chronicle.fy);
   });
 
-  it('anchors building feet near ground line in content space', () => {
+  it('anchors building feet on painted foundation pads', () => {
     for (const [id, norm] of Object.entries(HUB_BUILDING_LAYOUT)) {
       if (id === 'slots' || norm.emblem) continue;
       const foot = norm.fy + norm.fh;
-      expect(foot, id).toBeGreaterThan(0.82);
-      expect(foot, id).toBeLessThan(0.98);
+      expect(foot, id).toBeGreaterThanOrEqual(0.40);
+      expect(foot, id).toBeLessThan(0.95);
+      expect(norm.fh, id).toBeLessThanOrEqual(0.20);
     }
   });
 
@@ -43,7 +44,7 @@ describe('settlementHubLayout', () => {
     const norm = HUB_BUILDING_LAYOUT.recruit;
     const box = resolveHubBuildingRect(norm, layout, { useArtSpace: true });
     expect(box.w).toBeGreaterThan(40);
-    expect(box.y + box.h).toBeLessThan(layout.y + layout.h * 0.92);
-    expect(box.y + box.h).toBeGreaterThan(layout.y + layout.h * 0.55);
+    expect(box.y + box.h).toBeLessThan(layout.y + layout.h * 0.82);
+    expect(box.y + box.h).toBeGreaterThan(layout.y + layout.h * 0.48);
   });
 });

@@ -572,9 +572,11 @@ export class Enemy {
       ? this.path[this.pathIndex + 1] : null;
     const fallbackDx = nextPt ? nextPt.x - this.x : 1;
     const fallbackDy = nextPt ? nextPt.y - this.y : 0;
-    const aimAngle = resolveFacingAngle(this.velX, this.velY, fallbackDx, fallbackDy);
     const attacking = (this.attackAnimTimer ?? 0) > 0;
-    const moving = !dying && (this.moveSpeed ?? 0) > 0.08;
+    const aimAngle = attacking && this.attackAimAngle != null
+      ? this.attackAimAngle
+      : resolveFacingAngle(this.velX, this.velY, fallbackDx, fallbackDy);
+    const moving = !dying && (this.moveSpeed ?? 0) > 0.08 && !attacking;
     const col = pickAnimColumn({
       dying,
       attacking,

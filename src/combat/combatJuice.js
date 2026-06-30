@@ -206,6 +206,42 @@ export function getHeroLungeOffset(tower) {
   };
 }
 
+/** Brief knockback when a hero takes melee damage. */
+export function triggerHeroHitRecoil(tower, fromX, fromY) {
+  if (!tower) return;
+  let dx = tower.x - fromX;
+  let dy = tower.y - fromY;
+  const len = Math.hypot(dx, dy) || 1;
+  dx /= len;
+  dy /= len;
+  tower._hitRecoilMax = 9;
+  tower._hitRecoil = 9;
+  tower._hitRecoilDx = dx;
+  tower._hitRecoilDy = dy;
+}
+
+export function tickHeroHitRecoil(tower) {
+  if ((tower._hitRecoil ?? 0) > 0) tower._hitRecoil--;
+}
+
+export function getHeroHitRecoilOffset(tower) {
+  const max = tower._hitRecoilMax ?? 0;
+  const rem = tower._hitRecoil ?? 0;
+  if (max <= 0 || rem <= 0) return { x: 0, y: 0 };
+  const t = 1 - rem / max;
+  const mag = Math.sin(t * Math.PI) * 5;
+  return {
+    x: (tower._hitRecoilDx ?? 0) * mag,
+    y: (tower._hitRecoilDy ?? 0) * mag,
+  };
+}
+
+export function getHeroCombatMotionOffset(tower) {
+  const lunge = getHeroLungeOffset(tower);
+  const recoil = getHeroHitRecoilOffset(tower);
+  return { x: lunge.x + recoil.x, y: lunge.y + recoil.y };
+}
+
 /** Per-type death flair — returns particle burst specs for game.spawnParticles. */
 export function getEnemyDeathFlair(type, x, y, highlightColor = '#c0a060') {
   const base = { x, y };

@@ -26,14 +26,6 @@ export const PREP_HOTSPOTS = {
   TREASURY: 'treasury',
 };
 
-import {
-  FIRST_SAGA_A2_NODE,
-  FIRST_SAGA_A3_NODE,
-} from '../campaign/firstSaga.js';
-
-export const GATE_REPAIR_WOOD_COST = 10;
-export const A2_DEBRIEF_WOOD_BUNDLE = 15;
-export { FIRST_SAGA_A2_NODE, FIRST_SAGA_A3_NODE };
 export const CAMERA_DURATION_MS = 400;
 export const HORN_ANIM_MS = 500;
 
@@ -54,7 +46,6 @@ export function createPrepShellState() {
     cameraScale: 1,
     cameraFocusX: 0.5,
     cameraFocusY: 0.5,
-    repairAnim: 0,
     hornAnim: 0,
     panelBtns: [],
     schematicBtns: [],
@@ -65,16 +56,27 @@ export function createPrepShellState() {
 }
 
 export function defaultPrepFieldMeta() {
-  return { wood: 0, westGateScarred: false, westGateRepaired: false };
+  return { wood: 0, westGateScarred: false, westGateRepaired: true };
+}
+
+/** Prep always opens with a fully restored fortress — no carry-over damage. */
+export function normalizePrepFieldMeta(meta) {
+  return {
+    ...meta,
+    wood: 0,
+    westGateScarred: false,
+    westGateRepaired: true,
+  };
 }
 
 export function loadPrepFieldMeta(fieldState) {
   const m = defaultPrepFieldMeta();
   if (!fieldState) return m;
-  m.wood = fieldState.wood ?? 0;
-  m.westGateScarred = !!fieldState.westGateScarred;
-  m.westGateRepaired = !!fieldState.westGateRepaired;
-  return m;
+  return normalizePrepFieldMeta({
+    wood: fieldState.wood ?? 0,
+    westGateScarred: !!fieldState.westGateScarred,
+    westGateRepaired: fieldState.westGateRepaired !== false,
+  });
 }
 
 export function mergePrepFieldMeta(fieldState, meta) {
@@ -86,56 +88,14 @@ export function mergePrepFieldMeta(fieldState, meta) {
   };
 }
 
-/** Apply First Saga rewards when an assault node is cleared (A2 → scar + timber). */
-export function applyFirstSagaAssaultRewards(fieldState, clearedNodeIndex) {
-  if (clearedNodeIndex !== FIRST_SAGA_A2_NODE) return fieldState;
-  const meta = loadPrepFieldMeta(fieldState);
-  meta.westGateScarred = true;
-  meta.wood = Math.max(meta.wood, A2_DEBRIEF_WOOD_BUNDLE);
-  return mergePrepFieldMeta(fieldState, meta);
+/** Clear legacy scar/timber from persisted field state after assault victory. */
+export function applyFirstSagaAssaultRewards(fieldState) {
+  return mergePrepFieldMeta(fieldState, normalizePrepFieldMeta(loadPrepFieldMeta(fieldState)));
 }
 
-/** Bootstrap prep meta for saves that predate explicit A2 debrief wiring. */
-export function syncPrepMetaForAssault(meta, assaultNodeIndex, battlesCompleted = 0) {
-  const next = { ...meta };
-  if (
-    assaultNodeIndex != null
-    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
-    && battlesCompleted >= 3
-    && !next.westGateRepaired
-    && !next.westGateScarred
-  ) {
-    next.westGateScarred = true;
-  }
-  if (
-    assaultNodeIndex != null
-    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
-    && next.westGateScarred
-    && next.wood === 0
-  ) {
-    next.wood = A2_DEBRIEF_WOOD_BUNDLE;
-  }
-  return next;
-}
-
-export function getPrepAutoHotspot(prepMeta, { mapIndex, nodeIndex, isFirstSaga } = {}) {
-  if (
-    isFirstSaga
-    && nodeIndex === FIRST_SAGA_A3_NODE
-    && prepMeta?.westGateScarred
-    && !prepMeta?.westGateRepaired
-  ) {
-    return PREP_HOTSPOTS.WALL_SCAR;
-  }
-  return null;
-}
-
-export function getPrepRepairTeachHint(prepMeta) {
-  if (!prepMeta?.westGateScarred || prepMeta.westGateRepaired) return null;
-  if ((prepMeta.wood ?? 0) >= GATE_REPAIR_WOOD_COST) {
-    return `Click WEST WALL — Repair (${GATE_REPAIR_WOOD_COST} wood) before the horn`;
-  }
-  return 'Splintered palisade — gather timber from assault rewards';
+/** Ensure prep meta reflects a fully restored fortress for the next assault. */
+export function syncPrepMetaForAssault(meta) {
+  return normalizePrepFieldMeta(meta);
 }
 
 /** Ordered prep checklist — required steps gate the horn; optional scout is last. */
@@ -143,8 +103,6 @@ export function getPrepObjectives(ctx) {
   const {
     pendingAssaultNode,
     postAssignments,
-    prepMeta,
-    assaultNodeIndex,
     assault,
   } = ctx;
 
@@ -168,24 +126,6 @@ export function getPrepObjectives(ctx) {
     done: gateAssigned,
   });
 
-  const needsRepair = !!(
-    prepMeta?.westGateScarred
-    && !prepMeta?.westGateRepaired
-    && assaultNodeIndex != null
-    && assaultNodeIndex >= FIRST_SAGA_A3_NODE
-  );
-  if (needsRepair) {
-    const wood = prepMeta?.wood ?? 0;
-    steps.push({
-      id: 'repair_gate',
-      label: wood >= GATE_REPAIR_WOOD_COST
-        ? `Repair the west wall (${GATE_REPAIR_WOOD_COST} wood)`
-        : 'Gather timber, then repair the west wall',
-      required: true,
-      done: false,
-    });
-  }
-
   steps.push({
     id: 'sound_horn',
     label: assault
@@ -196,7 +136,7 @@ export function getPrepObjectives(ctx) {
   });
 
   const towerAssigned = Boolean(postAssignments?.watch_tower?.defenderId);
-  if (gateAssigned && !needsRepair) {
+  if (gateAssigned) {
     steps.push({
       id: 'assign_tower',
       label: 'Post a scout on the Watch Tower (optional)',
@@ -242,7 +182,6 @@ export function getPrepInstructionHint(ctx) {
   const titles = {
     pick_assault: 'COMMAND MAP',
     assign_gate: 'ASSIGN GATE',
-    repair_gate: 'MEND THE GATE',
     assign_tower: 'WATCH TOWER',
     sound_horn: 'SOUND HORN',
   };
@@ -250,7 +189,7 @@ export function getPrepInstructionHint(ctx) {
   return {
     title: titles[active.id] ?? 'FORTRESS PREP',
     line: active.label,
-    urgent: active.id === 'repair_gate',
+    urgent: false,
   };
 }
 
@@ -281,7 +220,6 @@ export function updatePrepCamera(state, dtMs) {
   state.cameraScale += (targetScale - state.cameraScale) * t;
   state.cameraFocusX += (targetFx - state.cameraFocusX) * t;
   state.cameraFocusY += (targetFy - state.cameraFocusY) * t;
-  if (state.repairAnim > 0) state.repairAnim = Math.max(0, state.repairAnim - dtMs);
   if (state.hornAnim > 0) state.hornAnim = Math.max(0, state.hornAnim - dtMs);
 }
 
@@ -586,8 +524,6 @@ export function getHornBlockReason(ctx) {
   const {
     pendingAssaultNode,
     postAssignments,
-    prepMeta,
-    assaultNodeIndex,
   } = ctx;
   if (pendingAssaultNode == null) {
     return 'Pick an assault on the command map';
@@ -596,14 +532,11 @@ export function getHornBlockReason(ctx) {
   if (!validation.ok) {
     return validation.errors[0] ?? 'Assign a hero to the West Gate';
   }
-  if (prepMeta.westGateScarred && !prepMeta.westGateRepaired && assaultNodeIndex != null && assaultNodeIndex >= 3) {
-    return 'Repair the west gate before the horn';
-  }
   return null;
 }
 
 function advisorLines(hotspot, ctx) {
-  const { prepMeta, assault, postAssignments, roster, goldReserve } = ctx;
+  const { assault, postAssignments, roster, goldReserve } = ctx;
   const gateHero = postAssignments?.west_gate?.defenderId;
   const towerHero = postAssignments?.watch_tower?.defenderId;
   const def = gateHero ? roster?.find?.(gateHero) : null;
@@ -652,9 +585,7 @@ function advisorLines(hotspot, ctx) {
       return {
         advisor: 'builder',
         title: 'West Wall',
-        lines: prepMeta.westGateScarred && !prepMeta.westGateRepaired
-          ? ['The palisade splintered.', `Timber will hold — ${GATE_REPAIR_WOOD_COST} wood.`]
-          : ['The wall stands.', prepMeta.westGateRepaired ? 'Patch and prayer.' : 'No breach yet.'],
+        lines: ['The wall stands.', 'Stone and timber hold the line.'],
       };
     case PREP_HOTSPOTS.LONGHOUSE:
       return {
@@ -686,7 +617,7 @@ function advisorLines(hotspot, ctx) {
 }
 
 function panelActions(hotspot, ctx) {
-  const { prepMeta, postAssignments, roster, nodeCasualties } = ctx;
+  const { postAssignments, roster, nodeCasualties } = ctx;
   const actions = [];
   const available = (roster?.defenders ?? []).filter(
     d => !nodeCasualties?.has?.(d.defenderId),
@@ -719,12 +650,6 @@ function panelActions(hotspot, ctx) {
       });
     } else if (assigned) {
       actions.push({ id: 'clear_tower', label: 'Clear tower', postId: 'watch_tower' });
-    }
-  }
-
-  if (hotspot === PREP_HOTSPOTS.WALL_SCAR || hotspot === PREP_HOTSPOTS.WEST_GATE) {
-    if (prepMeta.westGateScarred && !prepMeta.westGateRepaired && prepMeta.wood >= GATE_REPAIR_WOOD_COST) {
-      actions.push({ id: 'repair_gate', label: `Repair (${GATE_REPAIR_WOOD_COST} wood)` });
     }
   }
 
@@ -786,19 +711,6 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   }
 
   const gateBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.WEST_GATE), pf, cam);
-  const wallR = hotspotRect(pf, PREP_HOTSPOTS.WALL_SCAR);
-  const wallBox = boxFromRect(wallR, pf, cam);
-
-  const scarActive = prepMeta.westGateScarred && !prepMeta.westGateRepaired;
-  if (scarActive) {
-    if (!drawFortressPrepSprite(ctx, 'wallScar', wallBox)) {
-      ctx.fillStyle = '#3a2818';
-      ctx.fillRect(wallBox.x, wallBox.y, wallBox.w, wallBox.h);
-      ctx.strokeStyle = '#5a4030';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(wallBox.x + 0.5, wallBox.y + 0.5, wallBox.w - 1, wallBox.h - 1);
-    }
-  }
 
   const lhBox = boxFromRect(hotspotRect(pf, PREP_HOTSPOTS.LONGHOUSE), pf, cam);
   drawLonghouseGraphic(ctx, lhBox);
@@ -814,23 +726,6 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
   drawWatchTowerGraphic(ctx, towerBox);
 
   drawWestGateGraphic(ctx, gateBox, prepMeta, state.selectedHotspot === PREP_HOTSPOTS.WEST_GATE);
-
-  if (scarActive) {
-    ctx.strokeStyle = 'rgba(180,60,40,0.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(gateBox.x + gateBox.w * 0.2, gateBox.y + gateBox.h * 0.3);
-    ctx.lineTo(gateBox.x + gateBox.w * 0.55, gateBox.y + gateBox.h * 0.7);
-    ctx.lineTo(gateBox.x + gateBox.w * 0.75, gateBox.y + gateBox.h * 0.35);
-    ctx.stroke();
-    drawHotspotLabel(ctx, wallBox, 'WEST WALL', 'Splintered — repair', { urgent: true });
-  }
-
-  if (state.repairAnim > 0) {
-    const a = state.repairAnim / 600;
-    ctx.fillStyle = `rgba(200,180,120,${0.35 * a})`;
-    ctx.fillRect(gateBox.x, gateBox.y, gateBox.w, gateBox.h);
-  }
 
   const gateHero = postAssignments?.west_gate?.defenderId;
   const towerHero = postAssignments?.watch_tower?.defenderId;
@@ -884,13 +779,8 @@ export function drawFortressSchematic(ctx, playfield, state, drawCtx) {
 
   if (gateNeedsHero && state.selectedHotspot !== PREP_HOTSPOTS.WEST_GATE) {
     drawSchematicHint(ctx, pf, 'Click WEST GATE — assign your fighter before the horn');
-  } else {
-    const repairHint = getPrepRepairTeachHint(prepMeta);
-    if (repairHint) {
-      drawSchematicHint(ctx, pf, repairHint);
-    } else if (!state.selectedHotspot && assault) {
-      drawSchematicHint(ctx, pf, `${assault.codename} — click a building, then sound the horn`);
-    }
+  } else if (!state.selectedHotspot && assault) {
+    drawSchematicHint(ctx, pf, `${assault.codename} — click a building, then sound the horn`);
   }
 
   drawPrepObjectiveLegend(ctx, pf, drawCtx);
@@ -1102,18 +992,6 @@ export function handlePrepShellPointer(state, mouseX, mouseY, playfield, panelRe
   }
 
   return null;
-}
-
-export function applyPanelAction(action, prepMeta) {
-  const next = { ...prepMeta };
-  if (action.id === 'repair_gate') {
-    if (next.westGateScarred && !next.westGateRepaired && next.wood >= GATE_REPAIR_WOOD_COST) {
-      next.wood -= GATE_REPAIR_WOOD_COST;
-      next.westGateRepaired = true;
-      return { meta: next, repairAnim: 600 };
-    }
-  }
-  return { meta: next };
 }
 
 export function startHornAnimation(state) {

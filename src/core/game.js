@@ -43,6 +43,7 @@ import {
   drawHallOfHeroesBackdrop,
   isHallOfHeroesBackdropReady,
   drawWarCampGlassChip,
+  drawImmersiveBackToTownChip,
   WAR_CAMP_BANNER_H,
   WAR_CAMP_BOTTOM_BAR_H,
 } from '../ui/warCampVisual.js';
@@ -79,6 +80,7 @@ import {
   tickBtParticle,
   createBtParticlePool,
   getVictoryHeaderStyle,
+  drawBetweenBattlesSkipHint,
 } from '../ui/betweenBattlesJuice.js';
 import { ONBOARDING, advanceOnboarding, resolveOnboardingHint } from '../campaign/onboarding.js';
 import {
@@ -175,7 +177,13 @@ import { formatThreatStatusLine } from '../combat/threatStatus.js';
 import { Roster } from '../roster/roster.js';
 import { ROMAN, Defender, CAREER_XP, XP_PER_KILL, XP_PER_WAVE } from '../roster/defender.js';
 import { getDefenderName } from '../roster/names.js';
-import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR, getItemBonuses } from '../roster/items.js';
+import { ITEM_DEFS, BOSS_DROP_TABLE, RARITY_COLOR } from '../roster/items.js';
+import {
+  buildEquipmentBonuses,
+  defenderHasRuneSocket,
+  syncTowerDefenderGear,
+  canAddEquipment,
+} from '../roster/defenderGear.js';
 import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.js';
 import { FORTRESS_DEFS, getFortressBonuses, getNextFortressUpgradeOffer } from '../fortress/fortress.js';
 import {
@@ -225,6 +233,8 @@ import {
   tickPathlessFootDust,
   tickLaneWearMarks,
   tickHeroAttackLunge,
+  tickHeroHitRecoil,
+  triggerHeroHitRecoil,
   isOnPathlessLane,
   drawPathlessFootDust,
   drawLaneWearMarks,
@@ -232,8 +242,8 @@ import {
 import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { bakeAshfenTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGradeBg, drawCampaignPalisadeRing, drawPathlessAssaultLane } from '../assets/terrainArt.js';
-import { drawFortressPrepSprite } from '../preparation/fortressPrepArt.js';
-import { drawBossBannerArt, drawEquipRingArt } from '../assets/combatArt.js';
+import { drawFortressPrepSprite, drawCampaignGateSprite, getBattleWestGateArtKey } from '../preparation/fortressPrepArt.js';
+import { drawBossBannerArt, drawEquipRingArt, drawHitSparkArt } from '../assets/combatArt.js';
 import {
   getEquipCeremonyLayout,
   RUNE_CARVER_COLLAPSED_H,
@@ -312,10 +322,8 @@ import {
   drawFortressSchematic,
   drawCommanderContextPanel,
   handlePrepShellPointer,
-  applyPanelAction,
   startHornAnimation,
   getHornBlockReason,
-  getPrepAutoHotspot,
   getPrepInstructionHint,
 } from '../preparation/fortressCommanderShell.js';
 import {
@@ -840,6 +848,7 @@ let _hintSeen            = {};         // one-time hint flags: { firstPlacement,
 let _leftDockTab         = 'warband';  // 'warband' | 'structures'
 let _leftDockTabBtns     = [];
 let _structureScrollY    = 0;
+let _structureArtPreloaded = false;
 let _rightNavTabBtns     = [];
 let _rosterHighlightTimer = 0;       // frames — pulse left warband dock when nav WAR BAND clicked
 let _dossierSlideT       = 0;        // 0–1 slide-in for defender dossier
@@ -2311,18 +2320,28 @@ function drawHeroCombatHpBar(tower) {
   if (tower.combatHp == null || tower.combatMaxHp == null) return;
   if (!isPathlessMode()) return;
   const frac = Math.max(0, Math.min(1, tower.combatHp / tower.combatMaxHp));
-  const by = tower.y + CELL_SIZE * 0.36;
+  const by = tower.y - CELL_SIZE * 0.52;
   const accent = combatFieldHpAccent(frac);
   ctx.save();
   if ((tower.combatHitFlash ?? 0) > 0) {
-    const hf = tower.combatHitFlash / 12;
-    ctx.strokeStyle = `rgba(255,90,70,${0.35 + hf * 0.55})`;
-    ctx.lineWidth = 2;
+    const hf = tower.combatHitFlash / 16;
+    ctx.fillStyle = `rgba(255,50,40,${0.14 + hf * 0.32})`;
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, CELL_SIZE * 0.42, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, CELL_SIZE * 0.40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,90,70,${0.40 + hf * 0.55})`;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(tower.x, tower.y, CELL_SIZE * 0.44, 0, Math.PI * 2);
     ctx.stroke();
+    if (hf > 0.35) {
+      drawHitSparkArt(ctx, tower.x, tower.y - 6, 10 + hf * 10, hf);
+    }
   }
-  const { w: barW, h: barH, bx } = drawCombatFieldHpBar(ctx, tower.x, by, frac, accent);
+  const { w: barW, h: barH, bx } = drawCombatFieldHpBar(ctx, tower.x, by, frac, accent, {
+    forceShow: true,
+    barW: 20,
+  });
   if (tower._rankIndex != null && tower._rankIndex < VETERAN_RANKS.length - 1) {
     const rankCol = VETERAN_RANKS[tower._rankIndex]?.color ?? '#8090c0';
     ctx.fillStyle = rankCol;
@@ -2396,14 +2415,16 @@ function restoreCampaignField(state, options = {}) {
         t.defenderId = def.defenderId;
         t.name = wt.name ?? def.name;
         def.deployed = true;
-        const rawEq = getItemBonuses(def.equipment);
-        const eqBonuses = rawEq;
+        const eqBonuses = buildEquipmentBonuses(def, _fortressBonuses.equipDmMult ?? 1);
         const talentBonuses = getTalentBonuses(def.talents);
         t.applyCareerData(def.defenderId, t.name, def.careerLevel, eqBonuses, talentBonuses, def.legacyBonus ?? null);
       }
     }
-    if (wt.rune) t.rune = wt.rune;
-    if (wt.itemRune) t.itemRune = wt.itemRune;
+    if (wt.rune) t.setRune(wt.rune);
+    if (wt.itemRune) {
+      if (defenderHasRuneSocket(_roster?.find(wt.defenderId))) t.setItemRune(wt.itemRune);
+      else runeInventory[wt.itemRune] = (runeInventory[wt.itemRune] ?? 0) + 1;
+    }
     if (!isHeroTowerType(t.type)) t._applyLevel();
     if (isHeroTowerType(t.type)) initHeroCombatHp(t);
     towers.push(t);
@@ -2979,7 +3000,7 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   _postAssignments = { ...ensurePostAssignments(field, GOAL, FORTRESS_RING_R) };
   _prepShell = createPrepShellState();
   _prepFieldMeta = loadPrepFieldMeta(field);
-  _prepFieldMeta = syncPrepMetaForAssault(_prepFieldMeta, nodeIndex, battlesCompleted);
+  _prepFieldMeta = syncPrepMetaForAssault(_prepFieldMeta);
   _lastPrepFrameTime = performance.now();
   _hornLaunchPending = false;
   gamePhase = 'fortressPrep';
@@ -2994,16 +3015,6 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   dragItem = null;
   _placingDefenderId = null;
   if (!assaultFieldHasGate()) _structuresTabPulse = 120;
-  if (
-    isFirstSagaMap(mapIndex)
-    && nodeIndex === FIRST_SAGA_A3_NODE
-    && _prepFieldMeta.westGateScarred
-    && !_prepFieldMeta.westGateRepaired
-  ) {
-    _prepShell.selectedHotspot = getPrepAutoHotspot(_prepFieldMeta, {
-      mapIndex, nodeIndex, isFirstSaga: true,
-    }) ?? 'wall_scar';
-  }
   _onboardingStep = advanceOnboarding(_onboardingStep, 'startAssault');
 }
 
@@ -3106,14 +3117,6 @@ function processPrepShellClick(action) {
     _postAssignments = clearPost(_postAssignments, action.postId);
     persistCampaignFieldLayout();
     return;
-  }
-  if (action.id === 'repair_gate') {
-    const result = applyPanelAction(action, _prepFieldMeta);
-    _prepFieldMeta = result.meta;
-    if (result.repairAnim && _prepShell) _prepShell.repairAnim = result.repairAnim;
-    _onboardingStep = advanceOnboarding(_onboardingStep, 'repairedGate');
-    sfxPlace('wall');
-    persistCampaignFieldLayout();
   }
 }
 
@@ -3489,11 +3492,17 @@ function processEnemyMeleeAttacks() {
       const t = target.tower;
       if (t.combatHp == null) initHeroCombatHp(t);
       t.combatHp -= dmg;
-      t.combatHitFlash = 12;
+      t.combatHitFlash = 16;
       enemy.meleeTimer = 28;
-      enemy.attackAnimTimer = 14;
+      enemy.attackAnimTimer = 18;
+      enemy.attackAnimMax = 18;
+      enemy.attackAimAngle = Math.atan2(t.y - enemy.y, t.x - enemy.x);
+      enemy.meleeTargetX = t.x;
+      enemy.meleeTargetY = t.y;
       enemy.hitFlash = 6;
       enemy.hitFlashMax = 6;
+      triggerHeroHitRecoil(t, enemy.x, enemy.y);
+      combatHitStop = Math.max(combatHitStop, dmg >= 14 ? 2 : 1);
       showAssaultDamageFloater(t.x, t.y, dmg, 'hero');
       screenShake = Math.max(screenShake, 4);
       if (t.combatHp <= 0) killHeroInCombat(t);
@@ -5738,12 +5747,8 @@ function tryPlaceAt(col, row, mode, towerType) {
       t.defenderId = def.defenderId;
       t.name = def.name;
     }
-    const rawEq         = getItemBonuses(def.equipment);
     const hasEquip      = def.equipment.some(Boolean);
-    const armoryMult    = _fortressBonuses.equipDmMult ?? 1;
-    const eqBonuses     = hasEquip && armoryMult !== 1
-      ? { dm: rawEq.dm * armoryMult, rm: rawEq.rm, cm: rawEq.cm }
-      : rawEq;
+    const eqBonuses     = buildEquipmentBonuses(def, _fortressBonuses.equipDmMult ?? 1);
     const talentBonuses = getTalentBonuses(def.talents);
     const legacyBonus   = def.legacyBonus ?? null;
     const hasBonus = def.careerLevel > 0 || hasEquip || def.talents.length > 0 || !!legacyBonus;
@@ -6490,6 +6495,11 @@ canvas.addEventListener('mousedown', e => {
                 _campaignState.uiHints = { ...(_campaignState.uiHints ?? {}), chronicleBattleFilter: _chronicleBattleFilter };
                 try { persistCampaign(); } catch {}
               }
+            } else if (_cb.action === 'returnToSettlement') {
+              _showChronicle = false;
+              _chronicleDefFilter = null;
+              _chronicleBattleFilter = null;
+              enterSettlementHub();
             }
             return;
           }
@@ -6755,6 +6765,16 @@ canvas.addEventListener('mousedown', e => {
                     itemName: nextId ? (ITEM_DEFS[nextId]?.name ?? null) : null,
                   };
                   spawnEquipSparkles(_equipFlash.color);
+                  const deployed = towers.find(t => t.defenderId === def.defenderId);
+                  if (deployed) {
+                    const { returnedItemRune } = syncTowerDefenderGear(deployed, def, {
+                      armoryEquipDmMult: _fortressBonuses.equipDmMult ?? 1,
+                    });
+                    if (returnedItemRune) {
+                      runeInventory[returnedItemRune] = (runeInventory[returnedItemRune] ?? 0) + 1;
+                      _campaignState.runeInventory = { ...runeInventory };
+                    }
+                  }
                   _campaignState.defenders = _roster.toJSON();
                   _campaignState.equipmentInventory = _equipmentInventory.slice();
                   try { persistCampaign(); } catch {}
@@ -7425,6 +7445,7 @@ function update() {
   // ── Tower updates ─────────────────────────────────────────────────────────────
   for (const tower of towers) {
     tickHeroAttackLunge(tower);
+    tickHeroHitRecoil(tower);
     // Apply synergy stat boosts temporarily around update()
     const _origRange    = tower.range;
     const _origSplash   = tower.splashDamage;
@@ -8093,7 +8114,7 @@ function formatBattleStat(n) {
 }
 
 /** Small portrait + optional class tint — sidebar list and dossier. */
-function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1, { muted = false } = {}) {
+function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1, { muted = false, noFrame = false } = {}) {
   const rgb = defenderGlowRgb(towerType);
   if (!muted) {
     drawDefenderPortraitGlow(cx, cy, towerType, r, strength);
@@ -8115,14 +8136,16 @@ function drawMiniDefenderPortrait(cx, cy, towerType, r, strength = 1, { muted = 
     ctx.fillStyle = muted ? 'rgba(80,70,55,0.35)' : `rgba(${rgb},${0.35 * strength})`;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   }
-  if (muted) {
-    ctx.strokeStyle = `rgba(150,120,70,${0.42 * strength})`;
-    ctx.lineWidth = 1;
-  } else {
-    ctx.strokeStyle = `rgba(${rgb},${0.80 * strength})`;
-    ctx.lineWidth = 1.1;
+  if (!noFrame) {
+    if (muted) {
+      ctx.strokeStyle = `rgba(150,120,70,${0.42 * strength})`;
+      ctx.lineWidth = 1;
+    } else {
+      ctx.strokeStyle = `rgba(${rgb},${0.80 * strength})`;
+      ctx.lineWidth = 1.1;
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   }
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
 }
 
 /** Rampart segment bars — lives readout as filled/empty pixel bars. */
@@ -8435,10 +8458,9 @@ function drawDefenderDossier() {
     ctx.fillText(ready ? '● Ready' : '◌ Cooldown', col3, panelY + 46);
   }
 
-  const slots = ['weapon', 'armor'];
   let gx = col4;
-  for (const slot of slots) {
-    const itemId = def?.equipment?.[slot];
+  for (let si = 0; si < 2; si++) {
+    const itemId = def?.equipment?.[si];
     const iDef   = itemId ? ITEM_DEFS[itemId] : null;
     const slotW  = 24;
     const slotY  = panelY + 16;
@@ -8451,12 +8473,26 @@ function drawDefenderDossier() {
       ctx.font = '6px monospace'; ctx.fillStyle = RARITY_COLOR[iDef.rarity] ?? '#ccc';
       ctx.fillText(iDef.name.slice(0, 6), gx + 2, slotY + 14);
       ctx.font = '5px monospace'; ctx.fillStyle = 'rgba(180,160,120,0.50)';
-      ctx.fillText(slot.toUpperCase(), gx + 2, slotY + 23);
+      ctx.fillText(si === 0 ? 'WEAPON' : 'ARMOR', gx + 2, slotY + 23);
+      if (iDef.runeSlot && t.itemRune) {
+        const rd = RUNE_DEFS.find(d => d.id === t.itemRune);
+        if (rd) {
+          ctx.font = '7px monospace'; ctx.fillStyle = rd.color;
+          ctx.fillText(rd.symbol, gx + slotW - 8, slotY + 10);
+        }
+      }
     } else {
       ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(80,70,60,0.45)';
-      ctx.fillText(slot === 'weapon' ? '⚔' : '🛡', gx + 8, slotY + 18);
+      ctx.fillText(si === 0 ? '⚔' : '🛡', gx + 8, slotY + 18);
     }
     gx += slotW + 5;
+  }
+  if (t.rune) {
+    const rd = RUNE_DEFS.find(d => d.id === t.rune);
+    if (rd) {
+      ctx.font = '6px monospace'; ctx.fillStyle = rd.color;
+      ctx.fillText(`${rd.symbol} ${rd.symbol === rd.label ? rd.label : rd.label.split(' ')[0]}`, col4, panelY + 48);
+    }
   }
 
   ctx.restore();
@@ -8801,12 +8837,30 @@ function drawCampaignAssaultFortressDecor() {
   const gx = GOAL.col * cs + cs / 2;
   const gy = GOAL.row * cs + cs / 2;
   const now = performance.now() * 0.001;
+  const ringOuter = FORTRESS_RING_R * cs + cs * 0.38;
+  const gateAngle = SPAWN?.col < GOAL.col ? Math.PI : 0;
+  const gateX = gx + Math.cos(gateAngle) * ringOuter * 0.9;
+  const gateY = gy + Math.sin(gateAngle) * ringOuter * 0.8 + cs * 0.06;
+
+  let westGateEntry = null;
+  for (const w of Object.values(wallData)) {
+    if (w.isGate) { westGateEntry = w; break; }
+  }
+  const gateArt = getBattleWestGateArtKey(westGateEntry, _prepFieldMeta);
+  if (!drawCampaignGateSprite(ctx, gateArt, gateX, gateY, cs, now)) {
+    ctx.fillStyle = '#2a1810';
+    ctx.fillRect(gateX - cs * 0.7, gateY - cs * 0.45, cs * 1.4, cs * 0.9);
+    ctx.fillStyle = `rgba(255,170,70,${0.35 + Math.sin(now * 2.4) * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(gateX, gateY - cs * 0.12, cs * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const lhBox = {
-    x: gx - cs * 2.05,
-    y: gy + cs * 0.35,
-    w: cs * 4.1,
-    h: cs * 1.75,
+    x: gx - cs * 2.75,
+    y: gy - cs * 0.55,
+    w: cs * 5.5,
+    h: cs * 2.45,
   };
   if (!drawFortressPrepSprite(ctx, 'longhouse', lhBox)) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -8829,10 +8883,10 @@ function drawCampaignAssaultFortressDecor() {
   }
 
   const towerBox = {
-    x: gx + cs * 0.55,
-    y: gy - cs * 2.65,
-    w: cs * 1.55,
-    h: cs * 2.05,
+    x: gx + cs * 0.35,
+    y: gy - cs * 3.15,
+    w: cs * 2.05,
+    h: cs * 2.65,
   };
   if (!drawFortressPrepSprite(ctx, 'watchTower', towerBox)) {
     ctx.fillStyle = '#4a3828';
@@ -8842,6 +8896,17 @@ function drawCampaignAssaultFortressDecor() {
     ctx.beginPath();
     ctx.arc(towerBox.x + towerBox.w / 2, towerBox.y + towerBox.h * 0.48, Math.max(4, towerBox.w * 0.12), 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  const treasuryBox = {
+    x: gx - cs * 2.35,
+    y: gy + cs * 0.95,
+    w: cs * 1.65,
+    h: cs * 1.55,
+  };
+  if (!drawFortressPrepSprite(ctx, 'treasury', treasuryBox)) {
+    ctx.fillStyle = '#2a1c10';
+    ctx.fillRect(treasuryBox.x, treasuryBox.y, treasuryBox.w, treasuryBox.h);
   }
 
   // Courtyard fire pit — center warmth
@@ -10298,21 +10363,6 @@ function _metaBarChips() {
   if (goldReserve > 0) {
     chips.push({ w: 48, icon: '◈', value: `${goldReserve}g`, label: 'RESERVE', accent: UI_COLORS.parchment, pulse: 0.75 });
   }
-  if (gamePhase === 'fortressPrep') {
-    const prepMeta = _prepFieldMeta ?? loadPrepFieldMeta(null);
-    const showWood = prepMeta.wood > 0
-      || (_pendingAssaultNode != null && _pendingAssaultNode >= FIRST_SAGA_A3_NODE);
-    if (showWood) {
-      chips.push({
-        w: 42,
-        icon: '▣',
-        value: String(prepMeta.wood),
-        label: 'WOOD',
-        accent: '#a08050',
-        pulse: 0.7,
-      });
-    }
-  }
   return chips;
 }
 
@@ -10381,6 +10431,8 @@ function drawCampaignMetaBar(center) {
         equipmentCount: _equipmentInventory.length,
         fortressUpgrade: _fu,
         chronicleUnread: _chronicleUnread,
+        isVictory: _battleResult === 'victory',
+        isDefeat: _battleResult === 'defeat',
       });
       subtitle = _wcHint?.line
         ?? (_warCampTabPulse === 'recruit'
@@ -12222,7 +12274,7 @@ function onBossKilled(boss, killerTower = null) {
 
   // Equipment drop — each boss wave drops one item from its pool
   const dropPool = BOSS_DROP_TABLE[waveNumber];
-  if (dropPool) {
+  if (dropPool && canAddEquipment(_equipmentInventory)) {
     const itemId  = dropPool[Math.floor(Math.random() * dropPool.length)];
     const itemDef = ITEM_DEFS[itemId];
     _equipmentInventory.push(itemId);
@@ -12956,7 +13008,12 @@ function drawChronicleOverlay() {
   ctx.shadowBlur = 0;
 
   ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(140,120,80,0.40)';
-  ctx.fillText('CLICK OR ESC TO CLOSE  ·  SCROLL TO NAVIGATE', W / 2, H - 8);
+  const _chronicleFromSettlement = _fromSettlementHub || _progressionBuilding;
+  ctx.fillText(
+    _chronicleFromSettlement ? 'SCROLL TO NAVIGATE  ·  ESC TO CLOSE' : 'CLICK OR ESC TO CLOSE  ·  SCROLL TO NAVIGATE',
+    W / 2,
+    H - 8,
+  );
 
   const battles   = _campaignState?.chronicle?.battles ?? [];
   const hallH     = _campaignState?.hallOfHonored ?? [];
@@ -13128,6 +13185,16 @@ function drawChronicleOverlay() {
     ctx.fillText('↓ scroll for more', W / 2, listTop + listH - 6);
     ctx.textAlign = 'left';
   }
+
+  if (_chronicleFromSettlement) {
+    drawImmersiveBackToTownChip(ctx, {
+      x: FRAME_THICK,
+      y: FRAME_THICK,
+      w: W - FRAME_THICK * 2,
+      h: H - FRAME_THICK * 2,
+    }, _chronicleBtns);
+  }
+
   ctx.restore();
 }
 
@@ -14231,11 +14298,13 @@ function applyCampaignEventChoice(eventId, choice) {
     if (eventId === 'handelsman') {
       cs.goldReserve = (cs.goldReserve ?? 0) - 60;
       goldReserve    = cs.goldReserve;
-      const itemKeys = Object.keys(ITEM_DEFS).filter(k => ['common', 'rare'].includes(ITEM_DEFS[k].rarity));
-      const itemId   = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-      _equipmentInventory.push(itemId);
-      cs.equipmentInventory = _equipmentInventory.slice();
-      sfxLootDrop();
+      if (canAddEquipment(_equipmentInventory)) {
+        const itemKeys = Object.keys(ITEM_DEFS).filter(k => ['common', 'rare'].includes(ITEM_DEFS[k].rarity));
+        const itemId   = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+        _equipmentInventory.push(itemId);
+        cs.equipmentInventory = _equipmentInventory.slice();
+        sfxLootDrop();
+      }
     } else if (eventId === 'volva') {
       stars    = Math.max(0, (stars ?? 0) - 2);
       cs.stars = stars;
@@ -14398,7 +14467,10 @@ function drawBetweenBattlesHallImmersive(W, H, contentTop, contentBot, btSec, ph
     equipFlash: _equipFlash,
     slotMetaBuilder,
     scrollOffset: _rosterScrollOffset,
-    drawPortrait: (c, px, py, type, pr, o = {}) => drawMiniDefenderPortrait(px, py, type, pr, 1, { muted: o.muted !== false }),
+    drawPortrait: (c, px, py, type, pr, o = {}) => drawMiniDefenderPortrait(px, py, type, pr, 1, {
+      muted: o.muted !== false,
+      noFrame: !!o.noFrame,
+    }),
     btnsOut: _betweenBtns,
   };
 
@@ -14740,15 +14812,6 @@ function drawBetweenBattles() {
     const _nai = _na ? getAssaultInfo(_campaignMapIndex, _na.nodeIndex) : null;
     if (_nai) {
       _lpLine(`Next assault: ${_nai.codename} (${_nai.tierLabel})`, 'rgba(160,200,140,0.72)', '8px monospace');
-    }
-    const _wcMeta = loadPrepFieldMeta(getMapRun(ensureCampaignProgress(), _campaignMapIndex).fieldState);
-    if (_wcMeta.westGateScarred && !_wcMeta.westGateRepaired) {
-      _lpLine('West gate scarred — mend in fortress prep', 'rgba(220,140,60,0.72)', '8px monospace');
-    } else if (_wcMeta.westGateRepaired) {
-      _lpLine('West gate bears a patch', 'rgba(140,180,120,0.60)', '8px monospace');
-    }
-    if (_wcMeta.wood > 0) {
-      _lpLine(`Salvage wood: ▣ ${_wcMeta.wood}`, 'rgba(160,130,90,0.70)', '8px monospace');
     }
   } else {
     const _damagedWalls = Object.values(wallData).filter(w => !w.temporary && w.hp < w.maxHp);
@@ -15311,7 +15374,10 @@ function drawBetweenBattles() {
       equipFlash: _equipFlash,
       slotMetaBuilder,
       scrollOffset: _rosterScrollOffset,
-      drawPortrait: (c, px, py, type, pr) => drawMiniDefenderPortrait(px, py, type, pr, 1, { muted: true }),
+      drawPortrait: (c, px, py, type, pr, o = {}) => drawMiniDefenderPortrait(px, py, type, pr, 1, {
+        muted: o.muted !== false,
+        noFrame: !!o.noFrame,
+      }),
       btnsOut: _betweenBtns,
     });
     if (totalDefs === 0) {
@@ -15856,24 +15922,6 @@ function drawBetweenBattles() {
     ctx.fillText(`◆ ${goldReserve}g reserve · fortress upgrades`, rix, recY + 10);
 
     let _fortStatusY = recY + 22;
-    if (isCampaignWarCamp() && _campaignMapIndex != null) {
-      const _fMeta = loadPrepFieldMeta(getMapRun(ensureCampaignProgress(), _campaignMapIndex).fieldState);
-      ctx.font = '7px monospace';
-      if (_fMeta.westGateScarred && !_fMeta.westGateRepaired) {
-        ctx.fillStyle = 'rgba(220,140,80,0.72)';
-        ctx.fillText('West gate scarred — repair in fortress prep', rix, _fortStatusY);
-        _fortStatusY += 11;
-      } else if (_fMeta.westGateRepaired) {
-        ctx.fillStyle = 'rgba(140,180,120,0.65)';
-        ctx.fillText('West gate patched', rix, _fortStatusY);
-        _fortStatusY += 11;
-      }
-      if (_fMeta.wood > 0) {
-        ctx.fillStyle = 'rgba(160,130,90,0.70)';
-        ctx.fillText(`Salvage wood: ▣ ${_fMeta.wood}`, rix, _fortStatusY);
-        _fortStatusY += 11;
-      }
-    }
 
     const nodeKeys  = ['barracks', 'armory', 'watchtower', 'wallworks', 'treasury'];
     const _nextFu = getNextFortressUpgradeOffer(upgrades, goldReserve);
@@ -16026,6 +16074,13 @@ function drawBetweenBattles() {
       showReturnToHub: _fromSettlementHub,
       buildingOnly: !!_progressionBuilding,
     }, _betweenBtns);
+  }
+
+  if (_btFadeLeft > 0) {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    drawBetweenBattlesSkipHint(ctx, W, H, _btFadeLeft);
+    ctx.restore();
   }
 
   ctx.restore(); // fade-in globalAlpha
@@ -18536,6 +18591,10 @@ function drawDragGhost() {
 
 function gameLoop() {
   // Terrain is always procedural — no sprite rebake needed
+  if (!_structureArtPreloaded) {
+    _structureArtPreloaded = true;
+    preloadStructureArt();
+  }
   // Auto-launch countdown on map select screen
   if (gamePhase === 'mapSelect' && _mapAutoStartEnabled) {
     if (mapAutoTimerStart === 0) mapAutoTimerStart = performance.now();

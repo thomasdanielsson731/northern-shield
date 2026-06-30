@@ -23,6 +23,7 @@ import {
   HALL_ART_CONTENT,
   HALL_PLINTH_NORM,
   HALL_FLOOR_BOUNDS,
+  getHallFloorPlacementBounds,
   hallArtToScreen,
   computeHallImmersiveRect,
 } from '../src/ui/hallOfHeroesView.js';
@@ -88,23 +89,25 @@ describe('settlement hub art alignment', () => {
     expect(rect.dh).toBeCloseTo(cropped.dh, 4);
   });
 
-  it('ground buildings anchor feet in lower content band', () => {
+  it('building feet map to hill foundation band', () => {
     const groundIds = ['warband', 'fortress', 'recruit', 'chronicle', 'runeSmith', 'skirmish'];
     for (const id of groundIds) {
       const norm = HUB_BUILDING_LAYOUT[id];
-      expect(isGroundAnchored(norm), id).toBe(true);
+      const foot = norm.fy + norm.fh;
+      expect(foot, id).toBeGreaterThanOrEqual(0.40);
+      expect(foot, id).toBeLessThanOrEqual(0.95);
     }
     expect(HUB_BUILDING_LAYOUT.command.emblem).toBe(true);
     expect(isGroundAnchored(HUB_BUILDING_LAYOUT.command)).toBe(false);
   });
 
-  it('building feet land in lower dest band when art space is used', () => {
+  it('building feet land on painted pads when art space is used', () => {
     const fit = dest();
     for (const b of HUB_BUILDINGS) {
       if (b.id === 'slots') continue;
       const norm = HUB_BUILDING_LAYOUT[b.id];
       if (norm.emblem) continue;
-      expect(footYInDestBand(fit, norm, 0.68), b.id).toBe(true);
+      expect(footYInDestBand(fit, norm, 0.38), b.id).toBe(true);
     }
   });
 
@@ -114,7 +117,8 @@ describe('settlement hub art alignment', () => {
       const norm = HUB_BUILDING_LAYOUT[b.id];
       const box = resolveHubBuildingRect(norm, HUB_LAYOUT, { useArtSpace: true });
       if (norm.emblem) {
-        expect(box.x + box.w * 0.5).toBeLessThan(fit.dx + fit.dw * 0.12);
+        expect(box.x + box.w * 0.5).toBeLessThan(fit.dx + fit.dw * 0.14);
+        expect(box.x).toBeGreaterThanOrEqual(fit.dx - 2);
         continue;
       }
       expect(box.x).toBeGreaterThanOrEqual(fit.dx - 2);
@@ -133,8 +137,8 @@ describe('settlement hub art alignment', () => {
 describe('hall of heroes art alignment', () => {
   const hall = { x: 20, y: 60, w: 760, h: 360 };
 
-  it('plinth anchors sit on floor band of content (two rows)', () => {
-    const b = HALL_FLOOR_BOUNDS;
+  it('plinth anchors sit on inset floor band of content (two rows)', () => {
+    const b = getHallFloorPlacementBounds();
     for (const p of HALL_PLINTH_NORM) {
       expect(p.nx).toBeGreaterThanOrEqual(b.minX);
       expect(p.nx).toBeLessThanOrEqual(b.maxX);

@@ -8,7 +8,7 @@
 import { ENEMY_DEFS } from '../entities/enemy.js';
 import { TOWER_DEFS, TOWER_TYPES } from '../entities/tower.js';
 import { validateAssignments } from '../fortress/defensivePosts.js';
-import { getHornBlockReason, GATE_REPAIR_WOOD_COST, applyFirstSagaAssaultRewards, A2_DEBRIEF_WOOD_BUNDLE } from '../preparation/fortressCommanderShell.js';
+import { getHornBlockReason, applyFirstSagaAssaultRewards } from '../preparation/fortressCommanderShell.js';
 import { isAssaultUnlocked, getNextAvailableAssault } from './campaignFronts.js';
 import {
   buildNodeWavePlan,
@@ -181,18 +181,15 @@ export function runFirstSagaPlaytestHarness() {
   }) == null));
   checks.push(check('prep.assign-valid', 'A0', 'Single hero assignment valid', validateAssignments({ west_gate: { defenderId: 'h1' } }, { minHeroes: 1 }).ok));
 
-  // --- A2 scar + wood ---
-  const fieldAfterA2 = applyFirstSagaAssaultRewards({ towers: [], walls: {} }, 2);
-  checks.push(check('a2.scar-wood', 'A2', 'A2 debrief grants scar + 15 wood', fieldAfterA2.westGateScarred && fieldAfterA2.wood === A2_DEBRIEF_WOOD_BUNDLE));
+  // --- A2 rewards clear legacy scar meta ---
+  const fieldAfterA2 = applyFirstSagaAssaultRewards({ towers: [], walls: {}, westGateScarred: true, wood: 15 });
+  checks.push(check('a2.clear-scar', 'A2', 'Victory clears scar meta for next prep', !fieldAfterA2.westGateScarred && fieldAfterA2.westGateRepaired && fieldAfterA2.wood === 0));
 
-  // --- A3 repair gate ---
-  checks.push(check('a3.horn-block-repair', 'A3', 'Horn blocked if gate scarred unrepaired', !!getHornBlockReason({
+  // --- A3 horn (no repair gate) ---
+  checks.push(check('a3.horn-no-repair-block', 'A3', 'Horn not blocked by legacy scar meta', getHornBlockReason({
     pendingAssaultNode: 3,
     postAssignments: { west_gate: { defenderId: 'h1' } },
-    prepMeta: { wood: 15, westGateScarred: true, westGateRepaired: false },
-    assaultNodeIndex: 3,
-  })?.match(/Repair/i)));
-  checks.push(check('a3.repair-cost', 'A3', 'Repair costs 10 wood', GATE_REPAIR_WOOD_COST === 10));
+  }) == null));
 
   // --- A4 boss ---
   const boss = getFirstSagaBossConfig();

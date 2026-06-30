@@ -50,3 +50,30 @@ export function getVictoryHeaderStyle(isVictory, nowMs = 0) {
     blur: 14 + pulse * 8,
   };
 }
+
+/** Hint opacity while between-battles fade is active (WITNESS-07). */
+export function getBetweenBattlesSkipHintAlpha(framesRemaining) {
+  if (framesRemaining <= 0 || framesRemaining > 22) return 0;
+  return 0.42 + (1 - framesRemaining / 22) * 0.38;
+}
+
+/** "Click to continue" during War Camp entry fade. */
+export function drawBetweenBattlesSkipHint(ctx, w, h, framesRemaining) {
+  const alpha = getBetweenBattlesSkipHintAlpha(framesRemaining);
+  if (alpha <= 0) return;
+  const cx = w / 2;
+  const y = h - 52;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.font = '7px monospace';
+  ctx.fillStyle = 'rgba(8,6,12,0.88)';
+  const txt = 'Click anywhere to continue';
+  const tw = ctx.measureText(txt).width;
+  ctx.beginPath();
+  ctx.roundRect(cx - tw / 2 - 10, y - 10, tw + 20, 18, 4);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(200,180,130,0.82)';
+  ctx.fillText(txt, cx, y + 2);
+  ctx.restore();
+}

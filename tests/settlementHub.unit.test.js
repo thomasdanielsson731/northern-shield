@@ -19,13 +19,13 @@ describe('settlementHub', () => {
     expect(ids).toContain('runeSmith');
   });
 
-  it('hubRect maps assault emblem into left wilds', () => {
+  it('hubRect maps assault emblem west of hall but inside playfield', () => {
     const command = HUB_BUILDINGS.find(b => b.id === 'command');
     const r = hubRect(command, { x: 10, y: 20, w: 400, h: 300 });
-    expect(r.x).toBeLessThan(30);
-    expect(r.w).toBeGreaterThanOrEqual(35);
+    expect(r.x).toBeGreaterThanOrEqual(10);
+    expect(r.w).toBeGreaterThanOrEqual(14);
     const hall = hubRect(HUB_BUILDINGS.find(b => b.id === 'warband'), { x: 10, y: 20, w: 400, h: 300 });
-    expect(r.x + r.w).toBeLessThan(hall.x + hall.w * 0.35);
+    expect(r.x + r.w * 0.5).toBeLessThan(hall.x + hall.w * 0.5);
   });
 
   it('locks barracks until settlement on first saga', () => {

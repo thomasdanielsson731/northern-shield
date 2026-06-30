@@ -21,25 +21,34 @@ describe('treasuryView', () => {
     expect(Object.keys(TREASURY_BUILDING_ART).sort()).toEqual([...TREASURY_NODE_KEYS].sort());
   });
 
-  it('building anchors sit on settlement hill band (view-local 0–1)', () => {
+  it('building anchors align to settlement hill footprints', () => {
     const back = TREASURY_BUILDING_NORM.filter(p => p.z === 0);
-    const front = TREASURY_BUILDING_NORM.filter(p => p.z === 1);
-    expect(back).toHaveLength(2);
-    expect(front).toHaveLength(3);
+    const front = TREASURY_BUILDING_NORM.filter(p => p.z >= 1);
+    expect(back).toHaveLength(1);
+    expect(front).toHaveLength(4);
     for (const p of TREASURY_BUILDING_NORM) {
-      expect(p.nx).toBeGreaterThanOrEqual(0.05);
-      expect(p.nx).toBeLessThanOrEqual(0.95);
-      expect(p.ny).toBeGreaterThanOrEqual(0.54);
-      expect(p.ny).toBeLessThanOrEqual(0.62);
+      expect(p.nx).toBeGreaterThanOrEqual(0.20);
+      expect(p.nx).toBeLessThanOrEqual(0.80);
+      expect(p.ny).toBeGreaterThanOrEqual(0.42);
+      expect(p.ny).toBeLessThanOrEqual(0.82);
     }
+    const watch = TREASURY_BUILDING_NORM[2];
+    const wall = TREASURY_BUILDING_NORM[3];
+    expect(wall.nx).toBeLessThan(watch.nx);
+    expect(wall.ny).toBeGreaterThan(watch.ny);
   });
 
-  it('computeTreasuryBuildingSlots maps view-local coordinates', () => {
+  it('computeTreasuryBuildingSlots maps hub-aligned coordinates', () => {
     const hall = { x: 20, y: 40, w: 400, h: 300 };
     const slots = computeTreasuryBuildingSlots(hall);
-    expect(slots[0].x).toBeCloseTo(20 + 0.07 * 400, 4);
-    expect(slots[0].y).toBeCloseTo(40 + 0.56 * 300, 4);
-    expect(slots[4].x).toBeCloseTo(20 + 0.93 * 400, 4);
+    expect(slots[0].x).toBeCloseTo(20 + 0.63 * 400, 4);
+    expect(slots[0].y).toBeCloseTo(40 + 0.70 * 300, 4);
+    expect(slots[4].x).toBeCloseTo(20 + 0.50 * 400, 4);
+  });
+
+  it('treasury building art uses hub sprites for barracks and treasury', () => {
+    expect(TREASURY_BUILDING_ART.barracks).toEqual({ kind: 'hub', id: 'recruit' });
+    expect(TREASURY_BUILDING_ART.treasury).toEqual({ kind: 'hub', id: 'fortress' });
   });
 
   it('immersive rect fills inner frame', () => {

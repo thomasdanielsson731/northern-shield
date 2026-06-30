@@ -5,9 +5,9 @@
 import { drawFortressPrepSprite, isFortressPrepArtReady } from '../preparation/fortressPrepArt.js';
 import { drawHubBuildingSprite, isHubBuildingArtReady } from '../settlement/settlementHubArt.js';
 
-/** Art source per fortress upgrade node. */
+/** Art source per fortress upgrade node — hub sprites match settlement hill. */
 export const TREASURY_BUILDING_ART = {
-  barracks: { kind: 'prep', key: 'longhouse' },
+  barracks: { kind: 'hub', id: 'recruit' },
   armory: { kind: 'hub', id: 'runeSmith' },
   watchtower: { kind: 'prep', key: 'watchTower' },
   wallworks: { kind: 'prep', key: 'wallScar' },

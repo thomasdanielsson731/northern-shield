@@ -20,7 +20,7 @@ import {
   drawSpriteContourShadow,
 } from '../combat/spriteAnim.js';
 import { drawTowerAttackVfx } from '../combat/characterAttackVfx.js';
-import { triggerHeroAttackLunge, getHeroLungeOffset } from '../combat/combatJuice.js';
+import { triggerHeroAttackLunge, getHeroCombatMotionOffset } from '../combat/combatJuice.js';
 import {
   getMaxLevelForTowerType,
   getStructureLevelStatMultipliers,
@@ -606,9 +606,9 @@ export class Tower {
   drawCombatSpriteOnly(ctx, t) {
     if (!isHeroTowerType(this.type)) return;
     const bob = heroWalkBob(this, t);
-    const lunge = getHeroLungeOffset(this);
-    const x = this.x + lunge.x;
-    const y = this.y + lunge.y;
+    const motion = getHeroCombatMotionOffset(this);
+    const x = this.x + motion.x;
+    const y = this.y + motion.y;
     const angle = heroSpriteFacingAngle(this);
     const glow = this.glowRgb ? `rgba(${this.glowRgb},0.95)` : null;
     if      (this.type === TOWER_TYPES.BERSERK)    drawSpriteFrame(ctx, 'berserker', heroAnimFrame(this, t), x, y, angle, 58, glow ?? 'rgba(255,120,40,0.95)', this.level, bob);
@@ -702,17 +702,17 @@ export class Tower {
     // scaled up to fill their footprint.
     const fpScale = Math.sqrt(this.footprint.w * this.footprint.h);
     const useFpScale = fpScale > 1.01 && this.type !== TOWER_TYPES.CATAPULT;
-    const lunge = isHero ? getHeroLungeOffset(this) : { x: 0, y: 0 };
-    const lungeActive = isHero && (lunge.x !== 0 || lunge.y !== 0);
+    const motion = isHero ? getHeroCombatMotionOffset(this) : { x: 0, y: 0 };
+    const motionActive = isHero && (motion.x !== 0 || motion.y !== 0);
     if (useFpScale) {
       ctx.save();
       ctx.translate(this.x, this.y);
       ctx.scale(fpScale, fpScale);
       ctx.translate(-this.x, -this.y);
     }
-    if (lungeActive) {
+    if (motionActive) {
       ctx.save();
-      ctx.translate(lunge.x, lunge.y);
+      ctx.translate(motion.x, motion.y);
     }
     if      (this.type === TOWER_TYPES.BERSERK)    this._drawBerserk(ctx, t);
     else if (this.type === TOWER_TYPES.VALKYRIE)   this._drawValkyrie(ctx, t);
@@ -728,7 +728,7 @@ export class Tower {
     else if (this.type === TOWER_TYPES.RUNESHRINE) this._drawRuneShrine(ctx, t);
     else if (this.type === TOWER_TYPES.BARRACKS)   this._drawBarracks(ctx, t);
     else                                           this._drawBlondie(ctx, t);
-    if (lungeActive) ctx.restore();
+    if (motionActive) ctx.restore();
     if (useFpScale) ctx.restore();
 
     // Attack VFX — per-class (characterAttackVfx)

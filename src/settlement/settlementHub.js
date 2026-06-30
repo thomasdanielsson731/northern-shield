@@ -9,8 +9,10 @@ import { getHubBuildingMilestone } from './hubMilestones.js';
 import {
   drawSettlementHubBackdrop,
   drawHubBuildingSprite,
+  drawHubBuildingGroundShadow,
   drawAssaultEmblemFallback,
   isSettlementHubBackdropReady,
+  isHubAssaultEmblemUsable,
 } from './settlementHubArt.js';
 import {
   HUB_BUILDING_LAYOUT,
@@ -101,9 +103,10 @@ function drawHubBuilding(ctx, box, building, avail, pulse) {
   const hot = pulse && avail.pulse;
   const isEmblem = building.id === 'command';
   const hasSprite = isEmblem
-    ? (drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 })
+    ? ((isHubAssaultEmblemUsable() && drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 }))
       || drawAssaultEmblemFallback(ctx, box, { locked, alpha: locked ? 0.55 : 1, pulse: hot }))
-    : drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 });
+    : (drawHubBuildingGroundShadow(ctx, box, { alpha: locked ? 0.4 : 1 }),
+      drawHubBuildingSprite(ctx, building.id, box, { locked, alpha: locked ? 0.55 : 1 }));
 
   if (!hasSprite) {
     const fill = locked

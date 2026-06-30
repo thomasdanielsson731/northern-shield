@@ -7,7 +7,10 @@ import {
   HUB_BUILDINGS,
   hubBuildingAction,
 } from '../settlement/settlementHub.js';
+import { HUB_BUILDING_LAYOUT } from '../settlement/settlementHubLayout.js';
 import { getHubBuildingMilestone, hubBuildingToProgressionMode } from '../settlement/hubMilestones.js';
+import { TREASURY_BUILDING_ART } from '../ui/treasuryViewArt.js';
+import { STRUCTURE_ART_IDS } from '../assets/structureArt.js';
 
 /** @typedef {{ id: string, section: string, label: string, status: 'pass'|'fail', detail?: string }} LoopCheck */
 
@@ -78,6 +81,29 @@ export function runLoopClarityChecks() {
     'Preparation',
     'fortressPrep remains a valid assault-prep phase',
     validateSessionState({ version: 1, gamePhase: 'fortressPrep' }) != null,
+  ));
+
+  checks.push(check(
+    'loop.hub.assault-emblem',
+    'Hub',
+    'Assault entry is an emblem in the wilds, not a building pad',
+    HUB_BUILDING_LAYOUT.command?.emblem === true
+      && HUB_BUILDING_LAYOUT.command.fx < HUB_BUILDING_LAYOUT.warband.fx,
+  ));
+
+  checks.push(check(
+    'loop.treasury.hub-sprites',
+    'Fortress',
+    'Treasury view uses settlement hub sprites for barracks and treasury',
+    TREASURY_BUILDING_ART.barracks?.kind === 'hub'
+      && TREASURY_BUILDING_ART.treasury?.kind === 'hub',
+  ));
+
+  checks.push(check(
+    'loop.structure.dock-pngs',
+    'Skirmish',
+    'Structure dock has promoted PNG art for all build types',
+    STRUCTURE_ART_IDS.length >= 10,
   ));
 
   return checks;

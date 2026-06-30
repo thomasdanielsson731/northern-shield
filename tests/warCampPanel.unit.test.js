@@ -88,15 +88,13 @@ describe('warCampPanel', () => {
     }, btns)).not.toThrow();
   });
 
-  it('buildWarCampStatusLines covers scar, wood, and upgrade', () => {
+  it('buildWarCampStatusLines covers fortress upgrade hint', () => {
     const lines = buildWarCampStatusLines(
-      { westGateScarred: true, westGateRepaired: false, wood: 15 },
+      {},
       { fortressUpgrade: { label: 'Barracks', nextLevel: 2, cost: 40 } },
     );
-    expect(lines.some(l => l.text.includes('scarred'))).toBe(true);
-    expect(lines.some(l => l.text.includes('repair'))).toBe(true);
     expect(lines.some(l => l.text.includes('Barracks'))).toBe(true);
-    expect(buildWarCampStatusLines({ westGateRepaired: true })[0].text).toMatch(/patch/);
+    expect(buildWarCampStatusLines({})).toEqual([]);
   });
 
   it('tab pulse helpers for simplified War Camp', () => {
@@ -134,6 +132,18 @@ describe('warCampPanel', () => {
     const state = { tabPulseTarget: 'recruit', activeTab: 'warband', nextAssault: null };
     expect(getWarCampObjectives(state)[0].id).toBe('recruit');
     expect(getWarCampTabGuidance({ ...state, tabPulseTarget: 'recruit' }).tab).toBe('recruit');
+  });
+
+  it('instruction hint prioritizes chronicle unread and victory home copy', () => {
+    expect(getWarCampInstructionHint({ chronicleUnread: true })?.urgent).toBe(true);
+    const home = getWarCampInstructionHint({
+      tabPulseTarget: null,
+      activeTab: 'warband',
+      nextAssault: { codename: 'Wolf Smoke' },
+      isVictory: true,
+    });
+    expect(home?.title).toBe('WAR CAMP');
+    expect(home?.line).toMatch(/Victory/i);
   });
 
   it('drawWarCampBottomBar buildingOnly shows return to town only', () => {

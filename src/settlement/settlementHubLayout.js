@@ -24,23 +24,24 @@ export const HUB_ART_CONTENT = {
 
 /**
  * fx/fy/fw/fh in content-normalized space (0–1 within HUB_ART_CONTENT).
- * fy+fh = ground contact; back-row feet sit higher on the hill (~0.82), path edge ~0.90.
+ * fy = top of hotspot; fy+fh = foot contact on a painted foundation pad.
+ * Keep fh compact (~0.12–0.18) so labels sit just above the sprite, not the hill crest.
  */
 export const HUB_BUILDING_LAYOUT = {
-  /** Assault emblem — crossed swords in the left wilds, outside the hill */
-  command:   { fx: -0.07, fy: 0.44, fw: 0.12, fh: 0.20, z: 0, emblem: true, anchor: 'center' },
-  /** Hall of Heroes — central longhouse on the mound crest */
-  warband:   { fx: 0.10, fy: 0.26, fw: 0.28, fh: 0.56, z: 1 },
-  /** Fortress — hut behind hall, up the back slope */
-  fortress:  { fx: 0.33, fy: 0.30, fw: 0.09, fh: 0.52, z: 2 },
-  /** Chronicle — standing stones on the lower path */
-  chronicle: { fx: 0.48, fy: 0.54, fw: 0.08, fh: 0.36, z: 3 },
-  /** Barracks — right yard hut */
-  recruit:   { fx: 0.58, fy: 0.36, fw: 0.11, fh: 0.50, z: 5 },
-  /** Rune forge — mid-right hut */
-  runeSmith: { fx: 0.69, fy: 0.38, fw: 0.10, fh: 0.48, z: 2 },
-  /** Arena — fenced yard, far right foreground */
-  skirmish:  { fx: 0.80, fy: 0.42, fw: 0.11, fh: 0.48, z: 3 },
+  /** Assault emblem — crossed swords by the west palisade */
+  command:   { fx: 0.05, fy: 0.32, fw: 0.045, fh: 0.08, z: 0, emblem: true, anchor: 'center' },
+  /** Hall of Heroes — large oval pad, upper-left slope */
+  warband:   { fx: 0.21, fy: 0.36, fw: 0.18, fh: 0.16, z: 1 },
+  /** Fortress — back plateau behind the hall */
+  fortress:  { fx: 0.355, fy: 0.31, fw: 0.11, fh: 0.13, z: 2 },
+  /** Chronicle — central fire-pit hub on the lower path */
+  chronicle: { fx: 0.46, fy: 0.68, fw: 0.08, fh: 0.12, z: 3 },
+  /** Barracks — mid-right yard pad */
+  recruit:   { fx: 0.57, fy: 0.56, fw: 0.12, fh: 0.14, z: 5 },
+  /** Rune forge — upper-right hut pad */
+  runeSmith: { fx: 0.68, fy: 0.45, fw: 0.10, fh: 0.13, z: 2 },
+  /** Arena — fenced yard, foreground right */
+  skirmish:  { fx: 0.76, fy: 0.76, fw: 0.12, fh: 0.14, z: 3 },
   /** Meta — save slots (top-right of painted hamlet band) */
   slots:     { fx: 0.76, fy: 0.02, fw: 0.20, fh: 0.10, z: 6 },
 };

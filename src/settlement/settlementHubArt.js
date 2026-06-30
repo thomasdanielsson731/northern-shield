@@ -94,7 +94,34 @@ export function isSettlementHubBackdropReady() {
 
 export function isHubBuildingArtReady(buildingId) {
   const artKey = HUB_BUILDING_ART[buildingId];
+  if (buildingId === 'command') return isHubAssaultEmblemUsable();
   return artKey ? ready(artKey) : false;
+}
+
+/** Reject mislabeled full plates — emblem must be small and not a flat letterbox fill. */
+export function isHubAssaultEmblemUsable() {
+  if (!ready('assaultEmblem')) return false;
+  const img = _images.assaultEmblem;
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  if (w > 128 || h > 128 || w < 32 || h < 32) return false;
+  try {
+    const c = document.createElement('canvas');
+    c.width = 8;
+    c.height = 8;
+    const cx = c.getContext('2d');
+    cx.drawImage(img, 0, 0, w, h, 0, 0, 8, 8);
+    const d = cx.getImageData(0, 0, 8, 8).data;
+    let corners = 0;
+    let cornerBright = 0;
+    for (const i of [0, 4, 28, 252]) {
+      if (d[i + 3] < 12) corners++;
+      else if (d[i] + d[i + 1] + d[i + 2] > 630) cornerBright++;
+    }
+    return corners >= 2 || cornerBright < 3;
+  } catch {
+    return w <= 128 && h <= 128;
+  }
 }
 
 /** Procedural fallback while backdrop PNG loads. */
@@ -231,6 +258,20 @@ export function drawSettlementHubBackdrop(ctx, layout) {
   }
 
   return drawSettlementHubProceduralBackdrop(ctx, layout);
+}
+
+/** Soft ground contact under hub building sprites. */
+export function drawHubBuildingGroundShadow(ctx, box, { alpha = 1 } = {}) {
+  const cx = box.x + box.w / 2;
+  const footY = box.y + box.h;
+  const rx = Math.max(box.w * 0.38, 14);
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.35;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(cx, footY + 2, rx, Math.max(5, box.h * 0.05), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 export function drawHubBuildingSprite(ctx, buildingId, box, { alpha = 1, locked = false } = {}) {
