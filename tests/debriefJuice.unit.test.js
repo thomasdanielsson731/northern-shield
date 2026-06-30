@@ -101,4 +101,9 @@ describe('debriefJuice', () => {
     expect(debriefLineFits(safe.bottom - 5, 11, safe)).toBe(true);
     expect(debriefLineFits(safe.bottom, 11, safe)).toBe(false);
   });
+
+  it('buildDebriefContextLines mentions open recruit slot on victory', () => {
+    const lines = buildDebriefContextLines({ isVictory: true, nodeIndex: 1, openRecruitSlot: true });
+    expect(lines.some(l => /Barracks/i.test(l))).toBe(true);
+  });
 });

@@ -69,6 +69,12 @@ describe('settlementHub', () => {
     expect(hint.line).toMatch(/Chronicle/i);
   });
 
+  it('getHubInstructionHint surfaces open roster slot', () => {
+    const hint = getHubInstructionHint({ rosterCount: 3, rosterCap: 6, battlesCompleted: 2 });
+    expect(hint.title).toBe('OPEN ROSTER SLOT');
+    expect(hint.line).toMatch(/Barracks/i);
+  });
+
   it('chronicle milestone pulses when unread', () => {
     const m = getHubBuildingMilestone('chronicle', { chronicleCount: 2, chronicleUnread: true });
     expect(m.available).toBe(true);
