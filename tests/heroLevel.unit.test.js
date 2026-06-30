@@ -47,15 +47,16 @@ describe('heroLevel', () => {
 });
 
 describe('campaignDeploy', () => {
-  it('allows deploy only before wave 1 in campaign', () => {
-    expect(isAssaultDeployPhase(true, 0, 'countdown')).toBe(true);
+  it('campaign assault uses fortressPrep posts only — no grid deploy phase', () => {
+    expect(isAssaultDeployPhase(true, 0, 'countdown')).toBe(false);
     expect(isAssaultDeployPhase(true, 0, 'break')).toBe(false);
-    expect(isAssaultDeployPhase(true, 1, 'break')).toBe(false);
     expect(isAssaultDeployPhase(true, 1, 'active')).toBe(false);
   });
 
-  it('skirmish keeps open deploy rules', () => {
-    expect(isAssaultDeployPhase(false, 5, 'active')).toBe(true);
+  it('skirmish allows deploy before wave 1 countdown ends', () => {
+    expect(isAssaultDeployPhase(false, 0, 'countdown')).toBe(true);
+    expect(isAssaultDeployPhase(false, 0, 'break')).toBe(false);
+    expect(isAssaultDeployPhase(false, 5, 'active')).toBe(false);
   });
 
   it('hero upgrades only in War Camp between assaults', () => {

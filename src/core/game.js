@@ -203,6 +203,17 @@ import {
   assignDefender, clearPost, validateAssignments, buildTowerPlacements, countAssignedHeroes,
 } from '../fortress/defensivePosts.js';
 import {
+  bakeFortressLayout,
+  fortressLayoutFromPrep,
+  getPostLabelForDefender,
+} from '../fortress/fortressLayout.js';
+import { drawFortressLayout } from '../fortress/fortressRenderer.js';
+import {
+  drawPrepPostOverlays,
+  drawPrepWorldChrome,
+  hitTestPrepWorldPost,
+} from '../preparation/prepWorldView.js';
+import {
   createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText,
   getRandomTrait, TRAIT_DEFS, SCAR_DEFS, checkScars, getRank, VETERAN_RANKS,
   generateBio, generateEpitaph, generateBondName,
@@ -910,6 +921,7 @@ let _postAssignments       = {};     // defensive post → defender / structure
 let _postPickerPostId      = null;   // post awaiting roster pick
 let _postPrepBtns          = [];     // hit areas on post list (left panel)
 let _prepShell             = null;   // Fortress Commander prep UI
+let _prepSchematicOverlay  = false;  // onboarding schematic toggle (default: scroll battlefield)
 let _prepFieldMeta         = null;   // wood, gate scar (First Saga)
 let _lastPrepFrameTime     = 0;
 let _hornLaunchPending     = false;
@@ -1833,6 +1845,7 @@ function commanderPrepLayout() {
 
 /** Assault/skirmish active wave — full-width playfield, glass side panels. */
 function assaultPlayfieldWide() {
+  if (isFortressPrepPhase() && _campaignNodeMode) return true;
   return gamePhase === 'playing' && (useAssaultFieldDock() || useCampaignCombatLayout());
 }
 
@@ -2592,6 +2605,7 @@ function startCampaignNodeBattle(mapIndex, nodeIndex, options = {}) {
   }
   const _fieldEmpty = !field?.towers?.length && !Object.keys(field?.walls ?? {}).length;
   restoreCampaignField(field);
+  _postAssignments = { ...ensurePostAssignments(field, GOAL, FORTRESS_RING_R) };
   if (!skipFieldPrep) {
     resetAssaultFieldVitality(towers, wallData);
   }
@@ -3055,7 +3069,7 @@ function canModifyWarbandDeployment() {
 }
 
 function canLayoutCampaignField() {
-  if (isFortressPrepPhase()) return true;
+  if (isFortressPrepPhase()) return false;
   if (_campaignNodeMode) return false;
   return canModifyWarbandDeployment();
 }
@@ -3131,9 +3145,11 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   _prepShell = createPrepShellState();
   _prepFieldMeta = loadPrepFieldMeta(field);
   _prepFieldMeta = syncPrepMetaForAssault(_prepFieldMeta);
+  _prepSchematicOverlay = false;
   _lastPrepFrameTime = performance.now();
   _hornLaunchPending = false;
   gamePhase = 'fortressPrep';
+  centerAssaultCameraOnFortress();
 
   waveNumber = 0;
   waveState  = 'countdown';
@@ -3160,9 +3176,15 @@ function launchFieldPrepAssault() {
     _uiToast = { text: validation.errors[0] ?? 'Assign heroes to posts', timer: 120, color: UI_COLORS.warband };
     return;
   }
-  const placementTowers = buildTowerPlacements(_postAssignments, _roster, GOAL, {
+  const layout = fortressLayoutFromPrep({
+    postAssignments: _postAssignments,
+    goal: GOAL,
+    ringR: FORTRESS_RING_R,
     frontId: assault?.frontId ?? 'west',
+    fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
+    prepMeta: _prepFieldMeta ?? loadPrepFieldMeta(null),
   });
+  const { towers: placementTowers } = bakeFortressLayout(layout, _roster);
   persistCampaignFieldLayout();
   const mapIndex = _campaignMapIndex;
   const nodeIndex = _pendingAssaultNode;
@@ -3268,10 +3290,78 @@ function drawFortressCommanderPrepScreen() {
   tickFortressCommanderPrep();
   const pf = getCommanderPlayfield();
   const panelCtx = getPrepShellPanelCtx();
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
   if (!_prepShell.selectedHotspot && _pendingAssaultNode != null) {
-    _prepShell.selectedHotspot = 'west_gate';
+    _prepShell.selectedHotspot = getPrimaryGateForFront(assault?.frontId ?? 'west');
   }
-  drawFortressSchematic(ctx, pf, _prepShell, panelCtx);
+
+  if (_prepSchematicOverlay) {
+    drawFortressSchematic(ctx, pf, _prepShell, panelCtx);
+    return;
+  }
+
+  const time = performance.now() * 0.001;
+  const _pfScale = playfieldScale();
+  const _gridCx = COLS * CELL_SIZE * 0.5;
+  const _gridCy = ROWS * CELL_SIZE * 0.5;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(pf.x, pf.y, pf.w, pf.h);
+  ctx.clip();
+
+  drawCampaignAssaultPlayfieldBackdrop(ctx, pf.x, pf.y, pf.w, pf.h, time, {
+    scrollAssault: useAssaultScrollWorld(),
+    prepMode: true,
+  });
+
+  ctx.save();
+  ctx.translate(pf.x + gridPanX + playfieldShiftX(), pf.y + gridPanY + playfieldShiftY());
+  ctx.translate(_gridCx, _gridCy);
+  ctx.scale(gridZoom * _pfScale, gridZoom * _pfScale);
+  ctx.translate(-_gridCx, -_gridCy);
+
+  if (terrainCanvas) {
+    const _tox = useAssaultScrollWorld() ? -_assaultWorldPadX : 0;
+    const _toy = useAssaultScrollWorld() ? -_assaultWorldPadY : 0;
+    ctx.drawImage(terrainCanvas, _tox, _toy);
+  }
+
+  drawFortressLayout(ctx, {
+    goal: GOAL,
+    cellSize: CELL_SIZE,
+    ringR: FORTRESS_RING_R,
+    wallData,
+    prepMeta: _prepFieldMeta,
+    spawnCol: SPAWN?.col ?? 0,
+    time,
+    mode: 'prep',
+  });
+
+  const selectedPost = _prepShell.selectedHotspot;
+  drawPrepPostOverlays(ctx, {
+    goal: GOAL,
+    ringR: FORTRESS_RING_R,
+    cellSize: CELL_SIZE,
+    postAssignments: _postAssignments,
+    roster: _roster,
+    gridScreenX,
+    gridScreenY,
+    frontId: assault?.frontId ?? 'west',
+    selectedPostId: selectedPost,
+    now: performance.now(),
+  });
+
+  ctx.restore();
+
+  drawPrepWorldChrome(ctx, pf, {
+    showSchematicHint: battlesCompleted === 0,
+    assaultCodename: assault?.codename ?? null,
+    schematicOverlay: _prepSchematicOverlay,
+  });
+
+  ctx.restore();
 }
 
 function canUpgradeHeroNow() {
@@ -7186,7 +7276,7 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  // Fortress Commander prep — schematic hotspots + context panel
+  // Fortress Commander prep — scroll battlefield posts + context panel
   if (e.button === 0 && isFortressPrepPhase() && _prepShell) {
     const pf = getCommanderPlayfield();
     let action = handlePrepShellPointer(_prepShell, mouseX, mouseY, pf, null, 'click');
@@ -7195,6 +7285,27 @@ canvas.addEventListener('mousedown', e => {
       if (mouseX >= hz.x && mouseX <= hz.x + hz.w && mouseY >= hz.y && mouseY <= hz.y + hz.h) {
         action = { type: 'horn' };
       }
+    }
+    if (!action && !_prepSchematicOverlay) {
+      const assault = _pendingAssaultNode != null
+        ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+      const postHit = hitTestPrepWorldPost(mouseX, mouseY, {
+        goal: GOAL,
+        ringR: FORTRESS_RING_R,
+        cellSize: CELL_SIZE,
+        gridScreenX,
+        gridScreenY,
+        frontId: assault?.frontId ?? 'west',
+      });
+      if (postHit) {
+        _prepShell.selectedHotspot = postHit;
+        action = { type: 'hotspot', hotspot: postHit };
+      }
+    }
+    if (!action && mouseX >= pf.x + pf.w - 52 && mouseX <= pf.x + pf.w - 6
+        && mouseY >= pf.y + 4 && mouseY <= pf.y + 20) {
+      _prepSchematicOverlay = !_prepSchematicOverlay;
+      return;
     }
     processPrepShellClick(action);
     return;
@@ -8553,7 +8664,7 @@ function drawTreasuryChest(cx, cy, scale, stage = 1, glowing = false) {
 }
 
 /** Mockup-style defender row in the right panel. */
-function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false, maxScore = 0 } = {}) {
+function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isFieldSelected = false, maxScore = 0, postLabel = null } = {}) {
   const CARD_H = 32;
   const rgb    = defenderGlowRgb(tower);
   const tName  = tower.name ?? TOWER_DEFS[tower.type]?.label ?? tower.type;
@@ -8589,7 +8700,13 @@ function drawDefenderSidebarRow(x, y, w, rightX, tower, { isMvp = false, isField
   ctx.fillStyle = `rgba(${rgb},0.55)`;
   ctx.fillText(`${classLbl}${tLvl}`, x + 30, y + 22);
   const roleLbl = ABILITY_LABELS[tower.type];
-  if (roleLbl) drawRoleChip(x + 30, y + 29, roleLbl, tower.type, { alpha: 0.85 });
+  if (postLabel) {
+    ctx.font = '6px monospace';
+    ctx.fillStyle = 'rgba(160,180,140,0.70)';
+    ctx.fillText(postLabel, x + 30, y + 29);
+  } else if (roleLbl) {
+    drawRoleChip(x + 30, y + 29, roleLbl, tower.type, { alpha: 0.85 });
+  }
 
   if (isCampaignAssaultBattle() && waveState === 'active') {
     const hpFrac = getHeroHpFrac(tower);
@@ -9112,12 +9229,16 @@ function drawFortressZoneRing() {
 
 /** Campaign assault — courtyard props inside the ring (never blocks the west lane). */
 function drawCampaignAssaultFortressDecor() {
-  drawAssaultFortressStructures(ctx, GOAL, CELL_SIZE, FORTRESS_RING_R, {
+  drawFortressLayout(ctx, {
+    goal: GOAL,
+    cellSize: CELL_SIZE,
+    ringR: FORTRESS_RING_R,
     wallData,
     prepMeta: _prepFieldMeta,
     spawnCol: SPAWN?.col ?? 0,
     scale: ASSAULT_FORTRESS_STRUCTURE_SCALE,
     time: performance.now() * 0.001,
+    mode: 'assault',
   });
 }
 
@@ -9125,11 +9246,15 @@ function drawFortressComplex() {
   if (gamePhase !== 'playing') return;
   if (_campaignNodeMode) {
     if (hideAssaultBattleGrid() && isPathlessMode()) {
-      drawAssaultFortressStructures(ctx, GOAL, CELL_SIZE, FORTRESS_RING_R, {
+      drawFortressLayout(ctx, {
+        goal: GOAL,
+        cellSize: CELL_SIZE,
+        ringR: FORTRESS_RING_R,
         wallData,
         prepMeta: _prepFieldMeta,
         spawnCol: SPAWN?.col ?? 0,
         time: performance.now() * 0.001,
+        mode: 'assault',
       });
       return;
     }
@@ -10146,7 +10271,7 @@ function drawRightPanel() {
         _row('No defenders', 'deployed', 'rgba(140,120,90,0.50)');
         ly += 2;
         ctx.font = '7px monospace'; ctx.fillStyle = 'rgba(120,100,60,0.40)'; ctx.textAlign = 'left';
-        ctx.fillText('Deploy from warband panel ←', sX + 2, ly + 8);
+        ctx.fillText('Assign heroes at fortress prep', sX + 2, ly + 8);
         ly += 12;
         ctx.textAlign = 'left';
       } else {
@@ -10158,6 +10283,8 @@ function drawRightPanel() {
             isMvp: i === 0 && mvpT?.mvpTimer > 0,
             isFieldSelected: selectedTower != null && selectedTower.defenderId === t.defenderId,
             maxScore: _maxScore,
+            postLabel: isCampaignAssaultBattle()
+              ? getPostLabelForDefender(_postAssignments, t.defenderId) : null,
           });
         }
       }
@@ -11469,6 +11596,8 @@ function drawAssaultWarbandOverlay(topInset = 0) {
         isMvp: false,
         isFieldSelected: selectedTower?.defenderId === t.defenderId,
         maxScore: waveState === 'active' ? maxScore : 0,
+        postLabel: isCampaignAssaultBattle()
+          ? getPostLabelForDefender(_postAssignments, t.defenderId) : null,
       });
       _rosterPanelBtns.push({
         x: sX, y: rowY, w: sW, h: 34,

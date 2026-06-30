@@ -76,7 +76,7 @@ Objective: Settlement building interiors (Barracks), assault playfield scale/spa
 - **Command map chrome** — meta bar region/NEXT; top-left briefing glass chip
 - **Assault combat** — border spawn (`getAssaultBorderSpawnPx`); structures-only fortress @ 1.72×; full-world `assault_battlefield_bg@2048x1320.png`; wilderness scatter; HUD/terrain/unit fixes
 - **Polish Board iter 53–72** — Hall dossier, chronicle unread, `__NS_TEST_HOOKS__`
-- **513** unit tests passing
+- **519** unit tests passing
 
 ## Current implementation focus
 

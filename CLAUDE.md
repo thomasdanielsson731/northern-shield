@@ -83,13 +83,20 @@ src/
     firstSaga.js       — First Saga linear A0–A4 + settlement; spawn tables, wave bands, balance helpers
     sagaPlaytestHarness.js — automated Sprint 5 checklist (`npm run test:saga`); maps to agents/first-saga-playtest-runner.md
     campaignRun.js     — field persistence (10 heroes + 10 structures), assault casualties, mergeFallenHeroesIntoFieldState, completeNode()
-    campaignDeploy.js  — isAssaultDeployPhase(), canUpgradeHeroLevelBetweenAssaults(); prep-only placement rules
+    campaignDeploy.js  — isAssaultDeployPhase(); campaign = posts-only via fortressPrep; skirmish grid deploy before wave 1
     onboarding.js      — ONBOARDING steps enum, getOnboardingHint(), advanceOnboarding(), resolveOnboardingHint()
     saveValidate.js    — validateCampaignState(), verifySaveChecksum(), simpleSaveChecksum()
   fortress/
     fortress.js        — FORTRESS_DEFS (4 upgrade nodes, 3 levels each), getFortressBonuses(); purchased with goldReserve
+    fortressLayout.js  — FortressLayout bake (posts → towers); getPostLabelForDefender(); canonical prep/assault layout
+    fortressRenderer.js — drawFortressLayout() shared by prep scroll world + assault
+    defensivePosts.js  — post cells, assignDefender, buildTowerPlacements, validateAssignments
+  assets/
+    fortressManifest.js — structure art keys, rampart tier labels (single registry)
   preparation/
-    fortressPrepArt.js — prep sprites, drawAssaultFortressStructures (structures-only assault fortress)
+    fortressPrepArt.js — prep sprites, drawAssaultFortressStructures (legacy courtyard draw)
+    fortressCommanderShell.js — prep panel, horn, schematic overlay (MAP toggle)
+    prepWorldView.js   — scroll battlefield prep: post halos, hitTestPrepWorldPost, drawPrepPostOverlays
   chronicle/
     chronicle.js       — All Chronicle + Defender Legacy exports: TRAIT_DEFS, SCAR_DEFS, VETERAN_RANKS, BOND_NAMES, TITLE_DEFS,
                          getRank(), getRandomTrait(), checkScars(), checkTitles(), generateBio(), generateEpitaph(),
@@ -126,7 +133,7 @@ tests/
   gameImports.smoke.test.js
 ```
 
-**515 tests** — run `npm test` from repo root.
+**519 tests** — run `npm test` from repo root.
 
 ### Key facts about game.js
 
@@ -306,7 +313,7 @@ Campaign state (`stars`, `runeInventory`, `battlesCompleted`, Roster, `campaignP
 
 Key functions:
 - `getFrontLayout()` / `isAssaultUnlocked()` — command map fronts (`campaignFronts.js`)
-**Deploy rules (campaign):** Placement, recall, and reposition only during prep (`isAssaultDeployPhase`: `waveNumber === 0 && waveState === 'countdown'`). No hero/structure level upgrades during assault — War Camp only (`campaignDeploy.js`). Recruitment (new roster members) happens between assaults, not from the FIELD panel.
+**Campaign assault:** Placement is **posts-only** in `fortressPrep` (scroll battlefield default). No grid dock between horn and waves. `FortressLayout` bakes `postAssignments` → towers at horn. Schematic plate = MAP toggle (onboarding). See `design/FORTRESS_PREP_ASSAULT_GRAPHICS.md`.
 
 **Hydda:** Heals deployed warband `combatHp` in pathless mode (`warbandHeal.js`). Warband returns to deploy slots between waves (`snapWarbandToDeploy`).
 
