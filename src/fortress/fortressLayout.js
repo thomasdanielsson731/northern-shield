@@ -149,3 +149,20 @@ export function getPostLabelForDefender(postAssignments, defenderId) {
 export function getPrimaryFrontGatePost(frontId = 'west') {
   return getPrimaryGateForFront(frontId);
 }
+
+/** Siege structures assigned to posts (for assault HUD). */
+export function getSiegePostRows(postAssignments = {}) {
+  const rows = [];
+  for (const postId of SIEGE_POST_IDS) {
+    if (postId === 'gate_fixture') continue;
+    const a = postAssignments[postId];
+    if (!a?.structureType) continue;
+    rows.push({
+      postId,
+      postLabel: POST_DEFS[postId]?.label ?? postId,
+      structureType: a.structureType,
+      level: a.level ?? 1,
+    });
+  }
+  return rows;
+}

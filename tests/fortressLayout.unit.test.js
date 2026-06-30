@@ -4,6 +4,7 @@ import {
   fortressLayoutFromPrep,
   getPostLabelForDefender,
   getDefenderPostId,
+  getSiegePostRows,
 } from '../src/fortress/fortressLayout.js';
 import { getRampartTierLabel } from '../src/assets/fortressManifest.js';
 import { hitTestPrepWorldPost } from '../src/preparation/prepWorldView.js';
@@ -30,6 +31,15 @@ describe('fortressLayout', () => {
     expect(getDefenderPostId(posts, 'd2')).toBe('watch_tower');
     expect(getPostLabelForDefender(posts, 'd2')).toBe('Watch Tower');
     expect(getPostLabelForDefender(posts, 'missing')).toBeNull();
+  });
+
+  it('getSiegePostRows skips gate_fixture', () => {
+    const rows = getSiegePostRows({
+      gate_fixture: { structureType: 'gate' },
+      ballista_platform: { structureType: 'ballista', level: 1 },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].postId).toBe('ballista_platform');
   });
 });
 

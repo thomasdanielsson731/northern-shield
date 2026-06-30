@@ -6,11 +6,8 @@
 
 import { UI_COLORS } from '../ui/uiTheme.js';
 import { validateAssignments } from '../fortress/defensivePosts.js';
-import {
-  getDefenderPromotionTitle,
-  getSkaldPostCounsel,
-  getPreferredPostLabel,
-} from '../roster/postTitles.js';
+import { getHeroAdvisorContent, getHeroPanelActions, isHeroPostId } from './prepHeroPicker.js';
+import { getSiegeAdvisorContent, getSiegePanelActions, isSiegePostId } from './prepSiegePicker.js';
 import {
   drawAdvisorPortraitArt,
 } from '../assets/campaignArt.js';
@@ -536,51 +533,16 @@ export function getHornBlockReason(ctx) {
 }
 
 function advisorLines(hotspot, ctx) {
-  const { assault, postAssignments, roster, goldReserve } = ctx;
-  const gateHero = postAssignments?.west_gate?.defenderId;
-  const towerHero = postAssignments?.watch_tower?.defenderId;
-  const def = gateHero ? roster?.find?.(gateHero) : null;
-  const towerDef = towerHero ? roster?.find?.(towerHero) : null;
-  const heroName = def?.name || def?.type || 'your fighter';
+  if (isSiegePostId(hotspot)) {
+    return getSiegeAdvisorContent(hotspot, ctx);
+  }
+  if (isHeroPostId(hotspot)) {
+    return getHeroAdvisorContent(hotspot, ctx);
+  }
+
+  const { roster, goldReserve } = ctx;
 
   switch (hotspot) {
-    case PREP_HOTSPOTS.WEST_GATE: {
-      const gateTitle = gateHero ? getDefenderPromotionTitle(gateHero, postAssignments) : null;
-      const skald = def ? getSkaldPostCounsel(def, 'west_gate') : null;
-      return {
-        advisor: gateHero ? 'skald' : 'captain',
-        title: 'West Gate',
-        lines: gateHero
-          ? [
-              gateTitle ? `${heroName} — ${gateTitle}.` : `${heroName} holds the threshold.`,
-              skald
-                ? skald.replace(/^The skald[^:]+:\s*"?/, '').replace(/"?\.$/, '.')
-                : 'The plan starts here.',
-            ]
-          : [
-              'The west road stirs.',
-              `Favor a gatekeeper — the ${getPreferredPostLabel('berserk')} first.`,
-            ],
-      };
-    }
-    case PREP_HOTSPOTS.WATCH_TOWER: {
-      const towerTitle = towerHero ? getDefenderPromotionTitle(towerHero, postAssignments) : null;
-      const tSkald = towerDef ? getSkaldPostCounsel(towerDef, 'watch_tower') : null;
-      return {
-        advisor: towerHero ? 'skald' : 'scout',
-        title: 'Watch Tower',
-        lines: towerHero
-          ? [
-              towerTitle ? `${towerDef?.name ?? 'Scout'} — ${towerTitle}.` : 'Eyes on the treeline.',
-              tSkald
-                ? tSkald.replace(/^The skald[^:]+:\s*"?/, '').replace(/"?\.$/, '.')
-                : 'They come from the west.',
-            ]
-          : assault
-            ? [`${assault.codename} — ${assault.tierLabel ?? 'assault'}.`, 'They come from the west.']
-            : ['High ground. Clear eyes.', `The skald favors the ${getPreferredPostLabel('valkyrie')}.`],
-      };
-    }
     case PREP_HOTSPOTS.WALL_SCAR:
       return {
         advisor: 'builder',
@@ -617,43 +579,13 @@ function advisorLines(hotspot, ctx) {
 }
 
 function panelActions(hotspot, ctx) {
-  const { postAssignments, roster, nodeCasualties } = ctx;
-  const actions = [];
-  const available = (roster?.defenders ?? []).filter(
-    d => !nodeCasualties?.has?.(d.defenderId),
-  );
-
-  if (hotspot === PREP_HOTSPOTS.WEST_GATE) {
-    const assigned = postAssignments?.west_gate?.defenderId;
-    if (!assigned && available.length > 0) {
-      const d = available[0];
-      actions.push({
-        id: 'assign_gate',
-        label: `Assign ${d.name || d.type}`,
-        defenderId: d.defenderId,
-        postId: 'west_gate',
-      });
-    } else if (assigned) {
-      actions.push({ id: 'clear_gate', label: 'Clear gate', postId: 'west_gate' });
-    }
+  if (isSiegePostId(hotspot)) {
+    return getSiegePanelActions(hotspot, ctx).slice(0, 2);
   }
-
-  if (hotspot === PREP_HOTSPOTS.WATCH_TOWER) {
-    const assigned = postAssignments?.watch_tower?.defenderId;
-    if (!assigned && available.length > 0) {
-      const d = available.find(x => x.defenderId !== postAssignments?.west_gate?.defenderId) ?? available[0];
-      actions.push({
-        id: 'assign_tower',
-        label: `Assign ${d.name || d.type}`,
-        defenderId: d.defenderId,
-        postId: 'watch_tower',
-      });
-    } else if (assigned) {
-      actions.push({ id: 'clear_tower', label: 'Clear tower', postId: 'watch_tower' });
-    }
+  if (isHeroPostId(hotspot)) {
+    return getHeroPanelActions(hotspot, ctx).slice(0, 2);
   }
-
-  return actions.slice(0, 2);
+  return [];
 }
 
 export function getPrepAdvisorContent(hotspot, ctx) {

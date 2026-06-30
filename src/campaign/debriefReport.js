@@ -3,7 +3,8 @@
  * @see design/the_first_saga.md §14–16 · IMPLEMENTATION_ROADMAP Phase 5
  */
 
-import { getPrimaryGateForFront, resolvePostCell } from '../fortress/defensivePosts.js';
+import { getPrimaryGateForFront, resolvePostCell, HERO_POST_IDS, SIEGE_POST_IDS, POST_DEFS } from '../fortress/defensivePosts.js';
+import { TOWER_DEFS } from '../entities/tower.js';
 
 const SAGA_VICTORY_PROSE = {
   0: '{name} held the west gate alone. The fire still burns.',
@@ -115,6 +116,41 @@ export function buildFortressDamageReport(wallData, fieldState, options = {}) {
     lines,
     summary: lines.map(l => `${l.label}: ${l.value}`).join(' · '),
   };
+}
+
+/** Chronicle lines citing who held which post after an assault. */
+export function buildDeployedPostLines(postAssignments = {}, roster, { isVictory = true } = {}) {
+  const defenders = Array.isArray(roster) ? roster : (roster?.defenders ?? []);
+  const byId = new Map(defenders.map(d => [d.defenderId, d]));
+  const lines = [];
+
+  for (const postId of HERO_POST_IDS) {
+    const a = postAssignments[postId];
+    if (!a?.defenderId) continue;
+    const def = byId.get(a.defenderId);
+    const name = def?.name ?? 'A defender';
+    const postLabel = POST_DEFS[postId]?.label ?? postId;
+    if (isVictory) {
+      lines.push(`${name} held ${postLabel}.`);
+    } else {
+      lines.push(`${postLabel}: ${name} did not hold.`);
+    }
+  }
+
+  for (const postId of SIEGE_POST_IDS) {
+    if (postId === 'gate_fixture') continue;
+    const a = postAssignments[postId];
+    if (!a?.structureType) continue;
+    const postLabel = POST_DEFS[postId]?.label ?? postId;
+    const sLabel = TOWER_DEFS[a.structureType]?.label ?? a.structureType;
+    if (isVictory) {
+      lines.push(`${sLabel} on ${postLabel} stood through the assault.`);
+    } else {
+      lines.push(`The ${postLabel} lies in splinters.`);
+    }
+  }
+
+  return lines.slice(0, 4);
 }
 
 /** One-line compact stats for prose-first debrief footer. */

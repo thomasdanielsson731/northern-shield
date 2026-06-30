@@ -172,6 +172,7 @@ import {
   getSagaDebriefProse,
   getSagaDebriefTitle,
   buildFortressDamageReport,
+  buildDeployedPostLines,
   formatDebriefCompactStats,
   formatBossLootParchmentLine,
 } from '../campaign/debriefReport.js';
@@ -200,13 +201,16 @@ import { TALENT_DEFS, CLASS_TALENTS, getTalentBonuses } from '../roster/talents.
 import { FORTRESS_DEFS, getFortressBonuses, getNextFortressUpgradeOffer } from '../fortress/fortress.js';
 import {
   HERO_POST_IDS, POST_DEFS, resolvePostCell, getPrimaryGateForFront,
-  assignDefender, clearPost, validateAssignments, buildTowerPlacements, countAssignedHeroes,
+  assignDefender, assignStructure, clearPost, validateAssignments, buildTowerPlacements, countAssignedHeroes,
 } from '../fortress/defensivePosts.js';
 import {
   bakeFortressLayout,
   fortressLayoutFromPrep,
   getPostLabelForDefender,
+  getSiegePostRows,
 } from '../fortress/fortressLayout.js';
+import { getRampartTierLabel } from '../assets/fortressManifest.js';
+import { getSiegeStructureLabel } from '../preparation/prepSiegePicker.js';
 import { drawFortressLayout } from '../fortress/fortressRenderer.js';
 import {
   drawPrepPostOverlays,
@@ -3222,6 +3226,7 @@ function getPrepShellPanelCtx() {
     goldReserve,
     nodeCasualties: _nodeCasualties,
     treasuryUnlocked: battlesCompleted > 0 || nodesCleared.includes(0),
+    fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
   };
 }
 
@@ -3257,15 +3262,30 @@ function processPrepShellClick(action) {
     gamePhase = 'nodeMap';
     return;
   }
-  if (action.id === 'assign_gate' || action.id === 'assign_tower') {
+  if (action.id === 'assign_gate' || action.id === 'assign_tower' || action.id === 'assign_hero') {
     _postAssignments = assignDefender(_postAssignments, action.postId, action.defenderId);
-    if (action.id === 'assign_gate' && action.postId === 'west_gate') {
+    if ((action.id === 'assign_gate' || action.postId === 'west_gate') && action.postId === 'west_gate') {
       _onboardingStep = advanceOnboarding(_onboardingStep, 'assignedGate');
     }
     persistCampaignFieldLayout();
     return;
   }
-  if (action.id === 'clear_gate' || action.id === 'clear_tower') {
+  if (action.id === 'clear_gate' || action.id === 'clear_tower' || action.id === 'clear_hero') {
+    _postAssignments = clearPost(_postAssignments, action.postId);
+    persistCampaignFieldLayout();
+    return;
+  }
+  if (action.id === 'assign_siege') {
+    _postAssignments = assignStructure(
+      _postAssignments,
+      action.postId,
+      action.structureType,
+      action.level ?? 1,
+    );
+    persistCampaignFieldLayout();
+    return;
+  }
+  if (action.id === 'clear_siege') {
     _postAssignments = clearPost(_postAssignments, action.postId);
     persistCampaignFieldLayout();
     return;
@@ -10094,7 +10114,25 @@ function drawRightPanel() {
       if (_wTotal > 0) {
         _row('Walls:', _wDmg > 0 ? `${_wDmg} damaged` : 'intact', _wDmg > 0 ? UI_COLORS.gold : UI_COLORS.fortress);
       }
+      if (isCampaignAssaultBattle()) {
+        const _wwTier = getRampartTierLabel(_campaignState?.fortressUpgrades?.wallworks ?? 0);
+        _row('Rampart tier:', _wwTier, UI_COLORS.fortress);
+      }
       ly += GAP;
+    }
+
+    // ── SIEGE (campaign posts) ───────────────────────────────────────────────
+    if (isCampaignAssaultBattle()) {
+      const _siegeRows = getSiegePostRows(_postAssignments);
+      if (_siegeRows.length > 0) {
+        _hdr(UI_COLORS.gold, '▣', 'SIEGE', `${_siegeRows.length} mounted`, UI_COLORS.gold);
+        for (const row of _siegeRows.slice(0, 3)) {
+          const sLabel = getSiegeStructureLabel(row.structureType);
+          const shortPost = row.postLabel.split(' ')[0];
+          _row(`${shortPost}:`, `${sLabel} Lv${row.level}`, UI_COLORS.gold);
+        }
+        ly += GAP;
+      }
     }
 
     // ── TREASURY ───────────────────────────────────────────────────────────────
@@ -10227,6 +10265,9 @@ function drawRightPanel() {
       const _wallRightC   = _damaged > 0 ? '#e8c040' : '#70c870';
       _row(`Walls (${_wLvlStr}):`, _wallRightTxt, _wallRightC);
     }
+    if (isCampaignAssaultBattle()) {
+      _row('Rampart tier:', getRampartTierLabel(_campaignState?.fortressUpgrades?.wallworks ?? 0), '#90a8c8');
+    }
 
     // Selected gate info (pendingSell on a gate)
     if (pendingSell && !getTowerAtCell(pendingSell.col, pendingSell.row)) {
@@ -10290,6 +10331,20 @@ function drawRightPanel() {
       }
     }
     ly += GAP;
+  }
+
+  // ── 3b. SIEGE (campaign assault posts) ─────────────────────────────────────
+  if (isCampaignAssaultBattle()) {
+    const _siegeRows = getSiegePostRows(_postAssignments);
+    if (_siegeRows.length > 0) {
+      _hdr('#c89828', '▣', 'SIEGE', `${_siegeRows.length} mounted`, '#e8c060');
+      for (const row of _siegeRows.slice(0, 3)) {
+        const sLabel = getSiegeStructureLabel(row.structureType);
+        const shortPost = row.postLabel.split(' ')[0];
+        _row(`${shortPost}:`, `${sLabel} Lv${row.level}`, '#c89828');
+      }
+      ly += GAP;
+    }
   }
 
   // ── 4. TREASURY ──────────────────────────────────────────────────────────────
@@ -14064,6 +14119,20 @@ function drawCampaignAssaultDebrief(W, H, isVictory, fadeT) {
     hy += 12;
   }
   hy += 4;
+
+  const _postReportLines = buildDeployedPostLines(postAssignments, _roster, { isVictory });
+  for (const line of _postReportLines.slice(0, 2)) {
+    if (!debriefLineFits(hy, 11, safe)) break;
+    drawParchmentInk(ctx, line, hx, hy, {
+      font: '8px monospace',
+      fill: '#3a2810',
+      alpha: proseAlpha * 0.92,
+      outlineWidth: 0,
+      noOutline: true,
+    });
+    hy += 11;
+  }
+  if (_postReportLines.length > 0) hy += 4;
 
   const compact = formatDebriefCompactStats({
     waveNumber,
