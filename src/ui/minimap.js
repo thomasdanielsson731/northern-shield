@@ -136,6 +136,15 @@ export function drawBattleMinimap(ctx, opts) {
   ctx.restore();
 }
 
+export function getMinimapMapRect(panel) {
+  return {
+    x: panel.x + MAP_INSET,
+    y: panel.y + 12,
+    w: panel.w - MAP_INSET * 2,
+    h: panel.h - 14 - MAP_INSET,
+  };
+}
+
 export function minimapLayout(playfieldRight, playfieldBottom, panelW = 108, panelH = 88) {
   return {
     x: playfieldRight - panelW - PANEL_PAD,

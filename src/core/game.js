@@ -262,7 +262,7 @@ import {
   getAssaultBorderSpawnPx,
   getAssaultBorderSpawnPath,
 } from '../combat/assaultField.js';
-import { drawBattleMinimap, minimapLayout } from '../ui/minimap.js';
+import { drawBattleMinimap, minimapLayout, getMinimapMapRect } from '../ui/minimap.js';
 import { drawAssaultFortressStructures, ASSAULT_FORTRESS_STRUCTURE_SCALE } from '../preparation/fortressPrepArt.js';
 import { drawBossBannerArt, drawEquipRingArt, drawHitSparkArt } from '../assets/combatArt.js';
 import {
@@ -6405,12 +6405,9 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 0 && _battleMinimapRect && useAssaultScrollWorld() && gamePhase === 'playing' && !gameOver) {
     const mm = _battleMinimapRect;
     if (mouseX >= mm.x && mouseX <= mm.x + mm.w && mouseY >= mm.y && mouseY <= mm.y + mm.h) {
-      const mapX = mm.x + 4;
-      const mapY = mm.y + 12;
-      const mapW = mm.w - 8;
-      const mapH = mm.h - 18;
-      const u = Math.max(0, Math.min(1, (mouseX - mapX) / mapW));
-      const v = Math.max(0, Math.min(1, (mouseY - mapY) / mapH));
+      const map = getMinimapMapRect(mm);
+      const u = Math.max(0, Math.min(1, (mouseX - map.x) / map.w));
+      const v = Math.max(0, Math.min(1, (mouseY - map.y) / map.h));
       const worldX = u * _assaultWorldW;
       const worldY = v * _assaultWorldH;
       const s = effectiveGridZoom();
@@ -11610,7 +11607,7 @@ function drawBattleMinimapOverlay() {
   }
 
   const mm = minimapLayout(
-    playfieldLeft() + playfieldWidth() - effectiveRightPanelW(),
+    combatRightPanelX(),
     GRID_TOP + playfieldHeight(),
   );
   _battleMinimapRect = mm;
