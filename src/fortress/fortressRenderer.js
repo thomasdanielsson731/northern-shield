@@ -1,15 +1,115 @@
 /**
- * Fortress layout renderer — prep and assault share structure draw path.
+ * Fortress layout renderer — prep and assault share anchor-based structure draw.
  */
 
+import { computeStructureAnchors, createFortressLayout } from './fortressLayout.js';
+import { getGateArtKeyFromState, STRUCTURE_ART_KEYS } from '../assets/fortressManifest.js';
+import { needsGateRepair } from './prepScarRepair.js';
+import { resolvePostCell, getPrimaryGateForFront } from './defensivePosts.js';
 import {
-  drawAssaultFortressStructures,
+  drawFortressPrepSprite,
+  drawCampaignGateSprite,
+  getBattleWestGateArtKey,
+  getWestGateArtKey,
+  isFortressPrepArtReady,
   ASSAULT_FORTRESS_STRUCTURE_SCALE,
 } from '../preparation/fortressPrepArt.js';
+import { drawStructureArtIcon } from '../assets/structureArt.js';
+import { drawCampaignPalisadeRing } from '../assets/terrainArt.js';
+
+function cellBox(cell, cellSize, scale, footprint = { w: 1, h: 1 }) {
+  const cx = cell.col * cellSize + cellSize / 2;
+  const cy = cell.row * cellSize + cellSize / 2;
+  const w = cellSize * footprint.w * scale;
+  const h = cellSize * footprint.h * scale;
+  return {
+    x: cx - w / 2,
+    y: cy - h / 2,
+    w,
+    h,
+    cx,
+    cy,
+  };
+}
+
+function findGateWallEntry(wallData, goal, ringR, frontId) {
+  const gatePost = getPrimaryGateForFront(frontId);
+  const gateCell = resolvePostCell(gatePost, goal, ringR);
+  const key = `${gateCell.col}_${gateCell.row}`;
+  if (wallData?.[key]) return wallData[key];
+  for (const w of Object.values(wallData ?? {})) {
+    if (w?.isGate) return w;
+  }
+  return null;
+}
+
+function drawGateAtCell(ctx, cell, cellSize, scale, { wallData, prepMeta, frontId, goal, ringR, time }) {
+  const gateWall = findGateWallEntry(wallData, goal, ringR, frontId);
+  const scarred = prepMeta?.westGateScarred && !prepMeta?.westGateRepaired;
+  const artKey = wallData && Object.keys(wallData).length
+    ? getBattleWestGateArtKey(gateWall, prepMeta)
+    : (getGateArtKeyFromState({ scarred, repaired: !scarred }) === 'westGateCracked'
+      ? 'westGateCracked'
+      : getWestGateArtKey(prepMeta));
+  const box = cellBox(cell, cellSize, scale, { w: 3.2, h: 2.1 });
+  if (!drawFortressPrepSprite(ctx, artKey, box)) {
+    drawCampaignGateSprite(ctx, artKey, box.cx, box.cy, cellSize * scale, time);
+  }
+}
+
+function drawCourtyardStructure(ctx, kind, cell, cellSize, scale, watchtowerLevel = 0) {
+  const footprints = {
+    longhouse: { w: 5.2, h: 2.4 },
+    watch_tower: { w: 2.0, h: 2.6 },
+    treasury: { w: 1.65, h: 1.55 },
+  };
+  const fp = footprints[kind] ?? { w: 2, h: 2 };
+  const towerBoost = kind === 'watch_tower' ? 1 + watchtowerLevel * 0.08 : 1;
+  const box = cellBox(cell, cellSize, scale, {
+    w: fp.w,
+    h: fp.h * towerBoost,
+  });
+  const artKey = STRUCTURE_ART_KEYS[kind === 'watch_tower' ? 'watch_tower' : kind];
+  if (artKey && !drawFortressPrepSprite(ctx, artKey, box)) {
+    ctx.fillStyle = 'rgba(40,28,16,0.55)';
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+  }
+}
+
+function drawSiegeProp(ctx, anchor, cellSize, scale) {
+  const box = cellBox(anchor.cell, cellSize, scale * 0.95, { w: 1.6, h: 1.6 });
+  const drew = drawStructureArtIcon(
+    ctx,
+    anchor.structureType,
+    box.cx,
+    box.cy - box.h * 0.08,
+    Math.min(box.w, box.h),
+    true,
+  );
+  if (!drew) {
+    ctx.fillStyle = 'rgba(80,60,30,0.55)';
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.font = 'bold 6px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8d7b5';
+    ctx.fillText((anchor.structureType ?? '?').slice(0, 4), box.cx, box.cy + 2);
+  }
+}
+
+function drawWallScarMarker(ctx, goal, ringR, cellSize, frontId, scale, time) {
+  const gatePost = getPrimaryGateForFront(frontId);
+  const cell = resolvePostCell(gatePost, goal, ringR);
+  const north = { col: cell.col, row: cell.row - 1 };
+  const box = cellBox(north, cellSize, scale, { w: 1.2, h: 1.2 });
+  if (drawFortressPrepSprite(ctx, 'wallScar', box)) return;
+  const pulse = 0.45 + Math.sin(time * 3.2) * 0.25;
+  ctx.strokeStyle = `rgba(232,160,60,${pulse})`;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
+}
 
 /**
- * Draw Age I fortress structures for prep or assault.
- * Layout anchors drive future per-post siege props; courtyard uses established art.
+ * Draw Age I fortress from baked layout anchors.
  */
 export function drawFortressLayout(ctx, {
   goal,
@@ -21,22 +121,58 @@ export function drawFortressLayout(ctx, {
   scale = ASSAULT_FORTRESS_STRUCTURE_SCALE,
   time = 0,
   mode = 'assault',
+  postAssignments = {},
+  fortressUpgrades = {},
+  frontId = 'west',
 } = {}) {
   if (!goal || !cellSize) return false;
+
+  const layout = createFortressLayout({
+    goal,
+    ringR,
+    frontId,
+    posts: postAssignments,
+    upgrades: fortressUpgrades,
+    scars: {
+      westGateScarred: !!prepMeta?.westGateScarred,
+      westGateRepaired: prepMeta?.westGateRepaired !== false,
+    },
+  });
+  const anchors = computeStructureAnchors(layout);
+  const wallworks = fortressUpgrades?.wallworks ?? 0;
+  const watchLv = fortressUpgrades?.watchtower ?? 0;
 
   ctx.save();
   if (mode === 'prep') {
     ctx.globalAlpha = 0.96;
+    drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time, {
+      spawnCol,
+      wallworksLevel: wallworks,
+    });
   }
 
-  const ok = drawAssaultFortressStructures(ctx, goal, cellSize, ringR, {
-    wallData,
-    prepMeta,
-    spawnCol,
-    scale,
-    time,
-  });
+  for (const anchor of anchors) {
+    if (anchor.kind === 'gate') {
+      drawGateAtCell(ctx, anchor.cell, cellSize, scale, {
+        wallData, prepMeta, frontId, goal, ringR, time,
+      });
+    } else if (anchor.kind === 'longhouse') {
+      drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, scale);
+    } else if (anchor.kind === 'watch_tower') {
+      drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, scale, watchLv);
+    } else if (anchor.kind === 'treasury') {
+      drawCourtyardStructure(ctx, 'treasury', anchor.cell, cellSize, scale);
+    } else if (anchor.kind === 'siege') {
+      drawSiegeProp(ctx, anchor, cellSize, scale);
+    }
+  }
+
+  if (mode === 'prep' && needsGateRepair(prepMeta)) {
+    drawWallScarMarker(ctx, goal, ringR, cellSize, frontId, scale, time);
+  }
 
   ctx.restore();
-  return ok;
+  return true;
 }
+
+export { ASSAULT_FORTRESS_STRUCTURE_SCALE };

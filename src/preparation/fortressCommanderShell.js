@@ -9,6 +9,11 @@ import { validateAssignments } from '../fortress/defensivePosts.js';
 import { getHeroAdvisorContent, getHeroPanelActions, isHeroPostId } from './prepHeroPicker.js';
 import { getSiegeAdvisorContent, getSiegePanelActions, isSiegePostId } from './prepSiegePicker.js';
 import {
+  canAffordGateRepair,
+  getGateRepairBlockReason,
+  needsGateRepair,
+} from '../fortress/prepScarRepair.js';
+import {
   drawAdvisorPortraitArt,
 } from '../assets/campaignArt.js';
 import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey, isFortressPrepArtReady } from './fortressPrepArt.js';
@@ -66,14 +71,19 @@ export function normalizePrepFieldMeta(meta) {
   };
 }
 
+/** Load persisted prep meta — scars carry over until repaired or victory clears them. */
 export function loadPrepFieldMeta(fieldState) {
-  const m = defaultPrepFieldMeta();
-  if (!fieldState) return m;
-  return normalizePrepFieldMeta({
+  if (!fieldState) return defaultPrepFieldMeta();
+  return {
     wood: fieldState.wood ?? 0,
     westGateScarred: !!fieldState.westGateScarred,
     westGateRepaired: fieldState.westGateRepaired !== false,
-  });
+  };
+}
+
+/** Prep session uses field meta as-is (no silent scar wipe). */
+export function syncPrepMetaForAssault(meta) {
+  return loadPrepFieldMeta(meta);
 }
 
 export function mergePrepFieldMeta(fieldState, meta) {
@@ -87,12 +97,7 @@ export function mergePrepFieldMeta(fieldState, meta) {
 
 /** Clear legacy scar/timber from persisted field state after assault victory. */
 export function applyFirstSagaAssaultRewards(fieldState) {
-  return mergePrepFieldMeta(fieldState, normalizePrepFieldMeta(loadPrepFieldMeta(fieldState)));
-}
-
-/** Ensure prep meta reflects a fully restored fortress for the next assault. */
-export function syncPrepMetaForAssault(meta) {
-  return normalizePrepFieldMeta(meta);
+  return mergePrepFieldMeta(fieldState, normalizePrepFieldMeta(defaultPrepFieldMeta()));
 }
 
 /** Ordered prep checklist — required steps gate the horn; optional scout is last. */
@@ -536,11 +541,28 @@ function advisorLines(hotspot, ctx) {
   if (isSiegePostId(hotspot)) {
     return getSiegeAdvisorContent(hotspot, ctx);
   }
+
+  const { prepMeta, goldReserve, roster } = ctx;
+  if ((hotspot === 'west_gate' || hotspot === PREP_HOTSPOTS.WALL_SCAR) && needsGateRepair(prepMeta)) {
+    const afford = canAffordGateRepair(prepMeta, goldReserve);
+    return {
+      advisor: 'builder',
+      title: hotspot === PREP_HOTSPOTS.WALL_SCAR ? 'West Wall' : 'West Gate',
+      lines: afford
+        ? [
+            'The gate splintered in the last fight.',
+            'Mend it before the horn — timber or gold.',
+          ]
+        : [
+            'The gate still bears the last assault.',
+            getGateRepairBlockReason(prepMeta, goldReserve) ?? 'Gather resources in War Camp.',
+          ],
+    };
+  }
+
   if (isHeroPostId(hotspot)) {
     return getHeroAdvisorContent(hotspot, ctx);
   }
-
-  const { roster, goldReserve } = ctx;
 
   switch (hotspot) {
     case PREP_HOTSPOTS.WALL_SCAR:
@@ -579,6 +601,17 @@ function advisorLines(hotspot, ctx) {
 }
 
 function panelActions(hotspot, ctx) {
+  const { prepMeta, goldReserve } = ctx;
+  if ((hotspot === 'west_gate' || hotspot === PREP_HOTSPOTS.WALL_SCAR)
+      && needsGateRepair(prepMeta) && canAffordGateRepair(prepMeta, goldReserve)) {
+    const wood = prepMeta?.wood ?? 0;
+    const useWood = wood >= 8;
+    return [{
+      id: 'repair_gate',
+      label: useWood ? 'Mend gate (8 wood)' : 'Mend gate (25g)',
+      payWood: useWood,
+    }];
+  }
   if (isSiegePostId(hotspot)) {
     return getSiegePanelActions(hotspot, ctx).slice(0, 2);
   }

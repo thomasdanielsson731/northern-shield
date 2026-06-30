@@ -218,6 +218,12 @@ import {
   hitTestPrepWorldPost,
 } from '../preparation/prepWorldView.js';
 import {
+  createHornCameraState,
+  startHornCameraPan,
+  tickHornCameraPan,
+} from '../preparation/prepHornCamera.js';
+import { repairWestGateMeta, applyGateScarFromAssault } from '../fortress/prepScarRepair.js';
+import {
   createChronicle, generateBattleReport, checkTitles, getPrimaryTitle, TITLE_DEFS, wrapText,
   getRandomTrait, TRAIT_DEFS, SCAR_DEFS, checkScars, getRank, VETERAN_RANKS,
   generateBio, generateEpitaph, generateBondName,
@@ -929,6 +935,7 @@ let _prepSchematicOverlay  = false;  // onboarding schematic toggle (default: sc
 let _prepFieldMeta         = null;   // wood, gate scar (First Saga)
 let _lastPrepFrameTime     = 0;
 let _hornLaunchPending     = false;
+let _hornCamera            = createHornCameraState();
 let _equipSparkles         = [];     // { x, y, vx, vy, life, color }
 let _autoMoveHintFrames  = 0;
 let _synergySeenThisTick = new Set();  // tower IDs that formed a new synergy this tick (cleared each tick)
@@ -2652,6 +2659,7 @@ function finishCampaignNodeVictory() {
   if (_assaultDeploySnapshot) {
     field = attachDeploySnapshot(field, _assaultDeploySnapshot);
   }
+  field = applyAssaultEndGateScar(field);
   field = repairFieldStateAfterAssault(field, _assaultDeploySnapshot);
   field = applyFirstSagaAssaultRewards(field, _campaignNodeIndex);
   const _completeMeta = completeNode(progress, _campaignMapIndex, _campaignNodeIndex, field);
@@ -3152,6 +3160,7 @@ function enterFieldPrep(mapIndex, nodeIndex = null) {
   _prepSchematicOverlay = false;
   _lastPrepFrameTime = performance.now();
   _hornLaunchPending = false;
+  _hornCamera = createHornCameraState();
   gamePhase = 'fortressPrep';
   centerAssaultCameraOnFortress();
 
@@ -3230,6 +3239,21 @@ function getPrepShellPanelCtx() {
   };
 }
 
+function applyAssaultEndGateScar(field) {
+  const assault = getAssaultInfo(_campaignMapIndex, _campaignNodeIndex);
+  const damage = buildFortressDamageReport(wallData, field, {
+    goal: GOAL,
+    ringR: FORTRESS_RING_R,
+    frontId: assault?.frontId ?? 'west',
+    lives,
+    breachFlag: _fortressGateBreached || _chronBreached,
+  });
+  return applyGateScarFromAssault(field, {
+    gateHpPct: damage.gateHpPct,
+    breached: damage.breached,
+  });
+}
+
 function requestHornLaunch() {
   if (!_prepShell || _prepShell.hornAnim > 0 || _hornLaunchPending) return;
   const block = getHornBlockReason(getPrepShellPanelCtx());
@@ -3237,6 +3261,21 @@ function requestHornLaunch() {
     _uiToast = { text: block, timer: 120, color: UI_COLORS.gold };
     return;
   }
+  const assault = _pendingAssaultNode != null
+    ? getAssaultInfo(_campaignMapIndex, _pendingAssaultNode) : null;
+  startHornCameraPan(_hornCamera, {
+    goal: GOAL,
+    ringR: FORTRESS_RING_R,
+    frontId: assault?.frontId ?? 'west',
+    cellSize: CELL_SIZE,
+    cols: COLS,
+    rows: ROWS,
+    playfieldWidth: playfieldWidth(),
+    playfieldHeight: playfieldHeight(),
+    zoom: effectiveGridZoom(),
+    fromPanX: gridPanX,
+    fromPanY: gridPanY,
+  });
   startHornAnimation(_prepShell);
   _hornLaunchPending = true;
   _onboardingStep = advanceOnboarding(_onboardingStep, 'soundedHorn');
@@ -3290,6 +3329,21 @@ function processPrepShellClick(action) {
     persistCampaignFieldLayout();
     return;
   }
+  if (action.id === 'repair_gate') {
+    const result = repairWestGateMeta(_prepFieldMeta ?? loadPrepFieldMeta(null), goldReserve);
+    if (result.failed) {
+      _uiToast = { text: 'Not enough wood or gold to mend the gate', timer: 120, color: UI_COLORS.gold };
+      return;
+    }
+    if (result.goldSpent > 0) {
+      goldReserve -= result.goldSpent;
+      _campaignState.goldReserve = goldReserve;
+    }
+    _prepFieldMeta = result.meta;
+    persistCampaignFieldLayout();
+    sfxUpgrade('wall');
+    return;
+  }
 }
 
 function tickFortressCommanderPrep() {
@@ -3299,7 +3353,13 @@ function tickFortressCommanderPrep() {
   _lastPrepFrameTime = now;
   const prevHorn = _prepShell.hornAnim;
   updatePrepCamera(_prepShell, dt);
-  if (_hornLaunchPending && prevHorn > 0 && _prepShell.hornAnim <= 0) {
+  const cam = tickHornCameraPan(_hornCamera, dt);
+  if (cam.panX != null) {
+    gridPanX = cam.panX;
+    gridPanY = cam.panY;
+    clampGridPan();
+  }
+  if (_hornLaunchPending && prevHorn > 0 && _prepShell.hornAnim <= 0 && !_hornCamera.active) {
     _hornLaunchPending = false;
     launchFieldPrepAssault();
   }
@@ -3357,6 +3417,9 @@ function drawFortressCommanderPrepScreen() {
     spawnCol: SPAWN?.col ?? 0,
     time,
     mode: 'prep',
+    postAssignments: _postAssignments,
+    fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
+    frontId: assault?.frontId ?? 'west',
   });
 
   const selectedPost = _prepShell.selectedHotspot;
@@ -3371,6 +3434,7 @@ function drawFortressCommanderPrepScreen() {
     frontId: assault?.frontId ?? 'west',
     selectedPostId: selectedPost,
     now: performance.now(),
+    fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
   });
 
   ctx.restore();
@@ -3540,6 +3604,7 @@ function finishCampaignNodeDefeat(reason = 'ramparts') {
   if (_assaultDeploySnapshot) {
     field = attachDeploySnapshot(field, _assaultDeploySnapshot);
   }
+  field = applyAssaultEndGateScar(field);
   field = repairFieldStateAfterAssault(field, _assaultDeploySnapshot);
   const run = getMapRun(progress, _campaignMapIndex);
   if (run) run.fieldState = field;
@@ -9248,8 +9313,10 @@ function drawFortressZoneRing() {
 }
 
 /** Campaign assault — courtyard props inside the ring (never blocks the west lane). */
-function drawCampaignAssaultFortressDecor() {
-  drawFortressLayout(ctx, {
+function getAssaultFortressLayoutOpts(time) {
+  const assault = _campaignNodeIndex != null
+    ? getAssaultInfo(_campaignMapIndex, _campaignNodeIndex) : null;
+  return {
     goal: GOAL,
     cellSize: CELL_SIZE,
     ringR: FORTRESS_RING_R,
@@ -9257,25 +9324,23 @@ function drawCampaignAssaultFortressDecor() {
     prepMeta: _prepFieldMeta,
     spawnCol: SPAWN?.col ?? 0,
     scale: ASSAULT_FORTRESS_STRUCTURE_SCALE,
-    time: performance.now() * 0.001,
+    time,
     mode: 'assault',
-  });
+    postAssignments: _postAssignments,
+    fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
+    frontId: assault?.frontId ?? 'west',
+  };
+}
+
+function drawCampaignAssaultFortressDecor() {
+  drawFortressLayout(ctx, getAssaultFortressLayoutOpts(performance.now() * 0.001));
 }
 
 function drawFortressComplex() {
   if (gamePhase !== 'playing') return;
   if (_campaignNodeMode) {
     if (hideAssaultBattleGrid() && isPathlessMode()) {
-      drawFortressLayout(ctx, {
-        goal: GOAL,
-        cellSize: CELL_SIZE,
-        ringR: FORTRESS_RING_R,
-        wallData,
-        prepMeta: _prepFieldMeta,
-        spawnCol: SPAWN?.col ?? 0,
-        time: performance.now() * 0.001,
-        mode: 'assault',
-      });
+      drawFortressLayout(ctx, getAssaultFortressLayoutOpts(performance.now() * 0.001));
       return;
     }
     drawCampaignAssaultFortressDecor();
@@ -18011,7 +18076,10 @@ function draw() {
   }
 
   if (grid.usePalisadeRingArt) {
-    drawCampaignPalisadeRing(ctx, GOAL, FORTRESS_RING_R, CELL_SIZE, time, { spawnCol: SPAWN?.col });
+    drawCampaignPalisadeRing(ctx, GOAL, FORTRESS_RING_R, CELL_SIZE, time, {
+      spawnCol: SPAWN?.col,
+      wallworksLevel: _campaignState?.fortressUpgrades?.wallworks ?? 0,
+    });
   }
 
   // Wall level tints — per-level color overlay to make upgrade investment visible

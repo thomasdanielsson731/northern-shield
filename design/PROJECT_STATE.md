@@ -2,7 +2,7 @@
 
 *Single source of truth for current implementation state · read this before any work*
 
-**Last updated:** 2026-06-22 (Proposal A fortress prep scroll world; siege picker + assault SIEGE dock)  
+**Last updated:** 2026-06-22 (Sprint 3: scar repair, anchor renderer, horn camera)  
 **Maintainer:** Technical Program Manager (update after every completed sprint)
 
 ---
@@ -70,6 +70,7 @@ Objective: Settlement building interiors (Barracks), assault playfield scale/spa
 
 ## Recently completed work
 
+- **Sprint 3 prep/assault** — Gate scar repair flow; anchor-based `fortressRenderer`; siege props on posts; horn camera pan; wallworks palisade tint
 - **Proposal A — Fortress prep/assault** — Scroll battlefield prep default; `FortressLayout` bake on horn; campaign posts-only; MAP schematic toggle; `prepSiegePicker` + `prepHeroPicker`; assault glass dock SIEGE section; rampart tier label; debrief post-name prose (`design/FORTRESS_PREP_ASSAULT_GRAPHICS.md`)
 - **Immersive Barracks** — `barracksView.js`; Hall statues recruit row; roster panel; level card; `ui_barracks_interior@1536x1024.png`
 - **Hall statues** — frame crop; no gold plinth rectangles
@@ -77,7 +78,7 @@ Objective: Settlement building interiors (Barracks), assault playfield scale/spa
 - **Command map chrome** — meta bar region/NEXT; top-left briefing glass chip
 - **Assault combat** — border spawn (`getAssaultBorderSpawnPx`); structures-only fortress @ 1.72×; full-world `assault_battlefield_bg@2048x1320.png`; wilderness scatter; HUD/terrain/unit fixes
 - **Polish Board iter 53–72** — Hall dossier, chronicle unread, `__NS_TEST_HOOKS__`
-- **524** unit tests passing
+- **531** unit tests passing
 
 ## Current implementation focus
 
@@ -281,8 +282,8 @@ Player reads enemies from forest edge; fortress feels sized to terrain; Barracks
 | Implementation progress (Fortress Commander roadmap) | Phases 0–6 ✅ (100%) | 2026-06-22 |
 | First Saga vertical slice completion | ~95% (code complete; manual RC pending) | 2026-06-22 |
 | Playable end-to-end (First Saga finale) | Code yes · human verify pending | 2026-06-22 |
-| Tests passing | **524** / 524 | 2026-06-22 |
-| Test files | 84 | 2026-06-22 |
+| Tests passing | **531** / 531 | 2026-06-22 |
+| Test files | 85 | 2026-06-22 |
 | Open bugs (critical) | 0 | 2026-06-22 |
 | Open bugs (major) | 0 | 2026-06-22 |
 | Active design decisions | 26 | 2026-06-22 |

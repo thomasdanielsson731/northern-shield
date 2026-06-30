@@ -42,6 +42,7 @@ describe('fortressCommanderShell', () => {
       towers: [],
       walls: {},
       westGateScarred: true,
+      westGateRepaired: false,
       wood: 15,
     });
     expect(field.westGateScarred).toBe(false);
@@ -49,8 +50,30 @@ describe('fortressCommanderShell', () => {
     expect(field.wood).toBe(0);
   });
 
-  it('normalizes prep meta to a fully restored fortress', () => {
+  it('preserves scar meta when loading prep field', () => {
+    const loaded = loadPrepFieldMeta({
+      westGateScarred: true,
+      westGateRepaired: false,
+      wood: 12,
+    });
+    expect(loaded.westGateScarred).toBe(true);
+    expect(loaded.westGateRepaired).toBe(false);
+    expect(loaded.wood).toBe(12);
+  });
+
+  it('syncPrepMetaForAssault keeps scars for repair flow', () => {
     const m = syncPrepMetaForAssault({
+      wood: 10,
+      westGateScarred: true,
+      westGateRepaired: false,
+    });
+    expect(m.westGateScarred).toBe(true);
+    expect(m.westGateRepaired).toBe(false);
+    expect(m.wood).toBe(10);
+  });
+
+  it('normalizes only via applyFirstSagaAssaultRewards', () => {
+    const m = normalizePrepFieldMeta({
       wood: 15,
       westGateScarred: true,
       westGateRepaired: false,
@@ -58,13 +81,6 @@ describe('fortressCommanderShell', () => {
     expect(m.westGateScarred).toBe(false);
     expect(m.westGateRepaired).toBe(true);
     expect(m.wood).toBe(0);
-
-    const loaded = loadPrepFieldMeta({
-      westGateScarred: true,
-      westGateRepaired: false,
-      wood: 20,
-    });
-    expect(loaded).toEqual(normalizePrepFieldMeta({}));
   });
 
   it('defines five hotspot layouts', () => {

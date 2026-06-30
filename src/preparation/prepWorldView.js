@@ -12,6 +12,7 @@ import {
   resolvePostCell,
 } from '../fortress/defensivePosts.js';
 import { drawFortressLayout } from '../fortress/fortressRenderer.js';
+import { isSiegePostUnlocked } from './prepSiegePicker.js';
 
 const PREP_POST_HIT_R = 18;
 
@@ -60,6 +61,7 @@ export function drawPrepPostOverlays(ctx, {
   frontId = 'west',
   selectedPostId = null,
   now = 0,
+  fortressUpgrades = {},
 }) {
   const primaryGate = getPrimaryGateForFront(frontId);
   ctx.save();
@@ -112,10 +114,25 @@ export function drawPrepPostOverlays(ctx, {
   for (const postId of SIEGE_POST_IDS) {
     if (postId === 'gate_fixture') continue;
     const a = postAssignments[postId];
-    if (!a?.structureType) continue;
     const cell = resolvePostCell(postId, goal, ringR);
     const sx = gridScreenX(cell.col * cellSize + cellSize / 2);
     const sy = gridScreenY(cell.row * cellSize + cellSize / 2);
+    const unlocked = isSiegePostUnlocked(postId, fortressUpgrades);
+    const isSelected = selectedPostId === postId;
+
+    if (!a?.structureType) {
+      if (!unlocked) continue;
+      ctx.strokeStyle = isSelected ? UI_COLORS.gold : 'rgba(180,140,80,0.35)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx - 12, sy - 12, 24, 24);
+      ctx.setLineDash([]);
+      ctx.font = '5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(160,130,80,0.55)';
+      ctx.fillText('SIEGE', sx, sy + 2);
+      continue;
+    }
     ctx.fillStyle = 'rgba(200,160,80,0.35)';
     ctx.strokeStyle = 'rgba(220,180,100,0.65)';
     ctx.lineWidth = 1;

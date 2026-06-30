@@ -574,7 +574,10 @@ export function drawCampaignAssaultColorGrade(ctx, cols, rows, cellSize, goal, r
 }
 
 /** Single illustrated palisade ring — replaces per-cell tile loop during campaign assault combat. */
-export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, { spawnCol = null } = {}) {
+export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
+  spawnCol = null,
+  wallworksLevel = 0,
+} = {}) {
   if (!goal) return;
   const gx = goal.col * cellSize + cellSize / 2;
   const gy = goal.row * cellSize + cellSize / 2;
@@ -596,8 +599,9 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   ctx.fill();
 
   const stakeCount = Math.max(32, Math.round(ringR * 16));
-  const woodA = '#5c3a18';
-  const woodB = '#3a2410';
+  const tier = Math.min(3, Math.max(0, wallworksLevel));
+  const woodA = ['#5c3a18', '#6a4820', '#7a7a72', '#8a8a82'][tier];
+  const woodB = ['#3a2410', '#4a3018', '#5a5a54', '#6a6a64'][tier];
   const flicker = 0.55 + Math.sin(time * 8.2) * 0.32;
 
   for (let i = 0; i < stakeCount; i++) {
@@ -621,13 +625,13 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
     ctx.restore();
   }
 
-  ctx.strokeStyle = 'rgba(30,18,8,0.68)';
-  ctx.lineWidth = cellSize * 0.16;
+  ctx.strokeStyle = tier >= 2 ? 'rgba(100,100,108,0.72)' : 'rgba(30,18,8,0.68)';
+  ctx.lineWidth = cellSize * (tier >= 2 ? 0.22 : 0.16);
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, outer, outer * 0.9, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(90,62,32,0.52)';
+  ctx.strokeStyle = tier >= 2 ? 'rgba(140,140,150,0.55)' : 'rgba(90,62,32,0.52)';
   ctx.lineWidth = cellSize * 0.09;
   ctx.beginPath();
   ctx.ellipse(gx, gy + cellSize * 0.08, inner, inner * 0.9, 0, 0, Math.PI * 2);
