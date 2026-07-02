@@ -10998,6 +10998,17 @@ function drawCampaignMetaBar(center) {
       const _nextNode = _pendingNextAssaultNode ?? getNextAvailableAssault(_wcProgress, _campaignMapIndex, null)?.nodeIndex;
       const _prepNode = _nextNode ?? (_battleResult === 'defeat' ? _campaignNodeIndex : null);
       const _nai = _prepNode != null ? getAssaultInfo(_campaignMapIndex, _prepNode) : null;
+      // P7 (DIFFICULTY_BALANCE.md): surface composition gaps here, in War Camp,
+      // where the player can actually recruit/re-equip to close them — not just
+      // on the command map or (too late) mid-battle.
+      const _wcCompWarnings = _prepNode != null
+        ? getCompositionWarnings(
+            analyzeWarband(_roster?.defenders ?? []),
+            getPortalCountForMap(_campaignMapIndex),
+            getWaveCountForNode(_campaignMapIndex, _prepNode),
+            _nai?.isBoss ?? false,
+          )
+        : [];
       const _fu = goldReserve > 0
         ? getNextFortressUpgradeOffer(_campaignState?.fortressUpgrades ?? {}, goldReserve)
         : null;
@@ -11016,7 +11027,10 @@ function drawCampaignMetaBar(center) {
           barracksLevel: _campaignState?.fortressUpgrades?.barracks ?? 0,
         }),
       });
-      if (_wcHint) {
+      if (_wcCompWarnings.length > 0) {
+        metaCenter = { line1: `⚠ ${_nai?.codename?.toUpperCase() ?? 'NEXT ASSAULT'}`, line2: _wcCompWarnings[0], color: UI_COLORS.threat };
+        subtitle = 'WAR CAMP';
+      } else if (_wcHint) {
         metaCenter = { line1: _wcHint.title, line2: _wcHint.line, color: UI_COLORS.gold };
         subtitle = 'WAR CAMP';
       } else {

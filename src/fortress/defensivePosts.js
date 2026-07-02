@@ -7,7 +7,10 @@ import { isHeroTowerType } from '../campaign/campaignRun.js';
 import { chebyshevDist } from '../roster/heroRoles.js';
 
 export const FORTRESS_RING_R_DEFAULT = 5;
-export const MAX_HERO_POSTS_FILLED = 6;
+// Matches MAX_FIELD_HEROES (campaignMaps.js) and getRecommendedDeploy()'s ceiling of 10 —
+// was capped at 6 while boss/multi-portal nodes recommend deploying up to 10 heroes,
+// making the prep screen physically unable to follow the game's own guidance.
+export const MAX_HERO_POSTS_FILLED = 10;
 export const MAX_SIEGE_POSTS_FILLED = 4;
 
 export const HERO_POST_IDS = [
