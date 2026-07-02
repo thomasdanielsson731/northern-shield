@@ -46,6 +46,9 @@ const FRONT_TO_GATE = {
   south: 'south_gate',
 };
 
+/** All four fixed cardinal gate posts — the fortress always has one per side. */
+export const GATE_POST_IDS = Object.freeze(Object.values(FRONT_TO_GATE));
+
 export function getPrimaryGateForFront(frontId) {
   return FRONT_TO_GATE[frontId] ?? 'west_gate';
 }

@@ -617,7 +617,6 @@ export function drawCampaignAssaultColorGrade(ctx, cols, rows, cellSize, goal, r
 
 /** Single illustrated palisade ring — replaces per-cell tile loop during campaign assault combat. */
 export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
-  spawnCol = null,
   wallworksLevel = 0,
   wallData = null,
   mode = 'prep',
@@ -628,11 +627,9 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const outer = ringR * cellSize + cellSize * 0.42;
   const inner = outer - cellSize * 0.55;
   const isAssault = mode === 'assault';
-  const primaryGateAngle = spawnCol != null && spawnCol < goal.col ? Math.PI : 0;
-  // In assault, show all 4 gate openings; in prep, only the primary front
-  const gateAngles = isAssault
-    ? [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]
-    : [primaryGateAngle];
+  // The fortress always has all 4 cardinal gates — palisade ring opens at every one,
+  // in both prep and assault, matching the 4 gate structures drawFortressLayout renders.
+  const gateAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
   const gateSpread = 0.48;
   const useTiles = isPalisadeTileReady();
   const damageRatio = wallRingDamageRatio(wallData);

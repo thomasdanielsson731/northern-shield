@@ -7,6 +7,7 @@ const ART = {
   equipRing: '/assets/fx/fx_equip_ring_reference@128.png',
   hitSpark: '/assets/fx/fx_hit_spark_melee@32.png',
   gateBreach: '/assets/fx/fx_gate_breach_splinters_sheet@64.png',
+  firstNightIntro: '/assets/ui/ui_intro_first_night@960x540.png',
 };
 
 const _images = {};
@@ -48,6 +49,20 @@ export function drawHitSparkArt(ctx, x, y, size = 16, alpha = 1) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.drawImage(_images.hitSpark, x - size / 2, y - size / 2, size, size);
+  ctx.restore();
+  return true;
+}
+
+/** Full-bleed cold-open backdrop for the very first campaign battle. Cover-fits the rect. */
+export function drawFirstNightIntroArt(ctx, x, y, w, h, alpha = 1) {
+  if (!ready('firstNightIntro')) return false;
+  const img = _images.firstNightIntro;
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   ctx.restore();
   return true;
 }

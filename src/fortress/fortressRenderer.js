@@ -3,14 +3,13 @@
  */
 
 import { computeStructureAnchors, createFortressLayout } from './fortressLayout.js';
-import { getGateArtKeyFromState, STRUCTURE_ART_KEYS } from '../assets/fortressManifest.js';
+import { STRUCTURE_ART_KEYS } from '../assets/fortressManifest.js';
 import { needsGateRepair } from './prepScarRepair.js';
 import { resolvePostCell, getPrimaryGateForFront } from './defensivePosts.js';
 import {
   drawFortressPrepSprite,
   drawCampaignGateSprite,
   getBattleWestGateArtKey,
-  getWestGateArtKey,
   ASSAULT_FORTRESS_STRUCTURE_SCALE,
 } from '../preparation/fortressPrepArt.js';
 import { PREP_FORTRESS_STRUCTURE_SCALE } from '../combat/assaultField.js';
@@ -32,28 +31,20 @@ function cellBox(cell, cellSize, scale, footprint = { w: 1, h: 1 }) {
   };
 }
 
-function findGateWallEntry(wallData, goal, ringR, frontId) {
-  const gatePost = getPrimaryGateForFront(frontId);
-  const gateCell = resolvePostCell(gatePost, goal, ringR);
-  const key = `${gateCell.col}_${gateCell.row}`;
-  if (wallData?.[key]) return wallData[key];
-  for (const w of Object.values(wallData ?? {})) {
-    if (w?.isGate) return w;
-  }
-  return null;
+function findGateWallEntry(wallData, cell) {
+  const key = `${cell.col}_${cell.row}`;
+  return wallData?.[key] ?? null;
 }
 
-function drawGateAtCell(ctx, cell, cellSize, scale, { wallData, prepMeta, frontId, goal, ringR, time, mode = 'assault' }) {
-  const gateWall = findGateWallEntry(wallData, goal, ringR, frontId);
-  const scarred = prepMeta?.westGateScarred && !prepMeta?.westGateRepaired;
-  const artKey = wallData && Object.keys(wallData).length
-    ? getBattleWestGateArtKey(gateWall, prepMeta)
-    : (getGateArtKeyFromState({ scarred, repaired: !scarred }) === 'westGateCracked'
-      ? 'westGateCracked'
-      : getWestGateArtKey(prepMeta));
+/** Draw one of the fortress's four fixed gates. Scar/repair narrative only applies to
+ * the primary gate (the front under assault this battle) — the other three default
+ * to intact unless their own wall entry records battle damage. */
+function drawGateAtCell(ctx, cell, cellSize, scale, { wallData, prepMeta, isPrimary = false, time, mode = 'assault' }) {
+  const gateWall = findGateWallEntry(wallData, cell);
+  const artKey = getBattleWestGateArtKey(gateWall, isPrimary ? prepMeta : null);
   const gateScale = mode === 'prep' ? scale * 1.08 : scale;
   const box = cellBox(cell, cellSize, gateScale, { w: 3.6, h: 2.35 });
-  if (needsGateRepair(prepMeta) && mode === 'prep') {
+  if (isPrimary && needsGateRepair(prepMeta) && mode === 'prep') {
     const pulse = 0.45 + Math.sin(time * 4.5) * 0.3;
     ctx.save();
     ctx.strokeStyle = `rgba(255,100,40,${pulse})`;
@@ -208,7 +199,7 @@ export function drawFortressLayout(ctx, {
   for (const anchor of anchors) {
     if (anchor.kind === 'gate') {
       drawGateAtCell(ctx, anchor.cell, cellSize, structureScale, {
-        wallData, prepMeta, frontId, goal, ringR, time, mode,
+        wallData, prepMeta, isPrimary: anchor.isPrimary, time, mode,
       });
     } else if (anchor.kind === 'longhouse') {
       const box = drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);

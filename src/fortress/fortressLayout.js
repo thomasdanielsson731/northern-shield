@@ -6,6 +6,7 @@
 import {
   buildTowerPlacements,
   FORTRESS_RING_R_DEFAULT,
+  GATE_POST_IDS,
   getPrimaryGateForFront,
   HERO_POST_IDS,
   POST_DEFS,
@@ -91,12 +92,15 @@ export function computeStructureAnchors(layout) {
   const anchors = [];
 
   const primaryGate = getPrimaryGateForFront(frontId);
-  anchors.push({
-    id: 'west_gate_structure',
-    kind: 'gate',
-    cell: resolvePostCell(primaryGate, goal, ringR),
-    postId: primaryGate,
-  });
+  for (const gatePostId of GATE_POST_IDS) {
+    anchors.push({
+      id: `gate_structure_${gatePostId}`,
+      kind: 'gate',
+      cell: resolvePostCell(gatePostId, goal, ringR),
+      postId: gatePostId,
+      isPrimary: gatePostId === primaryGate,
+    });
+  }
 
   anchors.push({
     id: 'longhouse',

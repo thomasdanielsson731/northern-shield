@@ -289,7 +289,7 @@ import {
 } from '../combat/assaultField.js';
 import { drawBattleMinimap, minimapLayout, getMinimapMapRect } from '../ui/minimap.js';
 import { drawAssaultFortressStructures, ASSAULT_FORTRESS_STRUCTURE_SCALE } from '../preparation/fortressPrepArt.js';
-import { drawBossBannerArt, drawEquipRingArt, drawHitSparkArt } from '../assets/combatArt.js';
+import { drawBossBannerArt, drawEquipRingArt, drawHitSparkArt, drawFirstNightIntroArt } from '../assets/combatArt.js';
 import {
   getEquipCeremonyLayout,
   RUNE_CARVER_COLLAPSED_H,
@@ -793,6 +793,7 @@ let dmgFloaters     = [];       // { x, y, val, life, maxLife, color }
 let poorWaveStreak     = 0;       // consecutive waves player started with <15g
 let chapterBannerTimer = 0;       // frames to show chapter milestone banner
 let chapterBannerText  = '';      // text to display in chapter banner
+let chapterBannerArtKey = null;   // optional full-bleed backdrop art key for this banner
 let _depthBannerTimer  = 0;       // frames to show depth banner (endless 5-wave tiers)
 let _depthBannerTier   = 0;       // current endless depth tier number
 let _bossPhaseDesc     = null;    // { text, timer } — 2s auto-display on boss phase transition
@@ -1419,6 +1420,7 @@ function restartCombatState() {
   poorWaveStreak     = 0;
   chapterBannerTimer = 0;
   chapterBannerText  = '';
+  chapterBannerArtKey = null;
   _depthBannerTimer  = 0;
   _depthBannerTier   = 0;
   currentWaveEvent   = null;
@@ -3451,6 +3453,10 @@ function drawFortressCommanderPrepScreen() {
     frontId: assault?.frontId ?? 'west',
   });
 
+  ctx.restore();
+
+  // drawPrepPostOverlays computes its own screen-space coords via gridScreenX/Y —
+  // it must run after the world transform is restored, or positions get transformed twice.
   const selectedPost = _prepShell.selectedHotspot;
   drawPrepPostOverlays(ctx, {
     goal: GOAL,
@@ -3466,8 +3472,6 @@ function drawFortressCommanderPrepScreen() {
     fortressUpgrades: _campaignState?.fortressUpgrades ?? {},
     prepMeta: _prepFieldMeta,
   });
-
-  ctx.restore();
 
   const fortSx = gridScreenX(GOAL.col * CELL_SIZE + CELL_SIZE / 2);
   const fortSy = gridScreenY(GOAL.row * CELL_SIZE + CELL_SIZE / 2);
@@ -4301,10 +4305,16 @@ let waveLeak  = false;
 function startNextWave() {
   ancestralAidActive = false;   // clear any unused Aid from prior wave
   waveNumber++;
+  chapterBannerArtKey = null;
   if (_campaignNodeMode && _marchSuppliesShown > 0 && waveNumber === 1) {
     chapterBannerText = `MARCH SUPPLIES +${_marchSuppliesShown}g`;
     chapterBannerTimer = 200;
     _marchSuppliesShown = 0;
+  }
+  if (_campaignNodeMode && isFirstSagaMap(_campaignMapIndex) && _campaignNodeIndex === 0 && waveNumber === 1) {
+    chapterBannerText  = 'FIRST NIGHT';
+    chapterBannerTimer = 260;
+    chapterBannerArtKey = 'firstNightIntro';
   }
   let _equivWave = waveNumber;
   if (_campaignNodeMode && _nodeWavePlan) {
@@ -19002,6 +19012,16 @@ function drawChapterBanner() {
   const cy = GRID_TOP + (ROWS * CELL_SIZE) / 2 - 18;
   ctx.save();
   ctx.textAlign = 'center';
+
+  // Cold-open still for the very first campaign battle — full-bleed behind the banner text
+  if (chapterBannerArtKey === 'firstNightIntro') {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const { width, height } = getViewSize();
+    drawFirstNightIntroArt(ctx, 0, 0, width, height, alpha * 0.85);
+    ctx.restore();
+    ctx.save();
+    ctx.textAlign = 'center';
+  }
 
   // Dark backing strip for legibility
   ctx.fillStyle = `rgba(4,2,10,${alpha * 0.68})`;
