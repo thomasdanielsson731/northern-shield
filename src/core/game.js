@@ -1097,6 +1097,21 @@ const WAVE_EVENTS = {
   95: { id: 'valhallaCalling',label: '⭐ VALHALLA CALLS',    desc: '+60% HP, +20% speed, +8 Jötunn', hpMult: 1.60, speedMult: 1.20, bonus: { type: 'jotunn', count: 8 } },
 };
 
+// DIFFICULTY_BALANCE.md P5 — campaign has no wave-event variation/relief at all
+// (skirmish's WAVE_EVENTS never fires in pathless mode). Light, mercy-only
+// modifiers — never harsher than baseline — with a 10% chance per wave.
+const CAMPAIGN_RELIEF_EVENTS = [
+  { id: 'campaignMistSettles',  label: '🌫 MIST SETTLES',  desc: 'Enemies 10% slower this wave', speedMult: 0.90 },
+  { id: 'campaignThinnedRanks', label: '☀ THINNED RANKS', desc: 'Enemies 10% weaker this wave',  hpMult: 0.90 },
+  { id: 'campaignCalmWinds',    label: '🕊 CALM WINDS',    desc: 'Enemies 15% slower this wave', speedMult: 0.85 },
+];
+const CAMPAIGN_RELIEF_CHANCE = 0.10;
+
+function rollCampaignReliefEvent() {
+  if (Math.random() >= CAMPAIGN_RELIEF_CHANCE) return null;
+  return CAMPAIGN_RELIEF_EVENTS[Math.floor(Math.random() * CAMPAIGN_RELIEF_EVENTS.length)];
+}
+
 // ── achievements ──────────────────────────────────────────────────────────────
 
 const ACH_KEY = 'northern-shield-ach';
@@ -4342,7 +4357,13 @@ function startNextWave() {
     }
   }
   waveRangeMult  = 1;
-  currentWaveEvent = _campaignNodeMode ? null : (WAVE_EVENTS[waveNumber] ?? null);
+  currentWaveEvent = _campaignNodeMode ? rollCampaignReliefEvent() : (WAVE_EVENTS[waveNumber] ?? null);
+  // Don't clobber the First Night cold-open banner if relief happens to roll on it —
+  // the modifier still applies below, just without stealing that moment's text.
+  if (currentWaveEvent && _campaignNodeMode && chapterBannerArtKey !== 'firstNightIntro') {
+    chapterBannerText  = currentWaveEvent.label;
+    chapterBannerTimer = 160;
+  }
   if (endlessMode && waveNumber > 101) {
     const epoch = waveNumber - 102;
     currentWaveEvent = ENDLESS_FLAVOR_EVENTS[epoch % ENDLESS_FLAVOR_EVENTS.length];
