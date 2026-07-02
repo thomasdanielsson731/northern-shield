@@ -31,6 +31,31 @@ function cellBox(cell, cellSize, scale, footprint = { w: 1, h: 1 }) {
   };
 }
 
+// The palisade ring is drawn as a smooth ellipse (drawCampaignPalisadeRing's
+// cos(a)*outer / sin(a)*outer*0.9), but resolvePostCell's corner-tower cells sit
+// on the Chebyshev-square corner (Euclidean distance ringR*cellSize*sqrt(2)) —
+// ~40% farther out than where the ellipse actually curves at a diagonal angle.
+// Rendered at their real post cell, corner towers float disconnected out in the
+// wilderness well outside the visible wall. Reposition just the sprite (not the
+// gameplay post cell used for hero deployment/hit-testing) onto the ellipse.
+const CORNER_TOWER_ANGLE = {
+  watch_tower: -Math.PI / 4,        // NE
+  nw_tower: (5 * Math.PI) / 4,      // NW
+  sw_tower: (3 * Math.PI) / 4,      // SW
+  se_tower: Math.PI / 4,            // SE
+};
+
+function cornerTowerWallCell(goal, cellSize, ringR, towerId) {
+  const angle = CORNER_TOWER_ANGLE[towerId];
+  if (angle == null) return null;
+  const gx = goal.col * cellSize + cellSize / 2;
+  const gy = goal.row * cellSize + cellSize / 2;
+  const outer = ringR * cellSize + cellSize * 0.42;
+  const x = gx + Math.cos(angle) * outer;
+  const y = gy + Math.sin(angle) * outer * 0.9 + cellSize * 0.08;
+  return { col: x / cellSize, row: y / cellSize };
+}
+
 function findGateWallEntry(wallData, cell) {
   const key = `${cell.col}_${cell.row}`;
   return wallData?.[key] ?? null;
@@ -209,7 +234,8 @@ export function drawFortressLayout(ctx, {
       // hollow/unfortified with zero towers. Only the assignable Watch Tower
       // post gets the upgrade height boost; the other 3 are decorative.
       const isUpgradeableWatchTower = anchor.id === 'watch_tower';
-      drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, isUpgradeableWatchTower ? watchLv : 0);
+      const wallCell = cornerTowerWallCell(goal, cellSize, ringR, anchor.id) ?? anchor.cell;
+      drawCourtyardStructure(ctx, 'watch_tower', wallCell, cellSize, structureScale, isUpgradeableWatchTower ? watchLv : 0);
     } else if (anchor.kind === 'treasury') {
       // Treasury is only 1 row from longhouse — place it 3 rows above center in assault to avoid overlap
       const cell = mode === 'assault' ? { col: goal.col, row: goal.row - 3 } : anchor.cell;

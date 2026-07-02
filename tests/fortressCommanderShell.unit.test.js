@@ -13,6 +13,7 @@ import {
   getPrepPanelActions,
   PREP_HOTSPOTS,
   hotspotRect,
+  handlePrepShellPointer,
 } from '../src/preparation/fortressCommanderShell.js';
 import { FIRST_SAGA_A3_NODE } from '../src/campaign/firstSaga.js';
 
@@ -135,6 +136,21 @@ describe('fortressCommanderShell', () => {
 
     const noAssault = { ...base, pendingAssaultNode: null, assaultNodeIndex: null, assault: null };
     expect(getPrepInstructionHint(noAssault)?.title).toBe('COMMAND MAP');
+  });
+
+  it('does not swallow scroll-world clicks with the legacy schematic deselect fallback', () => {
+    const state = createPrepShellState();
+    const pf = { x: 0, y: 0, w: 400, h: 300 };
+    // A click on empty battlefield space (not a panel button, not the horn) must
+    // fall through to null in scroll-world mode so hitTestPrepWorldPost gets a
+    // chance to run in the real click handler — this used to always resolve to
+    // {type:'deselect'} and block every non-West-Gate post from ever being hit.
+    const scrollWorldResult = handlePrepShellPointer(state, 200, 150, pf, null, 'click', false);
+    expect(scrollWorldResult).toBeNull();
+
+    // The legacy schematic overlay still runs its own 5-hotspot lookup at the same coords.
+    const schematicResult = handlePrepShellPointer(state, 200, 150, pf, null, 'click', true);
+    expect(schematicResult).not.toBeNull();
   });
 
   it('prep objectives skip repair on A3 teach', () => {

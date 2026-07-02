@@ -7295,6 +7295,8 @@ canvas.addEventListener('mousedown', e => {
                   _campaignState.equipmentInventory = _equipmentInventory.slice();
                   try { persistCampaign(); } catch {}
                 }
+              } else {
+                _uiToast = { text: `No ${slotType} in inventory yet — boss drops`, timer: 90, color: UI_COLORS.gold };
               }
             }
           } else if (btn.action === 'cycleFortressRole') {
@@ -7454,7 +7456,7 @@ canvas.addEventListener('mousedown', e => {
   // Fortress Commander prep — scroll battlefield posts + context panel
   if (e.button === 0 && isFortressPrepPhase() && _prepShell) {
     const pf = getCommanderPlayfield();
-    let action = handlePrepShellPointer(_prepShell, mouseX, mouseY, pf, null, 'click');
+    let action = handlePrepShellPointer(_prepShell, mouseX, mouseY, pf, null, 'click', _prepSchematicOverlay);
     if (!action && _prepShell.hornHoverZone) {
       const hz = _prepShell.hornHoverZone;
       if (mouseX >= hz.x && mouseX <= hz.x + hz.w && mouseY >= hz.y && mouseY <= hz.y + hz.h) {
@@ -7836,7 +7838,10 @@ canvas.addEventListener('wheel', e => {
                  outerY >= GRID_TOP  && outerY <= GRID_TOP  + playfieldHeight();
   if (!inGrid) return;
 
-  if (useAssaultScrollWorld()) {
+  // Scroll-world (prep/assault) used to consume the wheel entirely for panning,
+  // leaving no way to zoom at all — right-drag and arrow keys already pan, so
+  // free the wheel to zoom here too, same as the default grid.
+  if (useAssaultScrollWorld() && e.shiftKey) {
     gridPanX -= e.deltaX * 0.4;
     gridPanY -= e.deltaY * 0.4;
     clampGridPan();
@@ -17991,6 +17996,9 @@ function draw() {
     if (_showDefenderBio)  drawDefenderBioOverlay(_showDefenderBio);
     if (_retirementCeremony) drawRetirementCeremony(_retirementCeremony);
     if (_pendingCampaignEvent && _betweenFadeIn <= 0) drawCampaignEventCard();
+    // _uiToast is set all over War Camp (locked-building reasons, equip feedback, etc.)
+    // but was never drawn on this phase — every one of those messages was invisible.
+    drawUiToast();
     ctx.restore();
     return;
   }

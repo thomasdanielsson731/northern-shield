@@ -950,7 +950,16 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
   ctx.textAlign = 'left';
 }
 
-export function handlePrepShellPointer(state, mouseX, mouseY, playfield, panelRect, eventType) {
+/**
+ * @param schematicMode - true only on the legacy static schematic (MAP) overlay.
+ *   hitTestHotspots below targets that overlay's fixed 5-hotspot layout
+ *   (PREP_HOTSPOT_LAYOUT, west-front-only positions) — its "anywhere in the
+ *   playfield that isn't one of those 5 -> deselect" fallback must not run in
+ *   the default scroll-world view, or it swallows every click meant for
+ *   hitTestPrepWorldPost's real 9-post hit test (east/north/south gates,
+ *   corner towers, inner keep) before that ever gets a chance to run.
+ */
+export function handlePrepShellPointer(state, mouseX, mouseY, playfield, panelRect, eventType, schematicMode = false) {
   if (eventType === 'move') {
     const hz = state.hornHoverZone;
     state.hornHover = hz
@@ -972,6 +981,8 @@ export function handlePrepShellPointer(state, mouseX, mouseY, playfield, panelRe
     && mouseY >= state.hornBtn.y && mouseY <= state.hornBtn.y + state.hornBtn.h) {
     return { type: 'horn' };
   }
+
+  if (!schematicMode) return null;
 
   const hit = hitTestHotspots(mouseX, mouseY, playfield, state);
   if (hit) {
