@@ -51,4 +51,35 @@ describe('assaultField', () => {
     expect(pan.x).toBeLessThanOrEqual(0);
     expect(pan.y).toBeLessThanOrEqual(0);
   });
+
+  it('clampAssaultGridPan allows panning far enough to reveal the world padding', () => {
+    // The render transform scales around the grid's *center*, not the world's
+    // top-left corner. With gridWidth/gridHeight omitted (defaulting to the
+    // world size, i.e. no padding) that offset happens to be small, but with
+    // real padding the naive [-maxPan, 0] range used to fall ~240px short of
+    // the world's actual left/top edge — that much of the padding was
+    // permanently unreachable no matter how far the player panned.
+    const cellSize = 14;
+    const gridWidth = 48 * cellSize;   // 672
+    const gridHeight = 30 * cellSize;  // 420
+    const padX = 18 * cellSize;        // 252
+    const padY = 12 * cellSize;        // 168
+    const opts = {
+      worldWidth: gridWidth + padX * 2,
+      worldHeight: gridHeight + padY * 2,
+      viewportWidth: 840,
+      viewportHeight: 500,
+      zoom: 0.98,
+      gridWidth,
+      gridHeight,
+    };
+    // Try to pan far past any sane bound in both directions — the clamp should
+    // stop short of the world's actual edges, not short of some offset guess.
+    const atMax = clampAssaultGridPan(1e6, 1e6, opts);
+    const atMin = clampAssaultGridPan(-1e6, -1e6, opts);
+    expect(atMax.x).toBeGreaterThan(0); // padding is reachable past the old hard 0 ceiling
+    expect(atMax.x).toBeGreaterThan(atMin.x);
+    expect(atMax.y).toBeGreaterThan(0);
+    expect(atMax.y).toBeGreaterThan(atMin.y);
+  });
 });

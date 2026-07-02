@@ -213,10 +213,15 @@ export function hotspotRect(playfield, hotspotId) {
 }
 
 export function updatePrepCamera(state, dtMs) {
-  const target = state.selectedHotspot
-    ? HOTSPOT_LAYOUT[state.selectedHotspot]
-    : { fx: 0.5, fy: 0.5, fw: 0, fh: 0 };
-  const targetScale = state.selectedHotspot ? 1.22 : 1;
+  // HOTSPOT_LAYOUT only covers the legacy 5-hotspot static schematic (west-front
+  // positions). Scroll-world posts (east/north/south gates, corner towers, inner
+  // keep, siege posts) aren't in it — selecting one used to be impossible (see
+  // the click-routing fix), so this crash on `undefined.fx` was never reachable
+  // until that bug was fixed. Fall back to centered/no-zoom for those instead of
+  // crashing the render loop.
+  const layoutTarget = state.selectedHotspot ? HOTSPOT_LAYOUT[state.selectedHotspot] : null;
+  const target = layoutTarget ?? { fx: 0.5, fy: 0.5, fw: 0, fh: 0 };
+  const targetScale = layoutTarget ? 1.22 : 1;
   const targetFx = target.fx + (target.fw || 0) / 2;
   const targetFy = target.fy + (target.fh || 0) / 2;
   const t = Math.min(1, dtMs / CAMERA_DURATION_MS);

@@ -73,13 +73,27 @@ export function clampAssaultGridPan(gridPanX, gridPanY, {
   viewportWidth,
   viewportHeight,
   zoom,
+  gridWidth = worldWidth,
+  gridHeight = worldHeight,
 }) {
-  const scaledW = worldWidth * zoom;
-  const scaledH = worldHeight * zoom;
-  const maxPanX = Math.max(0, scaledW - viewportWidth);
-  const maxPanY = Math.max(0, scaledH - viewportHeight);
+  // The render transform scales around the grid's center (cx,cy), not the
+  // world's top-left corner: screenX(localX) = pfLeft + gridPanX + cx + (localX-cx)*zoom.
+  // A naive [-maxPan, 0] clamp (correct only when there's no world padding)
+  // ignores that offset — with padding (the scroll world always has some),
+  // it cuts the reachable pan range short well before the world's real edges,
+  // making the far side (here: the left/west padding) permanently unpannable.
+  const cx = gridWidth / 2;
+  const cy = gridHeight / 2;
+  const padX = (worldWidth - gridWidth) / 2;
+  const padY = (worldHeight - gridHeight) / 2;
+  const maxX = -cx + (padX + cx) * zoom;
+  const minX = viewportWidth - cx - (gridWidth + padX - cx) * zoom;
+  const maxY = -cy + (padY + cy) * zoom;
+  const minY = viewportHeight - cy - (gridHeight + padY - cy) * zoom;
+  const loX = Math.min(minX, maxX), hiX = Math.max(minX, maxX);
+  const loY = Math.min(minY, maxY), hiY = Math.max(minY, maxY);
   return {
-    x: Math.max(-maxPanX, Math.min(0, gridPanX)),
-    y: Math.max(-maxPanY, Math.min(0, gridPanY)),
+    x: Math.max(loX, Math.min(hiX, gridPanX)),
+    y: Math.max(loY, Math.min(hiY, gridPanY)),
   };
 }

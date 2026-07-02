@@ -5641,6 +5641,8 @@ function clampGridPan() {
       viewportWidth: playfieldWidth(),
       viewportHeight: playfieldHeight(),
       zoom: s,
+      gridWidth: COLS * CELL_SIZE,
+      gridHeight: ROWS * CELL_SIZE,
     });
     gridPanX = clamped.x;
     gridPanY = clamped.y;
