@@ -321,10 +321,12 @@ function scatterAssaultWilderness(tc, worldW, worldH, padX, padY, cols, rows, ce
     return Math.max(Math.abs(lx / cellSize - goal.col), Math.abs(ly / cellSize - goal.row)) <= 7;
   };
 
-  for (let i = 0; i < 48; i++) {
+  // Trees/rocks previously only spawned in the outer padding, never inside the
+  // 48x30 grid itself — but the grid (minus the courtyard) is what's actually
+  // on screen once the camera centers on the fortress, so it read as bare dirt.
+  for (let i = 0; i < 80; i++) {
     let wx = rng() * worldW;
     let wy = rng() * worldH;
-    if (wx > padX && wx < padX + gridW && wy > padY && wy < padY + gridH) continue;
     if (inCourtyard(wx, wy)) continue;
 
     const pick = rng();

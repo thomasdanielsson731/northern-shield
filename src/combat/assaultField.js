@@ -3,14 +3,20 @@
  * World is larger than the viewport so the player can pan around the fortress.
  */
 
-export const ASSAULT_FIELD_ZOOM = 1.4;
+// Zoom 2.0 was reverted to 1.4 because ASSAULT_UNIT_SCALE stayed at 1.0 — heroes/enemies
+// appeared oversized, not because the fortress filling more of the frame was wrong.
+// 1.4 left the ring at only ~32% of viewport width (too small vs. the fortress-as-
+// main-character art direction). Raising zoom again while compensating unit scale
+// (keeping the effective on-screen unit size close to the old 1.4*0.65=0.91) grows
+// the fortress ~29% without repeating that mistake.
+export const ASSAULT_FIELD_ZOOM = 1.8;
 /** Prep uses a tighter, readable view — same world, higher magnification. */
 export const PREP_FIELD_ZOOM = 0.98;
 export const PREP_INITIAL_GRID_ZOOM = 1.48;
 export const PREP_FORTRESS_STRUCTURE_SCALE = 2.35;
 export const ASSAULT_WORLD_PAD_COLS = 18;
 export const ASSAULT_WORLD_PAD_ROWS = 12;
-export const ASSAULT_UNIT_SCALE = 0.65;
+export const ASSAULT_UNIT_SCALE = 0.5;
 
 export function assaultWorldPadPx(cellSize) {
   return {
