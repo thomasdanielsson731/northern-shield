@@ -108,11 +108,13 @@ export function computeStructureAnchors(layout) {
     cell: { col: goal.col, row: goal.row },
   });
 
-  anchors.push({
-    id: 'watch_tower',
-    kind: 'watch_tower',
-    cell: resolvePostCell('watch_tower', goal, ringR),
-  });
+  for (const cornerId of ['watch_tower', 'nw_tower', 'sw_tower', 'se_tower']) {
+    anchors.push({
+      id: cornerId,
+      kind: 'watch_tower',
+      cell: resolvePostCell(cornerId, goal, ringR),
+    });
+  }
 
   anchors.push({
     id: 'treasury',

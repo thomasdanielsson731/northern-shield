@@ -205,10 +205,11 @@ export function drawFortressLayout(ctx, {
       const box = drawCourtyardStructure(ctx, 'longhouse', anchor.cell, cellSize, structureScale);
       if (mode === 'assault') drawBuildingLabel(ctx, COURTYARD_LABELS.longhouse, box, cellSize, { below: true });
     } else if (anchor.kind === 'watch_tower') {
-      // Watch tower anchor is outside the palisade ring in assault — skip it there
-      if (mode !== 'assault') {
-        const box = drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, watchLv);
-      }
+      // Reuse the one watch tower sprite at all 4 corners — the ring reads as
+      // hollow/unfortified with zero towers. Only the assignable Watch Tower
+      // post gets the upgrade height boost; the other 3 are decorative.
+      const isUpgradeableWatchTower = anchor.id === 'watch_tower';
+      drawCourtyardStructure(ctx, 'watch_tower', anchor.cell, cellSize, structureScale, isUpgradeableWatchTower ? watchLv : 0);
     } else if (anchor.kind === 'treasury') {
       // Treasury is only 1 row from longhouse — place it 3 rows above center in assault to avoid overlap
       const cell = mode === 'assault' ? { col: goal.col, row: goal.row - 3 } : anchor.cell;

@@ -629,8 +629,10 @@ export function drawCampaignPalisadeRing(ctx, goal, ringR, cellSize, time = 0, {
   const isAssault = mode === 'assault';
   // The fortress always has all 4 cardinal gates — palisade ring opens at every one,
   // in both prep and assault, matching the 4 gate structures drawFortressLayout renders.
+  // gateSpread was tuned for a single opening (~55° wide); with 4 gates that width
+  // would leave over 60% of the ring open and read as a broken wall, not a fortress.
   const gateAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
-  const gateSpread = 0.48;
+  const gateSpread = 0.22;
   const useTiles = isPalisadeTileReady();
   const damageRatio = wallRingDamageRatio(wallData);
 
