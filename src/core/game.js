@@ -273,7 +273,7 @@ import {
   drawPathlessFootDust,
   drawLaneWearMarks,
 } from '../combat/combatJuice.js';
-import { drawCampaignPortrait, drawCampaignArtCover } from '../assets/campaignArt.js';
+import { drawCampaignPortrait, drawCampaignArtCover, drawNamedPortraitArt } from '../assets/campaignArt.js';
 import { tickStoneFlash } from '../ui/settlementJuice.js';
 import { bakeAshfenTerrain, bakeAssaultWorldTerrain, drawCampaignAssaultPlayfieldBackdrop, drawAnimatedSpawnFenMist, drawCampaignPalisadeTorchPools, drawCampaignAssaultColorGradeBg, drawCampaignPalisadeRing, drawPathlessAssaultLane } from '../assets/terrainArt.js';
 import { drawGateBreachSplinters } from '../combat/gateBreachFx.js';
@@ -12986,6 +12986,11 @@ function drawBossDefeat() {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign   = 'center';
+
+  if (isKill && bossDefeatText.toUpperCase().includes('ASH-WARDEN')) {
+    const pw = 48, ph = 60;
+    drawNamedPortraitArt(ctx, 'bossAshWarden', cx - pw / 2, cy - ph - 30, pw, ph, alpha);
+  }
 
   ctx.font        = 'bold 22px monospace';
   ctx.fillStyle   = isKill ? '#60ee80' : '#ff8800';

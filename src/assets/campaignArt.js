@@ -10,6 +10,11 @@ const PORTRAIT_BY_TYPE = {
   archer: '/assets/portraits/portrait_military_default@64x80.png',
 };
 
+const NAMED_PORTRAITS = {
+  bossAshWarden: '/assets/portraits/portrait_boss_ash_warden@64x80.png',
+  refugeeSettler: '/assets/portraits/portrait_refugee_settler@64x80.png',
+};
+
 const ART = {
   warCampBgAge1: '/assets/ui/ui_war_camp_bg_age1@1024x512.png',
   commandMapRegion1: '/assets/ui/ui_command_map_region1@800x600.png',
@@ -32,6 +37,8 @@ const ART = {
   hallOfHeroesBg: '/assets/ui/ui_hall_of_heroes_bg@1536x1024.png',
   heroCardFrame: '/assets/ui/ui_hero_card_frame@200x320.png',
   berserkMedallion: '/assets/ui/icon_hero_berserk_medallion@24.png',
+  resourceWood: '/assets/ui/icons/icon_resource_wood@24.png',
+  resourceStone: '/assets/ui/icons/icon_resource_stone@24.png',
   advisorPrep: '/assets/portraits/portrait_advisor_prep@96x112.png',
   assaultIcons: [
     '/assets/ui/icons/icon_assault_a0@32.png',
@@ -40,6 +47,14 @@ const ART = {
     '/assets/ui/icons/icon_assault_a3@32.png',
     '/assets/ui/icons/icon_assault_a4@32.png',
     '/assets/ui/icons/icon_assault_a5@32.png',
+  ],
+  assaultIntel: [
+    '/assets/ui/ui_assault_intel_a0@128x72.png',
+    '/assets/ui/ui_assault_intel_a1@128x72.png',
+    '/assets/ui/ui_assault_intel_a2@128x72.png',
+    '/assets/ui/ui_assault_intel_a3@128x72.png',
+    '/assets/ui/ui_assault_intel_a4@128x72.png',
+    '/assets/ui/ui_assault_intel_a5@128x72.png',
   ],
 };
 
@@ -54,6 +69,8 @@ function load(key, src) {
 for (const [key, src] of Object.entries(ART)) {
   if (key === 'assaultIcons') {
     src.forEach((path, i) => load(`assault${i}`, path));
+  } else if (key === 'assaultIntel') {
+    src.forEach((path, i) => load(`assaultIntel${i}`, path));
   } else {
     load(key, src);
   }
@@ -61,6 +78,10 @@ for (const [key, src] of Object.entries(ART)) {
 
 for (const [type, src] of Object.entries(PORTRAIT_BY_TYPE)) {
   load(`portrait_${type}`, src);
+}
+
+for (const [key, src] of Object.entries(NAMED_PORTRAITS)) {
+  load(key, src);
 }
 
 export function isCampaignArtReady(key) {
@@ -132,6 +153,37 @@ export function drawAssaultNodeIcon(ctx, nodeIndex, nx, ny, size = 20) {
   return true;
 }
 
+/** Illustrated intel vignette for a First Saga node (0-4 assaults, 5 = settlement). Cover-fit. */
+export function drawAssaultIntelArt(ctx, nodeIndex, x, y, w, h, alpha = 1) {
+  const key = `assaultIntel${nodeIndex}`;
+  if (!isCampaignArtReady(key)) return false;
+  const img = _images[key];
+  const { dx, dy, dw, dh } = computeCoverFitRect(img.naturalWidth, img.naturalHeight, x, y, w, h);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  return true;
+}
+
+/** Named story portrait (boss, ceremony NPC) in a rounded rect. */
+export function drawNamedPortraitArt(ctx, key, x, y, w, h, alpha = 1) {
+  if (!isCampaignArtReady(key)) return false;
+  const img = _images[key];
+  const { dx, dy, dw, dh } = computeCoverFitRect(img.naturalWidth, img.naturalHeight, x, y, w, h);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  return true;
+}
+
 export function drawAdvisorPortraitArt(ctx, x, y, size = 40) {
   if (!isCampaignArtReady('advisorPrep')) return false;
   const img = _images.advisorPrep;
@@ -152,6 +204,14 @@ export function drawHeroCardFrame(ctx, x, y, w, h, alpha = 1) {
   ctx.globalAlpha = alpha;
   ctx.drawImage(img, x, y, w, h);
   ctx.restore();
+  return true;
+}
+
+/** Resource icon (wood/stone) at natural 24px size. */
+export function drawResourceIconArt(ctx, resource, cx, cy, size = 12) {
+  const key = resource === 'wood' ? 'resourceWood' : resource === 'stone' ? 'resourceStone' : null;
+  if (!key || !isCampaignArtReady(key)) return false;
+  ctx.drawImage(_images[key], cx - size / 2, cy - size / 2, size, size);
   return true;
 }
 

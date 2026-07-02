@@ -29,7 +29,7 @@ import {
   getSettlementStepGlow,
   getHeroNamingGlow,
 } from '../ui/settlementJuice.js';
-import { drawCampaignArtCover, drawAssaultNodeIcon } from '../assets/campaignArt.js';
+import { drawCampaignArtCover, drawAssaultNodeIcon, drawAssaultIntelArt, drawNamedPortraitArt } from '../assets/campaignArt.js';
 import { drawFortressPrepSprite } from '../preparation/fortressPrepArt.js';
 import { getCommandMapArtKey, resolveCommandMapNodePositions } from './commandMapLayout.js';
 
@@ -153,6 +153,8 @@ export function drawFirstSagaCommandMap(ctx, {
     { ...FIRST_SAGA_SETTLEMENT, kind: 'settlement' },
   ];
 
+  let featuredIntel = null;
+
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     const pt = layoutPts?.[i];
@@ -172,6 +174,7 @@ export function drawFirstSagaCommandMap(ctx, {
         && !run.nodesCleared.includes(a.nodeIndex)
       );
     const isSettlementNext = node.kind === 'settlement' && settlementReady && !settlementDone;
+    if (isNext || isSettlementNext) featuredIntel = { intelIndex: i, codename: node.codename };
 
     const r = nodeR;
     ctx.beginPath();
@@ -216,6 +219,26 @@ export function drawFirstSagaCommandMap(ctx, {
     if (node.kind === 'settlement' && settlementReady && !settlementDone) {
       btnsOut.push({ x: hx, y: hy, w: hitW, h: hitH, action: 'settlement' });
     }
+  }
+
+  if (featuredIntel) {
+    const iw = 120, ih = 68;
+    const ix = mapX + mapW - iw - 10;
+    const iy = mapY + 10;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,170,100,0.55)';
+    ctx.lineWidth = 1.5;
+    if (drawAssaultIntelArt(ctx, featuredIntel.intelIndex, ix, iy, iw, ih, 0.92)) {
+      ctx.strokeRect(ix, iy, iw, ih);
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(240,210,120,0.9)';
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 3;
+      ctx.fillText('INTEL: ' + featuredIntel.codename.toUpperCase(), ix + iw / 2, iy + ih + 11);
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
   }
 
   ctx.font = '7px monospace';
@@ -268,6 +291,9 @@ export function drawSettlementCeremony(ctx, W, H, {
   if (step === 1) {
     const gateBox = { x: hx - 70, y: panY + panH - 100, w: 140, h: 90 };
     drawFortressPrepSprite(ctx, 'westGateStoneCeremony', gateBox);
+  }
+  if (step === 2) {
+    drawNamedPortraitArt(ctx, 'refugeeSettler', hx - 40, panY + panH - 108, 80, 100);
   }
 
   ctx.textAlign = 'center';

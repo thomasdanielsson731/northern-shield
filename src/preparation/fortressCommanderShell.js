@@ -15,6 +15,7 @@ import {
 } from '../fortress/prepScarRepair.js';
 import {
   drawAdvisorPortraitArt,
+  drawResourceIconArt,
 } from '../assets/campaignArt.js';
 import { drawFortressPrepSprite, drawFortressPrepBackground, getWestGateArtKey, isFortressPrepArtReady } from './fortressPrepArt.js';
 import { PREP_HOTSPOT_LAYOUT, resolvePrepHotspotRect } from './fortressPrepLayout.js';
@@ -859,7 +860,10 @@ export function drawCommanderContextPanel(ctx, px, py, pw, ph, state, panelCtx) 
     ctx.stroke();
     ctx.font = 'bold 8px monospace';
     ctx.fillStyle = '#c8dce8';
-    ctx.fillText(act.label, contentX + 8, ly + 18);
+    const _labelX = act.id === 'repair_gate' && act.payWood
+      && drawResourceIconArt(ctx, 'wood', contentX + 14, ly + 14, 14)
+      ? contentX + 26 : contentX + 8;
+    ctx.fillText(act.label, _labelX, ly + 18);
     state.panelBtns.push({ ...act, x: contentX, y: ly, w: btnW, h: btnH });
     ly += btnH + 6;
   }
