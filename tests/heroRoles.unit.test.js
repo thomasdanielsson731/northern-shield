@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   isInGateZone, isInCoreZone, isInWallZone, isNearStructure, isRoleInZone,
-  getFortressRoleDamageMult, cycleFortressRole, FORTRESS_ROLE_IDS,
+  getFortressRoleDamageMult, cycleFortressRole, FORTRESS_ROLE_IDS, FORTRESS_ROLES,
   getDefaultFortressRole, getPortalCells, chebyshevDist, countDeployedRoleBonus,
+  isNearStructureOfTypes, isAdjacentToHero, getRoleSynergyDamageMult,
 } from '../src/roster/heroRoles.js';
 
 describe('heroRoles', () => {
@@ -63,5 +64,62 @@ describe('heroRoles', () => {
     const roster = [{ defenderId: 'd1', fortressRole: 'gatekeeper' }];
     expect(countDeployedRoleBonus(towers, roster, 'gatekeeper')).toBe(1);
     expect(countDeployedRoleBonus(towers, roster, 'scout')).toBe(0);
+  });
+
+  describe('v2 roles (20 total)', () => {
+    it('has 20 roles, all defined', () => {
+      expect(FORTRESS_ROLE_IDS).toHaveLength(20);
+      for (const id of FORTRESS_ROLE_IDS) {
+        expect(FORTRESS_ROLES[id]).toBeDefined();
+        expect(FORTRESS_ROLES[id].label).toBeTruthy();
+      }
+    });
+
+    it('citadel_warden and field_surgeon are core-zone roles', () => {
+      expect(isRoleInZone('citadel_warden', 24, 15, ctx)).toBe(true);
+      expect(isRoleInZone('field_surgeon', 24, 15, ctx)).toBe(true);
+      expect(isRoleInZone('citadel_warden', 0, 0, ctx)).toBe(false);
+    });
+
+    it('vanguard is only active outside every zone', () => {
+      expect(isRoleInZone('vanguard', 1, 15, ctx)).toBe(false); // gate zone
+      expect(isRoleInZone('vanguard', 24, 15, ctx)).toBe(false); // core zone
+      expect(isRoleInZone('vanguard', 12, 12, ctx)).toBe(true); // no man's land
+    });
+
+    it('shield_brother detects an adjacent hero, ignoring self and structures', () => {
+      const towers = [
+        { type: 'berserk', col: 10, row: 10 },
+        { type: 'valkyrie', col: 11, row: 10 },
+        { type: 'runeshrine', col: 12, row: 10 },
+      ];
+      expect(isAdjacentToHero(10, 10, towers)).toBe(true);
+      expect(isAdjacentToHero(20, 20, towers)).toBe(false);
+    });
+
+    it('siege_captain and miners_mate detect their structure types', () => {
+      const towers = [{ type: 'catapult', col: 5, row: 5 }, { type: 'mine', col: 8, row: 8 }];
+      expect(isNearStructureOfTypes(5, 6, towers, new Set(['catapult']))).toBe(true);
+      expect(isNearStructureOfTypes(8, 9, towers, new Set(['mine']))).toBe(true);
+      expect(isNearStructureOfTypes(5, 6, towers, new Set(['mine']))).toBe(false);
+    });
+
+    it('new roles grant a damage bonus in their zone', () => {
+      expect(getFortressRoleDamageMult({ fortressRole: 'bulwark' }, 23, 15, ctx)).toBeGreaterThan(1);
+      expect(getFortressRoleDamageMult({ fortressRole: 'vanguard' }, 12, 12, ctx)).toBeGreaterThan(1);
+      expect(getFortressRoleDamageMult({ fortressRole: 'herald_breaker' }, 10, 10, ctx)).toBe(1);
+      expect(getFortressRoleDamageMult({ fortressRole: 'herald_breaker' }, 10, 10, { ...ctx, targetIsBoss: true })).toBeGreaterThan(1);
+    });
+
+    it('"The Pass" synergy: gatekeeper gains a bonus near a deployed scout', () => {
+      const towers = [
+        { type: 'berserk', col: 1, row: 15, defenderId: 'gk' },
+        { type: 'military', col: 2, row: 15, defenderId: 'sc' },
+      ];
+      const roster = { find: (id) => ({ gk: { defenderId: 'gk', fortressRole: 'gatekeeper' }, sc: { defenderId: 'sc', fortressRole: 'scout' } })[id] };
+      const gate = roster.find('gk');
+      expect(getRoleSynergyDamageMult(gate, 1, 15, { towers, roster })).toBeGreaterThan(1);
+      expect(getRoleSynergyDamageMult({ fortressRole: 'wallkeeper' }, 23, 15, { towers, roster })).toBe(1);
+    });
   });
 });

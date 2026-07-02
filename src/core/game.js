@@ -232,7 +232,7 @@ import {
 import {
   FORTRESS_ROLES, FORTRESS_ROLE_IDS, cycleFortressRole, getDefaultFortressRole,
   getPortalCells, isInGateZone, isInWallZone, isInCoreZone, isRoleInZone,
-  getFortressRoleDamageMult, countDeployedRoleBonus,
+  getFortressRoleDamageMult, getRoleSynergyDamageMult, countDeployedRoleBonus,
 } from '../roster/heroRoles.js';
 import {
   SQUAD_PRESETS, analyzeWarband, getRecommendedDeploy, getCompositionWarnings,
@@ -2289,7 +2289,7 @@ function buildHeroModifierCtx(tower, targetIsBoss = false) {
     inGateZone:  isInGateZone(col, row, portalCells),
     inWallZone:  isInWallZone(col, row, wallData, GOAL),
     inCoreZone:  isInCoreZone(col, row, GOAL),
-    portalCells, wallData, goal: GOAL, towers,
+    portalCells, wallData, goal: GOAL, towers, roster: _roster,
     waveInNode:  _nodeWavePlan?.waves?.[_nodeWaveIndex]?.waveInNode ?? waveNumber,
     livesFull:   lives >= STARTING_LIVES,
     rampartsLostThisBattle: Math.max(0, STARTING_LIVES - lives),
@@ -4809,6 +4809,12 @@ function updateWave() {
           _starsEarnedThisBattle++;
           if (_campaignState) _campaignState.stars = stars;
           dmgFloaters.push({ x: t.x, y: t.y - 10, val: '+1', life: 80, maxLife: 80, color: '#c0a0ff', large: false, suffix: '★' });
+          // "Treasury" role synergy (Rune Keeper + Quartermaster both deployed) — +1g per star earned
+          if (countDeployedRoleBonus(towers, _roster, 'rune_keeper') > 0
+              && countDeployedRoleBonus(towers, _roster, 'quartermaster') > 0) {
+            gold += 1;
+            goldEarned += 1;
+          }
         }
       }
     }
@@ -8013,8 +8019,9 @@ function update() {
         const ctx = buildHeroModifierCtx(tower, !!tower._currentTarget?.isBoss);
         const trait = getTraitModifiers(def, ctx);
         const roleMult = getFortressRoleDamageMult(def, tower.col, tower.row, ctx);
+        const roleSynergyMult = getRoleSynergyDamageMult(def, tower.col, tower.row, ctx);
         const bossMult = tower._currentTarget?.isBoss ? trait.bossDmgMult : 1;
-        tower._synergyDmgBoost *= trait.dmgMult * roleMult * bossMult;
+        tower._synergyDmgBoost *= trait.dmgMult * roleMult * roleSynergyMult * bossMult;
         if (trait.rangeMult !== 1) tower.range    = Math.round(tower.range    * trait.rangeMult);
         if (trait.cdMult    !== 1) tower.fireRate = Math.max(4, Math.round(tower.fireRate * trait.cdMult));
       }
